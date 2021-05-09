@@ -10,30 +10,6 @@ from Pyro5 import api, core
 from . import _server
 from ._serialize import register_serializers
 
-# class QCoreListener(QObject):
-#     properties_changed = Signal()
-#     property_changed = Signal(str, str, object)
-#     channel_group_changed = Signal(str)
-#     config_group_changed = Signal(str, str)
-#     system_configuration_loaded = Signal()
-#     pixel_size_changed = Signal(float)
-#     pixel_size_affine_changed = Signal(float, float, float, float, float, float)
-#     stage_position_changed = Signal(str, float)
-#     xy_stage_position_changed = Signal(str, float, float)
-#     exposure_changed = Signal(str, float)
-#     slm_exposure_changed = Signal(str, float)
-#     mda_frame_ready = Signal(object, object)
-#     mda_started = Signal()
-#     mda_canceled = Signal()
-#     mda_paused = Signal(bool)
-#     mda_finished = Signal()
-
-#     @api.expose
-#     def emit(self, signal_name, args):
-#         emitter = getattr(self, signal_name, None)
-#         if emitter:
-#             emitter.emit(*args)
-
 
 def ensure_server_running(host="127.0.0.1", port=54333, timeout=5):
     uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
@@ -55,11 +31,11 @@ def ensure_server_running(host="127.0.0.1", port=54333, timeout=5):
         raise TimeoutError(f"Timeout connecting to server {uri}")
 
 
-class detatched_mmcore:
+class remote_mmcore:
     _instance = None
 
     def __init__(self, host="127.0.0.1", port=54333, timeout=5, cleanup=True):
-        detatched_mmcore._instance = self
+        remote_mmcore._instance = self
         self._cleanup = cleanup
 
         register_serializers()
@@ -69,6 +45,7 @@ class detatched_mmcore:
 
         self.core = api.Proxy(f"PYRO:{_server.CORE_NAME}@{host}:{port}")
         # self.qsignals = QCoreListener()
+        self.qsignals = None
 
         self._callback_daemon = api.Daemon()
         # self._callback_daemon.register(self.qsignals)
@@ -97,6 +74,6 @@ class detatched_mmcore:
 
 
 if __name__ == "__main__":
-    with detatched_mmcore() as (mmcore, signals):
+    with remote_mmcore() as (mmcore, signals):
         print(mmcore._pyroUri)
         mmcore.loadSystemConfiguration()
