@@ -5,7 +5,9 @@ DEFAULT_HOST = "127.0.0.1"
 
 def main():
     import argparse
+
     from Pyro5.api import serve
+
     from pymmcore_remote._pyrocore import pyroCMMCore
     from pymmcore_remote._serialize import register_serializers
 
