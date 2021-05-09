@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     import useq
 
 
-class MMCorePlus(pymmcore.CMMCore):
+class CMMCorePlus(pymmcore.CMMCore):
     def __init__(self, mm_path=None, adapter_paths=None):
         super().__init__()
 
@@ -118,7 +118,7 @@ class MMCorePlus(pymmcore.CMMCore):
 
 
 class MMCallback(pymmcore.MMEventCallback):
-    def __init__(self, core: MMCorePlus):
+    def __init__(self, core: CMMCorePlus):
         super().__init__()
         self._core = core
 
