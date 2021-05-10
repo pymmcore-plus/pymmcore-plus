@@ -1,6 +1,7 @@
-CORE_NAME = "mmgui.cmmcore"
+CORE_NAME = "pymmcore_remote.CMMCorePlus"
 DEFAULT_PORT = 54333
 DEFAULT_HOST = "127.0.0.1"
+DEFAULT_URI = f"PYRO:{CORE_NAME}@{DEFAULT_HOST}:{DEFAULT_PORT}"
 
 
 def main():
@@ -14,6 +15,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT, help="port")
     parser.add_argument("--host", default=DEFAULT_HOST)
+    parser.add_argument("--verbose", default=DEFAULT_HOST)
     args = parser.parse_args()
 
     register_serializers()
@@ -23,7 +25,7 @@ def main():
         use_ns=False,
         host=args.host,
         port=args.port,
-        verbose=False,
+        verbose=args.verbose,
     )
 
 

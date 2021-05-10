@@ -1,6 +1,9 @@
 import os
+import re
 import sys
 from pathlib import Path
+
+camel_to_snake = re.compile(r"(?<!^)(?=[A-Z])")
 
 
 def find_micromanager():

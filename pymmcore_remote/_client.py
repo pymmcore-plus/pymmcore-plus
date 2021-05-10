@@ -11,7 +11,7 @@ from . import _server
 from ._serialize import register_serializers
 
 
-def ensure_server_running(host="127.0.0.1", port=54333, timeout=5):
+def ensure_server_running(host, port, timeout=5):
     uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
     remote_daemon = api.Proxy(uri)
     try:
@@ -34,7 +34,13 @@ def ensure_server_running(host="127.0.0.1", port=54333, timeout=5):
 class remote_mmcore:
     _instance = None
 
-    def __init__(self, host="127.0.0.1", port=54333, timeout=5, cleanup=True):
+    def __init__(
+        self,
+        host=_server.DEFAULT_HOST,
+        port=_server.DEFAULT_PORT,
+        timeout=5,
+        cleanup=True,
+    ):
         remote_mmcore._instance = self
         self._cleanup = cleanup
 
@@ -73,7 +79,25 @@ class remote_mmcore:
         return cls._instance
 
 
+class RemoteMMCore(api.Proxy):
+    def __init__(
+        self,
+        host=_server.DEFAULT_HOST,
+        port=_server.DEFAULT_PORT,
+        timeout=5,
+        cleanup=True,
+        connected_socket=None,
+    ):
+        register_serializers()
+        _proc = ensure_server_running(host, port, timeout)
+        if cleanup and _proc:
+            atexit.register(_proc.kill)
+
+        uri = f"PYRO:{_server.CORE_NAME}@{host}:{port}"
+        super().__init__(uri, connected_socket=connected_socket)
+
+
 if __name__ == "__main__":
-    with remote_mmcore() as (mmcore, signals):
+    with RemoteMMCore() as mmcore:
         print(mmcore._pyroUri)
         mmcore.loadSystemConfiguration()

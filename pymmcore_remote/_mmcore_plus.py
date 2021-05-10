@@ -25,8 +25,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         if not adapter_paths:
             adapter_paths = [self._mm_path]
         self.setDeviceAdapterSearchPaths(adapter_paths)
-        self._callbacks = MMCallback(self)
-        self.registerCallback(self._callbacks)
+        self._callback_relay = MMCallbackRelay(self)
+        self.registerCallback(self._callback_relay)
         self._canceled = False
         self._paused = False
 
@@ -117,7 +117,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.emit_signal("mda_paused", self._paused)
 
 
-class MMCallback(pymmcore.MMEventCallback):
+class MMCallbackRelay(pymmcore.MMEventCallback):
     def __init__(self, core: CMMCorePlus):
         super().__init__()
         self._core = core
