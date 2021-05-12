@@ -29,6 +29,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.registerCallback(self._callback_relay)
         self._canceled = False
         self._paused = False
+        self._callback_handlers = set()
 
     def setDeviceAdapterSearchPaths(self, adapter_paths):
         # add to PATH as well for dynamic dlls
@@ -62,7 +63,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self.setPosition(self.getFocusDevice(), val)
 
     def run_mda(self, sequence: useq.MDASequence) -> None:
-        self.emit_signal("mda_started")
+        self.emit_signal("onMDAStarted", sequence)
         self._paused = False
         logger.info("MDA Started: {}", sequence)
         t0 = time.perf_counter()  # reference time, in seconds
@@ -73,7 +74,7 @@ class CMMCorePlus(pymmcore.CMMCore):
                 time.sleep(0.1)
             if self._canceled:
                 logger.warning("MDA Canceled: {}", sequence)
-                self.emit_signal("mda_canceled")
+                self.emit_signal("onMDACanceled")
                 self._canceled = False
                 break
 
@@ -101,13 +102,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.snapImage()
             img = self.getImage()
 
-            self.emit_signal("mda_frame_ready", img, event)
+            self.emit_signal("onMDAFrame", img, event)
         logger.info("MDA Finished: {}", sequence)
-        self.emit_signal("mda_finished")
-
-    def emit_signal(self, signal_name, *args):
-        # for pyro subclass
-        logger.debug("{}: {}", signal_name, args)
+        self.emit_signal("onMDAFinished")
 
     def cancel(self):
         self._canceled = True
@@ -116,6 +113,18 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._paused = not self._paused
         self.emit_signal("mda_paused", self._paused)
 
+    def connect_remote_callback(self, handler):
+        self._callback_handlers.add(handler)
+
+    def disconnect_remote_callback(self, handler):
+        self._callback_handlers.discard(handler)
+
+    def emit_signal(self, signal_name, *args):
+        # different in pyro subclass
+        logger.debug("{}: {}", signal_name, args)
+        for handler in self._callback_handlers:
+            handler.receive_core_callback(signal_name, args)
+
 
 class MMCallbackRelay(pymmcore.MMEventCallback):
     def __init__(self, core: CMMCorePlus):
@@ -123,34 +132,34 @@ class MMCallbackRelay(pymmcore.MMEventCallback):
         self._core = core
 
     def onPropertiesChanged(self):
-        self._core.emit_signal("propertiesChanged")
+        self._core.emit_signal("onPropertiesChanged")
 
     def onPropertyChanged(self, dev_name: str, prop_name: str, prop_val: str):
-        self._core.emit_signal("propertyChanged", dev_name, prop_name, prop_val)
+        self._core.emit_signal("onPropertyChanged", dev_name, prop_name, prop_val)
 
     def onChannelGroupChanged(self, new_channel_group_name: str):
-        self._core.emit_signal("channelGroupChanged", new_channel_group_name)
+        self._core.emit_signal("onChannelGroupChanged", new_channel_group_name)
 
     def onConfigGroupChanged(self, group_name: str, new_config_name: str):
-        self._core.emit_signal("configGroupChanged", group_name, new_config_name)
+        self._core.emit_signal("onConfigGroupChanged", group_name, new_config_name)
 
     def onSystemConfigurationLoaded(self):
-        self._core.emit_signal("systemConfigurationLoaded")
+        self._core.emit_signal("onSystemConfigurationLoaded")
 
     def onPixelSizeChanged(self, new_pixel_size_um: float):
-        self._core.emit_signal("pixelSizeChanged", new_pixel_size_um)
+        self._core.emit_signal("onPixelSizeChanged", new_pixel_size_um)
 
     def onPixelSizeAffineChanged(self, v0, v1, v2, v3, v4, v5):
-        self._core.emit_signal("pixelSizeAffineChanged", v0, v1, v2, v3, v4, v5)
+        self._core.emit_signal("onPixelSizeAffineChanged", v0, v1, v2, v3, v4, v5)
 
     def onStagePositionChanged(self, name: str, pos: float):
-        self._core.emit_signal("stagePositionChanged", name, pos)
+        self._core.emit_signal("onStagePositionChanged", name, pos)
 
     def onXYStagePositionChanged(self, name: str, xpos: float, ypos: float):
-        self._core.emit_signal("xYStagePositionChanged", name, xpos, ypos)
+        self._core.emit_signal("onXYStagePositionChanged", name, xpos, ypos)
 
     def onExposureChanged(self, name: str, new_exposure: float):
-        self._core.emit_signal("exposureChanged", name, new_exposure)
+        self._core.emit_signal("onExposureChanged", name, new_exposure)
 
     def onSLMExposureChanged(self, name: str, new_exposure: float):
-        self._core.emit_signal("sLMExposureChanged", name, new_exposure)
+        self._core.emit_signal("onSLMExposureChanged", name, new_exposure)

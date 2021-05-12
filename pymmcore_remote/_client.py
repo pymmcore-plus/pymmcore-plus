@@ -1,26 +1,105 @@
 import atexit
+import os
+import signal
 import subprocess
 import sys
 import threading
 import time
 
 from loguru import logger
-from Pyro5 import api, core
+from Pyro5 import api, core, errors
+from typing_extensions import Protocol
 
 from . import _server
 from ._serialize import register_serializers
 
 
-def ensure_server_running(host, port, timeout=5):
+class CallbackProtocol(Protocol):
+    def receive_core_callback(self, signal_name: str, args: tuple) -> None:
+        """Will be called by server with name of signal, and tuple of args."""
+
+
+class RemoteMMCore(api.Proxy):
+    def __init__(
+        self,
+        host=_server.DEFAULT_HOST,
+        port=_server.DEFAULT_PORT,
+        timeout=5,
+        cleanup_new=True,
+        cleanup_existing=True,
+        connected_socket=None,
+        callback=None,
+    ):
+        register_serializers()
+        ensure_server_running(host, port, timeout, cleanup_new, cleanup_existing)
+
+        uri = f"PYRO:{_server.CORE_NAME}@{host}:{port}"
+        super().__init__(uri, connected_socket=connected_socket)
+        self._cb_thread = None
+        self._callbacks = set()
+        if callback is not None:
+            self.register_callback(callback)
+
+    def register_callback(self, callback: CallbackProtocol):
+        class_cb = getattr(type(callback), "receive_core_callback", None)
+        if class_cb is None:
+            raise TypeError("Callbacks must have a 'receive_core_callback' method.")
+        if not hasattr(class_cb, "_pyroExposed"):
+            class_cb._pyroExposed = True
+
+        self._callbacks.add(callback)
+        self._cb_thread = DaemonThread()
+        self._cb_thread._daemon.register(callback)
+        self.connect_remote_callback(callback)  # must come after register()
+        self._cb_thread.start()
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        logger.debug("closing pyro client")
+        for cb in self._callbacks:
+            self.disconnect_remote_callback(cb)
+        if self._cb_thread is not None:
+            self._cb_thread._daemon.close()
+        return super().__exit__(exc_type, exc_value, traceback)
+
+    def __getattr__(self, name):
+        if name in ("_cb_thread", "_callbacks"):
+            return object.__getattribute__(self, name)
+        return super().__getattr__(name)
+
+    def __setattr__(self, name, value):
+        if name in ("_cb_thread", "_callbacks"):
+            return object.__setattr__(self, name, value)
+        return super().__setattr__(name, value)
+
+
+def _get_remote_pid(host, port):
+    import psutil
+
+    for p in psutil.process_iter(["connections"]):
+        for pconn in p.info["connections"] or []:
+            if pconn.laddr.port == port and pconn.laddr.ip == host:
+                return p.pid
+
+
+def ensure_server_running(
+    host, port, timeout=5, cleanup_new=True, cleanup_existing=False
+):
     uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
     remote_daemon = api.Proxy(uri)
     try:
         remote_daemon.ping()
         logger.debug("Found existing server:\n{}", remote_daemon.info())
-    except Exception:
+        if cleanup_existing:
+            pid = _get_remote_pid(host, port)
+            if pid:
+                atexit.register(os.kill, pid, signal.SIGKILL)
+
+    except errors.CommunicationError:
         logger.debug("No server found, creating new mmcore server")
         cmd = [sys.executable, _server.__file__, "-p", str(port), "--host", host]
         proc = subprocess.Popen(cmd)
+        if cleanup_new:
+            atexit.register(proc.kill)
         while timeout > 0:
             try:
                 remote_daemon.ping()
@@ -31,73 +110,16 @@ def ensure_server_running(host, port, timeout=5):
         raise TimeoutError(f"Timeout connecting to server {uri}")
 
 
-class remote_mmcore:
-    _instance = None
-
-    def __init__(
-        self,
-        host=_server.DEFAULT_HOST,
-        port=_server.DEFAULT_PORT,
-        timeout=5,
-        cleanup=True,
-    ):
-        remote_mmcore._instance = self
-        self._cleanup = cleanup
-
-        register_serializers()
-        self.proc = ensure_server_running(host, port, timeout)
-        if cleanup and self.proc:
-            atexit.register(self.proc.kill)
-
-        self.core = api.Proxy(f"PYRO:{_server.CORE_NAME}@{host}:{port}")
-        # self.qsignals = QCoreListener()
-        self.qsignals = None
-
-        self._callback_daemon = api.Daemon()
-        # self._callback_daemon.register(self.qsignals)
-        # self.core.connect_remote_callback(self.qsignals)  # must come after register()
-        thread = threading.Thread(target=self._callback_daemon.requestLoop, daemon=True)
-        thread.start()
+class DaemonThread(threading.Thread):
+    def __init__(self, daemon=True):
+        self._daemon = api.Daemon()
+        self._stop_event = threading.Event()
+        super().__init__(
+            target=self._daemon.requestLoop, name="DaemonThread", daemon=daemon
+        )
 
     def __enter__(self):
-        # FIXME: weird...
-        return (self.core, self.qsignals)
+        return self
 
-    def __exit__(self, *args):
-        self.close()
-
-    def close(self):
-        logger.debug("closing pyro client")
-        self.core.disconnect_remote_callback(self.qsignals)
-        self.core._pyroRelease()
-        self._callback_daemon.close()
-        if self._cleanup and self.proc is not None:
-            self.proc.kill()
-
-    @classmethod
-    def instance(cls):
-        return cls._instance
-
-
-class RemoteMMCore(api.Proxy):
-    def __init__(
-        self,
-        host=_server.DEFAULT_HOST,
-        port=_server.DEFAULT_PORT,
-        timeout=5,
-        cleanup=True,
-        connected_socket=None,
-    ):
-        register_serializers()
-        _proc = ensure_server_running(host, port, timeout)
-        if cleanup and _proc:
-            atexit.register(_proc.kill)
-
-        uri = f"PYRO:{_server.CORE_NAME}@{host}:{port}"
-        super().__init__(uri, connected_socket=connected_socket)
-
-
-if __name__ == "__main__":
-    with RemoteMMCore() as mmcore:
-        print(mmcore._pyroUri)
-        mmcore.loadSystemConfiguration()
+    def __exit__(self, *args, **kwargs):
+        self.stop()

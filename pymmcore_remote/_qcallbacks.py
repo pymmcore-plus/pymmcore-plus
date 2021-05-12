@@ -2,25 +2,24 @@ from qtpy.QtCore import QObject, Signal
 
 
 class QCoreListener(QObject):
-    properties_changed = Signal()
-    property_changed = Signal(str, str, object)
-    channel_group_changed = Signal(str)
-    config_group_changed = Signal(str, str)
-    system_configuration_loaded = Signal()
-    pixel_size_changed = Signal(float)
-    pixel_size_affine_changed = Signal(float, float, float, float, float, float)
-    stage_position_changed = Signal(str, float)
-    xy_stage_position_changed = Signal(str, float, float)
-    exposure_changed = Signal(str, float)
-    slm_exposure_changed = Signal(str, float)
-    mda_frame_ready = Signal(object, object)
-    mda_started = Signal()
-    mda_canceled = Signal()
-    mda_paused = Signal(bool)
-    mda_finished = Signal()
+    onPropertiesChanged = Signal()
+    onPropertyChanged = Signal(str, str, object)
+    onChannelGroupChanged = Signal(str)
+    onConfigGroupChanged = Signal(str, str)
+    onSystemConfigurationLoaded = Signal()
+    onPixelSizeChanged = Signal(float)
+    onPixelSizeAffineChanged = Signal(float, float, float, float, float, float)
+    onStagePositionChanged = Signal(str, float)
+    onXYStagePositionChanged = Signal(str, float, float)
+    onExposureChanged = Signal(str, float)
+    onSLMExposureChanged = Signal(str, float)
+    onMDAFrameReady = Signal(object, object)
+    onMDAStarted = Signal()
+    onMDACanceled = Signal()
+    onMDAPaused = Signal(bool)
+    onMDAFinished = Signal()
 
-    # @api.expose
-    # def emit(self, signal_name, args):
-    #     emitter = getattr(self, signal_name, None)
-    #     if emitter:
-    #         emitter.emit(*args)
+    def receive_core_callback(self, signal_name, args):
+        emitter = getattr(self, signal_name, None)
+        if emitter is not None:
+            emitter.emit(*args)

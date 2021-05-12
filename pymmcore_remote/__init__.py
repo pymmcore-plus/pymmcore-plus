@@ -3,6 +3,7 @@ try:
 except ImportError:
     __version__ = "unknown"
 
-from ._client import remote_mmcore
+from ._client import RemoteMMCore
+from ._mmcore_plus import CMMCorePlus
 
-__all__ = ["remote_mmcore"]
+__all__ = ["RemoteMMCore", "CMMCorePlus"]

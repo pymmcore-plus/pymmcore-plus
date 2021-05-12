@@ -1,13 +1,11 @@
-import re
 from itertools import chain
 from typing import Type
 
+from loguru import logger
 from Pyro5 import errors
 from Pyro5.api import behavior, expose, oneway
 
 from ._mmcore_plus import CMMCorePlus
-
-camel_to_snake = re.compile(r"(?<!^)(?=[A-Z])")
 
 
 def wrap_for_pyro(cls: Type) -> Type:
@@ -52,29 +50,17 @@ def wrap_for_pyro(cls: Type) -> Type:
 @behavior(instance_mode="single")
 @wrap_for_pyro
 class pyroCMMCore(CMMCorePlus):
-    def __init__(self, adapter_paths=None):
-        super().__init__(adapter_paths=adapter_paths)
-        self._callback_handlers = set()
-
     @oneway
     def run_mda(self, sequence) -> None:
         return super().run_mda(sequence)
 
     @oneway
-    def connect_remote_callback(self, handler):
-        self._callback_handlers.add(handler)
-
-    @oneway
-    def disconnect_remote_callback(self, handler):
-        self._callback_handlers.discard(handler)
-
-    @oneway
     def emit_signal(self, signal_name, *args):
-        super().emit_signal(signal_name, *args)
-        snaked = camel_to_snake.sub("_", signal_name).lower()
+        logger.debug("{}: {}", signal_name, args)
         for handler in list(self._callback_handlers):
             try:
                 handler._pyroClaimOwnership()
-                handler.emit(snaked, args)
+                # FIXME: magic name connection with RemoteMMCore.register_callback
+                handler.receive_core_callback(signal_name, args)
             except errors.CommunicationError:
                 self.disconnect_remote_callback(handler)
