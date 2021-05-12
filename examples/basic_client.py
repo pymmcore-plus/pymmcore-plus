@@ -1,5 +1,7 @@
 from pymmcore_remote import RemoteMMCore
 
 with RemoteMMCore() as mmcore:
-    mmcore.loadSystemConfiguration("demo")  # 'demo' is a special option for CMMCorePlus
+    # 'demo' is a special option for the included CMMCorePlus
+    # that loads the micro-manager demo config
+    mmcore.loadSystemConfiguration("demo")
     print("loaded:", mmcore.getLoadedDevices())

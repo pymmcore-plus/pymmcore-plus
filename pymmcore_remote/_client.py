@@ -35,6 +35,8 @@ class RemoteMMCore(api.Proxy):
 
         uri = f"PYRO:{_server.CORE_NAME}@{host}:{port}"
         super().__init__(uri, connected_socket=connected_socket)
+        sys._original_exchook_, sys.excepthook = sys.excepthook, errors.excepthook
+
         self._cb_thread = None
         self._callbacks = set()
         if callback is not None:
@@ -54,6 +56,7 @@ class RemoteMMCore(api.Proxy):
         self._cb_thread.start()
 
     def __exit__(self, exc_type, exc_value, traceback):
+        sys.excepthook = sys._original_exchook_
         logger.debug("closing pyro client")
         for cb in self._callbacks:
             self.disconnect_remote_callback(cb)
