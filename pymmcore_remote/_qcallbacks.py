@@ -2,24 +2,28 @@ from qtpy.QtCore import QObject, Signal
 
 
 class QCoreListener(QObject):
-    onPropertiesChanged = Signal()
-    onPropertyChanged = Signal(str, str, object)
-    onChannelGroupChanged = Signal(str)
-    onConfigGroupChanged = Signal(str, str)
-    onSystemConfigurationLoaded = Signal()
-    onPixelSizeChanged = Signal(float)
-    onPixelSizeAffineChanged = Signal(float, float, float, float, float, float)
-    onStagePositionChanged = Signal(str, float)
-    onXYStagePositionChanged = Signal(str, float, float)
-    onExposureChanged = Signal(str, float)
-    onSLMExposureChanged = Signal(str, float)
-    onMDAFrameReady = Signal(object, object)
-    onMDAStarted = Signal(object)
-    onMDACanceled = Signal()
-    onMDAPauseToggled = Signal(bool)
-    onMDAFinished = Signal()
+    propertiesChanged = Signal()
+    propertyChanged = Signal(str, str, object)
+    channelGroupChanged = Signal(str)
+    configGroupChanged = Signal(str, str)
+    systemConfigurationLoaded = Signal()
+    pixelSizeChanged = Signal(float)
+    pixelSizeAffineChanged = Signal(float, float, float, float, float, float)
+    stagePositionChanged = Signal(str, float)
+    XYStagePositionChanged = Signal(str, float, float)
+    exposureChanged = Signal(str, float)
+    SLMExposureChanged = Signal(str, float)
+    MDAFrameReady = Signal(object, object)
+    MDAStarted = Signal(object)
+    MDACanceled = Signal()
+    MDAPauseToggled = Signal(bool)
+    MDAFinished = Signal()
 
     def receive_core_callback(self, signal_name, args):
+        if signal_name.startswith("on"):
+            signal_name = signal_name[2:]
+        if not signal_name[1].isupper():
+            signal_name = signal_name[0].lower() + signal_name[1:]
         emitter = getattr(self, signal_name, None)
         if emitter is not None:
             emitter.emit(*args)
