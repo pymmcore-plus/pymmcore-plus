@@ -1,7 +1,7 @@
 from qtpy.QtCore import QObject, Signal
 
 
-class QCoreListener(QObject):
+class QCoreCallback(QObject):
     propertiesChanged = Signal()
     propertyChanged = Signal(str, str, object)
     channelGroupChanged = Signal(str)
