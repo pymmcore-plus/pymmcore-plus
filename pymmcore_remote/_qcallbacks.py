@@ -14,9 +14,9 @@ class QCoreListener(QObject):
     onExposureChanged = Signal(str, float)
     onSLMExposureChanged = Signal(str, float)
     onMDAFrameReady = Signal(object, object)
-    onMDAStarted = Signal()
+    onMDAStarted = Signal(object)
     onMDACanceled = Signal()
-    onMDAPaused = Signal(bool)
+    onMDAPauseToggled = Signal(bool)
     onMDAFinished = Signal()
 
     def receive_core_callback(self, signal_name, args):

@@ -111,7 +111,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def toggle_pause(self):
         self._paused = not self._paused
-        self.emit_signal("mda_paused", self._paused)
+        self.emit_signal("onMDAPauseToggled", self._paused)
 
     def connect_remote_callback(self, handler):
         self._callback_handlers.add(handler)
