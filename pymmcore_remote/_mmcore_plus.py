@@ -102,7 +102,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.snapImage()
             img = self.getImage()
 
-            self.emit_signal("onMDAFrame", img, event)
+            self.emit_signal("onMDAFrameReady", img, event)
         logger.info("MDA Finished: {}", sequence)
         self.emit_signal("onMDAFinished")
 
