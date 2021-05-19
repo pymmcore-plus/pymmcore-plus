@@ -24,6 +24,5 @@ class QCoreCallback(QObject):
             signal_name = signal_name[2:]
         if not signal_name[1].isupper():
             signal_name = signal_name[0].lower() + signal_name[1:]
-        emitter = getattr(self, signal_name, None)
-        if emitter is not None:
-            emitter.emit(*args)
+        # let it throw an exception.
+        getattr(self, signal_name).emit(*args)
