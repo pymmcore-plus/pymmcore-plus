@@ -84,9 +84,28 @@ def _get_remote_pid(host, port):
                 return p.pid
 
 
+def new_server_process(host, port, timeout=5):
+    """Create a new daemon process"""
+    cmd = [sys.executable, _server.__file__, "-p", str(port), "--host", host]
+    proc = subprocess.Popen(cmd)
+
+    uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
+    remote_daemon = api.Proxy(uri)
+
+    while timeout > 0:
+        try:
+            remote_daemon.ping()
+            return proc
+        except Exception:
+            timeout -= 0.1
+            time.sleep(0.1)
+    raise TimeoutError(f"Timeout connecting to server {uri}")
+
+
 def ensure_server_running(
     host, port, timeout=5, cleanup_new=True, cleanup_existing=False
 ):
+    """Ensure that a server daemon is running, or start one."""
     uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
     remote_daemon = api.Proxy(uri)
     try:
@@ -99,18 +118,10 @@ def ensure_server_running(
 
     except errors.CommunicationError:
         logger.debug("No server found, creating new mmcore server")
-        cmd = [sys.executable, _server.__file__, "-p", str(port), "--host", host]
-        proc = subprocess.Popen(cmd)
+        proc = new_server_process(host, port)
         if cleanup_new:
             atexit.register(proc.kill)
-        while timeout > 0:
-            try:
-                remote_daemon.ping()
-                return proc
-            except Exception:
-                timeout -= 0.1
-                time.sleep(0.1)
-        raise TimeoutError(f"Timeout connecting to server {uri}")
+        return proc
 
 
 class DaemonThread(threading.Thread):

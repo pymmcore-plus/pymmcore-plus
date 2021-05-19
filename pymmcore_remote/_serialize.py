@@ -84,6 +84,17 @@ def dict_to_mdaseq(classname, d):
     return useq.MDASequence.parse_obj(d.get("val"))
 
 
+def mda_event_to_dict(mda_event: useq.MDAEvent):
+    return {
+        "__class__": "useq.MDAEvent",
+        "val": mda_event.dict(),
+    }
+
+
+def dict_to_mda_event(classname, d):
+    return useq.MDAEvent.parse_obj(d.get("val"))
+
+
 def remove_shm_from_resource_tracker():
     """Monkey-patch multiprocessing.resource_tracker so SharedMemory won't be tracked
 
@@ -123,3 +134,6 @@ def register_serializers():
 
     register_class_to_dict(useq.MDASequence, mdaseq_to_dict)
     register_dict_to_class("useq.MDASequence", dict_to_mdaseq)
+
+    register_class_to_dict(useq.MDAEvent, mda_event_to_dict)
+    register_dict_to_class("useq.MDAEvent", dict_to_mda_event)
