@@ -138,3 +138,4 @@ dmypy.json
 cython_debug/
 
 pymmcore_remote/_version.py
+Micro-Manager-*
