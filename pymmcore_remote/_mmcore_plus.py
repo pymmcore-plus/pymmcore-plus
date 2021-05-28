@@ -111,7 +111,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
             self.emit_signal("onMDAFrameReady", img, event)
         logger.info("MDA Finished: {}", sequence)
-        self.emit_signal("onMDAFinished")
+        self.emit_signal("onMDAFinished", sequence)
 
     def cancel(self):
         self._canceled = True

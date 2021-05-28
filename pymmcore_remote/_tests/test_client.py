@@ -54,8 +54,12 @@ def test_mda(qtbot, proxy):
             and event.sequence is not mda
         )
 
-    signals = [cb.MDAFrameReady, cb.MDAFrameReady]
-    checks = [_test_signal, _test_signal]
+    def _check_finished(obj):
+        return obj.uid == mda.uid
+
+    signals = [cb.MDAFrameReady, cb.MDAFrameReady, cb.MDAFinished]
+    checks = [_test_signal, _test_signal, _check_finished]
 
     with qtbot.waitSignals(signals, check_params_cbs=checks, order="strict"):
         proxy.run_mda(mda)
+
