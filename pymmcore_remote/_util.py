@@ -2,11 +2,12 @@ import os
 import re
 import sys
 from pathlib import Path
+from typing import Optional
 
 camel_to_snake = re.compile(r"(?<!^)(?=[A-Z])")
 
 
-def find_micromanager():
+def find_micromanager() -> Optional[str]:
     """Locate a Micro-Manager folder (for device adapters)."""
     from loguru import logger
 
@@ -27,10 +28,11 @@ def find_micromanager():
         "win32": Path("C:/Program Files/"),
     }
     try:
-        return str(next(applications.get(sys.platform).glob("Micro-Manager*")))
+        return str(next(applications[sys.platform].glob("Micro-Manager*")))
     except KeyError:
         raise NotImplementedError(
             f"MM autodiscovery not implemented for platform: {sys.platform}"
         )
     except StopIteration:
         logger.error("could not find micromanager directory")
+        return None

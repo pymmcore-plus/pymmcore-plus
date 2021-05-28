@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Sequence
 
 import pymmcore
 from loguru import logger
@@ -13,7 +13,7 @@ if TYPE_CHECKING:
 
 
 class CMMCorePlus(pymmcore.CMMCore):
-    def __init__(self, mm_path=None, adapter_paths=None):
+    def __init__(self, mm_path=None, adapter_paths: Sequence[str] = ()):
         super().__init__()
 
         if not mm_path:
@@ -22,17 +22,24 @@ class CMMCorePlus(pymmcore.CMMCore):
             mm_path = find_micromanager()
 
         self._mm_path = mm_path
-        if not adapter_paths:
-            adapter_paths = [self._mm_path]
-        self.setDeviceAdapterSearchPaths(adapter_paths)
+        if not adapter_paths and mm_path:
+            adapter_paths = [mm_path]
+        if adapter_paths:
+            self.setDeviceAdapterSearchPaths(adapter_paths)
         self._callback_relay = MMCallbackRelay(self)
         self.registerCallback(self._callback_relay)
         self._canceled = False
         self._paused = False
         self._callback_handlers = set()
 
-    def setDeviceAdapterSearchPaths(self, adapter_paths):
+    def setDeviceAdapterSearchPaths(self, adapter_paths: Sequence[str]):
         # add to PATH as well for dynamic dlls
+        if (
+            not isinstance(adapter_paths, (list, tuple))
+            and adapter_paths
+            and all(isinstance(i, str) for i in adapter_paths)
+        ):
+            raise TypeError("adapter paths must be a sequence of strings")
         env_path = os.environ["PATH"]
         for p in adapter_paths:
             if p not in env_path:
@@ -42,7 +49,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
     def loadSystemConfiguration(self, fileName="demo"):
-        if fileName.lower() == "demo":
+        if fileName.lower() == "demo" and self._mm_path:
             fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
         super().loadSystemConfiguration(str(fileName))
 
