@@ -1,6 +1,4 @@
 import atexit
-import os
-import signal
 import subprocess
 import sys
 import threading
@@ -78,10 +76,10 @@ class RemoteMMCore(api.Proxy):
 def _get_remote_pid(host, port):
     import psutil
 
-    for p in psutil.process_iter(["connections"]):
-        for pconn in p.info["connections"] or []:
+    for proc in psutil.process_iter(["connections"]):
+        for pconn in proc.info["connections"] or []:
             if pconn.laddr.port == port and pconn.laddr.ip == host:
-                return p.pid
+                return proc
 
 
 def new_server_process(host, port, timeout=5):
@@ -112,9 +110,9 @@ def ensure_server_running(
         remote_daemon.ping()
         logger.debug("Found existing server:\n{}", remote_daemon.info())
         if cleanup_existing:
-            pid = _get_remote_pid(host, port)
-            if pid:
-                atexit.register(os.kill, pid, signal.SIGKILL)
+            proc = _get_remote_pid(host, port)
+            if proc is not None:
+                atexit.register(proc.kill)
 
     except errors.CommunicationError:
         logger.debug("No server found, creating new mmcore server")
