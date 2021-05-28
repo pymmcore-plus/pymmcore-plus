@@ -11,17 +11,17 @@ from pymmcore_remote._client import RemoteMMCore, new_server_process
 from pymmcore_remote._server import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_URI
 from pymmcore_remote.qcallbacks import QCoreCallback
 
-# if not os.getenv("MICROMANAGER_PATH"):
-#     try:
-#         root = Path(pymmcore_remote.__file__).parent.parent
-#         mm_path = list(root.glob("Micro-Manager-*"))[0]
-#         os.environ["MICROMANAGER_PATH"] = str(mm_path)
-#     except IndexError:
-#         raise AssertionError(
-#             "MICROMANAGER_PATH env var was not set, and Micro-Manager "
-#             "installation was not found in this package.  Please run "
-#             "`python micromanager_gui/install_mm.py"
-#         )
+if not os.getenv("MICROMANAGER_PATH"):
+    try:
+        root = Path(pymmcore_remote.__file__).parent.parent
+        mm_path = list(root.glob("Micro-Manager-*"))[0]
+        os.environ["MICROMANAGER_PATH"] = str(mm_path)
+    except IndexError:
+        raise AssertionError(
+            "MICROMANAGER_PATH env var was not set, and Micro-Manager "
+            "installation was not found in this package.  Please run "
+            "`python micromanager_gui/install_mm.py"
+        )
 
 
 @pytest.fixture(scope="session")
