@@ -17,7 +17,7 @@ class QCoreCallback(QObject):
     MDAStarted = Signal(object)
     MDACanceled = Signal()
     MDAPauseToggled = Signal(bool)
-    MDAFinished = Signal()
+    MDAFinished = Signal(object)
 
     def receive_core_callback(self, signal_name, args):
         if signal_name.startswith("on"):
