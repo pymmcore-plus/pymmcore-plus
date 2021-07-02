@@ -45,7 +45,7 @@ jobs:
         run: python install_mm.py
 
       - name: Test
-        run: pytest -v --color=yes --cov=pymmcore_remote --cov-report=xml
+        run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
 
       - name: Coverage
         uses: codecov/codecov-action@v1
@@ -53,7 +53,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'tlambert03/pymmcore-remote' && contains(github.ref, 'tags') }}
+    if: ${{ github.repository == 'tlambert03/pymmcore-plus' && contains(github.ref, 'tags') }}
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python

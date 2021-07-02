@@ -6,14 +6,14 @@ import numpy as np
 import pytest
 from useq import MDAEvent, MDASequence
 
-import pymmcore_remote
-from pymmcore_remote._client import RemoteMMCore, new_server_process
-from pymmcore_remote._server import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_URI
-from pymmcore_remote.qcallbacks import QCoreCallback
+import pymmcore_plus
+from pymmcore_plus._client import RemoteMMCore, new_server_process
+from pymmcore_plus._server import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_URI
+from pymmcore_plus.qcallbacks import QCoreCallback
 
 if not os.getenv("MICROMANAGER_PATH"):
     try:
-        root = Path(pymmcore_remote.__file__).parent.parent
+        root = Path(pymmcore_plus.__file__).parent.parent
         mm_path = list(root.glob("Micro-Manager-*"))[0]
         os.environ["MICROMANAGER_PATH"] = str(mm_path)
     except IndexError:
@@ -62,4 +62,3 @@ def test_mda(qtbot, proxy):
 
     with qtbot.waitSignals(signals, check_params_cbs=checks, order="strict"):
         proxy.run_mda(mda)
-

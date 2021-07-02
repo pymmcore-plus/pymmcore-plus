@@ -1,4 +1,4 @@
-from pymmcore_remote import RemoteMMCore
+from pymmcore_plus import RemoteMMCore
 
 with RemoteMMCore() as mmcore:
     # 'demo' is a special option for the included CMMCorePlus

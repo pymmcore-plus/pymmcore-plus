@@ -1,4 +1,4 @@
-CORE_NAME = "pymmcore_remote.CMMCorePlus"
+CORE_NAME = "pymmcore_plus.CMMCorePlus"
 DEFAULT_PORT = 54333
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_URI = f"PYRO:{CORE_NAME}@{DEFAULT_HOST}:{DEFAULT_PORT}"
@@ -9,8 +9,8 @@ def main():
 
     from Pyro5.api import serve
 
-    from pymmcore_remote._pyrocore import pyroCMMCore
-    from pymmcore_remote._serialize import register_serializers
+    from pymmcore_plus._pyrocore import pyroCMMCore
+    from pymmcore_plus._serialize import register_serializers
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT, help="port")
