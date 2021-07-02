@@ -37,12 +37,12 @@ jobs:
       - uses: actions/cache@v2
         id: cache
         with:
-          path: Micro-Manager-*
+          path: pymmcore_plus/Micro-Manager-*
           key: ${{ hashFiles('install_mm.py') }}
 
       - name: Install Micro-Manager
         if: steps.cache.outputs.cache-hit != 'true'
-        run: python install_mm.py
+        run: python -m pymmcore_plus.install
 
       - name: Test
         run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
