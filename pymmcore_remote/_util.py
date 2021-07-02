@@ -18,7 +18,7 @@ def find_micromanager() -> Optional[str]:
         return env_path
     # then look for an installation in this folder (use `install_mm.sh` to install)
     sfx = "_win" if os.name == "nt" else "_mac"
-    local_install = list(Path(__file__).parent.glob(f"Micro-Manager*{sfx}"))
+    local_install = list(Path(__file__).parent.parent.glob(f"**/Micro-Manager*{sfx}"))
     if local_install:
         logger.debug(f"using MM path from env var: {local_install[0]}")
         return str(local_install[0])
