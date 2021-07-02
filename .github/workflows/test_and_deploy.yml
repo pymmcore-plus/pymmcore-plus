@@ -37,7 +37,7 @@ jobs:
       - uses: actions/cache@v2
         id: cache
         with:
-          path: pymmcore_plus/Micro-Manager-*
+          path: Micro-Manager-*
           key: ${{ hashFiles('pymmcore_plus/install.py') }}
 
       - name: Install Micro-Manager
