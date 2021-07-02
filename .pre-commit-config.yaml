@@ -8,6 +8,11 @@ repos:
     rev: v2.13.0
     hooks:
       - id: pyupgrade
+        args: [--py37-plus]
+  - repo: https://github.com/asottile/setup-cfg-fmt
+    rev: v1.17.0
+    hooks:
+      - id: setup-cfg-fmt
   - repo: https://github.com/myint/autoflake
     rev: v1.4
     hooks:
