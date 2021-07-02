@@ -30,36 +30,59 @@ def download_url(url, output_path):
 def mac_main(release=MAC_RELEASE):
     url = "https://valelab4.ucsf.edu/~MM/nightlyBuilds/2.0.0-gamma/Mac/"
     fname = f"Micro-Manager-2.0.0-gamma1-{release}.dmg"
+    dst = Path(__file__).parent / f"{fname[:-4]}_mac"
+
+    if dst.exists():
+        resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
+        if resp.lower().startswith("n"):
+            print("aborting")
+            return
+
     download_url(f"{url}{fname}", fname)
     run(["hdiutil", "attach", "-nobrowse", fname], check=True)
     src = f"/Volumes/Micro-Manager/{fname[:-4]}"
-    dst = Path(__file__).parent / f"{fname[:-4]}_mac"
-    print("copied to", dst)
-    shutil.copytree(src, dst)
+    shutil.copytree(src, dst, dirs_exist_ok=True)
     run(["hdiutil", "detach", "/Volumes/Micro-Manager"], check=True)
     os.unlink(fname)
     # fix gatekeeper ... requires password
+    print(
+        "\nYour password is required to enable Micro-manager in your security settings."
+        "\nNote: you can also quit now (cmd-C) and do this "
+        "manually in the Security & Privacy preference pane."
+    )
     run(["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(dst)], check=True)
     # # fix path randomization
     os.rename(dst / "ImageJ.app", "ImageJ.app")
     os.rename("ImageJ.app", dst / "ImageJ.app")
-    print(os.listdir(Path(__file__).parent))
+    return dst
 
 
 def win_main(release=WIN_RELEASE):
     url = "https://valelab4.ucsf.edu/~MM/nightlyBuilds/2.0.0-gamma/Windows/"
     fname = f"MMSetup_64bit_2.0.0-gamma1_{release}.exe"
-    download_url(f"{url}{fname}", fname)
     dst = Path(__file__).parent / f"Micro-Manager-2.0.0-gamma1-{release}_win"
+
+    if dst.exists():
+        resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
+        if resp.lower().startswith("n"):
+            print("aborting")
+            return
+
+    download_url(f"{url}{fname}", fname)
     run(
         [fname, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dst}"],
         check=True,
     )
     os.unlink(fname)
+    return dst
+
+
+def install():
+    print("installing device drivers")
+    dest = win_main() if os.name == "nt" else mac_main()
+    if dest:
+        print("installed to", dest)
 
 
 if __name__ == "__main__":
-    if os.name == "nt":
-        win_main()
-    else:
-        mac_main()
+    install()

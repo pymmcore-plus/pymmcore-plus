@@ -20,7 +20,7 @@ def find_micromanager() -> Optional[str]:
     sfx = "_win" if os.name == "nt" else "_mac"
     local_install = list(Path(__file__).parent.parent.glob(f"**/Micro-Manager*{sfx}"))
     if local_install:
-        logger.debug(f"using MM path from env var: {local_install[0]}")
+        logger.debug(f"using MM path from local install: {local_install[0]}")
         return str(local_install[0])
 
     applications = {
@@ -28,7 +28,10 @@ def find_micromanager() -> Optional[str]:
         "win32": Path("C:/Program Files/"),
     }
     try:
-        return str(next(applications[sys.platform].glob("Micro-Manager*")))
+        app_path = applications[sys.platform]
+        pth = str(next(app_path.glob("Micro-Manager*")))
+        logger.debug(f"using MM path found in applications: {pth}")
+        return pth
     except KeyError:
         raise NotImplementedError(
             f"MM autodiscovery not implemented for platform: {sys.platform}"

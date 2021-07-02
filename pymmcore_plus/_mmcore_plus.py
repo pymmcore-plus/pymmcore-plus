@@ -51,7 +51,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
     def loadSystemConfiguration(self, fileName="demo"):
-        if fileName.lower() == "demo" and self._mm_path:
+        if fileName.lower() == "demo":
+            if not self._mm_path:
+                raise ValueError(
+                    "No micro-manager path provided. Cannot load 'demo' file.\nTry "
+                    "installing micro-manager with `python install_mm.py`"
+                )
             fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
         super().loadSystemConfiguration(str(fileName))
 
