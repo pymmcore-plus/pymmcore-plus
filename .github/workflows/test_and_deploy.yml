@@ -38,7 +38,7 @@ jobs:
         id: cache
         with:
           path: pymmcore_plus/Micro-Manager-*
-          key: ${{ hashFiles('install_mm.py') }}
+          key: ${{ hashFiles('pymmcore_plus/install.py') }}
 
       - name: Install Micro-Manager
         if: steps.cache.outputs.cache-hit != 'true'
