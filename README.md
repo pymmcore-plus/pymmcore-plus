@@ -5,7 +5,11 @@
 `pymmcore-plus` aims to extend [pymmcore](https://github.com/micro-manager/pymmcore) (python bindings for the C++ [micro-manager core](https://github.com/micro-manager/mmCoreAndDevices/)) with a number of features designed to facilitate working with **Micro-manager in pure python/C environments**.
 
 - `pymmcore_plus.CMMCorePlus` is a subclass of `pymmcore.CMMCore` that provides additional convenience functions beyond the standard [CMMCore API](https://javadoc.scijava.org/Micro-Manager-Core/mmcorej/CMMCore.html).
-- `CMMCorePlus` includes a `run_mda` (name may change) "acquisition engine" that drives micro-manager for conventional multi-dimensional experiments. It accepts an [MDASequence](https://github.com/tlambert03/useq-schema#mdasequence) from [useq-schema](https://github.com/tlambert03/useq-schema) for experiment design/declaration.
+
+  ```py
+  from pymmcore_plus import CMMCorePlus
+  ```
+- `CMMCorePlus` includes a `run_mda` method (name may change) "acquisition engine" that drives micro-manager for conventional multi-dimensional experiments. It accepts an [MDASequence](https://github.com/tlambert03/useq-schema#mdasequence) from [useq-schema](https://github.com/tlambert03/useq-schema) for experiment design/declaration.
 - Adds a callback system that adapts the CMMCore callback object to an existing python event loop (such as Qt, or perhaps asyncio/etc...)
 - Includes a [Pyro5](https://pyro5.readthedocs.io/en/latest/)-based client/server that allows one to create and control and CMMCorePlus instance running in another process, or (conceivably) another computer.  This is particularly useful for integration in an existing event loop (without choking the main python thread).
 
