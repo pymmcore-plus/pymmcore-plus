@@ -64,9 +64,11 @@ nascent project that adds Qt-based GUI interface on top of an interprocess
 ### install
 
 ```sh
-# not yet available
-# pip install pymmcore-plus
 
+# from pip
+pip install pymmcore-plus
+
+# or from source
 git clone https://github.com/tlambert03/pymmcore-plus.git
 cd pymmcore-plus
 pip install -e .
