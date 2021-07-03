@@ -54,7 +54,7 @@ instead of a Java process).
 Finally, the `CMMCorePlus` class here adds a callback mechanism that makes it
 easier to adapt the native MMCore callback system to multiple listeners, across
 multiple process, which makes it easier to incorporate `pymmcore-plus` into
-existing event loops (such as the Qt event loop).  See
+existing event loops (like a [Qt event loop](examples/qt_integration.py)).  See
 [`napari-micromanager`](https://github.com/tlambert03/napari-micromanager) for a
 nascent project that adds Qt-based GUI interface on top of an interprocess
 `RemoteMMCore`.
