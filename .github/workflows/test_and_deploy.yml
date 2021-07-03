@@ -37,15 +37,15 @@ jobs:
       - uses: actions/cache@v2
         id: cache
         with:
-          path: Micro-Manager-*
-          key: ${{ hashFiles('install_mm.py') }}
+          path: pymmcore_plus/Micro-Manager-*
+          key: ${{ hashFiles('pymmcore_plus/install.py') }}
 
       - name: Install Micro-Manager
         if: steps.cache.outputs.cache-hit != 'true'
-        run: python install_mm.py
+        run: python -m pymmcore_plus.install
 
       - name: Test
-        run: pytest -v --color=yes --cov=pymmcore_remote --cov-report=xml
+        run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
 
       - name: Coverage
         uses: codecov/codecov-action@v1
@@ -53,7 +53,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'tlambert03/pymmcore-remote' && contains(github.ref, 'tags') }}
+    if: ${{ github.repository == 'tlambert03/pymmcore-plus' && contains(github.ref, 'tags') }}
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python

@@ -137,5 +137,5 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-pymmcore_remote/_version.py
+pymmcore_plus/_version.py
 Micro-Manager-*

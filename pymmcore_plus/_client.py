@@ -23,13 +23,16 @@ class RemoteMMCore(api.Proxy):
         host=_server.DEFAULT_HOST,
         port=_server.DEFAULT_PORT,
         timeout=5,
+        verbose=False,
         cleanup_new=True,
         cleanup_existing=True,
         connected_socket=None,
         callback=None,
     ):
         register_serializers()
-        ensure_server_running(host, port, timeout, cleanup_new, cleanup_existing)
+        ensure_server_running(
+            host, port, timeout, verbose, cleanup_new, cleanup_existing
+        )
 
         uri = f"PYRO:{_server.CORE_NAME}@{host}:{port}"
         super().__init__(uri, connected_socket=connected_socket)
@@ -82,9 +85,12 @@ def _get_remote_pid(host, port):
                 return proc
 
 
-def new_server_process(host, port, timeout=5):
+def new_server_process(host, port, timeout=5, verbose=False):
     """Create a new daemon process"""
     cmd = [sys.executable, _server.__file__, "-p", str(port), "--host", host]
+    if verbose:
+        cmd.append("--verbose")
+
     proc = subprocess.Popen(cmd)
 
     uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
@@ -101,7 +107,7 @@ def new_server_process(host, port, timeout=5):
 
 
 def ensure_server_running(
-    host, port, timeout=5, cleanup_new=True, cleanup_existing=False
+    host, port, timeout=5, verbose=False, cleanup_new=True, cleanup_existing=False
 ):
     """Ensure that a server daemon is running, or start one."""
     uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
@@ -116,7 +122,7 @@ def ensure_server_running(
 
     except errors.CommunicationError:
         logger.debug("No server found, creating new mmcore server")
-        proc = new_server_process(host, port)
+        proc = new_server_process(host, port, verbose=verbose)
         if cleanup_new:
             atexit.register(proc.kill)
         return proc
