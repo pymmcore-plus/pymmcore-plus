@@ -159,3 +159,13 @@ python examples/qt_integration.py
 ```
 
 > note: you'll need to `pip install qtpy pyqt5` (or `pyside2`) for this to work
+
+
+## Contributing
+
+Contributions welcome.  Please fork this library, then clone locally, then install with extras
+```
+pip install -e .[testing]
+```
+Run `pre-commit install` to add pre-commit hooks (black, flake8, mypy, etc...)
+Run tests with `pytest`
