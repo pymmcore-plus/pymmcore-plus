@@ -90,6 +90,16 @@ python -m pymmcore_plus.install
 > Files directory.  To override these default device adapter search path, set the
 > `MICROMANAGER_PATH` environment variable.
 
+**Important:** The *device interface version* must match between pymmcore and the Micro-Manager device adapters.
+
+The device interface version of a given `pymmcore` version is the fourth part in the version number, and can also be with the following command:
+
+```sh
+python -c "print(__import__('pymmcore').CMMCore().getAPIVersionInfo())"
+```
+
+The device interface version of a given Micro-Manager installation can be viewed in **Help > About Micro-Manager**.  Or you can look at the `MMDevice.h` file for the corresponding date, roughly [here](https://github.com/micro-manager/mmCoreAndDevices/blob/main/MMDevice/MMDevice.h#L30)
+
 ### examples
 
 You can find for some basic examples in the [examples](examples) directory.
