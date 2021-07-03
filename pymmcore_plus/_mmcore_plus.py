@@ -11,6 +11,8 @@ from loguru import logger
 if TYPE_CHECKING:
     import useq
 
+    from ._client import CallbackProtocol
+
 
 class CMMCorePlus(pymmcore.CMMCore):
     def __init__(self, mm_path=None, adapter_paths: Sequence[str] = ()):
@@ -30,7 +32,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.registerCallback(self._callback_relay)
         self._canceled = False
         self._paused = False
-        self._callback_handlers = set()
+        self._callback_handlers: set[CallbackProtocol] = set()
 
     def setDeviceAdapterSearchPaths(self, adapter_paths: Sequence[str]):
         # add to PATH as well for dynamic dlls
@@ -49,11 +51,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
     def loadSystemConfiguration(self, fileName="demo"):
-        if fileName.lower() == "demo" and self._mm_path:
+        if fileName.lower() == "demo":
+            if not self._mm_path:
+                raise ValueError(
+                    "No micro-manager path provided. Cannot load 'demo' file.\nTry "
+                    "installing micro-manager with `python install_mm.py`"
+                )
             fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
         super().loadSystemConfiguration(str(fileName))
 
-    def setRelPosition(self, dx=0, dy=0, dz=0) -> None:
+    def setRelPosition(self, dx: float = 0, dy: float = 0, dz: float = 0) -> None:
         if dx or dy:
             x, y = self.getXPosition(), self.getYPosition()
             self.setXYPosition(x + dx, y + dy)
@@ -88,6 +95,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if event.min_start_time:
                 go_at = event.min_start_time + paused_time
                 # TODO: we need to enter a loop here checking paused and canceled.
+                # otherwise you'll potentially wait a long time to cancel
                 if go_at > time.perf_counter() - t0:
                     time.sleep(go_at - (time.perf_counter() - t0))
             logger.info(event)
@@ -120,13 +128,13 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._paused = not self._paused
         self.emit_signal("onMDAPauseToggled", self._paused)
 
-    def connect_remote_callback(self, handler):
+    def connect_remote_callback(self, handler: CallbackProtocol):
         self._callback_handlers.add(handler)
 
-    def disconnect_remote_callback(self, handler):
+    def disconnect_remote_callback(self, handler: CallbackProtocol):
         self._callback_handlers.discard(handler)
 
-    def emit_signal(self, signal_name, *args):
+    def emit_signal(self, signal_name: str, *args):
         # different in pyro subclass
         logger.debug("{}: {}", signal_name, args)
         for handler in self._callback_handlers:
