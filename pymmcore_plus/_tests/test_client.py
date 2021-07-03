@@ -14,7 +14,7 @@ from pymmcore_plus.qcallbacks import QCoreCallback
 if not os.getenv("MICROMANAGER_PATH"):
     try:
         root = Path(pymmcore_plus.__file__).parent.parent
-        mm_path = list(root.glob("Micro-Manager-*"))[0]
+        mm_path = list(root.glob("**/Micro-Manager-*"))[0]
         os.environ["MICROMANAGER_PATH"] = str(mm_path)
     except IndexError:
         raise AssertionError(
