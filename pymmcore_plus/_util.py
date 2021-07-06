@@ -26,10 +26,11 @@ def find_micromanager() -> Optional[str]:
     applications = {
         "darwin": Path("/Applications/"),
         "win32": Path("C:/Program Files/"),
+        "linux": Path("/usr/local/lib"),
     }
     try:
         app_path = applications[sys.platform]
-        pth = str(next(app_path.glob("Micro-Manager*")))
+        pth = str(next(app_path.glob("[m,M]icro-[m,M]anager*")))
         logger.debug(f"using MM path found in applications: {pth}")
         return pth
     except KeyError:
@@ -37,5 +38,5 @@ def find_micromanager() -> Optional[str]:
             f"MM autodiscovery not implemented for platform: {sys.platform}"
         )
     except StopIteration:
-        logger.error("could not find micromanager directory")
+        logger.error(f"could not find micromanager directory in {app_path}")
         return None
