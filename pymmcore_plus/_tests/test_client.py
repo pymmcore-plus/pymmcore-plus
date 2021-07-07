@@ -9,7 +9,6 @@ from useq import MDAEvent, MDASequence
 import pymmcore_plus
 from pymmcore_plus._client import RemoteMMCore, new_server_process
 from pymmcore_plus._server import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_URI
-from pymmcore_plus.qcallbacks import QCoreCallback
 
 if not os.getenv("MICROMANAGER_PATH"):
     try:
@@ -43,10 +42,8 @@ def test_client(proxy):
 
 def test_mda(qtbot, proxy):
     mda = MDASequence(time_plan={"interval": 0.1, "loops": 2})
-    cb = QCoreCallback()
-    proxy.register_callback(cb)
 
-    def _test_signal(img, event):
+    def _check_frame(img, event):
         return (
             isinstance(img, np.ndarray)
             and isinstance(event, MDAEvent)
@@ -54,11 +51,16 @@ def test_mda(qtbot, proxy):
             and event.sequence is not mda
         )
 
-    def _check_finished(obj):
+    def _check_seq(obj):
         return obj.uid == mda.uid
 
-    signals = [cb.MDAFrameReady, cb.MDAFrameReady, cb.MDAFinished]
-    checks = [_test_signal, _test_signal, _check_finished]
+    signals = [
+        proxy.sequenceStarted,
+        proxy.frameReady,
+        proxy.frameReady,
+        proxy.sequenceFinished,
+    ]
+    checks = [_check_seq, _check_frame, _check_frame, _check_seq]
 
     with qtbot.waitSignals(signals, check_params_cbs=checks, order="strict"):
         proxy.run_mda(mda)

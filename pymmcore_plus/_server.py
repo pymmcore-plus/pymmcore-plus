@@ -2,6 +2,7 @@ CORE_NAME = "pymmcore_plus.CMMCorePlus"
 DEFAULT_PORT = 54333
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_URI = f"PYRO:{CORE_NAME}@{DEFAULT_HOST}:{DEFAULT_PORT}"
+VERBOSE = False
 
 
 def main():
@@ -16,7 +17,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT, help="port")
     parser.add_argument("--host", default=DEFAULT_HOST)
-    parser.add_argument("--verbose", action="store_true", default=False)
+    parser.add_argument("--verbose", action="store_true", default=VERBOSE)
     args = parser.parse_args()
 
     register_serializers()

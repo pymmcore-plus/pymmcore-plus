@@ -9,30 +9,28 @@ import pymmcore
 from loguru import logger
 
 if TYPE_CHECKING:
-    import useq
+    from useq import MDASequence
 
-    from ._client import CallbackProtocol
+from ._signals import _CMMCoreSignaler
+from ._util import find_micromanager
 
 
-class CMMCorePlus(pymmcore.CMMCore):
+class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
     def __init__(self, mm_path=None, adapter_paths: Sequence[str] = ()):
         super().__init__()
 
-        if not mm_path:
-            from ._util import find_micromanager
-
-            mm_path = find_micromanager()
-
-        self._mm_path = mm_path
-        if not adapter_paths and mm_path:
-            adapter_paths = [mm_path]
+        self._mm_path = mm_path or find_micromanager()
+        if not adapter_paths and self._mm_path:
+            adapter_paths = [self._mm_path]
         if adapter_paths:
             self.setDeviceAdapterSearchPaths(adapter_paths)
+
         self._callback_relay = MMCallbackRelay(self)
         self.registerCallback(self._callback_relay)
         self._canceled = False
         self._paused = False
-        self._callback_handlers: set[CallbackProtocol] = set()
+
+    # Re-implemented methods from the CMMCore API
 
     def setDeviceAdapterSearchPaths(self, adapter_paths: Sequence[str]):
         # add to PATH as well for dynamic dlls
@@ -60,6 +58,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
         super().loadSystemConfiguration(str(fileName))
 
+    # NEW methods
+
     def setRelPosition(self, dx: float = 0, dy: float = 0, dz: float = 0) -> None:
         if dx or dy:
             x, y = self.getXPosition(), self.getYPosition()
@@ -76,19 +76,19 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setZPosition(self, val: float) -> None:
         return self.setPosition(self.getFocusDevice(), val)
 
-    def run_mda(self, sequence: useq.MDASequence) -> None:
-        self.emit_signal("onMDAStarted", sequence)
-        self._paused = False
+    def run_mda(self, sequence: MDASequence) -> None:
+        self.sequenceStarted.emit(sequence)
         logger.info("MDA Started: {}", sequence)
-        t0 = time.perf_counter()  # reference time, in seconds
+        self._paused = False
         paused_time = 0.0
+        t0 = time.perf_counter()  # reference time, in seconds
         for event in sequence:
             while self._paused and not self._canceled:
                 paused_time += 0.1  # fixme: be more precise
                 time.sleep(0.1)
             if self._canceled:
                 logger.warning("MDA Canceled: {}", sequence)
-                self.emit_signal("onMDACanceled")
+                self.sequenceCanceled.emit(sequence)
                 self._canceled = False
                 break
 
@@ -117,64 +117,42 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.snapImage()
             img = self.getImage()
 
-            self.emit_signal("onMDAFrameReady", img, event)
+            self.frameReady.emit(img, event)
+
         logger.info("MDA Finished: {}", sequence)
-        self.emit_signal("onMDAFinished", sequence)
+        self.sequenceFinished.emit(sequence)
 
     def cancel(self):
         self._canceled = True
 
     def toggle_pause(self):
         self._paused = not self._paused
-        self.emit_signal("onMDAPauseToggled", self._paused)
-
-    def connect_remote_callback(self, handler: CallbackProtocol):
-        self._callback_handlers.add(handler)
-
-    def disconnect_remote_callback(self, handler: CallbackProtocol):
-        self._callback_handlers.discard(handler)
-
-    def emit_signal(self, signal_name: str, *args):
-        # different in pyro subclass
-        logger.debug("{}: {}", signal_name, args)
-        for handler in self._callback_handlers:
-            handler.receive_core_callback(signal_name, args)
+        self.sequencePauseToggled.emit(self._paused)
 
 
-class MMCallbackRelay(pymmcore.MMEventCallback):
+class _MMCallbackRelay:
+    """Relays MMEventCallback methods to CMMCorePlus.signal."""
+
     def __init__(self, core: CMMCorePlus):
-        super().__init__()
         self._core = core
+        super().__init__()
 
-    def onPropertiesChanged(self):
-        self._core.emit_signal("onPropertiesChanged")
+    @staticmethod
+    def _make_reemitter(name):
+        sig_name = name[2].lower() + name[3:]
 
-    def onPropertyChanged(self, dev_name: str, prop_name: str, prop_val: str):
-        self._core.emit_signal("onPropertyChanged", dev_name, prop_name, prop_val)
+        def reemit(self: _MMCallbackRelay, *args):
+            getattr(self._core, sig_name).emit(*args)
 
-    def onChannelGroupChanged(self, new_channel_group_name: str):
-        self._core.emit_signal("onChannelGroupChanged", new_channel_group_name)
+        return reemit
 
-    def onConfigGroupChanged(self, group_name: str, new_config_name: str):
-        self._core.emit_signal("onConfigGroupChanged", group_name, new_config_name)
 
-    def onSystemConfigurationLoaded(self):
-        self._core.emit_signal("onSystemConfigurationLoaded")
-
-    def onPixelSizeChanged(self, new_pixel_size_um: float):
-        self._core.emit_signal("onPixelSizeChanged", new_pixel_size_um)
-
-    def onPixelSizeAffineChanged(self, v0, v1, v2, v3, v4, v5):
-        self._core.emit_signal("onPixelSizeAffineChanged", v0, v1, v2, v3, v4, v5)
-
-    def onStagePositionChanged(self, name: str, pos: float):
-        self._core.emit_signal("onStagePositionChanged", name, pos)
-
-    def onXYStagePositionChanged(self, name: str, xpos: float, ypos: float):
-        self._core.emit_signal("onXYStagePositionChanged", name, xpos, ypos)
-
-    def onExposureChanged(self, name: str, new_exposure: float):
-        self._core.emit_signal("onExposureChanged", name, new_exposure)
-
-    def onSLMExposureChanged(self, name: str, new_exposure: float):
-        self._core.emit_signal("onSLMExposureChanged", name, new_exposure)
+MMCallbackRelay = type(
+    "MMCallbackRelay",
+    (_MMCallbackRelay, pymmcore.MMEventCallback),
+    {
+        n: _MMCallbackRelay._make_reemitter(n)
+        for n in dir(pymmcore.MMEventCallback)
+        if n.startswith("on")
+    },
+)

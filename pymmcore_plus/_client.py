@@ -3,6 +3,7 @@ import subprocess
 import sys
 import threading
 import time
+from typing import TYPE_CHECKING, Optional
 
 from loguru import logger
 from Pyro5 import api, core, errors
@@ -10,6 +11,10 @@ from typing_extensions import Protocol
 
 from . import _server
 from ._serialize import register_serializers
+from ._signals import _CMMCoreSignaler
+
+if TYPE_CHECKING:
+    from psutil import Process
 
 
 class CallbackProtocol(Protocol):
@@ -17,17 +22,27 @@ class CallbackProtocol(Protocol):
         """Will be called by server with name of signal, and tuple of args."""
 
 
-class RemoteMMCore(api.Proxy):
+class _CBrelay(CallbackProtocol):
+    def __init__(self, proxy: _CMMCoreSignaler) -> None:
+        super().__init__()
+        self._proxy = proxy
+
+    def receive_core_callback(self, signal_name: str, args: tuple) -> None:
+        """Will be called by server with name of signal, and tuple of args."""
+        getattr(self._proxy, signal_name).emit(*args)
+
+
+class RemoteMMCore(api.Proxy, _CMMCoreSignaler):
     def __init__(
         self,
-        host=_server.DEFAULT_HOST,
-        port=_server.DEFAULT_PORT,
-        timeout=5,
-        verbose=False,
+        *,
+        host: str = _server.DEFAULT_HOST,
+        port: int = _server.DEFAULT_PORT,
+        timeout: int = 5,
+        verbose: bool = False,
         cleanup_new=True,
         cleanup_existing=True,
         connected_socket=None,
-        callback=None,
     ):
         register_serializers()
         ensure_server_running(
@@ -39,10 +54,34 @@ class RemoteMMCore(api.Proxy):
 
         self._cb_thread = None
         self._callbacks = set()
-        if callback is not None:
-            self.register_callback(callback)
+        self.register_callback(_CBrelay(self))
 
     def register_callback(self, callback: CallbackProtocol):
+        """Register callback object in proxy process to receive remote callbacks.
+
+        Not to be confused with `mmcore.registerCallback`, which is only used once by
+        CMMCorePlus to receive events coming from the internal C++ CMMcore object.
+
+        Note: RemoteMMCore automatically behaves as a callback receiver, you can
+        connect to any of the signals in the `_CMMCoreSignaler` class:
+
+            proxy = RemoteMMCore()
+            proxy.systemConfigurationLoaded.connect(lambda: print("loaded!"))
+
+        This method can be used to register an independent callback object.
+
+        Parameters
+        ----------
+        callback : CallbackProtocol
+            Just an object that has a `receive_core_callback` method. When a remote
+            callback is received by this proxy, it will call this method as:
+            `callback.receive_core_callback(signal_name, args)`
+
+        Raises
+        ------
+        TypeError
+            If the provided object doesn't have a `receive_core_callback` method.
+        """
         class_cb = getattr(type(callback), "receive_core_callback", None)
         if class_cb is None:
             raise TypeError("Callbacks must have a 'receive_core_callback' method.")
@@ -55,15 +94,13 @@ class RemoteMMCore(api.Proxy):
         self.connect_remote_callback(callback)  # must come after register()
         self._cb_thread.start()
 
-    def __exit__(self, exc_type, exc_value, traceback):
+    def __exit__(self, *args):
         logger.debug("closing pyro client")
         for cb in self._callbacks:
             self.disconnect_remote_callback(cb)
         if self._cb_thread is not None:
             self._cb_thread._daemon.close()
-        super().__exit__(exc_type, exc_value, traceback)
-        if exc_value is not None:
-            sys._original_exchook_, sys.excepthook = sys.excepthook, errors.excepthook
+        super().__exit__(*args)
 
     def __getattr__(self, name):
         if name in ("_cb_thread", "_callbacks"):
@@ -76,7 +113,7 @@ class RemoteMMCore(api.Proxy):
         return super().__setattr__(name, value)
 
 
-def _get_remote_pid(host, port):
+def _get_remote_pid(host, port) -> Optional["Process"]:
     import psutil
 
     for proc in psutil.process_iter(["connections"]):
@@ -85,7 +122,9 @@ def _get_remote_pid(host, port):
                 return proc
 
 
-def new_server_process(host, port, timeout=5, verbose=False):
+def new_server_process(
+    host: str, port: int, timeout=5, verbose=False
+) -> subprocess.Popen:
     """Create a new daemon process"""
     cmd = [sys.executable, _server.__file__, "-p", str(port), "--host", host]
     if verbose:
@@ -108,7 +147,7 @@ def new_server_process(host, port, timeout=5, verbose=False):
 
 def ensure_server_running(
     host, port, timeout=5, verbose=False, cleanup_new=True, cleanup_existing=False
-):
+) -> Optional[subprocess.Popen]:
     """Ensure that a server daemon is running, or start one."""
     uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
     remote_daemon = api.Proxy(uri)
@@ -119,7 +158,6 @@ def ensure_server_running(
             proc = _get_remote_pid(host, port)
             if proc is not None:
                 atexit.register(proc.kill)
-
     except errors.CommunicationError:
         logger.debug("No server found, creating new mmcore server")
         proc = new_server_process(host, port, verbose=verbose)
