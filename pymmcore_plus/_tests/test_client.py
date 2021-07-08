@@ -7,8 +7,9 @@ import pytest
 from useq import MDAEvent, MDASequence
 
 import pymmcore_plus
-from pymmcore_plus._client import RemoteMMCore, new_server_process
-from pymmcore_plus._server import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_URI
+from pymmcore_plus.client import RemoteMMCore
+from pymmcore_plus.client._client import new_server_process
+from pymmcore_plus.server import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_URI
 
 if not os.getenv("MICROMANAGER_PATH"):
     try:

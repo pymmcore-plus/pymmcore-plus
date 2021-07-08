@@ -9,9 +9,9 @@ from loguru import logger
 from Pyro5 import api, core, errors
 from typing_extensions import Protocol
 
-from . import _server
-from ._serialize import register_serializers
-from ._signals import _CMMCoreSignaler
+from .. import server
+from .._serialize import register_serializers
+from ..core._signals import _CMMCoreSignaler
 
 if TYPE_CHECKING:
     from psutil import Process
@@ -36,8 +36,8 @@ class RemoteMMCore(api.Proxy, _CMMCoreSignaler):
     def __init__(
         self,
         *,
-        host: str = _server.DEFAULT_HOST,
-        port: int = _server.DEFAULT_PORT,
+        host: str = server.DEFAULT_HOST,
+        port: int = server.DEFAULT_PORT,
         timeout: int = 5,
         verbose: bool = False,
         cleanup_new=True,
@@ -49,26 +49,25 @@ class RemoteMMCore(api.Proxy, _CMMCoreSignaler):
             host, port, timeout, verbose, cleanup_new, cleanup_existing
         )
 
-        uri = f"PYRO:{_server.CORE_NAME}@{host}:{port}"
+        uri = f"PYRO:{server.CORE_NAME}@{host}:{port}"
         super().__init__(uri, connected_socket=connected_socket)
 
         self._cb_thread = None
         self._callbacks = set()
-        self.register_callback(_CBrelay(self))
+        self._register_callback(_CBrelay(self))
 
-    def register_callback(self, callback: CallbackProtocol):
+    def _register_callback(self, callback: CallbackProtocol):
         """Register callback object in proxy process to receive remote callbacks.
 
         Not to be confused with `mmcore.registerCallback`, which is only used once by
         CMMCorePlus to receive events coming from the internal C++ CMMcore object.
 
         Note: RemoteMMCore automatically behaves as a callback receiver, you can
-        connect to any of the signals in the `_CMMCoreSignaler` class:
+        connect to any of the signals already provided by `CMMCorePlus`:
 
             proxy = RemoteMMCore()
             proxy.systemConfigurationLoaded.connect(lambda: print("loaded!"))
 
-        This method can be used to register an independent callback object.
 
         Parameters
         ----------
@@ -126,7 +125,7 @@ def new_server_process(
     host: str, port: int, timeout=5, verbose=False
 ) -> subprocess.Popen:
     """Create a new daemon process"""
-    cmd = [sys.executable, _server.__file__, "-p", str(port), "--host", host]
+    cmd = [sys.executable, "-m", server.__name__, "-p", str(port), "--host", host]
     if verbose:
         cmd.append("--verbose")
 

@@ -11,8 +11,8 @@ from loguru import logger
 if TYPE_CHECKING:
     from useq import MDASequence
 
+from .._util import find_micromanager
 from ._signals import _CMMCoreSignaler
-from ._util import find_micromanager
 
 
 class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):

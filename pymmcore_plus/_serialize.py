@@ -26,7 +26,7 @@ def _cleanup():
         shm.unlink()
 
 
-def ndarray_to_dict(obj):
+def ndarray_to_dict(obj: np.ndarray):
     """convert numpy array to dict."""
     shm = SharedMemory(create=True, size=obj.nbytes)
     SHM_SENT.append(shm)
