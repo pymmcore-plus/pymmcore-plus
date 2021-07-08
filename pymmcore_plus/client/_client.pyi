@@ -6,8 +6,8 @@ from typing import Any, Type
 from Pyro5 import api
 from typing_extensions import Protocol as Protocol
 
-from ._pyrocore import CMMCorePlus
-from ._serialize import register_serializers as register_serializers
+from .._serialize import register_serializers as register_serializers
+from ..server._pyrocore import CMMCorePlus
 
 class CallbackProtocol(Protocol):
     def receive_core_callback(self, signal_name: str, args: tuple) -> None: ...
