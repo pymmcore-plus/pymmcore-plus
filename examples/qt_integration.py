@@ -11,7 +11,6 @@ from qtpy.QtWidgets import QApplication, QPushButton
 from useq import MDAEvent, MDASequence
 
 from pymmcore_plus import RemoteMMCore
-from pymmcore_plus.qcallbacks import QCoreCallback
 
 app = QApplication([])
 
@@ -30,24 +29,21 @@ sequence = MDASequence(
 
 # start server in another process and connect to it
 with RemoteMMCore() as mmcore:
-    # create and register a Qt callback/signal adapter
-    cb = QCoreCallback()
-    mmcore.register_callback(cb)
 
+    @mmcore.frameReady.connect
     def on_frame(image: np.ndarray, event: MDAEvent):
         print(
             f"received frame: {image.shape}, {image.dtype} "
             f"@ index {event.index}, z={event.z_pos}"
         )
 
+    @mmcore.propertyChanged.connect
     def prop_changed(device, prop, value):
         print(f"{device}.{prop} changed to {value!r}")
 
     # setup some callbacks
-    cb.systemConfigurationLoaded.connect(lambda: print("config loaded!"))
-    cb.MDAFrameReady.connect(on_frame)
-    cb.propertyChanged.connect(prop_changed)
-    cb.MDAFinished.connect(app.quit)
+    mmcore.systemConfigurationLoaded.connect(lambda: print("config loaded!"))
+    mmcore.sequenceFinished.connect(app.quit)
 
     # load config and start an experiment
     mmcore.loadSystemConfiguration("demo")
