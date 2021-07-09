@@ -200,8 +200,10 @@ class CMMCore:
         """Set the region of interest of the current camera to the full frame."""
     def debugLogEnabled(self) -> bool:
         """Indicates if logging of debug messages is enabled"""
+    @overload
     def defineConfig(self, groupName: str, configName: str) -> None:
         """Defines a configuration."""
+    @overload
     def defineConfig(
         self,
         groupName: str,
@@ -861,11 +863,7 @@ class CMMCore:
         """For SLM devices with build-in light source (such as projectors),
 
         this will set the exposure time, but not (yet) start the illumination"""
-    @overload
     def setSLMImage(self, slmLabel: str, pixels: Any) -> None:
-        """Write a 32-bit color image to the SLM."""
-    @overload
-    def setSLMImage(self, slmLabel: str, pixels: Sequence[int]) -> None:
         """Write a 32-bit color image to the SLM."""
     @overload
     def setSLMPixelsTo(self, slmLabel: str, intensity: int) -> None:
@@ -1138,4 +1136,4 @@ class PropertySetting:
     def getReadOnly(self) -> bool: ...
     def getVerbose(self) -> str: ...
     def isEqualTo(self, ps: PropertySetting) -> bool: ...
-    def __eq__(sel, ps: PropertySetting) -> bool: ...
+    def __eq__(sel, other: Any) -> bool: ...

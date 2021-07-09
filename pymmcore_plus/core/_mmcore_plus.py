@@ -60,14 +60,14 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
             fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
         super().loadSystemConfiguration(str(fileName))
 
-    def getDeviceType(label: str) -> DeviceType:
+    def getDeviceType(self, label: str) -> DeviceType:
         """Returns device type."""
         return DeviceType(super().getDeviceType(label))
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         return PropertyType(super().getPropertyType(label, propName))
 
-    def detectDevice(deviceLabel: str) -> DeviceDetectionStatus:
+    def detectDevice(self, deviceLabel: str) -> DeviceDetectionStatus:
         """Tries to communicate to a device through a given serial port.
 
         Used to automate discovery of correct serial port.
