@@ -4,6 +4,6 @@ except ImportError:
     __version__ = "unknown"
 
 from .client import RemoteMMCore
-from .core import CMMCorePlus
+from .core import CMMCorePlus, Metadata
 
-__all__ = ["RemoteMMCore", "CMMCorePlus"]
+__all__ = ["RemoteMMCore", "CMMCorePlus", "Metadata"]
