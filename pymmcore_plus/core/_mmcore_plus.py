@@ -7,15 +7,17 @@ from typing import TYPE_CHECKING, Sequence
 
 import pymmcore
 from loguru import logger
+from pymmcore import CMMCore
 
 if TYPE_CHECKING:
     from useq import MDASequence
 
 from .._util import find_micromanager
+from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._signals import _CMMCoreSignaler
 
 
-class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
+class CMMCorePlus(CMMCore, _CMMCoreSignaler):
     def __init__(self, mm_path=None, adapter_paths: Sequence[str] = ()):
         super().__init__()
 
@@ -57,6 +59,21 @@ class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
                 )
             fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
         super().loadSystemConfiguration(str(fileName))
+
+    def getDeviceType(label: str) -> DeviceType:
+        """Returns device type."""
+        return DeviceType(super().getDeviceType(label))
+
+    def getPropertyType(self, label: str, propName: str) -> PropertyType:
+        return PropertyType(super().getPropertyType(label, propName))
+
+    def detectDevice(deviceLabel: str) -> DeviceDetectionStatus:
+        """Tries to communicate to a device through a given serial port.
+
+        Used to automate discovery of correct serial port.
+        Also configures the serial port correctly.
+        """
+        return DeviceDetectionStatus(super().detectDevice(deviceLabel))
 
     # NEW methods
 
