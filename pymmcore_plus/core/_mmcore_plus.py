@@ -2,19 +2,22 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, Optional, Sequence, Tuple
 
 import pymmcore
 from loguru import logger
 from pymmcore import CMMCore
 
-if TYPE_CHECKING:
-    from useq import MDASequence
-
 from .._util import find_micromanager
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
+from ._metadata import Metadata
 from ._signals import _CMMCoreSignaler
+
+if TYPE_CHECKING:
+    import numpy as np
+    from useq import MDASequence
 
 
 class CMMCorePlus(CMMCore, _CMMCoreSignaler):
@@ -75,6 +78,32 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
         """
         return DeviceDetectionStatus(super().detectDevice(deviceLabel))
 
+    # metadata overloads that don't require instantiating metadata first
+
+    def getLastImageMD(
+        self, md: Optional[Metadata] = None
+    ) -> Tuple[np.ndarray, Metadata]:
+        if md is None:
+            md = Metadata()
+        img = super().getLastImageMD(md)
+        return img, md
+
+    def popNextImageMD(
+        self, md: Optional[Metadata] = None
+    ) -> Tuple[np.ndarray, Metadata]:
+        if md is None:
+            md = Metadata()
+        img = super().popNextImageMD(md)
+        return img, md
+
+    def getNBeforeLastImageMD(
+        self, n: int, md: Optional[Metadata] = None
+    ) -> Tuple[np.ndarray, Metadata]:
+        if md is None:
+            md = Metadata()
+        img = super().getNBeforeLastImageMD(n, md)
+        return img, md
+
     # NEW methods
 
     def setRelPosition(self, dx: float = 0, dy: float = 0, dz: float = 0) -> None:
@@ -92,6 +121,12 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
 
     def setZPosition(self, val: float) -> None:
         return self.setPosition(self.getFocusDevice(), val)
+
+    def getCameraChannelNames(self) -> Tuple[str, ...]:
+        return tuple(
+            self.getCameraChannelName(i)
+            for i in range(self.getNumberOfCameraChannels())
+        )
 
     def run_mda(self, sequence: MDASequence) -> None:
         self.sequenceStarted.emit(sequence)
@@ -145,6 +180,29 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
     def toggle_pause(self):
         self._paused = not self._paused
         self.sequencePauseToggled.emit(self._paused)
+
+    def state(self) -> dict:
+        # approx retrieval cost in comment (for demoCam)
+        return {
+            "bytest_per_pixel": self.getBytesPerPixel(),  # 149 ns
+            "image_bit_depth": self.getImageBitDepth(),  # 147 ns
+            "image_width": self.getImageWidth(),  # 172 ns
+            "image_height": self.getImageHeight(),  # 164 ns
+            "pixel_size_um": self.getPixelSizeUm(),  # 2.83 µs
+            "xy_stage_device": self.getXYStageDevice(),  # 156 ns
+            "xy_position": self.getXYPosition(),  # 1.1 µs
+            "focus_device": self.getFocusDevice(),  # 112 ns
+            "focus_position": self.getZPosition(),  # 1.03 µs
+            "auto_focus_device": self.getAutoFocusDevice(),  # 150 ns
+            "camera_device": self.getCameraDevice(),  # 159 ns
+            "exposure": self.getExposure(),  # 726 ns
+            "camera_channels": self.getCameraChannelNames(),  # 1 µs
+            "galvo_device": self.getGalvoDevice(),  # 109 ns
+            "image_processor_device": self.getImageProcessorDevice(),  # 110 ns
+            "slm_device": self.getSLMDevice(),  # 110 ns
+            "shutter_device": self.getShutterDevice(),  # 152 ns
+            "datetime": str(datetime.now()),
+        }
 
 
 class _MMCallbackRelay:

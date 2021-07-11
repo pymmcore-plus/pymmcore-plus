@@ -1,10 +1,12 @@
-from typing import Any, Sequence
+from typing import Any, Sequence, Tuple, overload
 
+import numpy as np
 import pymmcore
 from useq import MDASequence as MDASequence
 
 from .._util import find_micromanager as find_micromanager
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
+from ._metadata import Metadata
 from ._signals import _CMMCoreSignaler
 
 class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
@@ -17,7 +19,13 @@ class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
     def getDeviceType(self, label: str) -> DeviceType: ...
     def getPropertyType(self, label: str, propName: str) -> PropertyType: ...
     def detectDevice(self, deviceLabel: str) -> DeviceDetectionStatus: ...
+    @overload
+    def getLastImageMD(self, channel: int, slice: int, md: Metadata) -> np.ndarray: ...
+    @overload
+    def getLastImageMD(self, md: Metadata) -> np.ndarray: ...
     # NEW methods
+    @overload
+    def getLastImageMD(self) -> Tuple[np.ndarray, Metadata]: ...
     def setRelPosition(
         self, dx: float = ..., dy: float = ..., dz: float = ...
     ) -> None: ...

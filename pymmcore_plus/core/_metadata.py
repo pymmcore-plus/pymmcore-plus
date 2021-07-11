@@ -1,56 +1,11 @@
 """pythonic wrapper on pymmcore.Metadata object."""
 from collections.abc import Mapping
+from types import new_class
 from typing import Any, ItemsView, Iterator, KeysView, ValuesView
 
 import pymmcore
 
-
-class MetaKeysView(KeysView[str]):
-    def __init__(self, metadata: "Metadata") -> None:
-        super().__init__(metadata)
-        self._metadata = metadata
-
-    def __iter__(self) -> Iterator[str]:
-        """Yield headers."""
-        yield from self._metadata
-
-    def __repr__(self) -> str:
-        return f"metadata_keys({list(self)!r})"
-
-
-class MetaItemsView(ItemsView[str, Any]):
-    """dictionary view for Table items."""
-
-    def __init__(self, mapping: "Metadata") -> None:
-        super().__init__(mapping)
-        self._mapping = mapping
-
-    def __iter__(self) -> Iterator[tuple[str, Any]]:
-        """Yield items."""
-        for key in self._mapping:
-            yield (key, self._mapping.GetSingleTag(key).GetValue())
-
-    def __repr__(self) -> str:
-        return f"metadata_items({list(self)!r})"
-
-
 _NULL = object()
-
-
-class MetaValuesView(ValuesView[Any]):
-    """dictionary view for Table items."""
-
-    def __init__(self, mapping: "Metadata") -> None:
-        super().__init__(mapping)
-        self._mapping = mapping
-
-    def __iter__(self) -> Iterator[tuple[str, Any]]:
-        """Yield items."""
-        for key in self._mapping:
-            yield self._mapping.GetSingleTag(key).GetValue()
-
-    def __repr__(self) -> str:
-        return f"metadata_values({list(self)!r})"
 
 
 class Metadata(pymmcore.Metadata):
@@ -86,7 +41,7 @@ class Metadata(pymmcore.Metadata):
         return len(self.GetKeys())
 
     def __repr__(self):
-        return f"Metadata({dict(self)!r})"
+        return f"{dict(self)!r}"
 
     def get(self, name, default=_NULL):
         try:
@@ -98,15 +53,6 @@ class Metadata(pymmcore.Metadata):
 
     def copy(self):
         return type(self)(**dict(self))
-
-    def keys(self) -> MetaKeysView:
-        return MetaKeysView(self)
-
-    def items(self) -> MetaItemsView:
-        return MetaItemsView(self)
-
-    def values(self) -> MetaValuesView:
-        return MetaValuesView(self)
 
     def clear(self) -> None:
         self.Clear()
@@ -120,3 +66,17 @@ class Metadata(pymmcore.Metadata):
         import json
 
         return json.dumps(dict(self))
+
+    def keys(self) -> KeysView[str]:
+        return metadata_keys(self)
+
+    def items(self) -> ItemsView[str, str]:
+        return metadata_items(self)
+
+    def values(self) -> ValuesView[str]:
+        return metadata_values(self)
+
+
+metadata_keys = new_class("metadata_keys", (KeysView,), {})
+metadata_items = new_class("metadata_items", (ItemsView,), {})
+metadata_values = new_class("metadata_values", (ValuesView,), {})
