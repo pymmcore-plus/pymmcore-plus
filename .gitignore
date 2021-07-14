@@ -139,4 +139,4 @@ cython_debug/
 
 pymmcore_plus/_version.py
 Micro-Manager-*
-.vscode/settings.json
+.vscode

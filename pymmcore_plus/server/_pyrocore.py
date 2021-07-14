@@ -30,7 +30,7 @@ class pyroCMMCore(CMMCorePlus):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for name in _SIGNAL_NAMES:
-            getattr(self, name).connect(partial(self._emit_signal, name))
+            getattr(self.events, name).connect(partial(self._emit_signal, name))
 
     def connect_remote_callback(self, handler: "CallbackProtocol"):
         self._callback_handlers.add(handler)
@@ -49,7 +49,7 @@ class pyroCMMCore(CMMCorePlus):
         logger.debug("{}: {}", signal_name, args)
         for handler in list(self._callback_handlers):
             try:
-                handler._pyroClaimOwnership()
+                handler._pyroClaimOwnership()  # type: ignore
                 handler.receive_core_callback(signal_name, args)
             except errors.CommunicationError:
                 self.disconnect_remote_callback(handler)

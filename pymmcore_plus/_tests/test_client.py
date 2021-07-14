@@ -56,10 +56,10 @@ def test_mda(qtbot, proxy):
         return obj.uid == mda.uid
 
     signals = [
-        proxy.sequenceStarted,
-        proxy.frameReady,
-        proxy.frameReady,
-        proxy.sequenceFinished,
+        proxy.events.sequenceStarted,
+        proxy.events.frameReady,
+        proxy.events.frameReady,
+        proxy.events.sequenceFinished,
     ]
     checks = [_check_seq, _check_frame, _check_frame, _check_seq]
 
