@@ -11,7 +11,6 @@ from typing_extensions import Protocol
 
 from .. import server
 from .._serialize import register_serializers
-from ..core._signals import _CMMCoreSignaler
 
 if TYPE_CHECKING:
     from psutil import Process
@@ -37,7 +36,7 @@ def _get_auto_callback_class():
     return SynchronousCallback
 
 
-class RemoteMMCore(api.Proxy, _CMMCoreSignaler):
+class RemoteMMCore(api.Proxy):
     def __init__(
         self,
         *,
@@ -62,7 +61,7 @@ class RemoteMMCore(api.Proxy, _CMMCoreSignaler):
         super().__init__(uri, connected_socket=connected_socket)
 
         self.events = callback_class()
-        cb_thread = DaemonThread()
+        cb_thread = DaemonThread(name="CallbackDaemon")
         cb_thread._daemon.register(self.events)
         self.connect_remote_callback(self.events)  # must come after register()
         cb_thread.start()
@@ -134,12 +133,10 @@ def ensure_server_running(
 
 
 class DaemonThread(threading.Thread):
-    def __init__(self, daemon=True):
+    def __init__(self, daemon=True, name="DaemonThread"):
         self._daemon = api.Daemon()
         self._stop_event = threading.Event()
-        super().__init__(
-            target=self._daemon.requestLoop, name="DaemonThread", daemon=daemon
-        )
+        super().__init__(target=self._daemon.requestLoop, name=name, daemon=daemon)
 
     def __enter__(self):
         return self

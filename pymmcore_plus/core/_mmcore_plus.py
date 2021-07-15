@@ -31,6 +31,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._canceled = False
         self._paused = False
 
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} at {hex(id(self))}>"
+
     # Re-implemented methods from the CMMCore API
 
     def setDeviceAdapterSearchPaths(self, adapter_paths: Sequence[str]):
