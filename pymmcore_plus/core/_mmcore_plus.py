@@ -15,7 +15,7 @@ from .._util import find_micromanager
 from ._signals import _CMMCoreSignaler
 
 
-class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
+class CMMCorePlus(pymmcore.CMMCore):
     def __init__(self, mm_path=None, adapter_paths: Sequence[str] = ()):
         super().__init__()
 
@@ -25,10 +25,14 @@ class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
         if adapter_paths:
             self.setDeviceAdapterSearchPaths(adapter_paths)
 
-        self._callback_relay = MMCallbackRelay(self)
+        self.events = _CMMCoreSignaler()
+        self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
         self._canceled = False
         self._paused = False
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} at {hex(id(self))}>"
 
     # Re-implemented methods from the CMMCore API
 
@@ -77,7 +81,7 @@ class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
         return self.setPosition(self.getFocusDevice(), val)
 
     def run_mda(self, sequence: MDASequence) -> None:
-        self.sequenceStarted.emit(sequence)
+        self.events.sequenceStarted.emit(sequence)
         logger.info("MDA Started: {}", sequence)
         self._paused = False
         paused_time = 0.0
@@ -88,7 +92,7 @@ class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
                 time.sleep(0.1)
             if self._canceled:
                 logger.warning("MDA Canceled: {}", sequence)
-                self.sequenceCanceled.emit(sequence)
+                self.events.sequenceCanceled.emit(sequence)
                 self._canceled = False
                 break
 
@@ -117,24 +121,24 @@ class CMMCorePlus(pymmcore.CMMCore, _CMMCoreSignaler):
             self.snapImage()
             img = self.getImage()
 
-            self.frameReady.emit(img, event)
+            self.events.frameReady.emit(img, event)
 
         logger.info("MDA Finished: {}", sequence)
-        self.sequenceFinished.emit(sequence)
+        self.events.sequenceFinished.emit(sequence)
 
     def cancel(self):
         self._canceled = True
 
     def toggle_pause(self):
         self._paused = not self._paused
-        self.sequencePauseToggled.emit(self._paused)
+        self.events.sequencePauseToggled.emit(self._paused)
 
 
-class _MMCallbackRelay:
+class _MMCallbackRelay(pymmcore.MMEventCallback):
     """Relays MMEventCallback methods to CMMCorePlus.signal."""
 
-    def __init__(self, core: CMMCorePlus):
-        self._core = core
+    def __init__(self, emitter: _CMMCoreSignaler):
+        self._emitter = emitter
         super().__init__()
 
     @staticmethod
@@ -142,14 +146,14 @@ class _MMCallbackRelay:
         sig_name = name[2].lower() + name[3:]
 
         def reemit(self: _MMCallbackRelay, *args):
-            getattr(self._core, sig_name).emit(*args)
+            getattr(self._emitter, sig_name).emit(*args)
 
         return reemit
 
 
 MMCallbackRelay = type(
     "MMCallbackRelay",
-    (_MMCallbackRelay, pymmcore.MMEventCallback),
+    (_MMCallbackRelay,),
     {
         n: _MMCallbackRelay._make_reemitter(n)
         for n in dir(pymmcore.MMEventCallback)
