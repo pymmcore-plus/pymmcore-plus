@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING, Sequence
+from typing import TYPE_CHECKING, List, Tuple, TypeVar, Union
 
 import pymmcore
 from loguru import logger
@@ -14,9 +14,13 @@ if TYPE_CHECKING:
 from .._util import find_micromanager
 from ._signals import _CMMCoreSignaler
 
+_T = TypeVar("_T")
+
+ListOrTuple = Union[List[_T], Tuple[_T, ...]]
+
 
 class CMMCorePlus(pymmcore.CMMCore):
-    def __init__(self, mm_path=None, adapter_paths: Sequence[str] = ()):
+    def __init__(self, mm_path=None, adapter_paths: ListOrTuple[str] = ()):
         super().__init__()
 
         self._mm_path = mm_path or find_micromanager()
@@ -36,7 +40,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # Re-implemented methods from the CMMCore API
 
-    def setDeviceAdapterSearchPaths(self, adapter_paths: Sequence[str]):
+    def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]):
         # add to PATH as well for dynamic dlls
         if (
             not isinstance(adapter_paths, (list, tuple))
@@ -55,7 +59,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def loadSystemConfiguration(self, fileName="demo"):
         if fileName.lower() == "demo":
             if not self._mm_path:
-                raise ValueError(
+                raise ValueError(  # pragma: no cover
                     "No micro-manager path provided. Cannot load 'demo' file.\nTry "
                     "installing micro-manager with `python install_mm.py`"
                 )
@@ -64,7 +68,10 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # NEW methods
 
-    def setRelPosition(self, dx: float = 0, dy: float = 0, dz: float = 0) -> None:
+    def setRelativeXYZPosition(
+        self, dx: float = 0, dy: float = 0, dz: float = 0
+    ) -> None:
+        """Sets the relative XYZ position in microns."""
         if dx or dy:
             x, y = self.getXPosition(), self.getYPosition()
             self.setXYPosition(x + dx, y + dy)

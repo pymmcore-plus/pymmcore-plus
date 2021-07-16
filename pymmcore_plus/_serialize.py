@@ -17,7 +17,7 @@ SHM_SENT: Deque[SharedMemory] = Deque(maxlen=MAX_SHM)
 SHM_RECV: Deque[SharedMemory] = Deque(maxlen=MAX_SHM)
 
 
-@atexit.register
+@atexit.register  # pragma: no cover
 def _cleanup():
     for shm in SHM_RECV:
         shm.close()
@@ -49,8 +49,8 @@ def dict_to_ndarray(classname, d):
 
 def CMMError_to_dict(err):
     try:
-        msg = err.args[0].getFullMsg()
-    except Exception:
+        msg = err.getMsg()
+    except Exception:  # pragma: no cover
         msg = ""
     return {
         "__class__": "pymmcore.CMMError",
@@ -102,14 +102,14 @@ def remove_shm_from_resource_tracker():
     """
     from multiprocessing import resource_tracker
 
-    def fix_register(name, rtype):
+    def fix_register(name, rtype):  # pragma: no cover
         if rtype == "shared_memory":
             return
         return resource_tracker._resource_tracker.register(name, rtype)
 
     resource_tracker.register = fix_register
 
-    def fix_unregister(name, rtype):
+    def fix_unregister(name, rtype):  # pragma: no cover
         if rtype == "shared_memory":
             return
         return resource_tracker._resource_tracker.unregister(name, rtype)

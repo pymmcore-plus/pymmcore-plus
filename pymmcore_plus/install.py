@@ -5,8 +5,8 @@ import urllib.request
 from pathlib import Path
 from subprocess import run
 
-MAC_RELEASE = 20210527
-WIN_RELEASE = 20210518
+RELEASE = 20210518 if os.name == "nt" else 20210527
+DEFAULT_DEST = Path(__file__).parent
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -27,10 +27,10 @@ def download_url(url, output_path):
     urllib.request.urlretrieve(url, filename=output_path, reporthook=progressBar)
 
 
-def mac_main(release=MAC_RELEASE):
+def _mac_main(dest_dir=DEFAULT_DEST, release=RELEASE):
     url = "https://valelab4.ucsf.edu/~MM/nightlyBuilds/2.0.0-gamma/Mac/"
     fname = f"Micro-Manager-2.0.0-gamma1-{release}.dmg"
-    dst = Path(__file__).parent / f"{fname[:-4]}_mac"
+    dst = dest_dir / f"{fname[:-4]}_mac"
 
     if dst.exists():
         resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
@@ -46,7 +46,8 @@ def mac_main(release=MAC_RELEASE):
     os.unlink(fname)
     # fix gatekeeper ... requires password
     print(
-        "\nYour password is required to enable Micro-manager in your security settings."
+        "\nYour password may be required to enable Micro-manager "
+        "in your security settings."
         "\nNote: you can also quit now (cmd-C) and do this "
         "manually in the Security & Privacy preference pane."
     )
@@ -57,10 +58,10 @@ def mac_main(release=MAC_RELEASE):
     return dst
 
 
-def win_main(release=WIN_RELEASE):
+def _win_main(dest_dir=DEFAULT_DEST, release=RELEASE):
     url = "https://valelab4.ucsf.edu/~MM/nightlyBuilds/2.0.0-gamma/Windows/"
     fname = f"MMSetup_64bit_2.0.0-gamma1_{release}.exe"
-    dst = Path(__file__).parent / f"Micro-Manager-2.0.0-gamma1-{release}_win"
+    dst = dest_dir / f"Micro-Manager-2.0.0-gamma1-{release}_win"
 
     if dst.exists():
         resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
@@ -77,12 +78,52 @@ def win_main(release=WIN_RELEASE):
     return dst
 
 
-def install():
-    print("installing device drivers")
-    dest = win_main() if os.name == "nt" else mac_main()
-    if dest:
-        print("installed to", dest)
+def install(dest_dir=DEFAULT_DEST):
+    out = _win_main(dest_dir) if os.name == "nt" else _mac_main(dest_dir)
+    if out:
+        print("installed to", out)
+
+
+def _existing_dir(string):
+    path = Path(string)
+    if not path.is_dir():
+        raise NotADirectoryError(string)
+    return path
+
+
+def _dateint(value):
+    if len(value) != 8:
+        raise ValueError(f"Invalid date: {value}. Must be eight digits.")
+    return int(value)
+
+
+def main():
+    import sys
+
+    print(sys.argv)
+    import argparse
+
+    parser = argparse.ArgumentParser(description="MM Device adapter installer.")
+    parser.add_argument(
+        "-d",
+        "--dest",
+        default=DEFAULT_DEST,
+        type=_existing_dir,
+        help=f"Directory in which to install (default: {DEFAULT_DEST})",
+    )
+    parser.add_argument(
+        "-r",
+        "--release",
+        metavar="DATE",
+        type=_dateint,
+        default=RELEASE,
+        help="8 digit date (YYYYMMDD) of MM nightly build to fetch "
+        f"(default: {RELEASE})",
+    )
+
+    args = parser.parse_args()
+    install(args.dest)
 
 
 if __name__ == "__main__":
-    install()
+    main()
