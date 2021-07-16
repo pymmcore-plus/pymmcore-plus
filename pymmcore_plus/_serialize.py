@@ -12,7 +12,11 @@ from Pyro5.api import register_class_to_dict, register_dict_to_class
 
 Pyro5.config.SERIALIZER = "msgpack"
 
-MAX_SHM = 10
+# FIXME:
+# setting a maxlength on the Deque is a good way to get segfaults
+# when passing around numpy arrays.  but it should be possible to
+# cleanup unneeded pointers.
+MAX_SHM = None
 SHM_SENT: Deque[SharedMemory] = Deque(maxlen=MAX_SHM)
 SHM_RECV: Deque[SharedMemory] = Deque(maxlen=MAX_SHM)
 

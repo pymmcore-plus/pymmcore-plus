@@ -21,7 +21,7 @@ class QCoreCallback(QObject):
 
     # added for CMMCorePlus
     sequenceStarted = Signal(object)  # at the start of an MDA sequence
-    sequencePauseToggled = Signal(object, bool)  # when MDA is paused/unpaused
+    sequencePauseToggled = Signal(bool)  # when MDA is paused/unpaused
     sequenceCanceled = Signal(object)  # when mda is canceled
     sequenceFinished = Signal(object)  # when mda is done (whether canceled or not)
     frameReady = Signal(object, object)  # after each event in the sequence

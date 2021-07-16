@@ -51,6 +51,17 @@ def test_search_paths(core: CMMCorePlus):
         core.setDeviceAdapterSearchPaths("test_path")
 
 
+def test_cb_exceptions(core: CMMCorePlus, caplog):
+    @core.events.propertyChanged.connect()
+    def _raze():
+        raise ValueError("Boom")
+
+    core.setProperty("Camera", "Binning", 2)
+
+    msg = caplog.records[0].message
+    assert msg == "Exception occured in MMCorePlus callback 'propertyChanged': Boom"
+
+
 def test_new_position_methods(core: CMMCorePlus):
     x1, y1 = core.getXYPosition()
     z1 = core.getZPosition()

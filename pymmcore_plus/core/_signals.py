@@ -23,7 +23,7 @@ class _CMMCoreSignaler:
 
     # added for CMMCorePlus
     sequenceStarted = Signal(MDASequence)  # at the start of an MDA sequence
-    sequencePauseToggled = Signal(MDASequence, bool)  # when MDA is paused/unpaused
+    sequencePauseToggled = Signal(bool)  # when MDA is paused/unpaused
     sequenceCanceled = Signal(MDASequence)  # when mda is canceled
     sequenceFinished = Signal(MDASequence)  # when mda is done (whether canceled or not)
     frameReady = Signal(np.ndarray, MDAEvent)  # after each event in the sequence

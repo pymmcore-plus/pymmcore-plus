@@ -153,7 +153,15 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         sig_name = name[2].lower() + name[3:]
 
         def reemit(self: _MMCallbackRelay, *args):
-            getattr(self._emitter, sig_name).emit(*args)
+            try:
+                getattr(self._emitter, sig_name).emit(*args)
+            except Exception as e:
+                import logging
+
+                logging.getLogger(__name__).error(
+                    "Exception occured in MMCorePlus callback %s: %s"
+                    % (repr(sig_name), str(e))
+                )
 
         return reemit
 
