@@ -8,8 +8,8 @@ VERBOSE = False
 def serve():
     import argparse
 
+    import Pyro5
     from loguru import logger
-    from Pyro5 import api
 
     from pymmcore_plus._serialize import register_serializers
     from pymmcore_plus.server import pyroCMMCore
@@ -24,7 +24,7 @@ def serve():
         logger.disable("pymmcore_plus")
 
     register_serializers()
-    api.serve(
+    Pyro5.api.serve(
         {pyroCMMCore: CORE_NAME},
         use_ns=False,
         host=args.host,
