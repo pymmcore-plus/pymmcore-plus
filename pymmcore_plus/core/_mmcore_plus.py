@@ -118,10 +118,10 @@ class CMMCorePlus(pymmcore.CMMCore):
                 self.setXYPosition(x, y)
             if event.z_pos is not None:
                 self.setZPosition(event.z_pos)
-            if event.exposure is not None:
-                self.setExposure(event.exposure)
             if event.channel is not None:
                 self.setConfig(event.channel.group, event.channel.config)
+            if event.exposure is not None:
+                self.setExposure(event.exposure)
 
             # acquire
             self.waitForSystem()
