@@ -4,6 +4,6 @@ except ImportError:  # pragma: no cover
     __version__ = "unknown"
 
 from .client import RemoteMMCore
-from .core import CMMCorePlus, Metadata
+from .core import CMMCorePlus, Configuration, Metadata
 
-__all__ = ["RemoteMMCore", "CMMCorePlus", "Metadata"]
+__all__ = ["CMMCorePlus", "Configuration", "Metadata", "RemoteMMCore"]

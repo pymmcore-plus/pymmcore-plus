@@ -10,6 +10,7 @@ import pymmcore
 from loguru import logger
 
 from .._util import find_micromanager
+from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._metadata import Metadata
 from ._signals import _CMMCoreSignaler
@@ -110,6 +111,11 @@ class CMMCorePlus(pymmcore.CMMCore):
             md = Metadata()
         img = super().getNBeforeLastImageMD(n, md)
         return img, md
+
+    # config overrides
+
+    def getSystemStatePlus(self) -> Configuration:
+        return Configuration.from_configuration(super().getSystemState())
 
     # NEW methods
 
