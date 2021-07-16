@@ -4,11 +4,10 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, List, Optional, Tuple, TypeVar, Union
 
 import pymmcore
 from loguru import logger
-from pymmcore import CMMCore
 
 from .._util import find_micromanager
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
@@ -19,9 +18,13 @@ if TYPE_CHECKING:
     import numpy as np
     from useq import MDASequence
 
+_T = TypeVar("_T")
 
-class CMMCorePlus(CMMCore, _CMMCoreSignaler):
-    def __init__(self, mm_path=None, adapter_paths: Sequence[str] = ()):
+ListOrTuple = Union[List[_T], Tuple[_T, ...]]
+
+
+class CMMCorePlus(pymmcore.CMMCore):
+    def __init__(self, mm_path=None, adapter_paths: ListOrTuple[str] = ()):
         super().__init__()
 
         self._mm_path = mm_path or find_micromanager()
@@ -30,14 +33,18 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
         if adapter_paths:
             self.setDeviceAdapterSearchPaths(adapter_paths)
 
-        self._callback_relay = MMCallbackRelay(self)
+        self.events = _CMMCoreSignaler()
+        self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
         self._canceled = False
         self._paused = False
 
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} at {hex(id(self))}>"
+
     # Re-implemented methods from the CMMCore API
 
-    def setDeviceAdapterSearchPaths(self, adapter_paths: Sequence[str]):
+    def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]):
         # add to PATH as well for dynamic dlls
         if (
             not isinstance(adapter_paths, (list, tuple))
@@ -56,7 +63,7 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
     def loadSystemConfiguration(self, fileName="demo"):
         if fileName.lower() == "demo":
             if not self._mm_path:
-                raise ValueError(
+                raise ValueError(  # pragma: no cover
                     "No micro-manager path provided. Cannot load 'demo' file.\nTry "
                     "installing micro-manager with `python install_mm.py`"
                 )
@@ -106,7 +113,10 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
 
     # NEW methods
 
-    def setRelPosition(self, dx: float = 0, dy: float = 0, dz: float = 0) -> None:
+    def setRelativeXYZPosition(
+        self, dx: float = 0, dy: float = 0, dz: float = 0
+    ) -> None:
+        """Sets the relative XYZ position in microns."""
         if dx or dy:
             x, y = self.getXPosition(), self.getYPosition()
             self.setXYPosition(x + dx, y + dy)
@@ -129,7 +139,7 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
         )
 
     def run_mda(self, sequence: MDASequence) -> None:
-        self.sequenceStarted.emit(sequence)
+        self.events.sequenceStarted.emit(sequence)
         logger.info("MDA Started: {}", sequence)
         self._paused = False
         paused_time = 0.0
@@ -140,7 +150,7 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
                 time.sleep(0.1)
             if self._canceled:
                 logger.warning("MDA Canceled: {}", sequence)
-                self.sequenceCanceled.emit(sequence)
+                self.events.sequenceCanceled.emit(sequence)
                 self._canceled = False
                 break
 
@@ -159,27 +169,27 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
                 self.setXYPosition(x, y)
             if event.z_pos is not None:
                 self.setZPosition(event.z_pos)
-            if event.exposure is not None:
-                self.setExposure(event.exposure)
             if event.channel is not None:
                 self.setConfig(event.channel.group, event.channel.config)
+            if event.exposure is not None:
+                self.setExposure(event.exposure)
 
             # acquire
             self.waitForSystem()
             self.snapImage()
             img = self.getImage()
 
-            self.frameReady.emit(img, event)
+            self.events.frameReady.emit(img, event)
 
         logger.info("MDA Finished: {}", sequence)
-        self.sequenceFinished.emit(sequence)
+        self.events.sequenceFinished.emit(sequence)
 
     def cancel(self):
         self._canceled = True
 
     def toggle_pause(self):
         self._paused = not self._paused
-        self.sequencePauseToggled.emit(self._paused)
+        self.events.sequencePauseToggled.emit(self._paused)
 
     def state(self) -> dict:
         # approx retrieval cost in comment (for demoCam)
@@ -205,11 +215,11 @@ class CMMCorePlus(CMMCore, _CMMCoreSignaler):
         }
 
 
-class _MMCallbackRelay:
+class _MMCallbackRelay(pymmcore.MMEventCallback):
     """Relays MMEventCallback methods to CMMCorePlus.signal."""
 
-    def __init__(self, core: CMMCorePlus):
-        self._core = core
+    def __init__(self, emitter: _CMMCoreSignaler):
+        self._emitter = emitter
         super().__init__()
 
     @staticmethod
@@ -217,14 +227,22 @@ class _MMCallbackRelay:
         sig_name = name[2].lower() + name[3:]
 
         def reemit(self: _MMCallbackRelay, *args):
-            getattr(self._core, sig_name).emit(*args)
+            try:
+                getattr(self._emitter, sig_name).emit(*args)
+            except Exception as e:
+                import logging
+
+                logging.getLogger(__name__).error(
+                    "Exception occured in MMCorePlus callback %s: %s"
+                    % (repr(sig_name), str(e))
+                )
 
         return reemit
 
 
 MMCallbackRelay = type(
     "MMCallbackRelay",
-    (_MMCallbackRelay, pymmcore.MMEventCallback),
+    (_MMCallbackRelay,),
     {
         n: _MMCallbackRelay._make_reemitter(n)
         for n in dir(pymmcore.MMEventCallback)

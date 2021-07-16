@@ -1,4 +1,3 @@
-import atexit
 import os
 from pathlib import Path
 
@@ -8,8 +7,9 @@ from useq import MDAEvent, MDASequence
 
 import pymmcore_plus
 from pymmcore_plus.client import RemoteMMCore
-from pymmcore_plus.client._client import new_server_process
-from pymmcore_plus.server import DEFAULT_HOST, DEFAULT_PORT, DEFAULT_URI
+from pymmcore_plus.client.callbacks.basic import SynchronousCallback
+from pymmcore_plus.client.callbacks.qcallback import QCoreCallback
+from pymmcore_plus.server import DEFAULT_URI
 
 if not os.getenv("MICROMANAGER_PATH"):
     try:
@@ -24,14 +24,8 @@ if not os.getenv("MICROMANAGER_PATH"):
         )
 
 
-@pytest.fixture(scope="session")
-def server():
-    proc = new_server_process(DEFAULT_HOST, DEFAULT_PORT)
-    atexit.register(proc.kill)
-
-
 @pytest.fixture
-def proxy(server):
+def proxy():
     with RemoteMMCore() as mmcore:
         mmcore.loadSystemConfiguration()
         yield mmcore
@@ -56,12 +50,50 @@ def test_mda(qtbot, proxy):
         return obj.uid == mda.uid
 
     signals = [
-        proxy.sequenceStarted,
-        proxy.frameReady,
-        proxy.frameReady,
-        proxy.sequenceFinished,
+        proxy.events.sequenceStarted,
+        proxy.events.frameReady,
+        proxy.events.frameReady,
+        proxy.events.sequenceFinished,
     ]
     checks = [_check_seq, _check_frame, _check_frame, _check_seq]
 
     with qtbot.waitSignals(signals, check_params_cbs=checks, order="strict"):
         proxy.run_mda(mda)
+
+
+# TODO: this test may accidentally pass if qtbot is created before this
+@pytest.mark.xfail(
+    reason="synchronous callbacks not working yet", raises=AssertionError, strict=True
+)
+def test_cb_without_qt(proxy):
+    """This tests that we can call a core method within a callback
+
+    currently only works for Qt callbacks... need to figure out synchronous approach.
+    """
+    assert isinstance(proxy.events, SynchronousCallback)
+    cam = [None]
+
+    @proxy.events.systemConfigurationLoaded.connect
+    def _cb():
+        cam[0] = proxy.getCameraDevice()
+
+    proxy.loadSystemConfiguration()
+    assert cam[0] == "Camera"
+
+
+def test_cb_with_qt(qtbot, proxy):
+    """This tests that we can call a core method within a callback
+
+    currently only works for Qt callbacks... need to figure out synchronous approach.
+    """
+    # because we're running with qt active
+    assert isinstance(proxy.events, QCoreCallback)
+    cam = [None]
+
+    @proxy.events.systemConfigurationLoaded.connect
+    def _cb():
+        cam[0] = proxy.getCameraDevice()
+
+    with qtbot.waitSignal(proxy.events.systemConfigurationLoaded):
+        proxy.loadSystemConfiguration()
+    assert cam[0] == "Camera"

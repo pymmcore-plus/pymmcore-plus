@@ -30,7 +30,7 @@ class pyroCMMCore(CMMCorePlus):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for name in _SIGNAL_NAMES:
-            getattr(self, name).connect(partial(self._emit_signal, name))
+            getattr(self.events, name).connect(partial(self.emit_signal, name))
 
     def connect_remote_callback(self, handler: "CallbackProtocol"):
         self._callback_handlers.add(handler)
@@ -39,17 +39,17 @@ class pyroCMMCore(CMMCorePlus):
         self._callback_handlers.discard(handler)
 
     @oneway
-    def run_mda(self, sequence) -> None:
+    def run_mda(self, sequence) -> None:  # pragma: no cover
         return super().run_mda(sequence)
 
     @oneway
-    def _emit_signal(self, signal_name: str, *args):
+    def emit_signal(self, signal_name: str, *args):
         from loguru import logger
 
         logger.debug("{}: {}", signal_name, args)
         for handler in list(self._callback_handlers):
             try:
-                handler._pyroClaimOwnership()
+                handler._pyroClaimOwnership()  # type: ignore
                 handler.receive_core_callback(signal_name, args)
-            except errors.CommunicationError:
+            except errors.CommunicationError:  # pragma: no cover
                 self.disconnect_remote_callback(handler)

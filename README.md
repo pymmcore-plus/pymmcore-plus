@@ -1,5 +1,11 @@
 # pymmcore-plus
 
+[![License](https://img.shields.io/pypi/l/pymmcore-plus.svg?color=green)](https://github.com/tlambert03/pymmcore-plus/raw/master/LICENSE)
+[![PyPI](https://img.shields.io/pypi/v/pymmcore-plus.svg?color=green)](https://pypi.org/project/pymmcore-plus)
+[![Python Version](https://img.shields.io/pypi/pyversions/pymmcore-plus.svg?color=green)](https://python.org)
+[![CI](https://github.com/tlambert03/pymmcore-plus/actions/workflows/test_and_deploy.yml/badge.svg)](https://github.com/tlambert03/pymmcore-plus/actions/workflows/test_and_deploy.yml)
+[![codecov](https://codecov.io/gh/tlambert03/pymmcore-plus/branch/main/graph/badge.svg)](https://codecov.io/gh/tlambert03/pymmcore-plus)
+
 #### 🧪🧪 pre-alpha software: work in progress!  🧪🧪
 
 `pymmcore-plus` aims to extend [pymmcore](https://github.com/micro-manager/pymmcore) (python bindings for the C++ [micro-manager core](https://github.com/micro-manager/mmCoreAndDevices/)) with a number of features designed to facilitate working with **Micro-manager in pure python/C environments**.
