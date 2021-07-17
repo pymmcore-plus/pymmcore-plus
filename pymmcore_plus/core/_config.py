@@ -2,43 +2,43 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import DefaultDict, Dict, Iterable, Iterator, Tuple
+from typing import Any, DefaultDict, Dict, Iterator, Tuple
 
 import pymmcore
 
 _NULL = object()
 
 
-class PropertySetting(pymmcore.PropertySetting):
-    """Encompasses a device label, property name, and property value"""
+# class PropertySetting(pymmcore.PropertySetting):
+#     """Encompasses a device label, property name, and property value"""
 
-    # pymmcore API:
-    # def getDeviceLabel(self) -> str:  # i.e. 'Camera'
-    # def getKey(self) -> str:  # ie. 'Camera-Binning'
-    # def getPropertyName(self) -> str:  # ie. 'Binning'
-    # def getPropertyValue(self) -> str:  # ie. '1'
-    # def getReadOnly(self) -> bool:
-    # def getVerbose(self) -> str:  # ie. 'Camera:Binning=1'
-    # def isEqualTo(self, ps: PropertySetting) -> bool:  # devLabel, propName & value eq
+#     # pymmcore API:
+#     # def getDeviceLabel(self) -> str:  # i.e. 'Camera'
+#     # def getKey(self) -> str:  # ie. 'Camera-Binning'
+#     # def getPropertyName(self) -> str:  # ie. 'Binning'
+#     # def getPropertyValue(self) -> str:  # ie. '1'
+#     # def getReadOnly(self) -> bool:
+#     # def getVerbose(self) -> str:  # ie. 'Camera:Binning=1'
+#     # def isEqualTo(self, ps: PropertySetting) -> bool:# devLabel, propName & value eq
 
-    @classmethod
-    def from_property_setting(cls, ps: pymmcore.PropertySetting) -> PropertySetting:
-        label = ps.getDeviceLabel()
-        prop = ps.getPropertyName()
-        value = ps.getPropertyValue()
-        readOnly = ps.getReadOnly()
-        return cls(label, prop, value, readOnly)
+#     @classmethod
+#     def from_property_setting(cls, ps: pymmcore.PropertySetting) -> PropertySetting:
+#         label = ps.getDeviceLabel()
+#         prop = ps.getPropertyName()
+#         value = ps.getPropertyValue()
+#         readOnly = ps.getReadOnly()
+#         return cls(label, prop, value, readOnly)
 
-    def __repr__(self) -> str:
-        return f"<PropertySetting '{self}'>"
+#     def __repr__(self) -> str:
+#         return f"<PropertySetting '{self}'>"
 
-    def __str__(self) -> str:
-        return self.getVerbose().replace(":=", "")
+#     def __str__(self) -> str:
+#         return self.getVerbose().replace(":=", "")
 
-    def __iter__(self) -> Iterable[str]:
-        yield self.getDeviceLabel()
-        yield self.getPropertyName()
-        yield self.getPropertyValue()
+#     def __iter__(self) -> Iterable[str]:
+#         yield self.getDeviceLabel()
+#         yield self.getPropertyName()
+#         yield self.getPropertyValue()
 
 
 class Configuration(pymmcore.Configuration):
@@ -93,9 +93,9 @@ class Configuration(pymmcore.Configuration):
     def __getitem__(self, key):
         """get property setting by index or (devLabel, propLabel) key"""
         if isinstance(key, int):
-            return PropertySetting.from_property_setting(self.getSetting(key))
+            return self.getSetting(key).getPropertyValue()
         if isinstance(key, tuple):
-            return PropertySetting.from_property_setting(self.getSetting(*key))
+            return self.getSetting(*key).getPropertyValue()
         raise TypeError("key must be either an int or 2-tuple of strings.")
 
     def __contains__(self, query):
@@ -135,7 +135,7 @@ class Configuration(pymmcore.Configuration):
         """Dump config to YAML string (requires PyYAML)."""
         try:
             from yaml import safe_dump
-        except ImportError:
+        except ImportError:  # pragma: no cover
             raise ImportError("Could not import yaml.  Please `pip install PyYAML`.")
 
         return safe_dump(self.dict())
@@ -147,3 +147,45 @@ class Configuration(pymmcore.Configuration):
         for s in range(config.size()):
             new.addSetting(config.getSetting(s))
         return new
+
+    @classmethod
+    def create(cls, *args, **kwargs):
+        """More flexible init to create a Configuration from:
+
+        1. A dict of dicts (outer key is device, inner key is prop)
+        2. A sequence of 3-tuple
+        3. kwargs: where the key is the device, and the value is a {prop: value} map
+        """
+        cfg = cls()
+        if args:
+            if len(args) > 1:  # pragma: no cover
+                raise ValueError(
+                    f"create takes 1 positional argument but {len(args)} were given"
+                )
+
+            arg = args[0]
+            err_msg = "Argument must be either a dict of dicts, or a list of 3-tuple"
+            props = []
+            if isinstance(arg, dict):
+                kwargs = {**arg, **kwargs}
+            elif isinstance(arg, (tuple, list)):
+                for item in arg:
+                    if len(item) != 3:
+                        raise ValueError(err_msg)
+                    cfg.addSetting(pymmcore.PropertySetting(*(str(x) for x in item)))
+            else:
+                raise ValueError()
+        if kwargs:
+            for dev_label, props in kwargs.items():
+                if not isinstance(props, dict):
+                    raise ValueError(err_msg)
+                for prop, value in props.items():
+                    cfg.addSetting(
+                        pymmcore.PropertySetting(dev_label, prop, str(value))
+                    )
+        return cfg
+
+    def __eq__(self, o: Any) -> bool:
+        if not isinstance(o, Configuration):
+            return False
+        return o.dict() == self.dict()

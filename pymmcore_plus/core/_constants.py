@@ -40,6 +40,9 @@ class DeviceType(IntEnum):
     Hub = HubDevice
     Galvo = GalvoDevice
 
+    def __str__(self):
+        return self.name.replace("Type", "").replace("Device", "")
+
 
 class PropertyType(IntEnum):
     Undef = 0
