@@ -115,6 +115,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     # config overrides
 
     def getSystemStatePlus(self) -> Configuration:
+        """Return a nicer Configuration object.
+
+        This method is about 1.5x slower than getSystemState ... so we don't
+        override the super() method directly.
+        """
         return Configuration.from_configuration(super().getSystemState())
 
     # NEW methods
@@ -197,27 +202,28 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._paused = not self._paused
         self.events.sequencePauseToggled.emit(self._paused)
 
-    def state(self) -> dict:
+    def state(self, exclude=()) -> dict:
+        """A dict with commonly accessed state values.  Faster than getSystemState."""
         # approx retrieval cost in comment (for demoCam)
         return {
-            "bytest_per_pixel": self.getBytesPerPixel(),  # 149 ns
-            "image_bit_depth": self.getImageBitDepth(),  # 147 ns
-            "image_width": self.getImageWidth(),  # 172 ns
-            "image_height": self.getImageHeight(),  # 164 ns
-            "pixel_size_um": self.getPixelSizeUm(),  # 2.83 µs
-            "xy_stage_device": self.getXYStageDevice(),  # 156 ns
-            "xy_position": self.getXYPosition(),  # 1.1 µs
-            "focus_device": self.getFocusDevice(),  # 112 ns
-            "focus_position": self.getZPosition(),  # 1.03 µs
-            "auto_focus_device": self.getAutoFocusDevice(),  # 150 ns
-            "camera_device": self.getCameraDevice(),  # 159 ns
-            "exposure": self.getExposure(),  # 726 ns
-            "camera_channels": self.getCameraChannelNames(),  # 1 µs
-            "galvo_device": self.getGalvoDevice(),  # 109 ns
-            "image_processor_device": self.getImageProcessorDevice(),  # 110 ns
-            "slm_device": self.getSLMDevice(),  # 110 ns
-            "shutter_device": self.getShutterDevice(),  # 152 ns
-            "datetime": str(datetime.now()),
+            "AutoFocusDevice": self.getAutoFocusDevice(),  # 150 ns
+            "BytesPerPixel": self.getBytesPerPixel(),  # 149 ns
+            "CameraChannelNames": self.getCameraChannelNames(),  # 1 µs
+            "CameraDevice": self.getCameraDevice(),  # 159 ns
+            "Datetime": str(datetime.now()),
+            "Exposure": self.getExposure(),  # 726 ns
+            "FocusDevice": self.getFocusDevice(),  # 112 ns
+            "GalvoDevice": self.getGalvoDevice(),  # 109 ns
+            "ImageBitDepth": self.getImageBitDepth(),  # 147 ns
+            "ImageHeight": self.getImageHeight(),  # 164 ns
+            "ImageProcessorDevice": self.getImageProcessorDevice(),  # 110 ns
+            "ImageWidth": self.getImageWidth(),  # 172 ns
+            "PixelSizeUm": self.getPixelSizeUm(True),  # 2.2 µs  (True==cached)
+            "ShutterDevice": self.getShutterDevice(),  # 152 ns
+            "SLMDevice": self.getSLMDevice(),  # 110 ns
+            "XYPosition": self.getXYPosition(),  # 1.1 µs
+            "XYStageDevice": self.getXYStageDevice(),  # 156 ns
+            "ZPosition": self.getZPosition(),  # 1.03 µs
         }
 
 
