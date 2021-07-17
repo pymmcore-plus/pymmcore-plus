@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import os
 import time
+from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, List, Optional, Tuple, TypeVar, Union
 
 import pymmcore
 from loguru import logger
 
-if TYPE_CHECKING:
-    from useq import MDASequence
-
 from .._util import find_micromanager
+from ._config import Configuration
+from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
+from ._metadata import Metadata
 from ._signals import _CMMCoreSignaler
+
+if TYPE_CHECKING:
+    import numpy as np
+    from useq import MDASequence
 
 _T = TypeVar("_T")
 
@@ -66,6 +71,57 @@ class CMMCorePlus(pymmcore.CMMCore):
             fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
         super().loadSystemConfiguration(str(fileName))
 
+    def getDeviceType(self, label: str) -> DeviceType:
+        """Returns device type."""
+        return DeviceType(super().getDeviceType(label))
+
+    def getPropertyType(self, label: str, propName: str) -> PropertyType:
+        return PropertyType(super().getPropertyType(label, propName))
+
+    def detectDevice(self, deviceLabel: str) -> DeviceDetectionStatus:
+        """Tries to communicate to a device through a given serial port.
+
+        Used to automate discovery of correct serial port.
+        Also configures the serial port correctly.
+        """
+        return DeviceDetectionStatus(super().detectDevice(deviceLabel))
+
+    # metadata overloads that don't require instantiating metadata first
+
+    def getLastImageMD(
+        self, md: Optional[Metadata] = None
+    ) -> Tuple[np.ndarray, Metadata]:
+        if md is None:
+            md = Metadata()
+        img = super().getLastImageMD(md)
+        return img, md
+
+    def popNextImageMD(
+        self, md: Optional[Metadata] = None
+    ) -> Tuple[np.ndarray, Metadata]:
+        if md is None:
+            md = Metadata()
+        img = super().popNextImageMD(md)
+        return img, md
+
+    def getNBeforeLastImageMD(
+        self, n: int, md: Optional[Metadata] = None
+    ) -> Tuple[np.ndarray, Metadata]:
+        if md is None:
+            md = Metadata()
+        img = super().getNBeforeLastImageMD(n, md)
+        return img, md
+
+    # config overrides
+
+    def getSystemStatePlus(self) -> Configuration:
+        """Return a nicer Configuration object.
+
+        This method is about 1.5x slower than getSystemState ... so we don't
+        override the super() method directly.
+        """
+        return Configuration.from_configuration(super().getSystemState())
+
     # NEW methods
 
     def setRelativeXYZPosition(
@@ -86,6 +142,12 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def setZPosition(self, val: float) -> None:
         return self.setPosition(self.getFocusDevice(), val)
+
+    def getCameraChannelNames(self) -> Tuple[str, ...]:
+        return tuple(
+            self.getCameraChannelName(i)
+            for i in range(self.getNumberOfCameraChannels())
+        )
 
     def run_mda(self, sequence: MDASequence) -> None:
         self.events.sequenceStarted.emit(sequence)
@@ -139,6 +201,30 @@ class CMMCorePlus(pymmcore.CMMCore):
     def toggle_pause(self):
         self._paused = not self._paused
         self.events.sequencePauseToggled.emit(self._paused)
+
+    def state(self, exclude=()) -> dict:
+        """A dict with commonly accessed state values.  Faster than getSystemState."""
+        # approx retrieval cost in comment (for demoCam)
+        return {
+            "AutoFocusDevice": self.getAutoFocusDevice(),  # 150 ns
+            "BytesPerPixel": self.getBytesPerPixel(),  # 149 ns
+            "CameraChannelNames": self.getCameraChannelNames(),  # 1 µs
+            "CameraDevice": self.getCameraDevice(),  # 159 ns
+            "Datetime": str(datetime.now()),
+            "Exposure": self.getExposure(),  # 726 ns
+            "FocusDevice": self.getFocusDevice(),  # 112 ns
+            "GalvoDevice": self.getGalvoDevice(),  # 109 ns
+            "ImageBitDepth": self.getImageBitDepth(),  # 147 ns
+            "ImageHeight": self.getImageHeight(),  # 164 ns
+            "ImageProcessorDevice": self.getImageProcessorDevice(),  # 110 ns
+            "ImageWidth": self.getImageWidth(),  # 172 ns
+            "PixelSizeUm": self.getPixelSizeUm(True),  # 2.2 µs  (True==cached)
+            "ShutterDevice": self.getShutterDevice(),  # 152 ns
+            "SLMDevice": self.getSLMDevice(),  # 110 ns
+            "XYPosition": self.getXYPosition(),  # 1.1 µs
+            "XYStageDevice": self.getXYStageDevice(),  # 156 ns
+            "ZPosition": self.getZPosition(),  # 1.03 µs
+        }
 
 
 class _MMCallbackRelay(pymmcore.MMEventCallback):
