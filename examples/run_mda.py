@@ -1,6 +1,6 @@
 from useq import MDASequence
 
-from pymmcore_plus import CMMCorePlus
+from pymmcore_plus import CMMCorePlus, MDA_multifile_tiff_writer
 
 # see https://github.com/tlambert03/useq-schema
 sequence = MDASequence(
@@ -10,6 +10,7 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
+<<<<<<< HEAD
 mmc = CMMCorePlus.instance()
 mmc.loadSystemConfiguration()
 
@@ -20,3 +21,11 @@ def new_frame(img, event):
 
 
 mda_thread = mmc.run_mda(sequence)
+=======
+mmc = CMMCorePlus()
+mmc.loadSystemConfiguration("demo_config.cfg")
+
+# create a writer to save the files
+writer = MDA_multifile_tiff_writer("mda_data")
+mmc.run_mda(sequence, writer)
+>>>>>>> b4c1380 (Create MDAWriters submodule + multifile tiff writer)

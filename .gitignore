@@ -142,3 +142,5 @@ Micro-Manager-*
 .vscode
 
 docs/api
+# from running MDA example
+examples/mda_data*

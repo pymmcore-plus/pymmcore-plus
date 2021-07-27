@@ -2,7 +2,9 @@ import importlib
 import os
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Optional, Tuple
+
+from useq import MDASequence
 
 __all__ = [
     "find_micromanager",
@@ -61,3 +63,10 @@ def _qt_app_is_running() -> bool:
             QtWidgets = importlib.import_module(".QtWidgets", modname)
             return QtWidgets.QApplication.instance() is not None
     return False
+
+
+def get_axis_order(seq: MDASequence) -> Tuple[str]:
+    """Get the axis order using only axes that are present in events."""
+    event = next(seq.iter_events())
+    event_axes = list(event.index.keys())
+    return tuple(a for a in seq.axis_order if a in event_axes)
