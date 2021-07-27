@@ -11,6 +11,7 @@ class _CMMCoreSignaler:
     propertyChanged = Signal(str, str, str)
     channelGroupChanged = Signal(str)
     configGroupChanged = Signal(str, str)
+    configSet = Signal(str, str)
     systemConfigurationLoaded = Signal()
     pixelSizeChanged = Signal(float)
     pixelSizeAffineChanged = Signal(float, float, float, float, float, float)
