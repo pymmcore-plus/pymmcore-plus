@@ -9,6 +9,7 @@ class QCoreCallback(QObject):
     propertyChanged = Signal(str, str, object)
     channelGroupChanged = Signal(str)
     configGroupChanged = Signal(str, str)
+    configSet = Signal(str, str)
     systemConfigurationLoaded = Signal()
     pixelSizeChanged = Signal(float)
     pixelSizeAffineChanged = Signal(float, float, float, float, float, float)
