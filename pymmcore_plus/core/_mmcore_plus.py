@@ -112,6 +112,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().getNBeforeLastImageMD(n, md)
         return img, md
 
+    def setConfig(self, groupName: str, configName: str) -> None:
+        """Applies a configuration to a group."""
+        super().setConfig(groupName, configName)
+        # The onConfigGroupChanged callback has some limitations as
+        # discussed in https://github.com/micro-manager/mmCoreAndDevices/issues/25
+        # use the pymmcore-plus configSet signal as a workaround
+        self.events.configSet.emit(groupName, configName)
+
     # config overrides
 
     def getSystemStatePlus(self) -> Configuration:
