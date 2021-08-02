@@ -163,22 +163,47 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._paused = False
         paused_time = 0.0
         t0 = time.perf_counter()  # reference time, in seconds
-        for event in sequence:
-            while self._paused and not self._canceled:
-                paused_time += 0.1  # fixme: be more precise
-                time.sleep(0.1)
+
+        def check_canceled():
             if self._canceled:
                 logger.warning("MDA Canceled: {}", sequence)
                 self.events.sequenceCanceled.emit(sequence)
                 self._canceled = False
+                return True
+            return False
+
+        for event in sequence:
+            while self._paused and not self._canceled:
+                paused_time += 0.1  # fixme: be more precise
+                time.sleep(0.1)
+
+            if check_canceled():
                 break
 
             if event.min_start_time:
                 go_at = event.min_start_time + paused_time
-                # TODO: we need to enter a loop here checking paused and canceled.
+                # We need to enter a loop here checking paused and canceled.
                 # otherwise you'll potentially wait a long time to cancel
-                if go_at > time.perf_counter() - t0:
-                    time.sleep(go_at - (time.perf_counter() - t0))
+                to_go = go_at - (time.perf_counter() - t0)
+                while to_go > 0:
+                    while self._paused and not self._canceled:
+                        paused_time += 0.1  # fixme: be more precise
+                        to_go += 0.1
+                        time.sleep(0.1)
+
+                    if self._canceled:
+                        break
+                    if to_go > 0.5:
+                        time.sleep(0.5)
+                    else:
+                        time.sleep(to_go)
+                    to_go = go_at - (time.perf_counter() - t0)
+
+            # check canceled again in case it was canceled
+            # during the waiting loop
+            if check_canceled():
+                break
+
             logger.info(event)
 
             # prep hardware
