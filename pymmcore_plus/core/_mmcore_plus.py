@@ -4,7 +4,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Tuple, TypeVar, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, TypeVar, Union
 
 import pymmcore
 from loguru import logger
@@ -131,6 +131,56 @@ class CMMCorePlus(pymmcore.CMMCore):
         return Configuration.from_configuration(super().getSystemState())
 
     # NEW methods
+
+    def getDeviceProperties(self, device_label: str) -> Dict[str, Any]:
+        """Return all current properties for device `device_label`."""
+        return {
+            name: self.getProperty(device_label, name)
+            for name in self.getDevicePropertyNames(device_label)
+        }
+
+    def getDeviceSchema(self, device_label: str) -> Dict[str, Any]:
+        """Return JSON schema for propties of `device_label`"""
+        d = {
+            "title": self.getDeviceName(device_label),
+            "description": self.getDeviceDescription(device_label),
+            "type": "object",
+            "properties": {},
+        }
+        for prop_name in self.getDevicePropertyNames(device_label):
+            _type = self.getPropertyType(device_label, prop_name)
+            d["properties"][prop_name] = {}
+            if _type.to_json() != "null":
+                d["properties"][prop_name]["type"] = _type.to_json()
+            if _type.to_python() is int:
+                min_ = self.getPropertyLowerLimit(device_label, prop_name)
+                max_ = self.getPropertyUpperLimit(device_label, prop_name)
+                if max_ or min_:
+                    d["properties"][prop_name]["minimum"] = min_
+                    d["properties"][prop_name]["maximum"] = max_
+            allowed = self.getAllowedPropertyValues(device_label, prop_name)
+            if allowed:
+                cls = _type.to_python()
+                d["properties"][prop_name]["enum"] = [
+                    cls(i) if cls else i for i in allowed
+                ]
+            if self.isPropertyReadOnly(device_label, prop_name):
+                d["properties"][prop_name]["readOnly"] = "true"
+                d["properties"][prop_name]["default"] = self.getProperty(
+                    device_label, prop_name
+                )
+            if self.isPropertySequenceable(device_label, prop_name):
+                d["properties"][prop_name]["sequenceable"] = "true"
+                d["properties"][prop_name][
+                    "sequence_max_length"
+                ] = self.getPropertySequenceMaxLength(device_label, prop_name)
+        if not d["properties"]:
+            del d["properties"]
+            del d["type"]
+        return d
+
+    def getAdapterSchema(self, adapter):
+        pass
 
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0
