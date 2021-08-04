@@ -276,3 +276,10 @@ def test_config_yaml():
     cfg1 = Configuration.create(input)
     yaml = pytest.importorskip("yaml")
     assert cfg1.yaml() == yaml.safe_dump(input)
+
+
+def test_property_schema(core: CMMCorePlus):
+    schema = core.getDeviceSchema("Camera")
+    assert isinstance(schema, dict)
+    assert schema["title"] == "DCam"
+    assert schema["properties"]["AllowMultiROI"] == {"type": "integer", "enum": [0, 1]}
