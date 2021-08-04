@@ -104,6 +104,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().popNextImageMD(md)
         return img, md
 
+    def popNextImage(self) -> np.ndarray:
+        """Gets and removes the next image from the circular buffer.
+
+        The pymmcore-plus implementation will convert images with n_components > 1
+        to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
+        """
+        return self._fix_image(super().popNextImage())
+
     def getNBeforeLastImageMD(
         self, n: int, md: Optional[Metadata] = None
     ) -> Tuple[np.ndarray, Metadata]:
@@ -252,6 +260,36 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         logger.info("MDA Finished: {}", sequence)
         self.events.sequenceFinished.emit(sequence)
+
+    def _fix_image(self, img: np.ndarray) -> np.ndarray:
+        """Fix img shape/dtype based on `self.getNumberOfComponents()`.
+
+        convert images with n_components > 1
+        to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
+
+        Parameters
+        ----------
+        img : np.ndarray
+            input image
+
+        Returns
+        -------
+        np.ndarray
+            output image (possibly new shape and dtype)
+        """
+        ncomp = self.getNumberOfComponents()
+        if ncomp != 1:
+            new_shape = img.shape + (ncomp,)
+            return img.view(dtype=f"u{img.dtype.itemsize//ncomp}").reshape(new_shape)
+        return img
+
+    def getImage(self, *args) -> np.ndarray:
+        """Exposes the internal image buffer.
+
+        The pymmcore-plus implementation will convert images with n_components > 1
+        to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
+        """
+        return self._fix_image(super().getImage(*args))
 
     def cancel(self):
         self._canceled = True
