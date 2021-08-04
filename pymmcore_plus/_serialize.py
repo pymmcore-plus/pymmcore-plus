@@ -12,19 +12,11 @@ from Pyro5.api import register_class_to_dict, register_dict_to_class
 
 Pyro5.config.SERIALIZER = "msgpack"
 
-# FIXME:
-# setting a maxlength on the Deque is a good way to get segfaults
-# when passing around numpy arrays.  but it should be possible to
-# cleanup unneeded pointers.
-MAX_SHM = None
-SHM_SENT: Deque[SharedMemory] = Deque(maxlen=MAX_SHM)
-SHM_RECV: Deque[SharedMemory] = Deque(maxlen=MAX_SHM)
+SHM_SENT: Deque[SharedMemory] = Deque(maxlen=15)
 
 
 @atexit.register  # pragma: no cover
 def _cleanup():
-    for shm in SHM_RECV:
-        shm.close()
     for shm in SHM_SENT:
         shm.close()
         shm.unlink()
@@ -47,8 +39,10 @@ def ndarray_to_dict(obj: np.ndarray):
 def dict_to_ndarray(classname, d):
     """convert dict from `ndarray_to_dict` back to np.ndarray"""
     shm = SharedMemory(name=d["shm"], create=False)
-    SHM_RECV.append(shm)
-    return np.ndarray(d["shape"], dtype=d["dtype"], buffer=shm.buf)
+    array = np.ndarray(d["shape"], dtype=d["dtype"], buffer=shm.buf).copy()
+    shm.close()
+    shm.unlink()
+    return array
 
 
 def CMMError_to_dict(err):
