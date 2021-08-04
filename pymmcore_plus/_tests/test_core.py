@@ -281,5 +281,5 @@ def test_config_yaml():
 def test_property_schema(core: CMMCorePlus):
     schema = core.getDeviceSchema("Camera")
     assert isinstance(schema, dict)
-    assert schema["title"] == "DCAM"
+    assert schema["title"] == "DCam"
     assert schema["properties"]["AllowMultiROI"] == {"type": "integer", "enum": [0, 1]}
