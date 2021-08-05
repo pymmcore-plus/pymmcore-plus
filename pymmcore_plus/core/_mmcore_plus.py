@@ -184,9 +184,6 @@ class CMMCorePlus(pymmcore.CMMCore):
             del d["type"]
         return d
 
-    def getAdapterSchema(self, adapter):
-        pass
-
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0
     ) -> None:
