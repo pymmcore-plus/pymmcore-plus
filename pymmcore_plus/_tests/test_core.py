@@ -282,4 +282,4 @@ def test_property_schema(core: CMMCorePlus):
     schema = core.getDeviceSchema("Camera")
     assert isinstance(schema, dict)
     assert schema["title"] == "DCam"
-    assert schema["properties"]["AllowMultiROI"] == {"type": "integer", "enum": [0, 1]}
+    assert schema["properties"]["AllowMultiROI"] == {"type": "boolean"}
