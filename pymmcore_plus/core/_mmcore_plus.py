@@ -157,31 +157,28 @@ class CMMCorePlus(pymmcore.CMMCore):
         }
         for prop_name in self.getDevicePropertyNames(device_label):
             _type = self.getPropertyType(device_label, prop_name)
-            d["properties"][prop_name] = {}
+            d["properties"][prop_name] = p = {}
             if _type.to_json() != "null":
-                d["properties"][prop_name]["type"] = _type.to_json()
-            if _type.to_python() is int:
+                p["type"] = _type.to_json()
+            if self.hasPropertyLimits(device_label, prop_name):
                 min_ = self.getPropertyLowerLimit(device_label, prop_name)
                 max_ = self.getPropertyUpperLimit(device_label, prop_name)
-                if max_ or min_:
-                    d["properties"][prop_name]["minimum"] = min_
-                    d["properties"][prop_name]["maximum"] = max_
+                p["minimum"] = min_
+                p["maximum"] = max_
             allowed = self.getAllowedPropertyValues(device_label, prop_name)
             if allowed:
                 cls = _type.to_python()
-                d["properties"][prop_name]["enum"] = [
-                    cls(i) if cls else i for i in allowed
-                ]
+                p["enum"] = [cls(i) if cls else i for i in allowed]
             if self.isPropertyReadOnly(device_label, prop_name):
-                d["properties"][prop_name]["readOnly"] = "true"
-                d["properties"][prop_name]["default"] = self.getProperty(
+                p["readOnly"] = "true"
+                p["default"] = self.getProperty(device_label, prop_name)
+            if self.isPropertySequenceable(device_label, prop_name):
+                p["sequenceable"] = "true"
+                p["sequence_max_length"] = self.getPropertySequenceMaxLength(
                     device_label, prop_name
                 )
-            if self.isPropertySequenceable(device_label, prop_name):
-                d["properties"][prop_name]["sequenceable"] = "true"
-                d["properties"][prop_name][
-                    "sequence_max_length"
-                ] = self.getPropertySequenceMaxLength(device_label, prop_name)
+            if self.isPropertyPreInit(device_label, prop_name):
+                p["preInit"] = "true"
         if not d["properties"]:
             del d["properties"]
             del d["type"]
