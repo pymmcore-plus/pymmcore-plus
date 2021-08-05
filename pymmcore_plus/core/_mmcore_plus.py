@@ -148,7 +148,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         }
 
     def getDeviceSchema(self, device_label: str) -> Dict[str, Any]:
-        """Return JSON schema for propties of `device_label`"""
+        """Return dict in JSON-schema format for propties of `device_label`.
+
+        Use `json.dump` to convert this dict to a JSON string.
+        """
         d = {
             "title": self.getDeviceName(device_label),
             "description": self.getDeviceDescription(device_label),
@@ -167,18 +170,21 @@ class CMMCorePlus(pymmcore.CMMCore):
                 p["maximum"] = max_
             allowed = self.getAllowedPropertyValues(device_label, prop_name)
             if allowed:
-                cls = _type.to_python()
-                p["enum"] = [cls(i) if cls else i for i in allowed]
+                if set(allowed) == {"0", "1"} and _type.to_json() == "integer":
+                    p["type"] = "boolean"
+                else:
+                    cls = _type.to_python()
+                    p["enum"] = [cls(i) if cls else i for i in allowed]
             if self.isPropertyReadOnly(device_label, prop_name):
-                p["readOnly"] = "true"
+                p["readOnly"] = True
                 p["default"] = self.getProperty(device_label, prop_name)
             if self.isPropertySequenceable(device_label, prop_name):
-                p["sequenceable"] = "true"
+                p["sequenceable"] = True
                 p["sequence_max_length"] = self.getPropertySequenceMaxLength(
                     device_label, prop_name
                 )
             if self.isPropertyPreInit(device_label, prop_name):
-                p["preInit"] = "true"
+                p["preInit"] = True
         if not d["properties"]:
             del d["properties"]
             del d["type"]
