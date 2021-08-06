@@ -45,6 +45,40 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # Re-implemented methods from the CMMCore API
 
+    def setProperty(
+        self, label: str, propName: str, propValue: Union[bool, float, int, str]
+    ) -> None:
+        """setProperty with more reliable event emission.
+
+        As stated by Nico: "Callbacks are mainly used to give devices the opportunity to
+        signal back to the UI."
+        https://forum.image.sc/t/micromanager-events-core-events-not-coming-through/53014/2
+
+        Because it's left to the device adapter to emit a signal, in many cases uses
+        `setProperty()` will NOT lead to a new `propertyChanged` event getting emitted.
+        But that makes it hard to create listeners (i.e. in the gui or elsewhere).
+
+        While this method override cannot completely solve that problem (core-internal
+        changes will still lack an associated event emission in many cases), it can at
+        least guarantee that if we use `CMMCorePlus.setProperty` to change the property,
+        then a `propertyChanged` event will be emitted if the value did indeed change.
+
+        Parameters
+        ----------
+        label : str
+            device label
+        propName : str
+            property name
+        propValue : Union[bool, float, int, str]
+            new value
+        """
+        before = super().getProperty(label, propName)
+        with self.events.propertyChanged.blocked():  # block the native event.
+            super().setProperty(label, propName, propValue)
+        after = super().getProperty(label, propName)
+        if before != after:
+            self.events.propertyChanged.emit(label, propName, after)
+
     def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]):
         # add to PATH as well for dynamic dlls
         if (
