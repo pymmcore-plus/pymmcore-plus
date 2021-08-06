@@ -277,19 +277,20 @@ class CMMCorePlus(pymmcore.CMMCore):
         np.ndarray
             output image (possibly new shape and dtype)
         """
-        ncomp = self.getNumberOfComponents()
-        if ncomp != 1:
-            new_shape = img.shape + (ncomp,)
-            return img.view(dtype=f"u{img.dtype.itemsize//ncomp}").reshape(new_shape)
+        if self.getNumberOfComponents() == 4:
+            new_shape = img.shape + (4,)
+            img = img.view(dtype=f"u{img.dtype.itemsize//4}")
+            img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
 
-    def getImage(self, *args) -> np.ndarray:
+    def getImage(self, *args, fix=True) -> np.ndarray:
         """Exposes the internal image buffer.
 
         The pymmcore-plus implementation will convert images with n_components > 1
         to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
         """
-        return self._fix_image(super().getImage(*args))
+        img = super().getImage(*args)
+        return self._fix_image(img) if fix else img
 
     def cancel(self):
         self._canceled = True
