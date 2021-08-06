@@ -4,6 +4,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
+from textwrap import dedent
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, TypeVar, Union
 
 import pymmcore
@@ -86,6 +87,49 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceDetectionStatus(super().detectDevice(deviceLabel))
 
+    # config overrides
+
+    def getConfigData(
+        self, configGroup: str, configName: str, *, native=False
+    ) -> Configuration:
+        """Returns the configuration object for a given group and name."""
+
+        cfg = super().getConfigData(configGroup, configName)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getConfigGroupState(self, group: str, *, native=False) -> Configuration:
+        """Returns the partial state of the system, for the devices included in the
+        specified group.
+        """
+        cfg = super().getConfigGroupState(group)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native=False
+    ) -> Configuration:
+        """Returns the partial state of the system cache, for the devices included
+        in the specified group.
+        """
+        cfg = super().getConfigGroupStateFromCache(group)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getConfigState(self, group: str, config: str, *, native=False) -> Configuration:
+        """Returns a partial state of the system, for devices included in the
+        specified configuration.
+        """
+        cfg = super().getConfigState(group, config)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getSystemState(self, *, native=False) -> Configuration:
+        """Returns the entire system state."""
+        cfg = super().getSystemState()
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getSystemStateCache(self, *, native=False) -> Configuration:
+        """Returns the entire system state from cache"""
+        cfg = super().getSystemStateCache()
+        return cfg if native else Configuration.from_configuration(cfg)
+
     # metadata overloads that don't require instantiating metadata first
 
     def getLastImageMD(
@@ -127,16 +171,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         # discussed in https://github.com/micro-manager/mmCoreAndDevices/issues/25
         # use the pymmcore-plus configSet signal as a workaround
         self.events.configSet.emit(groupName, configName)
-
-    # config overrides
-
-    def getSystemStatePlus(self) -> Configuration:
-        """Return a nicer Configuration object.
-
-        This method is about 1.5x slower than getSystemState ... so we don't
-        override the super() method directly.
-        """
-        return Configuration.from_configuration(super().getSystemState())
 
     # NEW methods
 
@@ -277,19 +311,20 @@ class CMMCorePlus(pymmcore.CMMCore):
         np.ndarray
             output image (possibly new shape and dtype)
         """
-        ncomp = self.getNumberOfComponents()
-        if ncomp != 1:
-            new_shape = img.shape + (ncomp,)
-            return img.view(dtype=f"u{img.dtype.itemsize//ncomp}").reshape(new_shape)
+        if self.getNumberOfComponents() == 4:
+            new_shape = img.shape + (4,)
+            img = img.view(dtype=f"u{img.dtype.itemsize//4}")
+            img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
 
-    def getImage(self, *args) -> np.ndarray:
+    def getImage(self, *args, fix=True) -> np.ndarray:
         """Exposes the internal image buffer.
 
         The pymmcore-plus implementation will convert images with n_components > 1
         to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
         """
-        return self._fix_image(super().getImage(*args))
+        img = super().getImage(*args)
+        return self._fix_image(img) if fix else img
 
     def cancel(self):
         self._canceled = True
@@ -321,6 +356,28 @@ class CMMCorePlus(pymmcore.CMMCore):
             "XYStageDevice": self.getXYStageDevice(),  # 156 ns
             "ZPosition": self.getZPosition(),  # 1.03 µs
         }
+
+
+for name in (
+    "getConfigData",
+    "getConfigGroupState",
+    "getConfigGroupStateFromCache",
+    "getConfigState",
+    "getSystemState",
+    "getSystemStateCache",
+):
+    native_doc = getattr(pymmcore.CMMCore, name).__doc__
+    getattr(CMMCorePlus, name).__doc__ += (
+        "\n"
+        + native_doc
+        + dedent(
+            """
+    By default, this method returns a `pymmcore_plus.Configuration` object, which
+    provides some conveniences over the native `pymmcore.Configuration` object, however
+    this adds a little overhead. Use `native=True` to avoid the conversion.
+    """
+        ).strip()
+    )
 
 
 class _MMCallbackRelay(pymmcore.MMEventCallback):
