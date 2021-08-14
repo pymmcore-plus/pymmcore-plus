@@ -65,7 +65,7 @@ def test_mda(qtbot, proxy):
 # test canceling while waiting for the next time point
 def test_mda_cancel(qtbot, proxy: RemoteMMCore):
     mda = MDASequence(time_plan={"interval": 5000, "loops": 3})
-    with qtbot.waitSignals([proxy.events.sequenceStarted]):
+    with qtbot.waitSignal(proxy.events.sequenceStarted):
         proxy.run_mda(mda)
     with qtbot.waitSignals(
         [proxy.events.sequenceFinished, proxy.events.sequenceCanceled], timeout=500
