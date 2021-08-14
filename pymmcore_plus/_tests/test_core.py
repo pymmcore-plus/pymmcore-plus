@@ -55,11 +55,13 @@ def test_search_paths(core: CMMCorePlus):
 
 
 def test_cb_exceptions(core: CMMCorePlus, caplog):
-    @core.events.propertyChanged.connect()
+    @core.events.propertyChanged.connect
     def _raze():
         raise ValueError("Boom")
 
-    core.setProperty("Camera", "Binning", 2)
+    # using this to avoid our setProperty override... which would immediately
+    # raise the exception (we want it to be raised deeper)
+    pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
 
     msg = caplog.records[0].message
     assert msg == "Exception occured in MMCorePlus callback 'propertyChanged': Boom"
@@ -236,8 +238,9 @@ def test_md_overrides(core: CMMCorePlus):
 
 
 def test_configuration(core: CMMCorePlus):
-    state = core.getSystemStatePlus()
+    state = core.getSystemState()
     assert isinstance(state, Configuration)
+    assert not isinstance(core.getSystemState(native=True), Configuration)
 
     assert str(state)
 
@@ -276,3 +279,31 @@ def test_config_yaml():
     cfg1 = Configuration.create(input)
     yaml = pytest.importorskip("yaml")
     assert cfg1.yaml() == yaml.safe_dump(input)
+
+
+def test_property_schema(core: CMMCorePlus):
+    schema = core.getDeviceSchema("Camera")
+    assert isinstance(schema, dict)
+    assert schema["title"] == "DCam"
+    assert schema["properties"]["AllowMultiROI"] == {"type": "boolean"}
+
+
+def test_set_property_events(core: CMMCorePlus):
+    """Test that using setProperty always emits a propertyChanged event."""
+    mock = MagicMock()
+    core.events.propertyChanged.connect(mock)
+    core.setProperty("Camera", "Binning", "2")
+    mock.assert_called_once_with("Camera", "Binning", "2")
+
+    mock.reset_mock()
+    core.setProperty("Camera", "Binning", "1")
+    mock.assert_called_once_with("Camera", "Binning", "1")
+
+    mock.reset_mock()
+    core.setProperty("Camera", "Binning", "1")
+    mock.assert_not_called()  # value didn't change
+
+    # this is not a property that the DemoCamera emits...
+    # so with regular pymmcore, this would not be emitted.
+    core.setProperty("Camera", "AllowMultiROI", "1")
+    mock.assert_called_once_with("Camera", "AllowMultiROI", "1")

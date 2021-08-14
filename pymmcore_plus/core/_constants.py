@@ -53,6 +53,9 @@ class PropertyType(IntEnum):
     def to_python(self):
         return {0: None, 1: str, 2: float, 3: int}[self]
 
+    def to_json(self):
+        return {0: "null", 1: "string", 2: "number", 3: "integer"}[self]
+
 
 class ActionType(IntEnum):
     NoAction = 0

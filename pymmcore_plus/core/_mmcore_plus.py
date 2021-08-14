@@ -4,7 +4,8 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, List, Optional, Tuple, TypeVar, Union
+from textwrap import dedent
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, TypeVar, Union
 
 import pymmcore
 from loguru import logger
@@ -44,6 +45,40 @@ class CMMCorePlus(pymmcore.CMMCore):
         return f"<{type(self).__name__} at {hex(id(self))}>"
 
     # Re-implemented methods from the CMMCore API
+
+    def setProperty(
+        self, label: str, propName: str, propValue: Union[bool, float, int, str]
+    ) -> None:
+        """setProperty with more reliable event emission.
+
+        As stated by Nico: "Callbacks are mainly used to give devices the opportunity to
+        signal back to the UI."
+        https://forum.image.sc/t/micromanager-events-core-events-not-coming-through/53014/2
+
+        Because it's left to the device adapter to emit a signal, in many cases uses
+        `setProperty()` will NOT lead to a new `propertyChanged` event getting emitted.
+        But that makes it hard to create listeners (i.e. in the gui or elsewhere).
+
+        While this method override cannot completely solve that problem (core-internal
+        changes will still lack an associated event emission in many cases), it can at
+        least guarantee that if we use `CMMCorePlus.setProperty` to change the property,
+        then a `propertyChanged` event will be emitted if the value did indeed change.
+
+        Parameters
+        ----------
+        label : str
+            device label
+        propName : str
+            property name
+        propValue : Union[bool, float, int, str]
+            new value
+        """
+        before = super().getProperty(label, propName)
+        with self.events.propertyChanged.blocked():  # block the native event.
+            super().setProperty(label, propName, propValue)
+        after = super().getProperty(label, propName)
+        if before != after:
+            self.events.propertyChanged.emit(label, propName, after)
 
     def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]):
         # add to PATH as well for dynamic dlls
@@ -86,6 +121,49 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceDetectionStatus(super().detectDevice(deviceLabel))
 
+    # config overrides
+
+    def getConfigData(
+        self, configGroup: str, configName: str, *, native=False
+    ) -> Configuration:
+        """Returns the configuration object for a given group and name."""
+
+        cfg = super().getConfigData(configGroup, configName)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getConfigGroupState(self, group: str, *, native=False) -> Configuration:
+        """Returns the partial state of the system, for the devices included in the
+        specified group.
+        """
+        cfg = super().getConfigGroupState(group)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native=False
+    ) -> Configuration:
+        """Returns the partial state of the system cache, for the devices included
+        in the specified group.
+        """
+        cfg = super().getConfigGroupStateFromCache(group)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getConfigState(self, group: str, config: str, *, native=False) -> Configuration:
+        """Returns a partial state of the system, for devices included in the
+        specified configuration.
+        """
+        cfg = super().getConfigState(group, config)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getSystemState(self, *, native=False) -> Configuration:
+        """Returns the entire system state."""
+        cfg = super().getSystemState()
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getSystemStateCache(self, *, native=False) -> Configuration:
+        """Returns the entire system state from cache"""
+        cfg = super().getSystemStateCache()
+        return cfg if native else Configuration.from_configuration(cfg)
+
     # metadata overloads that don't require instantiating metadata first
 
     def getLastImageMD(
@@ -104,6 +182,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().popNextImageMD(md)
         return img, md
 
+    def popNextImage(self) -> np.ndarray:
+        """Gets and removes the next image from the circular buffer.
+
+        The pymmcore-plus implementation will convert images with n_components > 1
+        to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
+        """
+        return self._fix_image(super().popNextImage())
+
     def getNBeforeLastImageMD(
         self, n: int, md: Optional[Metadata] = None
     ) -> Tuple[np.ndarray, Metadata]:
@@ -120,17 +206,57 @@ class CMMCorePlus(pymmcore.CMMCore):
         # use the pymmcore-plus configSet signal as a workaround
         self.events.configSet.emit(groupName, configName)
 
-    # config overrides
-
-    def getSystemStatePlus(self) -> Configuration:
-        """Return a nicer Configuration object.
-
-        This method is about 1.5x slower than getSystemState ... so we don't
-        override the super() method directly.
-        """
-        return Configuration.from_configuration(super().getSystemState())
-
     # NEW methods
+
+    def getDeviceProperties(self, device_label: str) -> Dict[str, Any]:
+        """Return all current properties for device `device_label`."""
+        return {
+            name: self.getProperty(device_label, name)
+            for name in self.getDevicePropertyNames(device_label)
+        }
+
+    def getDeviceSchema(self, device_label: str) -> Dict[str, Any]:
+        """Return dict in JSON-schema format for propties of `device_label`.
+
+        Use `json.dump` to convert this dict to a JSON string.
+        """
+        d = {
+            "title": self.getDeviceName(device_label),
+            "description": self.getDeviceDescription(device_label),
+            "type": "object",
+            "properties": {},
+        }
+        for prop_name in self.getDevicePropertyNames(device_label):
+            _type = self.getPropertyType(device_label, prop_name)
+            d["properties"][prop_name] = p = {}
+            if _type.to_json() != "null":
+                p["type"] = _type.to_json()
+            if self.hasPropertyLimits(device_label, prop_name):
+                min_ = self.getPropertyLowerLimit(device_label, prop_name)
+                max_ = self.getPropertyUpperLimit(device_label, prop_name)
+                p["minimum"] = min_
+                p["maximum"] = max_
+            allowed = self.getAllowedPropertyValues(device_label, prop_name)
+            if allowed:
+                if set(allowed) == {"0", "1"} and _type.to_json() == "integer":
+                    p["type"] = "boolean"
+                else:
+                    cls = _type.to_python()
+                    p["enum"] = [cls(i) if cls else i for i in allowed]
+            if self.isPropertyReadOnly(device_label, prop_name):
+                p["readOnly"] = True
+                p["default"] = self.getProperty(device_label, prop_name)
+            if self.isPropertySequenceable(device_label, prop_name):
+                p["sequenceable"] = True
+                p["sequence_max_length"] = self.getPropertySequenceMaxLength(
+                    device_label, prop_name
+                )
+            if self.isPropertyPreInit(device_label, prop_name):
+                p["preInit"] = True
+        if not d["properties"]:
+            del d["properties"]
+            del d["type"]
+        return d
 
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0
@@ -228,6 +354,37 @@ class CMMCorePlus(pymmcore.CMMCore):
         logger.info("MDA Finished: {}", sequence)
         self.events.sequenceFinished.emit(sequence)
 
+    def _fix_image(self, img: np.ndarray) -> np.ndarray:
+        """Fix img shape/dtype based on `self.getNumberOfComponents()`.
+
+        convert images with n_components > 1
+        to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
+
+        Parameters
+        ----------
+        img : np.ndarray
+            input image
+
+        Returns
+        -------
+        np.ndarray
+            output image (possibly new shape and dtype)
+        """
+        if self.getNumberOfComponents() == 4:
+            new_shape = img.shape + (4,)
+            img = img.view(dtype=f"u{img.dtype.itemsize//4}")
+            img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
+        return img
+
+    def getImage(self, *args, fix=True) -> np.ndarray:
+        """Exposes the internal image buffer.
+
+        The pymmcore-plus implementation will convert images with n_components > 1
+        to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
+        """
+        img = super().getImage(*args)
+        return self._fix_image(img) if fix else img
+
     def cancel(self):
         self._canceled = True
 
@@ -258,6 +415,28 @@ class CMMCorePlus(pymmcore.CMMCore):
             "XYStageDevice": self.getXYStageDevice(),  # 156 ns
             "ZPosition": self.getZPosition(),  # 1.03 µs
         }
+
+
+for name in (
+    "getConfigData",
+    "getConfigGroupState",
+    "getConfigGroupStateFromCache",
+    "getConfigState",
+    "getSystemState",
+    "getSystemStateCache",
+):
+    native_doc = getattr(pymmcore.CMMCore, name).__doc__
+    getattr(CMMCorePlus, name).__doc__ += (
+        "\n"
+        + native_doc
+        + dedent(
+            """
+    By default, this method returns a `pymmcore_plus.Configuration` object, which
+    provides some conveniences over the native `pymmcore.Configuration` object, however
+    this adds a little overhead. Use `native=True` to avoid the conversion.
+    """
+        ).strip()
+    )
 
 
 class _MMCallbackRelay(pymmcore.MMEventCallback):
