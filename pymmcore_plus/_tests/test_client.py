@@ -1,5 +1,4 @@
 import os
-import time
 from pathlib import Path
 
 import numpy as np
@@ -64,15 +63,14 @@ def test_mda(qtbot, proxy):
 
 
 # test canceling while waiting for the next time point
-def test_mda_cancel(qtbot, proxy):
-    mda = MDASequence(time_plan={"interval": 5, "loops": 3})
+def test_mda_cancel(qtbot, proxy: RemoteMMCore):
+    mda = MDASequence(time_plan={"interval": 5000, "loops": 3})
     with qtbot.waitSignals([proxy.events.sequenceStarted, proxy.events.frameReady]):
         proxy.run_mda(mda)
-    t0 = time.perf_counter()
-    with qtbot.waitSignals([proxy.events.sequenceFinished], timeout=10000):
+    with qtbot.waitSignals(
+        [proxy.events.sequenceFinished, proxy.events.sequenceCanceled], timeout=500
+    ):
         proxy.cancel()
-    delta_t = time.perf_counter() - t0
-    assert delta_t < 5
 
 
 # TODO: this test may accidentally pass if qtbot is created before this
