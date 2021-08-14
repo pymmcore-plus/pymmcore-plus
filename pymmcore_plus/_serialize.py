@@ -19,7 +19,10 @@ SHM_SENT: Deque[SharedMemory] = Deque(maxlen=15)
 def _cleanup():
     for shm in SHM_SENT:
         shm.close()
-        shm.unlink()
+        try:
+            shm.unlink()
+        except FileNotFoundError:
+            pass
 
 
 def ndarray_to_dict(obj: np.ndarray):
