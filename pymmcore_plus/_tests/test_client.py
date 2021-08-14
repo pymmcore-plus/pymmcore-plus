@@ -62,6 +62,17 @@ def test_mda(qtbot, proxy):
         proxy.run_mda(mda)
 
 
+# test canceling while waiting for the next time point
+def test_mda_cancel(qtbot, proxy: RemoteMMCore):
+    mda = MDASequence(time_plan={"interval": 5000, "loops": 3})
+    with qtbot.waitSignal(proxy.events.sequenceStarted):
+        proxy.run_mda(mda)
+    with qtbot.waitSignals(
+        [proxy.events.sequenceFinished, proxy.events.sequenceCanceled], timeout=500
+    ):
+        proxy.cancel()
+
+
 # TODO: this test may accidentally pass if qtbot is created before this
 @pytest.mark.xfail(
     reason="synchronous callbacks not working yet", raises=AssertionError, strict=True
