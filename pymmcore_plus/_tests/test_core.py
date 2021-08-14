@@ -236,8 +236,9 @@ def test_md_overrides(core: CMMCorePlus):
 
 
 def test_configuration(core: CMMCorePlus):
-    state = core.getSystemStatePlus()
+    state = core.getSystemState()
     assert isinstance(state, Configuration)
+    assert not isinstance(core.getSystemState(native=True), Configuration)
 
     assert str(state)
 
