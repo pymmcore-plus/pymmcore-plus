@@ -53,7 +53,7 @@ class Configuration(pymmcore.Configuration):
         dict() - convert Configuration to nested dict
         json() - convert to JSON string
         yaml() - convert to YAML string (requires PyYAML)
-        yaml() - convert to HTML string
+        html() - convert to HTML string
     """
 
     # pymmcore API:
