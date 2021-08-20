@@ -1,7 +1,7 @@
 import atexit
 import datetime
 from multiprocessing.shared_memory import SharedMemory
-from typing import Deque
+from typing import Deque, Generic, TypeVar
 
 import numpy as np
 import pymmcore
@@ -11,89 +11,7 @@ from pydantic.datetime_parse import parse_duration
 from Pyro5.api import register_class_to_dict, register_dict_to_class
 
 Pyro5.config.SERIALIZER = "msgpack"
-
-SHM_SENT: Deque[SharedMemory] = Deque(maxlen=15)
-
-
-@atexit.register  # pragma: no cover
-def _cleanup():
-    for shm in SHM_SENT:
-        shm.close()
-        try:
-            shm.unlink()
-        except FileNotFoundError:
-            pass
-
-
-def ndarray_to_dict(obj: np.ndarray):
-    """convert numpy array to dict."""
-    shm = SharedMemory(create=True, size=obj.nbytes)
-    SHM_SENT.append(shm)
-    b = np.ndarray(obj.shape, dtype=obj.dtype, buffer=shm.buf)
-    b[:] = obj[:]
-    return {
-        "__class__": "numpy.ndarray",
-        "shm": shm.name,
-        "shape": obj.shape,
-        "dtype": str(obj.dtype),
-    }
-
-
-def dict_to_ndarray(classname, d):
-    """convert dict from `ndarray_to_dict` back to np.ndarray"""
-    shm = SharedMemory(name=d["shm"], create=False)
-    array = np.ndarray(d["shape"], dtype=d["dtype"], buffer=shm.buf).copy()
-    shm.close()
-    shm.unlink()
-    return array
-
-
-def CMMError_to_dict(err):
-    try:
-        msg = err.getMsg()
-    except Exception:  # pragma: no cover
-        msg = ""
-    return {
-        "__class__": "pymmcore.CMMError",
-        "msg": msg,
-    }
-
-
-def dict_to_CMMError(classname, d):
-    return pymmcore.CMMError(str(d.get("msg")))
-
-
-def timedelta_to_dict(obj):
-    return {
-        "__class__": "datetime.timedelta",
-        "val": str(obj),
-    }
-
-
-def dict_to_timedelta(classname, d):
-    return parse_duration(d.get("val"))
-
-
-def mdaseq_to_dict(mda_sequence: useq.MDASequence):
-    return {
-        "__class__": "useq.MDASequence",
-        "val": mda_sequence.dict(),
-    }
-
-
-def dict_to_mdaseq(classname, d):
-    return useq.MDASequence.parse_obj(d.get("val"))
-
-
-def mda_event_to_dict(mda_event: useq.MDAEvent):
-    return {
-        "__class__": "useq.MDAEvent",
-        "val": mda_event.dict(),
-    }
-
-
-def dict_to_mda_event(classname, d):
-    return useq.MDAEvent.parse_obj(d.get("val"))
+T = TypeVar("T")
 
 
 def remove_shm_from_resource_tracker():
@@ -121,20 +39,117 @@ def remove_shm_from_resource_tracker():
         del resource_tracker._CLEANUP_FUNCS["shared_memory"]
 
 
+class Serializer(Generic[T]):
+    # define these in subclasses
+    type_: T
+
+    def to_dict(obj: T) -> dict:
+        ...
+
+    def from_dict(classname: str, dct: dict) -> T:
+        ...
+
+    # -----------------
+    @classmethod
+    def _to_dict(cls, obj: T) -> dict:
+        return {"__class__": cls.type_key, **cls.to_dict(obj)}
+
+    @classmethod
+    def register(cls):
+        register_class_to_dict(cls.type_, cls._to_dict)
+        register_dict_to_class(cls.type_key, cls.from_dict)
+
+    @classmethod
+    def type_key(cls):
+        return f"{cls.type_.__module__}.{cls.type_.__name__}"
+
+
+class SerMDASequence(Serializer[useq.MDASequence]):
+    type_ = useq.MDASequence
+
+    def to_dict(obj: useq.MDASequence):
+        return obj.dict()
+
+    def from_dict(classname: str, d: dict):
+        return useq.MDASequence.parse_obj(d)
+
+
+class SerMDAEvent(Serializer[useq.MDAEvent]):
+    type_ = useq.MDAEvent
+
+    def to_dict(obj: useq.MDAEvent):
+        return obj.dict()
+
+    def from_dict(classname: str, d: dict):
+        return useq.MDAEvent.parse_obj(d)
+
+
+class SerTimeDelta(Serializer[datetime.timedelta]):
+    type_ = datetime.timedelta
+
+    def to_dict(obj: datetime.timedelta):
+        return {"val": str(obj)}
+
+    def from_dict(classname: str, d: dict):
+        return parse_duration(d.get("val"))
+
+
+class SerCMMError(Serializer[pymmcore.CMMError]):
+    type_ = pymmcore.CMMError
+
+    def to_dict(obj: pymmcore.CMMError):
+        try:
+            msg = obj.getMsg()
+        except Exception:  # pragma: no cover
+            msg = ""
+        return {"msg": msg}
+
+    def from_dict(classname: str, d: dict):
+        return pymmcore.CMMError(str(d.get("msg")))
+
+
+class SerNDArray(Serializer[np.ndarray]):
+    type_ = np.ndarray
+    SHM_SENT: Deque[SharedMemory] = Deque(maxlen=15)
+
+    def to_dict(obj: np.ndarray):
+        shm = SharedMemory(create=True, size=obj.nbytes)
+        SerNDArray.SHM_SENT.append(shm)
+        b = np.ndarray(obj.shape, dtype=obj.dtype, buffer=shm.buf)
+        b[:] = obj[:]
+        return {
+            "shm": shm.name,
+            "shape": obj.shape,
+            "dtype": str(obj.dtype),
+        }
+
+    def from_dict(classname: str, d: dict):
+        """convert dict from `ndarray_to_dict` back to np.ndarray"""
+        shm = SharedMemory(name=d["shm"], create=False)
+        array = np.ndarray(d["shape"], dtype=d["dtype"], buffer=shm.buf).copy()
+        shm.close()
+        shm.unlink()
+        return array
+
+    @classmethod
+    def register(cls):
+        super().register()
+
+
+@atexit.register  # pragma: no cover
+def _cleanup():
+    for shm in SerNDArray.SHM_SENT:
+        shm.close()
+        try:
+            shm.unlink()
+        except FileNotFoundError:
+            pass
+
+
 def register_serializers():
     remove_shm_from_resource_tracker()
-
-    register_class_to_dict(np.ndarray, ndarray_to_dict)
-    register_dict_to_class("numpy.ndarray", dict_to_ndarray)
-
-    register_class_to_dict(pymmcore.CMMError, CMMError_to_dict)
-    register_dict_to_class("pymmcore.CMMError", dict_to_CMMError)
-
-    register_class_to_dict(datetime.timedelta, timedelta_to_dict)
-    register_dict_to_class("datetime.timedelta", dict_to_timedelta)
-
-    register_class_to_dict(useq.MDASequence, mdaseq_to_dict)
-    register_dict_to_class("useq.MDASequence", dict_to_mdaseq)
-
-    register_class_to_dict(useq.MDAEvent, mda_event_to_dict)
-    register_dict_to_class("useq.MDAEvent", dict_to_mda_event)
+    SerTimeDelta.register()
+    SerNDArray.register()
+    SerCMMError.register()
+    SerMDASequence.register()
+    SerMDAEvent.register()
