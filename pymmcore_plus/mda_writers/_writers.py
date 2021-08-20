@@ -45,10 +45,11 @@ class MDA_multifile_tiff_writer(MDAWriter):
             raise ValueError(
                 "This writer requires tifffile to be installed. `pip install tifffile`"
             )
-        self._path = self.get_unique_folder(data_folder_name)
-        self._path.mkdir(parents=True)
+        self._data_folder_name = data_folder_name
 
     def initialize(self, shape, axis_order, seq: MDASequence, dtype: np.dtype) -> None:
+        self._path = self.get_unique_folder(self._data_folder_name)
+        self._path.mkdir(parents=True)
         self._axis_order = axis_order
 
     def addFrame(self, img: np.ndarray, index, event: MDASequence) -> None:
