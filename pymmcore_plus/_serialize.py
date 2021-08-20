@@ -50,7 +50,7 @@ class Serializer(ABC, Generic[T]):
     @classmethod
     @property
     def type_key(cls):
-        return f"{cls.type_().__module__}.{cls.type_.__name__}"
+        return f"{cls.type_().__module__}.{cls.type_().__name__}"
 
 
 class SerMDASequence(Serializer[useq.MDASequence]):
