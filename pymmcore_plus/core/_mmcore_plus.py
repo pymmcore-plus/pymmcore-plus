@@ -80,7 +80,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if before != after:
             self.events.propertyChanged.emit(label, propName, after)
 
-    def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]):
+    def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]) -> None:
         # add to PATH as well for dynamic dlls
         if (
             not isinstance(adapter_paths, (list, tuple))
@@ -96,7 +96,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         logger.info(f"setting adapter search paths: {adapter_paths}")
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
-    def loadSystemConfiguration(self, fileName="demo"):
+    def loadSystemConfiguration(self, fileName="demo") -> None:
         if fileName.lower() == "demo":
             if not self._mm_path:
                 raise ValueError(  # pragma: no cover

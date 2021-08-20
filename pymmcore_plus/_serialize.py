@@ -11,6 +11,8 @@ import Pyro5.api
 import useq
 from pydantic.datetime_parse import parse_duration
 
+from .core import Configuration, Metadata
+
 Pyro5.config.SERIALIZER = "msgpack"
 T = TypeVar("T")
 
@@ -65,6 +67,22 @@ class SerMDAEvent(Serializer[useq.MDAEvent]):
 
     def from_dict(self, classname: str, d: dict):
         return useq.MDAEvent.parse_obj(d)
+
+
+class SerConfiguration(Serializer[Configuration]):
+    def to_dict(self, obj: Configuration):
+        return obj.dict()
+
+    def from_dict(self, classname: str, d: dict):
+        return Configuration.create(**d)
+
+
+class SerMetadata(Serializer[Metadata]):
+    def to_dict(self, obj: Metadata):
+        return dict(obj)
+
+    def from_dict(self, classname: str, d: dict):
+        return Metadata(**d)
 
 
 class SerTimeDelta(Serializer[datetime.timedelta]):
@@ -147,8 +165,6 @@ def remove_shm_from_resource_tracker():
 
 def register_serializers():
     remove_shm_from_resource_tracker()
-    SerTimeDelta.register()
-    SerNDArray.register()
-    SerCMMError.register()
-    SerMDASequence.register()
-    SerMDAEvent.register()
+    for i in globals().values():
+        if isinstance(i, type) and issubclass(i, Serializer) and i != Serializer:
+            i.register()
