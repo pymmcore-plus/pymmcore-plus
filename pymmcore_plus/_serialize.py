@@ -31,7 +31,6 @@ class Serializer(ABC, Generic[T]):
     # -----------------
 
     @classmethod
-    @property
     def type_(cls):
         return cls.__orig_bases__[0].__args__[0]
 
@@ -45,13 +44,13 @@ class Serializer(ABC, Generic[T]):
     @classmethod
     def register(cls):
         ser = cls()
-        Pyro5.api.register_class_to_dict(ser.type_, ser._to_dict)
-        Pyro5.api.register_dict_to_class(ser.type_key, ser._from_dict)
+        Pyro5.api.register_class_to_dict(cls.type_(), ser._to_dict)
+        Pyro5.api.register_dict_to_class(cls.type_key, ser._from_dict)
 
     @classmethod
     @property
     def type_key(cls):
-        return f"{cls.type_.__module__}.{cls.type_.__name__}"
+        return f"{cls.type_().__module__}.{cls.type_.__name__}"
 
 
 class SerMDASequence(Serializer[useq.MDASequence]):
