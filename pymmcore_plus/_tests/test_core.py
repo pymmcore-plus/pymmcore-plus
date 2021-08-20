@@ -20,6 +20,7 @@ from pymmcore_plus import (
     Configuration,
     DeviceDetectionStatus,
     DeviceType,
+    MDAWriter,
     Metadata,
     PropertyType,
 )
@@ -129,9 +130,21 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     stage_mock = MagicMock()
     exp_mock = MagicMock()
 
-    core.mda._events.frameReady.connect(fr_mock)
-    core.mda._events.sequenceStarted.connect(ss_mock)
-    core.mda._events.sequenceFinished.connect(sf_mock)
+    class MockWriter(MDAWriter):
+        indices = []
+
+        # custom addFrame to avoid having to know the images
+        # in order to check called
+        def addFrame(self, image, index, event):
+            self.indices.append(index)
+
+    writer = MockWriter()
+    writer.initialize = MagicMock()
+    writer.finalize = MagicMock()
+
+    core.events.frameReady.connect(fr_mock)
+    core.events.sequenceStarted.connect(ss_mock)
+    core.events.sequenceFinished.connect(sf_mock)
     core.events.XYStagePositionChanged.connect(xystage_mock)
     core.events.stagePositionChanged.connect(stage_mock)
     core.events.exposureChanged.connect(exp_mock)
@@ -142,6 +155,26 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     for event, _call in zip(mda, fr_mock.call_args_list):
         assert isinstance(_call.args[0], np.ndarray)
         assert _call.args[1] == event
+
+    writer.initialize.assert_called_once_with(
+        (2, 1, 1, 4), ("t", "p", "c", "z"), mda, dtype=np.dtype("uint16")
+    )
+    np.testing.assert_array_equal(
+        np.asarray(writer.indices),
+        np.asarray(
+            [
+                (0, 0, 0, 0),
+                (0, 0, 0, 1),
+                (0, 0, 0, 2),
+                (0, 0, 0, 3),
+                (1, 0, 0, 0),
+                (1, 0, 0, 1),
+                (1, 0, 0, 2),
+                (1, 0, 0, 3),
+            ]
+        ),
+    )
+    writer.finalize.assert_called_once()
 
     ss_mock.assert_called_once_with(mda)
     sf_mock.assert_called_once_with(mda)
