@@ -34,6 +34,7 @@ def proxy():
 
 def test_client(proxy):
     assert str(proxy._pyroUri) == DEFAULT_URI
+    proxy.getConfigGroupState("Channel")
 
 
 def test_mda(qtbot, proxy):

@@ -1,30 +1,41 @@
+import operator
+
 import numpy as np
 import pymmcore
 from useq import MDAEvent
 
+from pymmcore_plus import Configuration, Metadata
 from pymmcore_plus._serialize import (
-    CMMError_to_dict,
-    dict_to_CMMError,
-    dict_to_mda_event,
-    dict_to_ndarray,
-    mda_event_to_dict,
-    ndarray_to_dict,
+    SerCMMError,
+    SerConfiguration,
+    SerMDAEvent,
+    SerMetadata,
+    SerNDArray,
 )
 
 
+def _roundtrip(serializer, obj, compare=operator.eq):
+    return compare(serializer().from_dict("", serializer().to_dict(obj)), obj)
+
+
 def test_ndarray():
-    data = np.random.rand(4, 4)
-    d = ndarray_to_dict(data)
-    arr = dict_to_ndarray("", d)
-    np.testing.assert_allclose(data, arr)
+    assert _roundtrip(SerNDArray, np.random.rand(4, 4), np.allclose)
 
 
 def test_cmmerror():
-    err = pymmcore.CMMError("msg", 1)
-    assert dict_to_CMMError("", CMMError_to_dict(err)).getMsg() == err.getMsg()
+    assert _roundtrip(
+        SerCMMError, pymmcore.CMMError("msg", 1), lambda a, b: a.getMsg() == b.getMsg()
+    )
 
 
 def test_mda():
-    event = MDAEvent(exposure=42)
-    d = mda_event_to_dict(event)
-    assert dict_to_mda_event("", d) == event
+    assert _roundtrip(SerMDAEvent, MDAEvent(exposure=42))
+
+
+def test_configiration():
+    cfg = Configuration.create({"a": {"a0": "0", "a1": "1"}, "b": {"b0": "10"}})
+    assert _roundtrip(SerConfiguration, cfg)
+
+
+def test_metadata():
+    assert _roundtrip(SerMetadata, Metadata({"a": "1"}))
