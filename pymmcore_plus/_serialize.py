@@ -35,7 +35,7 @@ class Serializer(ABC, Generic[T]):
         return cls.__orig_bases__[0].__args__[0]
 
     def _to_dict(self, obj: T) -> dict:
-        return {**self.to_dict(obj), "__class__": self.type_key}
+        return {**self.to_dict(obj), "__class__": self.type_key()}
 
     def _from_dict(self, classname: str, d: dict) -> T:
         d.pop("__class__", None)
@@ -45,10 +45,9 @@ class Serializer(ABC, Generic[T]):
     def register(cls):
         ser = cls()
         Pyro5.api.register_class_to_dict(cls.type_(), ser._to_dict)
-        Pyro5.api.register_dict_to_class(cls.type_key, ser._from_dict)
+        Pyro5.api.register_dict_to_class(cls.type_key(), ser._from_dict)
 
     @classmethod
-    @property
     def type_key(cls):
         return f"{cls.type_().__module__}.{cls.type_().__name__}"
 
