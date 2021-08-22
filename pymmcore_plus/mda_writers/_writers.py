@@ -1,4 +1,5 @@
 from pathlib import Path
+from typing import Union
 
 import numpy as np
 from typing_extensions import Protocol  # typing extensions for 3.7 support
@@ -21,18 +22,19 @@ class MDAWriter(Protocol):
         ...
 
     @staticmethod
-    def get_unique_folder(folder_base_name: str) -> Path:
+    def get_unique_folder(folder_base_name: Union[str, Path]) -> Path:
         base_path = Path.cwd()
-        path: Path = base_path / folder_base_name
+        folder = str(folder_base_name)
+        path: Path = base_path / folder
         i = 1
         while path.exists():
-            path = base_path / (folder_base_name + f"_{i}")
+            path = base_path / (folder + f"_{i}")
             i += 1
         return path
 
 
 class MDA_multifile_tiff_writer(MDAWriter):
-    def __init__(self, data_folder_name: str) -> None:
+    def __init__(self, data_folder_name: Union[str, Path]) -> None:
         if tifffile is None:
             raise ValueError(
                 "This writer requires tifffile to be installed. `pip install tifffile`"
