@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Tuple
 
 import numpy as np
 from typing_extensions import Protocol  # typing extensions for 3.7 support
@@ -9,13 +8,6 @@ try:
     import tifffile
 except ImportError:
     tifffile = None
-
-
-def get_axis_order(seq: MDASequence) -> Tuple[str]:
-    """Get the axis order using only axes that are present in events."""
-    event = next(seq.iter_events())
-    event_axes = list(event.index.keys())
-    return tuple(a for a in seq.axis_order if a in event_axes)
 
 
 class MDAWriter(Protocol):
