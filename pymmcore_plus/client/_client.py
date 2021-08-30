@@ -45,7 +45,7 @@ class RemoteMMCore(api.Proxy):
         timeout: int = 5,
         verbose: bool = False,
         cleanup_new=True,
-        cleanup_existing=True,
+        cleanup_existing=False,
         connected_socket=None,
         callback_class=None,
     ):
@@ -123,11 +123,17 @@ def ensure_server_running(
             proc = _get_remote_pid(host, port)
             if proc is not None:
                 atexit.register(proc.kill)
+                atexit.register(
+                    api.Proxy(f"PYRO:{server.CORE_NAME}@{host}:{port}").unloadAllDevices
+                )
     except errors.CommunicationError:
         logger.debug("No server found, creating new mmcore server")
         proc = new_server_process(host, port, verbose=verbose)
         if cleanup_new:
             atexit.register(proc.kill)
+            atexit.register(
+                api.Proxy(f"PYRO:{server.CORE_NAME}@{host}:{port}").unloadAllDevices
+            )
         return proc
     return None
 
