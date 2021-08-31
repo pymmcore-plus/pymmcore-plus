@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import atexit
 import os
 import time
+import weakref
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
@@ -41,8 +43,17 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._canceled = False
         self._paused = False
 
+        # use weakref to avoid atexit keeping us from being
+        # garbage collected
+        self._weak_clean = weakref.WeakMethod(self.unloadAllDevices)
+        atexit.register(self._weak_clean)
+
     def __repr__(self) -> str:
         return f"<{type(self).__name__} at {hex(id(self))}>"
+
+    def __del__(self):
+        atexit.unregister(self._weak_clean)
+        self.unloadAllDevices()
 
     # Re-implemented methods from the CMMCore API
 
@@ -105,6 +116,12 @@ class CMMCorePlus(pymmcore.CMMCore):
                 )
             fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
         super().loadSystemConfiguration(str(fileName))
+
+    def unloadAllDevices(self) -> None:
+        # this log won't appear when exiting ipython
+        # but the method is still called
+        logger.info("Unloading all devices")
+        return super().unloadAllDevices()
 
     def getDeviceType(self, label: str) -> DeviceType:
         """Returns device type."""

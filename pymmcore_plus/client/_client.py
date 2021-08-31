@@ -3,7 +3,7 @@ import subprocess
 import sys
 import threading
 import time
-from typing import TYPE_CHECKING, Optional
+from typing import Optional
 
 from loguru import logger
 from Pyro5 import api, core, errors
@@ -11,9 +11,6 @@ from typing_extensions import Protocol
 
 from .. import server
 from .._serialize import register_serializers
-
-if TYPE_CHECKING:
-    from psutil import Process
 
 
 class CallbackProtocol(Protocol):
@@ -45,7 +42,6 @@ class RemoteMMCore(api.Proxy):
         timeout: int = 5,
         verbose: bool = False,
         cleanup_new=True,
-        cleanup_existing=True,
         connected_socket=None,
         callback_class=None,
     ):
@@ -53,9 +49,7 @@ class RemoteMMCore(api.Proxy):
             callback_class = _get_auto_callback_class()
 
         register_serializers()
-        ensure_server_running(
-            host, port, timeout, verbose, cleanup_new, cleanup_existing
-        )
+        ensure_server_running(host, port, timeout, verbose, cleanup_new)
 
         uri = f"PYRO:{server.CORE_NAME}@{host}:{port}"
         super().__init__(uri, connected_socket=connected_socket)
@@ -75,16 +69,6 @@ class RemoteMMCore(api.Proxy):
         if name in ("events",):
             return object.__setattr__(self, name, value)
         return super().__setattr__(name, value)
-
-
-def _get_remote_pid(host, port) -> Optional["Process"]:
-    import psutil
-
-    for proc in psutil.process_iter(["connections"]):
-        for pconn in proc.info["connections"] or []:
-            if pconn.laddr.port == port and pconn.laddr.ip == host:
-                return proc
-    return None
 
 
 def new_server_process(
@@ -111,7 +95,7 @@ def new_server_process(
 
 
 def ensure_server_running(
-    host, port, timeout=5, verbose=False, cleanup_new=True, cleanup_existing=False
+    host, port, timeout=5, verbose=False, cleanup_new=True
 ) -> Optional[subprocess.Popen]:
     """Ensure that a server daemon is running, or start one."""
     uri = f"PYRO:{core.DAEMON_NAME}@{host}:{port}"
@@ -119,15 +103,14 @@ def ensure_server_running(
     try:
         remote_daemon.ping()
         logger.debug("Found existing server:\n{}", remote_daemon.info())
-        if cleanup_existing:
-            proc = _get_remote_pid(host, port)
-            if proc is not None:
-                atexit.register(proc.kill)
     except errors.CommunicationError:
         logger.debug("No server found, creating new mmcore server")
         proc = new_server_process(host, port, verbose=verbose)
         if cleanup_new:
             atexit.register(proc.kill)
+            atexit.register(
+                api.Proxy(f"PYRO:{server.CORE_NAME}@{host}:{port}").unloadAllDevices
+            )
         return proc
     return None
 
