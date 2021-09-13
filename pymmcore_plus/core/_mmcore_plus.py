@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import atexit
 import os
+import re
 import time
 import weakref
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Pattern,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import pymmcore
 from loguru import logger
@@ -274,6 +285,25 @@ class CMMCorePlus(pymmcore.CMMCore):
             del d["properties"]
             del d["type"]
         return d
+
+    def guessObjectiveDevices(self, device_regex: Pattern = None) -> List[str]:
+        """
+        Find any loaded devices that are likely to be an Objective/Nosepiece.
+
+        If device_regex is not provided then this will return devices with names
+        that match:
+            ``re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)``
+        """
+        devices = []
+        if device_regex is None:
+            device_regex = re.compile(
+                "(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE
+            )
+
+        for device in self.getLoadedDevicesOfType(DeviceType.StateDevice):
+            if device_regex.match(device):
+                devices.append(device)
+        return devices
 
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0

@@ -307,3 +307,9 @@ def test_set_property_events(core: CMMCorePlus):
     # so with regular pymmcore, this would not be emitted.
     core.setProperty("Camera", "AllowMultiROI", "1")
     mock.assert_called_once_with("Camera", "AllowMultiROI", "1")
+
+
+def test_get_objectives(core: CMMCorePlus):
+    devices = core.guessObjectiveDevices()
+    assert len(devices) == 1
+    assert devices[0] == "Objective"
