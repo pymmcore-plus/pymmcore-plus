@@ -305,6 +305,23 @@ class CMMCorePlus(pymmcore.CMMCore):
                 devices.append(device)
         return devices
 
+    def getOrGuessChannelGroup(self) -> str | None:
+        """
+        Get the channelGroup or find a likely candidate. If the group is not in
+        the set of available config groups then None will be returned. If guessing
+        the group then this will return the first group with a name matching:
+            reg = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
+        """
+        chan_group = self.getChannelGroup()
+        if chan_group == "":
+            # not set in core. Try "Channel" and other variations as fallbacks
+            reg = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
+            for group in self.getAvailableConfigGroups():
+                if reg.match(group):
+                    return group
+        elif chan_group in self.getAvailableConfigGroups():
+            return chan_group
+
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0
     ) -> None:

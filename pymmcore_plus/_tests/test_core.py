@@ -1,6 +1,6 @@
 import json
 import os
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 import psygnal
@@ -313,3 +313,10 @@ def test_get_objectives(core: CMMCorePlus):
     devices = core.guessObjectiveDevices()
     assert len(devices) == 1
     assert devices[0] == "Objective"
+
+
+def test_guess_channel_group(core: CMMCorePlus):
+    chan_group = core.getChannelGroup()
+    assert core.getOrGuessChannelGroup() == chan_group
+    with patch.object(core, "getChannelGroup", return_value=""):
+        assert "Channel" == core.getOrGuessChannelGroup()
