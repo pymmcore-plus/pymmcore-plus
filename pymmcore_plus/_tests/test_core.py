@@ -1,5 +1,6 @@
 import json
 import os
+import re
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -314,9 +315,36 @@ def test_get_objectives(core: CMMCorePlus):
     assert len(devices) == 1
     assert devices[0] == "Objective"
 
+    with pytest.raises(TypeError):
+        core.objective_device_pattern = 4
+
+    # assign a new regex that won't match Objective using a str
+    core.objective_device_pattern = "^((?!Objective).)*$"
+    assert "Objective" not in core.guessObjectiveDevices()
+
+    # assign new using a pre-compile pattern
+    core.objective_device_pattern = re.compile("Objective")
+    devices = core.guessObjectiveDevices()
+    assert len(devices) == 1
+    assert devices[0] == "Objective"
+
 
 def test_guess_channel_group(core: CMMCorePlus):
     chan_group = core.getChannelGroup()
     assert core.getOrGuessChannelGroup() == chan_group
     with patch.object(core, "getChannelGroup", return_value=""):
-        assert "Channel" == core.getOrGuessChannelGroup()
+        assert core.getOrGuessChannelGroup() == "Channel"
+
+        with pytest.raises(TypeError):
+            core.channelGroup_pattern = 4
+
+        # assign a new regex that won't match Channel using a str
+        # this will return Camera, but that's because this a bad regex
+        # to use
+        core.channelGroup_pattern = "^((?!(Channel)).)*$"
+        assert core.getOrGuessChannelGroup() == "Camera"
+
+        # assign new using a pre-compile pattern
+        core.channelGroup_pattern = re.compile("Channel")
+        chan_group = core.getOrGuessChannelGroup()
+        assert chan_group == "Channel"
