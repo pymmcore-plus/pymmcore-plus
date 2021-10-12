@@ -1,28 +1,11 @@
-import os
-from pathlib import Path
-
 import numpy as np
 import pytest
 from useq import MDAEvent, MDASequence
 
-import pymmcore_plus
 from pymmcore_plus.client import RemoteMMCore
 from pymmcore_plus.client.callbacks.basic import SynchronousCallback
 from pymmcore_plus.client.callbacks.qcallback import QCoreCallback
 from pymmcore_plus.server import DEFAULT_URI
-
-if not os.getenv("MICROMANAGER_PATH"):
-    try:
-        sfx = "_win" if os.name == "nt" else "_mac"
-        root = Path(pymmcore_plus.__file__).parent.parent
-        mm_path = list(root.glob(f"**/Micro-Manager-*{sfx}"))[0]
-        os.environ["MICROMANAGER_PATH"] = str(mm_path)
-    except IndexError:
-        raise AssertionError(
-            "MICROMANAGER_PATH env var was not set, and Micro-Manager "
-            "installation was not found in this package.  Please run "
-            "`python micromanager_gui/install_mm.py"
-        )
 
 
 @pytest.fixture
