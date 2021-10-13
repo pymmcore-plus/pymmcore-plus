@@ -5,8 +5,14 @@ import urllib.request
 from pathlib import Path
 from subprocess import run
 
-RELEASE = 20210518 if os.name == "nt" else 20210527
+VERSION = "2.0.1"
+RELEASE = 20211007
 DEFAULT_DEST = Path(__file__).parent
+fname = (
+    f"MMSetup_64bit_{VERSION}_{RELEASE}.exe"
+    if os.name == "nt"
+    else f"Micro-Manager-{VERSION}-{RELEASE}.dmg"
+)
 
 ssl._create_default_https_context = ssl._create_unverified_context
 
@@ -28,8 +34,7 @@ def download_url(url, output_path):
 
 
 def _mac_main(dest_dir=DEFAULT_DEST, release=RELEASE):
-    url = "https://valelab4.ucsf.edu/~MM/nightlyBuilds/2.0.0-gamma/Mac/"
-    fname = f"Micro-Manager-2.0.0-gamma1-{release}.dmg"
+    url = "https://valelab4.ucsf.edu/~MM/nightlyBuilds/2.0/Mac/"
     dst = dest_dir / f"{fname[:-4]}_mac"
 
     if dst.exists():
@@ -59,9 +64,8 @@ def _mac_main(dest_dir=DEFAULT_DEST, release=RELEASE):
 
 
 def _win_main(dest_dir=DEFAULT_DEST, release=RELEASE):
-    url = "https://valelab4.ucsf.edu/~MM/nightlyBuilds/2.0.0-gamma/Windows/"
-    fname = f"MMSetup_64bit_2.0.0-gamma1_{release}.exe"
-    dst = dest_dir / f"Micro-Manager-2.0.0-gamma1-{release}_win"
+    url = "https://valelab4.ucsf.edu/~MM/nightlyBuilds/2.0/Windows/"
+    dst = dest_dir / f"Micro-Manager-{VERSION}-{RELEASE}_win"
 
     if dst.exists():
         resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")

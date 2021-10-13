@@ -2,12 +2,23 @@ from __future__ import annotations
 
 import atexit
 import os
+import re
 import time
 import weakref
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, TypeVar, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Optional,
+    Pattern,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 import pymmcore
 from loguru import logger
@@ -26,6 +37,11 @@ _T = TypeVar("_T")
 
 ListOrTuple = Union[List[_T], Tuple[_T, ...]]
 
+_OBJECTIVE_DEVICE_RE = re.compile(
+    "(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE
+)
+_CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
+
 
 class CMMCorePlus(pymmcore.CMMCore):
     def __init__(self, mm_path=None, adapter_paths: ListOrTuple[str] = ()):
@@ -42,6 +58,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.registerCallback(self._callback_relay)
         self._canceled = False
         self._paused = False
+
+        self._objective_regex = _OBJECTIVE_DEVICE_RE
+        self._channel_group_regex = _CHANNEL_REGEX
 
         # use weakref to avoid atexit keeping us from being
         # garbage collected
@@ -274,6 +293,78 @@ class CMMCorePlus(pymmcore.CMMCore):
             del d["properties"]
             del d["type"]
         return d
+
+    @property
+    def objective_device_pattern(self):
+        return self._objective_regex
+
+    @objective_device_pattern.setter
+    def objective_device_pattern(self, value: Union[Pattern, str]):
+        if isinstance(value, str):
+            value = re.compile(value, re.IGNORECASE)
+        elif not isinstance(value, Pattern):
+            raise TypeError(
+                "Objective Pattern must be a string or compiled regex"
+                f" but is type {type(value)}"
+            )
+        self._objective_regex = value
+
+    @property
+    def channelGroup_pattern(self):
+        return self._channelGroup_regex
+
+    @channelGroup_pattern.setter
+    def channelGroup_pattern(self, value: Union[Pattern, str]):
+        if isinstance(value, str):
+            value = re.compile(value, re.IGNORECASE)
+        elif not isinstance(value, Pattern):
+            raise TypeError(
+                "channelGroup Pattern must be a string or compiled regex"
+                f"but is type {type(value)}"
+            )
+        self._channel_group_regex = value
+
+    def guessObjectiveDevices(self) -> List[str]:
+        """
+        Find any loaded devices that are likely to be an Objective/Nosepiece.
+
+        Likely matches are loaded StateDevices with names that match this object's
+        ``objective_device_pattern`` property. This is a settable property
+        with a default value of::
+
+            re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)``
+        """
+        devices = []
+
+        for device in self.getLoadedDevicesOfType(DeviceType.StateDevice):
+            if self._objective_regex.match(device):
+                devices.append(device)
+        return devices
+
+    def getOrGuessChannelGroup(self) -> str | None:
+        """
+        Get the channelGroup or find a likely candidate.
+
+        If the group is not defined via ``.getChannelGroup`` then likely candidates
+        will be found by searching for config groups with names that match this
+        object's ``channelGroup_pattern`` property. This is a settable property
+        with a default value of::
+
+            reg = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
+
+
+        If the config group name does not match one of the available config groups
+        then *None* will be returned.
+
+        """
+        chan_group = self.getChannelGroup()
+        if chan_group == "":
+            # not set in core. Try "Channel" and other variations as fallbacks
+            for group in self.getAvailableConfigGroups():
+                if self._channel_group_regex.match(group):
+                    return group
+        elif chan_group in self.getAvailableConfigGroups():
+            return chan_group
 
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0
