@@ -108,9 +108,15 @@ def ensure_server_running(
         proc = new_server_process(host, port, verbose=verbose)
         if cleanup_new:
             atexit.register(proc.kill)
-            atexit.register(
-                api.Proxy(f"PYRO:{server.CORE_NAME}@{host}:{port}").unloadAllDevices
-            )
+
+            @atexit.register
+            def _try_unload():
+                try:
+                    proxy = api.Proxy(f"PYRO:{server.CORE_NAME}@{host}:{port}")
+                    proxy.unloadAllDevices()
+                except errors.CommunicationError:
+                    pass
+
         return proc
     return None
 
