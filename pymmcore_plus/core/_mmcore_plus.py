@@ -205,7 +205,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         cfg = super().getSystemStateCache()
         return cfg if native else Configuration.from_configuration(cfg)
 
-    def getPixelSizeConfigData(self, *, native=False) -> Configuration:
+    def getSystemStateCache(self, *, native=False) -> Configuration:
         """Returns the entire system state from cache"""
         cfg = super().getSystemStateCache()
         return cfg if native else Configuration.from_configuration(cfg)
