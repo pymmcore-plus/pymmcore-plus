@@ -169,7 +169,6 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def getPixelSizeConfigData(self, configName: str, *, native=False) -> Configuration:
         """Returns the configuration object for a given pixel size preset."""
-
         cfg = super().getPixelSizeConfigData(configName)
         return cfg if native else Configuration.from_configuration(cfg)
 
