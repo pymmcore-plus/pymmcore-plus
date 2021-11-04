@@ -369,7 +369,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             for group in self.getAvailableConfigGroups():
                 if self._channel_group_regex.match(group):
                     channel_guess.append(group)
-                return group
+                return channel_guess
         elif chan_group in self.getAvailableConfigGroups():
             return [chan_group]
 
