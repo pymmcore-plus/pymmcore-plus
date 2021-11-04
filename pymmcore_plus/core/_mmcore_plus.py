@@ -363,15 +363,14 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         """
         chan_group = self.getChannelGroup()
-        if chan_group == "":
-            # not set in core. Try "Channel" and other variations as fallbacks
-            channel_guess = []
-            for group in self.getAvailableConfigGroups():
-                if self._channel_group_regex.match(group):
-                    channel_guess.append(group)
-                return channel_guess
-        elif chan_group in self.getAvailableConfigGroups():
+        if chan_group:
             return [chan_group]
+        # not set in core. Try "Channel" and other variations as fallbacks
+        channel_guess = []
+        for group in self.getAvailableConfigGroups():
+            if self._channel_group_regex.match(group):
+                channel_guess.append(group)
+        return channel_guess
 
     # def getOrGuessChannelGroup(self) -> str | None:
     #     """
