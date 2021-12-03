@@ -347,7 +347,10 @@ def test_guess_channel_group(core: CMMCorePlus):
         # to use
         core.channelGroup_pattern = "^((?!(Channel)).)*$"
         assert core.getOrGuessChannelGroup() == [
-            "Camera", "LightPath", "Objective", "System" 
+            "Camera",
+            "LightPath",
+            "Objective",
+            "System",
         ]
 
         # assign new using a pre-compile pattern
@@ -361,4 +364,3 @@ def test_aliased_signals(core: CMMCorePlus):
     core.events.xYStagePositionChanged.connect(xy_cb)
     core.setXYPosition(1.0, 1.5)
     xy_cb.assert_has_calls([call("XY", 1.005, 1.5), call("XY", 1.0, 1.5)])
-
