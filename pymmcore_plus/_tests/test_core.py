@@ -340,7 +340,7 @@ def test_guess_channel_group(core: CMMCorePlus):
             core.channelGroup_pattern = 4
 
         # assign a new regex that won't match Channel using a str
-        # this will return all the mm groups, but that's because this a bad regex
+        # this will return all the mm groups except Channel, but that's because this a bad regex
         # to use
         core.channelGroup_pattern = "^((?!(Channel)).)*$"
         assert core.getOrGuessChannelGroup() == [
