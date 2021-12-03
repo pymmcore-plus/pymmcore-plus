@@ -348,3 +348,10 @@ def test_guess_channel_group(core: CMMCorePlus):
         core.channelGroup_pattern = re.compile("Channel")
         chan_group = core.getOrGuessChannelGroup()
         assert chan_group == "Channel"
+
+
+def test_aliased_signals(core: CMMCorePlus):
+    xy_cb = MagicMock()
+    core.events.xYStagePositionChanged.connect(xy_cb)
+    core.setXYPosition(1.0, 1.5)
+    xy_cb.assert_has_calls([call("XY", 1.005, 1.5), call("XY", 1.0, 1.5)])
