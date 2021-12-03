@@ -348,7 +348,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def getOrGuessChannelGroup(self) -> List[str]:
         """
-        Get the channelGroup or find a likely candidate.
+        Get the channelGroup or find a likely set of candidates.
 
         If the group is not defined via ``.getChannelGroup`` then likely candidates
         will be found by searching for config groups with names that match this
@@ -356,10 +356,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         with a default value of::
 
             reg = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
-
-
-        If the config group name does not match one of the available config groups
-        then *None* will be returned.
 
         """
         chan_group = self.getChannelGroup()
