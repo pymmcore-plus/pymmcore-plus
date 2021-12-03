@@ -347,7 +347,10 @@ def test_guess_channel_group(core: CMMCorePlus):
         # to use
         core.channelGroup_pattern = "^((?!(Channel)).)*$"
         assert core.getOrGuessChannelGroup() == [
-            "Camera", "LightPath", "Objective", "System" 
+            "Camera",
+            "LightPath",
+            "Objective",
+            "System",
         ]
 
         # assign new using a pre-compile pattern
