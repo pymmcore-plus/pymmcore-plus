@@ -1,6 +1,7 @@
 import json
 import os
 import re
+from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -27,7 +28,7 @@ def core():
         pytest.fail(
             "To run tests, please install MM with `python -m pymmcore_plus.install`"
         )
-    core.loadSystemConfiguration("demo")
+    core.loadSystemConfiguration()
     return core
 
 
@@ -53,6 +54,34 @@ def test_search_paths(core: CMMCorePlus):
 
     with pytest.raises(TypeError):
         core.setDeviceAdapterSearchPaths("test_path")
+
+
+def test_load_system_config(core: CMMCorePlus):
+    with pytest.raises(FileNotFoundError):
+        core.loadSystemConfiguration("nonexistent")
+
+    config_path = Path(__file__).parent / "local_config.cfg"
+    cwd = Path.cwd()
+
+    # create relative path stringify to be similar to
+    # likely user input
+    config_path = str(config_path.relative_to(cwd))
+
+    core.loadSystemConfiguration(config_path)
+    assert core.getLoadedDevices() == (
+        "DHub",
+        "Camera",
+        "Dichroic",
+        "Emission",
+        "Excitation",
+        "Objective",
+        "Z",
+        "Path",
+        "XY",
+        "Shutter",
+        "Autofocus",
+        "Core",
+    )
 
 
 def test_cb_exceptions(core: CMMCorePlus, caplog):
