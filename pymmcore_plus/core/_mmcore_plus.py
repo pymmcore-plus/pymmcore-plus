@@ -205,6 +205,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         cfg = super().getSystemStateCache()
         return cfg if native else Configuration.from_configuration(cfg)
 
+    def getPixelSizeConfigData(self, *, native=False) -> Configuration:
+        """Returns the entire system state from cache"""
+        cfg = super().getSystemStateCache()
+        return cfg if native else Configuration.from_configuration(cfg)
+
     # metadata overloads that don't require instantiating metadata first
 
     def getLastImageMD(
@@ -346,9 +351,9 @@ class CMMCorePlus(pymmcore.CMMCore):
                 devices.append(device)
         return devices
 
-    def getOrGuessChannelGroup(self) -> str | None:
+    def getOrGuessChannelGroup(self) -> List[str]:
         """
-        Get the channelGroup or find a likely candidate.
+        Get the channelGroup or find a likely set of candidates.
 
         If the group is not defined via ``.getChannelGroup`` then likely candidates
         will be found by searching for config groups with names that match this
@@ -357,19 +362,16 @@ class CMMCorePlus(pymmcore.CMMCore):
 
             reg = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
-
-        If the config group name does not match one of the available config groups
-        then *None* will be returned.
-
         """
         chan_group = self.getChannelGroup()
-        if chan_group == "":
-            # not set in core. Try "Channel" and other variations as fallbacks
-            for group in self.getAvailableConfigGroups():
-                if self._channel_group_regex.match(group):
-                    return group
-        elif chan_group in self.getAvailableConfigGroups():
-            return chan_group
+        if chan_group:
+            return [chan_group]
+        # not set in core. Try "Channel" and other variations as fallbacks
+        channel_guess = []
+        for group in self.getAvailableConfigGroups():
+            if self._channel_group_regex.match(group):
+                channel_guess.append(group)
+        return channel_guess
 
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0

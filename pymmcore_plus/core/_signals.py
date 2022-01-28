@@ -17,10 +17,8 @@ class _CMMCoreSignaler:
     pixelSizeAffineChanged = Signal(float, float, float, float, float, float)
     stagePositionChanged = Signal(str, float)
     XYStagePositionChanged = Signal(str, float, float)
-    xYStagePositionChanged = XYStagePositionChanged  # alias
     exposureChanged = Signal(str, float)
     SLMExposureChanged = Signal(str, float)
-    sLMExposureChanged = SLMExposureChanged  # alias
 
     # added for CMMCorePlus
     sequenceStarted = Signal(MDASequence)  # at the start of an MDA sequence
@@ -28,3 +26,12 @@ class _CMMCoreSignaler:
     sequenceCanceled = Signal(MDASequence)  # when mda is canceled
     sequenceFinished = Signal(MDASequence)  # when mda is done (whether canceled or not)
     frameReady = Signal(np.ndarray, MDAEvent)  # after each event in the sequence
+
+    # aliases for lower casing
+    @property
+    def xYStagePositionChanged(self):
+        return self.XYStagePositionChanged
+
+    @property
+    def sLMExposureChanged(self):
+        return self.SLMExposureChanged
