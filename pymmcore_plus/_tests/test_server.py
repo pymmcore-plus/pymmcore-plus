@@ -5,7 +5,7 @@ from pymmcore_plus.server import pyroCMMCore, serve
 
 def test_server():
     core = pyroCMMCore()
-    core.loadSystemConfiguration("demo")
+    core.loadSystemConfiguration()
 
     assert core.getDeviceAdapterSearchPaths()
     cb = MagicMock()

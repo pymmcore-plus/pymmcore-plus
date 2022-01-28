@@ -126,15 +126,20 @@ class CMMCorePlus(pymmcore.CMMCore):
         logger.info(f"setting adapter search paths: {adapter_paths}")
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
-    def loadSystemConfiguration(self, fileName="demo") -> None:
-        if fileName.lower() == "demo":
-            if not self._mm_path:
-                raise ValueError(  # pragma: no cover
-                    "No micro-manager path provided. Cannot load 'demo' file.\nTry "
-                    "installing micro-manager with `python install_mm.py`"
-                )
-            fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
-        super().loadSystemConfiguration(str(fileName))
+    def loadSystemConfiguration(
+        self, fileName: str | Path = "MMConfig_demo.cfg"
+    ) -> None:
+        """Load a config file.
+
+        For relative paths first checks relative to the current
+        working directory, then in the device adapter path.
+        """
+        fpath = Path(fileName).expanduser()
+        if not fpath.exists() and not fpath.is_absolute() and self._mm_path:
+            fpath = Path(self._mm_path) / fileName
+        if not fpath.exists():
+            raise FileNotFoundError(f"Path does not exist: {fpath}")
+        return super().loadSystemConfiguration(str(fpath.resolve()))
 
     def unloadAllDevices(self) -> None:
         # this log won't appear when exiting ipython
