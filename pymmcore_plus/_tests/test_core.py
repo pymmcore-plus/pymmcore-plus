@@ -330,28 +330,30 @@ def test_get_objectives(core: CMMCorePlus):
 
 
 def test_guess_channel_group(core: CMMCorePlus):
+
     chan_group = core.getChannelGroup()
-    assert core.getOrGuessChannelGroup() == chan_group
+    assert chan_group == "Channel"
+
+    assert core.getOrGuessChannelGroup() == ["Channel"]
+
     with patch.object(core, "getChannelGroup", return_value=""):
-        assert core.getOrGuessChannelGroup() == "Channel"
+        assert core.getOrGuessChannelGroup() == ["Channel"]
 
         with pytest.raises(TypeError):
             core.channelGroup_pattern = 4
 
         # assign a new regex that won't match Channel using a str
-        # this will return Camera, but that's because this a bad regex
+        # this will return all the mm groups, but that's because this a bad regex
         # to use
         core.channelGroup_pattern = "^((?!(Channel)).)*$"
-        assert core.getOrGuessChannelGroup() == "Camera"
+        assert core.getOrGuessChannelGroup() == [
+            "Camera",
+            "LightPath",
+            "Objective",
+            "System",
+        ]
 
         # assign new using a pre-compile pattern
         core.channelGroup_pattern = re.compile("Channel")
         chan_group = core.getOrGuessChannelGroup()
-        assert chan_group == "Channel"
-
-
-def test_aliased_signals(core: CMMCorePlus):
-    xy_cb = MagicMock()
-    core.events.xYStagePositionChanged.connect(xy_cb)
-    core.setXYPosition(1.0, 1.5)
-    xy_cb.assert_has_calls([call("XY", 1.005, 1.5), call("XY", 1.0, 1.5)])
+        assert chan_group == ["Channel"]
