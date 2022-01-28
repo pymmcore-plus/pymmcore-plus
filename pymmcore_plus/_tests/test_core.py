@@ -61,13 +61,7 @@ def test_load_system_config(core: CMMCorePlus):
         core.loadSystemConfiguration("nonexistent")
 
     config_path = Path(__file__).parent / "local_config.cfg"
-    cwd = Path.cwd()
-
-    # create relative path stringify to be similar to
-    # likely user input
-    config_path = str(config_path.relative_to(cwd))
-
-    core.loadSystemConfiguration(config_path)
+    core.loadSystemConfiguration(str(config_path))
     assert core.getLoadedDevices() == (
         "DHub",
         "Camera",
