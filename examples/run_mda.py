@@ -11,5 +11,5 @@ sequence = MDASequence(
 )
 
 mmc = CMMCorePlus()
-mmc.loadSystemConfiguration("demo")
-mmc.run_mda(sequence)
+mmc.loadSystemConfiguration()
+mda_thread = mmc.run_mda(sequence)

@@ -8,7 +8,7 @@ import weakref
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
-from threading import Lock
+from threading import Lock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -423,7 +423,12 @@ class CMMCorePlus(pymmcore.CMMCore):
     def snapImage(self) -> None:
         return super().snapImage()
 
-    def run_mda(self, sequence: MDASequence) -> None:
+    def run_mda(self, sequence: MDASequence) -> Thread:
+        th = Thread(target=self._mda, args=(sequence,))
+        th.start()
+        return th
+
+    def _mda(self, sequence) -> None:
         self.events.sequenceStarted.emit(sequence)
         logger.info("MDA Started: {}", sequence)
         self._paused = False

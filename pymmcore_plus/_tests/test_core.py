@@ -1,6 +1,7 @@
 import json
 import os
 import re
+import time
 from pathlib import Path
 from unittest.mock import MagicMock, call, patch
 
@@ -128,6 +129,7 @@ def test_mda(core: CMMCorePlus):
     core.events.exposureChanged.connect(exp_mock)
 
     core.run_mda(mda)
+    time.sleep(0.5)
     assert fr_mock.call_count == len(list(mda))
     for event, _call in zip(mda, fr_mock.call_args_list):
         assert isinstance(_call.args[0], np.ndarray)
@@ -185,6 +187,7 @@ def test_mda_pause_cancel(core: CMMCorePlus):
             core.cancel()
 
     core.run_mda(mda)
+    time.sleep(0.5)
 
     ss_mock.assert_called_once_with(mda)
     cancel_mock.assert_called_once_with(mda)
