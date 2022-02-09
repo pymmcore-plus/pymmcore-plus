@@ -8,6 +8,7 @@ import weakref
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
+from threading import Lock
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -22,6 +23,7 @@ from typing import (
 
 import pymmcore
 from loguru import logger
+from wrapt import synchronized
 
 from .._util import find_micromanager
 from ._config import Configuration
@@ -44,6 +46,8 @@ _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
 
 class CMMCorePlus(pymmcore.CMMCore):
+    lock = Lock()
+
     def __init__(self, mm_path=None, adapter_paths: ListOrTuple[str] = ()):
         super().__init__()
 
@@ -76,6 +80,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # Re-implemented methods from the CMMCore API
 
+    @synchronized(lock)
     def setProperty(
         self, label: str, propName: str, propValue: Union[bool, float, int, str]
     ) -> None:
@@ -126,6 +131,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         logger.info(f"setting adapter search paths: {adapter_paths}")
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
+    @synchronized(lock)
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
     ) -> None:
@@ -139,7 +145,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             fpath = Path(self._mm_path) / fileName
         if not fpath.exists():
             raise FileNotFoundError(f"Path does not exist: {fpath}")
-        return super().loadSystemConfiguration(str(fpath.resolve()))
+        logger.debug("loading config")
+        super().loadSystemConfiguration(str(fpath.resolve()))
+        logger.debug("config loaded")
 
     def unloadAllDevices(self) -> None:
         # this log won't appear when exiting ipython
@@ -212,6 +220,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # metadata overloads that don't require instantiating metadata first
 
+    @synchronized(lock)
     def getLastImageMD(
         self, md: Optional[Metadata] = None
     ) -> Tuple[np.ndarray, Metadata]:
@@ -220,6 +229,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().getLastImageMD(md)
         return img, md
 
+    @synchronized(lock)
     def popNextImageMD(
         self, md: Optional[Metadata] = None
     ) -> Tuple[np.ndarray, Metadata]:
@@ -228,6 +238,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().popNextImageMD(md)
         return img, md
 
+    @synchronized(lock)
     def popNextImage(self) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
 
@@ -236,6 +247,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self._fix_image(super().popNextImage())
 
+    @synchronized(lock)
     def getNBeforeLastImageMD(
         self, n: int, md: Optional[Metadata] = None
     ) -> Tuple[np.ndarray, Metadata]:
@@ -392,11 +404,24 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setZPosition(self, val: float) -> None:
         return self.setPosition(self.getFocusDevice(), val)
 
+    @synchronized(lock)
+    def setPosition(self, deviceLabel: str, val: float) -> None:
+        return super().setPosition(deviceLabel, val)
+
+    @synchronized(lock)
+    def setXYPosition(self, x: float, y: float) -> None:
+        return super().setXYPosition(x, y)
+
+    @synchronized(lock)
     def getCameraChannelNames(self) -> Tuple[str, ...]:
         return tuple(
             self.getCameraChannelName(i)
             for i in range(self.getNumberOfCameraChannels())
         )
+
+    @synchronized(lock)
+    def snapImage(self) -> None:
+        return super().snapImage()
 
     def run_mda(self, sequence: MDASequence) -> None:
         self.events.sequenceStarted.emit(sequence)
