@@ -8,7 +8,7 @@ import weakref
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
-from threading import Lock, Thread
+from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -46,7 +46,7 @@ _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
 
 class CMMCorePlus(pymmcore.CMMCore):
-    lock = Lock()
+    lock = RLock()
 
     def __init__(self, mm_path=None, adapter_paths: ListOrTuple[str] = ()):
         super().__init__()

@@ -3,6 +3,7 @@ import os
 import re
 import time
 from pathlib import Path
+from threading import Thread
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -383,3 +384,44 @@ def test_guess_channel_group(core: CMMCorePlus):
         core.channelGroup_pattern = re.compile("Channel")
         chan_group = core.getOrGuessChannelGroup()
         assert chan_group == ["Channel"]
+
+
+def test_lock_and_callbacks(core: CMMCorePlus):
+    # when a function with a lock triggers a callback
+    # that callback should be able to call locked functions
+    # without hanging.
+
+    # do some threading silliness here so we don't accidentally hang our
+    # test if things go wrong have to use *got_lock* to check because we
+    # can't assert in the function as theads don't throw their exceptions
+    # back into the calling thread.
+    got_lock = False
+
+    def cb(*args, **kwargs):
+        nonlocal got_lock
+        got_lock = core.lock.acquire(timeout=0.1)
+        if got_lock:
+            core.lock.release()
+
+    core.events.XYStagePositionChanged.connect(cb)
+
+    def trigger_cb():
+        core.setXYPosition(4, 5)
+
+    th = Thread(target=trigger_cb)
+    th.start()
+    time.sleep(0.2)
+    assert got_lock
+    got_lock = False
+
+    core.events.frameReady.connect(cb)
+    mda = MDASequence(
+        time_plan={"interval": 0.1, "loops": 2},
+        stage_positions=[(1, 1, 1)],
+        z_plan={"range": 3, "step": 1},
+        channels=[{"config": "DAPI", "exposure": 1}],
+    )
+
+    core.run_mda(mda)
+    time.sleep(0.5)
+    assert got_lock
