@@ -26,6 +26,7 @@ class _CMMCoreSignaler:
     sequenceCanceled = Signal(MDASequence)  # when mda is canceled
     sequenceFinished = Signal(MDASequence)  # when mda is done (whether canceled or not)
     frameReady = Signal(np.ndarray, MDAEvent)  # after each event in the sequence
+    imageSnapped = Signal(np.ndarray)  # whenever snap is called
 
     # aliases for lower casing
     @property

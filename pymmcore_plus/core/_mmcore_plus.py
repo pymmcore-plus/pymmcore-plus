@@ -491,6 +491,30 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
 
+    def snap(self, *args, fix=True) -> np.ndarray:
+        """
+        snap and return an image.
+
+        In contrast to ``snapImage`` this will directly return the image
+        without also calling ``getImage``.
+
+        Parameters
+        ----------
+        *args :
+            Passed through to ``getImage``
+        fix : bool, default: True
+            Whether to fix the shape of images with n_components >1
+            Pass on to ``getImage``
+
+        Returns
+        -------
+        img : np.ndarray
+        """
+        self.snapImage()
+        img = self.getImage()
+        self.events.imageSnapped.emit(img)
+        return img
+
     def getImage(self, *args, fix=True) -> np.ndarray:
         """Exposes the internal image buffer.
 
