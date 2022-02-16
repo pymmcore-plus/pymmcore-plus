@@ -26,6 +26,7 @@ class QCoreCallback(QObject):
     sequenceCanceled = Signal(object)  # when mda is canceled
     sequenceFinished = Signal(object)  # when mda is done (whether canceled or not)
     frameReady = Signal(object, object)  # after each event in the sequence
+    imageSnapped = Signal(object)  # after an image is snapped
 
     @expose
     def receive_core_callback(self, signal_name, args):
