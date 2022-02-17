@@ -13,6 +13,7 @@ import pytest
 from pymmcore import CMMCore, PropertySetting
 from useq import MDASequence
 
+import pymmcore_plus
 from pymmcore_plus import (
     CMMCorePlus,
     Configuration,
@@ -21,11 +22,17 @@ from pymmcore_plus import (
     Metadata,
     PropertyType,
 )
+from pymmcore_plus.core._signals import _CMMCoreSignaler
 
 
 @pytest.fixture
 def core():
     core = CMMCorePlus()
+    # force using psygnal callbacks
+    # necessary until tests can be adapted to work using qtbot
+    core.events = _CMMCoreSignaler()
+    core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(core.events)
+    core.registerCallback(core._callback_relay)
     if not core.getDeviceAdapterSearchPaths():
         pytest.fail(
             "To run tests, please install MM with `python -m pymmcore_plus.install`"

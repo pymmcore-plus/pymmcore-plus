@@ -29,7 +29,7 @@ from .._util import find_micromanager
 from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._metadata import Metadata
-from ._signals import _CMMCoreSignaler
+from ._signals import _CMMCoreSignaler, _get_auto_callback_class
 
 if TYPE_CHECKING:
     import numpy as np
@@ -69,7 +69,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if adapter_paths:
             self.setDeviceAdapterSearchPaths(adapter_paths)
 
-        self.events = _CMMCoreSignaler()
+        self.events = _get_auto_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
         self._canceled = False
