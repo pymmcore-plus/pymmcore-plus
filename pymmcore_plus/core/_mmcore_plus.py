@@ -5,6 +5,7 @@ import os
 import re
 import time
 import weakref
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
@@ -23,6 +24,7 @@ from typing import (
 
 import pymmcore
 from loguru import logger
+from psygnal import SignalInstance
 from wrapt import synchronized
 
 from .._util import find_micromanager
@@ -43,6 +45,18 @@ _OBJECTIVE_DEVICE_RE = re.compile(
     "(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE
 )
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
+
+
+@contextmanager
+def _blockSignal(obj, signal):
+    if isinstance(signal, SignalInstance):
+        signal.block()
+        yield
+        signal.unblock()
+    else:
+        obj.blockSignals(True)
+        yield
+        obj.blockSignals(False)
 
 
 _instance = None
@@ -121,7 +135,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             new value
         """
         before = super().getProperty(label, propName)
-        with self.events.propertyChanged.blocked():  # block the native event.
+        with _blockSignal(
+            self.events, self.events.propertyChanged
+        ):  # block the native event.
             super().setProperty(label, propName, propValue)
         after = super().getProperty(label, propName)
         if before != after:
