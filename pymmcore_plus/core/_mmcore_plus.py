@@ -45,8 +45,20 @@ _OBJECTIVE_DEVICE_RE = re.compile(
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
 
+_instance = None
+
+
 class CMMCorePlus(pymmcore.CMMCore):
     lock = RLock()
+
+    @classmethod
+    def instance(
+        cls, mm_path=None, adapter_paths: ListOrTuple[str] = ()
+    ) -> CMMCorePlus:
+        global _instance
+        if _instance is None:
+            _instance = cls(mm_path, adapter_paths)
+        return _instance
 
     def __init__(self, mm_path=None, adapter_paths: ListOrTuple[str] = ()):
         super().__init__()

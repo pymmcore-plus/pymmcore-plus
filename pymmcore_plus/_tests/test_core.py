@@ -425,3 +425,9 @@ def test_lock_and_callbacks(core: CMMCorePlus):
     core.run_mda(mda)
     time.sleep(0.5)
     assert got_lock
+
+
+def test_single_instance():
+    core1 = CMMCorePlus.instance()
+    core2 = CMMCorePlus.instance()
+    assert core1 is core2
