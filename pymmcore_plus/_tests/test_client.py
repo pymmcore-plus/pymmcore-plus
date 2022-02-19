@@ -40,6 +40,12 @@ def test_mda(qtbot, proxy):
         proxy.events.frameReady,
         proxy.events.sequenceFinished,
     ]
+    signals = [
+        (proxy.events.sequenceStarted, "started"),
+        (proxy.events.frameReady, "frameReady1"),
+        (proxy.events.frameReady, "frameReady2"),
+        (proxy.events.sequenceFinished, "finishd"),
+    ]
     checks = [_check_seq, _check_frame, _check_frame, _check_seq]
 
     with qtbot.waitSignals(signals, check_params_cbs=checks, order="strict"):
