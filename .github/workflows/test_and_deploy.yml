@@ -79,3 +79,6 @@ jobs:
           git tag
           python setup.py sdist bdist_wheel
           twine upload dist/*
+      - uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true
