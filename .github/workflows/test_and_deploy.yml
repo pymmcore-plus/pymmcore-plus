@@ -36,21 +36,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[testing]
 
-      - name: Get Date
-        id: get-date
-        run: |
-          echo "::set-output name=date::$(/bin/date -u "+%Y%m")"
-        shell: bash
-
-      - uses: actions/cache@v2
-        id: cache
-        with:
-          path: pymmcore_plus/Micro-Manager-*
-          # update cache monthly, or when install.py file changes
-          key: ${{ runner.os }}-${{ steps.get-date.outputs.date }}-${{ hashFiles('pymmcore_plus/install.py') }}
-
       - name: Install Micro-Manager
-        if: steps.cache.outputs.cache-hit != 'true'
         run: python -m pymmcore_plus.install
 
       - name: Test
