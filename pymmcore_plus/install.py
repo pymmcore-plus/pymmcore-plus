@@ -32,7 +32,7 @@ def download_url(url, output_path):
 
 def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
     if release == "latest":
-        url = "https://download.micro-manager.org/latest-experimental/macos/"
+        url = "https://download.micro-manager.org/latest/macos/"
         fname = "Micro-Manager-x86_64-latest.dmg"
         dst = dest_dir / "Micro-Manager-latest_mac"
     else:
@@ -71,7 +71,7 @@ def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
 
 def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
     if release == "latest":
-        url = "https://download.micro-manager.org/latest-experimental/windows/"
+        url = "https://download.micro-manager.org/latest/windows/"
         fname = "MMSetup_x64_latest.exe"
         dst = dest_dir / "Micro-Manager-latest_win"
     else:
