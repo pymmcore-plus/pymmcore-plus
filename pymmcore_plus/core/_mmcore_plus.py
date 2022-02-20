@@ -444,15 +444,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     @synchronized(lock)
     def setPosition(self, *args) -> None:
         """Set position of the stage in microns."""
-        n_args = len(args)
-        if n_args == 1:
-            return super().setPosition(args[0])
-        elif n_args == 2:
-            return super().setPosition(args[0], args[1])
-        else:
-            raise ValueError(
-                f"setPosition takes exactly one or two arguments. Got {len(args)}"
-            )
+        return super().setPosition(*args)
 
     @synchronized(lock)
     def setXYPosition(self, x: float, y: float) -> None:
