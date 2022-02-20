@@ -445,3 +445,9 @@ def test_single_instance():
     core1 = CMMCorePlus.instance()
     core2 = CMMCorePlus.instance()
     assert core1 is core2
+
+
+def test_setPosition_overload(core: CMMCorePlus):
+    core.setPosition(5)
+    dev = core.getFocusDevice()
+    core.setPosition(dev, 4)

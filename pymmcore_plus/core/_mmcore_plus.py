@@ -20,6 +20,7 @@ from typing import (
     Tuple,
     TypeVar,
     Union,
+    overload,
 )
 
 import pymmcore
@@ -432,9 +433,26 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setZPosition(self, val: float) -> None:
         return self.setPosition(self.getFocusDevice(), val)
 
+    @overload
+    def setPosition(self, stageLabel: str, position: float):
+        ...
+
+    @overload
+    def setPosition(self, position: float):
+        ...
+
     @synchronized(lock)
-    def setPosition(self, deviceLabel: str, val: float) -> None:
-        return super().setPosition(deviceLabel, val)
+    def setPosition(self, *args) -> None:
+        """Set position of the stage in microns."""
+        n_args = len(args)
+        if n_args == 1:
+            return super().setPosition(args[0])
+        elif n_args == 2:
+            return super().setPosition(args[0], args[1])
+        else:
+            raise ValueError(
+                f"setPosition takes exactly one or two arguments. Got {len(args)}"
+            )
 
     @synchronized(lock)
     def setXYPosition(self, x: float, y: float) -> None:
