@@ -10,7 +10,7 @@ import psygnal
 import pymmcore
 import pytest
 from pymmcore import CMMCore, PropertySetting
-from qtpy.QtCore import Signal as QSignal
+from qtpy.QtCore import SignalInstance as QSignalInstance
 from useq import MDASequence
 
 import pymmcore_plus
@@ -47,7 +47,9 @@ def test_core(core: CMMCorePlus):
     assert isinstance(core, CMMCore)
     # because the fixture tries to find micromanager, this should be populated
     assert core.getDeviceAdapterSearchPaths()
-    assert isinstance(core.events.propertyChanged, (psygnal.SignalInstance, QSignal))
+    assert isinstance(
+        core.events.propertyChanged, (psygnal.SignalInstance, QSignalInstance)
+    )
     assert not core._canceled
     assert not core._paused
 
