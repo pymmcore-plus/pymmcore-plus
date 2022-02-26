@@ -30,7 +30,7 @@ def download_url(url, output_path):
     urllib.request.urlretrieve(url, filename=output_path, reporthook=progressBar)
 
 
-def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
+def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=False):
     if release == "latest":
         url = "https://download.micro-manager.org/latest/macos/"
         fname = "Micro-Manager-x86_64-latest.dmg"
@@ -40,7 +40,7 @@ def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
         fname = f"Micro-Manager-{version}-{release}.dmg"
         dst = dest_dir / f"{fname[:-4]}_mac"
 
-    if dst.exists():
+    if dst.exists() and not noprompt:
         resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
         if resp.lower().startswith("n"):
             print("aborting")
@@ -62,14 +62,18 @@ def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
         "\nNote: you can also quit now (cmd-C) and do this "
         "manually in the Security & Privacy preference pane."
     )
-    run(["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(dst)], check=True)
+    cmd = ["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(dst)]
+    if noprompt:
+        cmd = cmd[1:]
+
+    run(cmd, check=True)
     # # fix path randomization
     os.rename(dst / "ImageJ.app", "ImageJ.app")
     os.rename("ImageJ.app", dst / "ImageJ.app")
     return dst
 
 
-def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
+def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=False):
     if release == "latest":
         url = "https://download.micro-manager.org/latest/windows/"
         fname = "MMSetup_x64_latest.exe"
@@ -79,7 +83,7 @@ def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
         dst = dest_dir / f"Micro-Manager-{version}-{release}_win"
         fname = f"MMSetup_64bit_{version}_{release}.exe"
 
-    if dst.exists():
+    if dst.exists() and not noprompt:
         resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
         if resp.lower().startswith("n"):
             print("aborting")
@@ -94,12 +98,9 @@ def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE):
     return dst
 
 
-def install(dest_dir=DEFAULT_DEST, version=VERSION, release="latest"):
-    out = (
-        _win_main(dest_dir, version, release)
-        if os.name == "nt"
-        else _mac_main(dest_dir, version, release)
-    )
+def install(dest_dir=DEFAULT_DEST, version=VERSION, release="latest", noprompt=False):
+    prog = _win_main if os.name == "nt" else _mac_main
+    out = prog(dest_dir, version, release, noprompt)
     if out:
         print("installed to", out)
 
@@ -160,9 +161,16 @@ def main():
         help='8 digit date (YYYYMMDD) of MM nightly build to fetch, or "latest" '
         "(default: latest)",
     )
+    parser.add_argument(
+        "-y",
+        "--yes",
+        action="store_true",
+        default=False,
+        help="Say yes to all prompts. (no input mode).",
+    )
 
     args = parser.parse_args()
-    install(args.dest, args.version, args.release)
+    install(args.dest, args.version, args.release, args.yes)
 
 
 if __name__ == "__main__":
