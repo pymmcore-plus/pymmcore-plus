@@ -34,7 +34,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[testing]
+          pip install -e .[remote,testing]
 
       - name: Install Micro-Manager
         run: python -m pymmcore_plus.install

@@ -2,10 +2,11 @@ import numpy as np
 import pytest
 from useq import MDAEvent, MDASequence
 
-from pymmcore_plus.client import RemoteMMCore
-from pymmcore_plus.client.callbacks.basic import SynchronousCallback
-from pymmcore_plus.client.callbacks.qcallback import QCoreCallback
-from pymmcore_plus.server import DEFAULT_URI
+pytest.importorskip("Pyro5")
+from pymmcore_plus.remote import RemoteMMCore  # noqa
+from pymmcore_plus.remote.client.callbacks.basic import SynchronousCallback  # noqa
+from pymmcore_plus.remote.client.callbacks.qcallback import QCoreCallback  # noqa
+from pymmcore_plus.remote.server import DEFAULT_URI  # noqa
 
 
 @pytest.fixture

@@ -2,10 +2,12 @@ import operator
 
 import numpy as np
 import pymmcore
+import pytest
 from useq import MDAEvent
 
-from pymmcore_plus import Configuration, Metadata
-from pymmcore_plus._serialize import (
+pytest.importorskip("Pyro5")
+from pymmcore_plus import Configuration, Metadata  # noqa
+from pymmcore_plus.remote._serialize import (  # noqa
     SerCMMError,
     SerConfiguration,
     SerMDAEvent,

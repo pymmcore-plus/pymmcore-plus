@@ -1,6 +1,6 @@
 from Pyro5 import api
 
-from ...core._signals import _CMMCoreSignaler
+from ....core._signals import _CMMCoreSignaler
 
 
 class SynchronousCallback(_CMMCoreSignaler):
