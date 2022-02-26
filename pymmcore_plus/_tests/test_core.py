@@ -241,8 +241,8 @@ def test_metadata(core: CMMCorePlus):
     image, md = core.getLastImageMD()
     assert isinstance(md, Metadata)
     assert md["Height"] == "512"
-    assert "Binning" in md.keys()
-    assert ("ImageNumber", "0") in md.items()
+    assert "ImageNumber" in md.keys()
+    assert ("Binning", "1") in md.items()
     assert "GRAY16" in md.values()
 
     assert "Camera" in md
