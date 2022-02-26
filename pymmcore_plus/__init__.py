@@ -3,6 +3,7 @@ try:
 except ImportError:  # pragma: no cover
     __version__ = "unknown"
 
+from ._util import find_micromanager
 from .client import RemoteMMCore
 from .core import (
     ActionType,
@@ -30,4 +31,5 @@ __all__ = [
     "PropertyType",
     "RemoteMMCore",
     "CMMCorePlus",
+    "find_micromanager",
 ]

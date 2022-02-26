@@ -9,7 +9,17 @@ camel_to_snake = re.compile(r"(?<!^)(?=[A-Z])")
 
 
 def find_micromanager() -> Optional[str]:
-    """Locate a Micro-Manager folder (for device adapters)."""
+    """Locate a Micro-Manager folder (for device adapters).
+
+    In order, this will look for:
+    1. An environment variable named MICROMANAGER_PATH
+    2. An installation in the pymmcore_plus package directory (this is the
+       default install location when running python -m pymmcore_plus.install)
+    3. The default micromanager install location:
+        - `C:/Program Files/` on windows
+        - `/Applications` on mac
+        - `/usr/local/lib` on linux
+    """
     from loguru import logger
 
     # environment variable takes precedence
@@ -17,7 +27,7 @@ def find_micromanager() -> Optional[str]:
     if env_path and os.path.isdir(env_path):
         logger.debug(f"using MM path from env var: {env_path}")
         return env_path
-    # then look for an installation in this folder (use `install_mm.sh` to install)
+    # then look for an installation in this folder (from `pymmcore_plus.install`)
     sfx = "_win" if os.name == "nt" else "_mac"
     local_install = list(Path(__file__).parent.parent.glob(f"**/Micro-Manager*{sfx}"))
     if local_install:
