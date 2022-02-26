@@ -174,9 +174,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             fpath = Path(self._mm_path) / fileName
         if not fpath.exists():
             raise FileNotFoundError(f"Path does not exist: {fpath}")
-        logger.debug("loading config")
         super().loadSystemConfiguration(str(fpath.resolve()))
-        logger.debug("config loaded")
 
     def unloadAllDevices(self) -> None:
         # this log won't appear when exiting ipython
