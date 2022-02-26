@@ -17,7 +17,7 @@
   ```
 - `CMMCorePlus` includes a `run_mda` method (name may change) "acquisition engine" that drives micro-manager for conventional multi-dimensional experiments. It accepts an [MDASequence](https://github.com/tlambert03/useq-schema#mdasequence) from [useq-schema](https://github.com/tlambert03/useq-schema) for experiment design/declaration.
 - Adds a callback system that adapts the CMMCore callback object to an existing python event loop (such as Qt, or perhaps asyncio/etc...)
-- Includes a [Pyro5](https://pyro5.readthedocs.io/en/latest/)-based client/server that allows one to create and control and CMMCorePlus instance running in another process, or (conceivably) another computer.  This is particularly useful for integration in an existing event loop (without choking the main python thread).
+- Includes a [Pyro5](https://pyro5.readthedocs.io/en/latest/)-based client/server that allows one to create and control and CMMCorePlus instance running in another process, or (conceivably) another computer.  This is particularly useful for integration in an existing event loop (without choking the main python thread).  (To use this feature, install with `pip install pymmcore-plus[remote]`)
 
   ```py
   from pymmcore_plus import RemoteMMCore
@@ -74,14 +74,14 @@ nascent project that adds Qt-based GUI interface on top of an interprocess
 ### install
 
 ```sh
-
 # from pip
 pip install pymmcore-plus
 
-# or from source
-git clone https://github.com/tlambert03/pymmcore-plus.git
-cd pymmcore-plus
-pip install -e .
+# if you also want the inter-process RemoteCMMCore feature
+pip install pymmcore-plus[remote]
+
+# or from source tree
+pip install git+https://github.com/tlambert03/pymmcore-plus.git
 ```
 
 #### device adapters
@@ -175,7 +175,7 @@ python examples/qt_integration.py
 
 Contributions welcome.  Please fork this library, then clone locally, then install with extras
 ```
-pip install -e .[testing]
+pip install -e .[remote,testing]
 ```
 Run `pre-commit install` to add pre-commit hooks (black, flake8, mypy, etc...)
 Run tests with `pytest`
