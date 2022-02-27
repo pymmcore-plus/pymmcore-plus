@@ -140,3 +140,5 @@ cython_debug/
 pymmcore_plus/_version.py
 Micro-Manager-*
 .vscode
+
+docs/api
