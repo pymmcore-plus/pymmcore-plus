@@ -17,7 +17,7 @@
   ```
 - `CMMCorePlus` includes a `run_mda` method (name may change) "acquisition engine" that drives micro-manager for conventional multi-dimensional experiments. It accepts an [MDASequence](https://github.com/tlambert03/useq-schema#mdasequence) from [useq-schema](https://github.com/tlambert03/useq-schema) for experiment design/declaration.
 - Adds a callback system that adapts the CMMCore callback object to an existing python event loop (such as Qt, or perhaps asyncio/etc...)
-- Includes a [Pyro5](https://pyro5.readthedocs.io/en/latest/)-based client/server that allows one to create and control and CMMCorePlus instance running in another process, or (conceivably) another computer.  This is particularly useful for integration in an existing event loop (without choking the main python thread).  (To use this feature, install with `pip install pymmcore-plus[remote]`)
+- Includes an experimental [Pyro5](https://pyro5.readthedocs.io/en/latest/)-based client/server that allows one to create and control and CMMCorePlus instance running in another process, or (conceivably) another computer.  To use this feature, install with `pip install pymmcore-plus[remote]`.  (Do try using the single-process `CMMCorePlus` first, as the interprocess variant is still buggy).
 
   ```py
   from pymmcore_plus import RemoteMMCore
@@ -41,14 +41,15 @@ converted to `snake_case`.)
 [pycro-manager](https://github.com/micro-manager/pycro-manager) is an excellent
 library designed to make it easier to work with and control Micro-manager using
 python.  It's [core acquisition
-engine](https://github.com/micro-manager/AcqEngJ), however, is written in Java, requiring java to be installed and running in the background (either via
+engine](https://github.com/micro-manager/AcqEngJ), however, is written in Java,
+requiring java to be installed and running in the background (either via
 the micro-manager GUI application directly, or via a headless process).  The
 python half communicates with the Java half using ZeroMQ messaging.
 
 Among other things, this package aims to provide a pure python / C++
 implementation of a MMCore acquisition engine, with no Java dependency (see
 `CMMCorePlus.run_mda`... it's minimal at the moment and lacks acquisition
-hooks). To circumvent issues with the GIL, this library also provides a
+hooks). This library also provides an experimental
 `pymmcore_plus.RemoteMMCore` proxy object (via
 [Pyro5](https://github.com/irmen/Pyro5)) that provides a server/client interface
 for inter-process communication (this serves the same role as the ZMQ server in
@@ -66,8 +67,7 @@ easier to adapt the native MMCore callback system to multiple listeners, across
 multiple process, which makes it easier to incorporate `pymmcore-plus` into
 existing event loops (like a [Qt event loop](examples/qt_integration.py)).  See
 [`napari-micromanager`](https://github.com/tlambert03/napari-micromanager) for a
-nascent project that adds Qt-based GUI interface on top of an interprocess
-`RemoteMMCore`.
+nascent project that adds Qt-based GUI interface for micro-manager.
 
 ## Quickstart
 
