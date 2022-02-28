@@ -3,6 +3,8 @@ try:
 except ImportError:  # pragma: no cover
     __version__ = "unknown"
 
+from typing import TYPE_CHECKING
+
 from ._util import find_micromanager
 from .core import (
     ActionType,
@@ -17,6 +19,9 @@ from .core import (
     PropertyType,
 )
 
+if TYPE_CHECKING:
+    from .remote import RemoteMMCore, server
+
 __all__ = [
     "ActionType",
     "CMMCorePlus",
@@ -29,6 +34,7 @@ __all__ = [
     "PortType",
     "PropertyType",
     "RemoteMMCore",
+    "server",
     "CMMCorePlus",
     "find_micromanager",
 ]
