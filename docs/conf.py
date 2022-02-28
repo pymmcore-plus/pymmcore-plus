@@ -16,12 +16,13 @@ import os
 import shutil
 import subprocess
 import sys
+from pathlib import Path
 
 try:
     from pymmcore_plus import __version__ as release
 except ImportError:
     release = "unknown"
-
+import pymmcore_plus
 
 # -- Project information -----------------------------------------------------
 
@@ -201,6 +202,7 @@ def linkcode_resolve(domain, info):
     else:
         linespec = ""
 
-    fn = os.path.relpath(fn, start=os.path.dirname("../pymmcore_plus"))
+    startdir = Path(pymmcore_plus.__file__).parent
+    fn = os.path.relpath(fn, start=startdir).replace(os.path.sep, "/")
 
     return f"https://github.com/tlambert03/pymmcore-plus/blob/main/pymmcore_plus/{fn}{linespec}"  # noqa
