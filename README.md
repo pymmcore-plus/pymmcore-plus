@@ -1,5 +1,6 @@
 # pymmcore-plus
 
+[![Documentation Status](https://readthedocs.org/projects/pymmcore-plus/badge/?version=latest)](https://pymmcore-plus.readthedocs.io/en/latest/?badge=latest)
 [![License](https://img.shields.io/pypi/l/pymmcore-plus.svg?color=green)](https://github.com/tlambert03/pymmcore-plus/raw/master/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/pymmcore-plus.svg?color=green)](https://pypi.org/project/pymmcore-plus)
 [![Python Version](https://img.shields.io/pypi/pyversions/pymmcore-plus.svg?color=green)](https://python.org)

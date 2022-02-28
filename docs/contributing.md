@@ -13,7 +13,7 @@ git clone <your fork>
 cd pymmcore-plus
 mamba create -n pymm-dev -c conda-forge python
 conda actiavte pymm-dev
-pip install -e ".[testing, doc]"
+pip install -e ".[testing, docs]"
 pip install pre-commit
 pre-commit install
 ```
