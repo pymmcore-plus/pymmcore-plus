@@ -3,8 +3,9 @@ try:
 except ImportError:  # pragma: no cover
     __version__ = "unknown"
 
+from typing import TYPE_CHECKING
+
 from ._util import find_micromanager
-from .client import RemoteMMCore
 from .core import (
     ActionType,
     CMMCorePlus,
@@ -18,6 +19,9 @@ from .core import (
     PropertyType,
 )
 
+if TYPE_CHECKING:
+    from .remote import RemoteMMCore, server
+
 __all__ = [
     "ActionType",
     "CMMCorePlus",
@@ -29,7 +33,27 @@ __all__ = [
     "Metadata",
     "PortType",
     "PropertyType",
-    "RemoteMMCore",
     "CMMCorePlus",
     "find_micromanager",
+    "RemoteMMCore",
+    "server",
 ]
+
+
+def __dir__():
+    return list(globals()) + ["RemoteMMCore", "server"]
+
+
+def __getattr__(name: str):
+    if name in {"RemoteMMCore", "server"}:
+        try:
+            from . import remote
+
+            return getattr(remote, name)
+        except ImportError as e:
+            raise ImportError(
+                f"{e}.\nTo use the interprocess features of pymmcore-plus, "
+                "please install with `pip install pymmcore-plus[remote]`"
+            ) from e
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
