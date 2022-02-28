@@ -33,31 +33,27 @@ __all__ = [
     "Metadata",
     "PortType",
     "PropertyType",
-    "RemoteMMCore",
-    "server",
     "CMMCorePlus",
     "find_micromanager",
+    "RemoteMMCore",
+    "server",
 ]
 
 
 def __dir__():
-    return __all__
+    return list(globals()) + ["RemoteMMCore", "server"]
 
 
 def __getattr__(name: str):
-    try:
-        if name == "RemoteMMCore":
-            from .remote import RemoteMMCore
+    if name in {"RemoteMMCore", "server"}:
+        try:
+            from . import remote
 
-            return RemoteMMCore
-        if name == "server":
-            from .remote import server
-
-            return server
-    except ImportError as e:
-        raise ImportError(
-            f"{e}.\nTo use the interprocess features of pymmcore-plus, "
-            "please install with `pip install pymmcore-plus[remote]`"
-        ) from e
+            return getattr(remote, name)
+        except ImportError as e:
+            raise ImportError(
+                f"{e}.\nTo use the interprocess features of pymmcore-plus, "
+                "please install with `pip install pymmcore-plus[remote]`"
+            ) from e
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
