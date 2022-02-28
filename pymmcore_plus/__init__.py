@@ -40,6 +40,10 @@ __all__ = [
 ]
 
 
+def __dir__():
+    return __all__
+
+
 def __getattr__(name: str):
     try:
         if name == "RemoteMMCore":
