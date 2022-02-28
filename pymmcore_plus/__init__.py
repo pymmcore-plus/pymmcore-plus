@@ -35,15 +35,19 @@ __all__ = [
 
 
 def __getattr__(name: str):
-    if name == "RemoteMMCore":
-        try:
+    try:
+        if name == "RemoteMMCore":
             from .remote import RemoteMMCore
-        except ImportError as e:
-            raise ImportError(
-                f"{e}.\nTo use the interprocess features of pymmcore-plus, "
-                "please install with `pip install pymmcore-plus[remote]`"
-            ) from e
 
-        return RemoteMMCore
+            return RemoteMMCore
+        if name == "server":
+            from .remote import server
+
+            return server
+    except ImportError as e:
+        raise ImportError(
+            f"{e}.\nTo use the interprocess features of pymmcore-plus, "
+            "please install with `pip install pymmcore-plus[remote]`"
+        ) from e
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
