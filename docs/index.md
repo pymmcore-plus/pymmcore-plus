@@ -1,4 +1,4 @@
-# pymmcore-plus's Documentation
+# pymmcore-plus
 
 `pymmcore-plus` aims to extend [pymmcore](https://github.com/micro-manager/pymmcore) (python bindings for the C++ [micro-manager core](https://github.com/micro-manager/mmCoreAndDevices/)) with a number of features designed to facilitate working with **Micro-manager in pure python/C environments**.
 
