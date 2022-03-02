@@ -368,7 +368,7 @@ def test_set_state_events(core: CMMCorePlus):
 
     mock.reset_mock()
     assert core.getState("Dichroic") == 0
-    core.setState("Dichroic", 1)
+    core.setStateLabel("Dichroic", "Q505LP")
     mock.assert_has_calls(
         [call("Dichroic", "State", "1"), call("Dichroic", "Label", "Q505LP")]
     )
