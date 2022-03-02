@@ -353,6 +353,28 @@ def test_set_property_events(core: CMMCorePlus):
     mock.assert_called_once_with("Camera", "AllowMultiROI", "1")
 
 
+def test_set_state_events(core: CMMCorePlus):
+    mock = MagicMock()
+    core.events.propertyChanged.connect(mock)
+    assert core.getState("Objective") == 1
+    core.setState("Objective", 3)
+    mock.assert_has_calls(
+        [
+            call("Objective", "State", "3"),
+            call("Objective", "Label", "Nikon 20X Plan Fluor ELWD"),
+        ]
+    )
+    assert core.getState("Objective") == 3
+
+    mock.reset_mock()
+    assert core.getState("Dichroic") == 0
+    core.setState("Dichroic", 1)
+    mock.assert_has_calls(
+        [call("Dichroic", "State", "1"), call("Dichroic", "Label", "Q505LP")]
+    )
+    assert core.getState("Dichroic") == 1
+
+
 def test_get_objectives(core: CMMCorePlus):
     devices = core.guessObjectiveDevices()
     assert len(devices) == 1

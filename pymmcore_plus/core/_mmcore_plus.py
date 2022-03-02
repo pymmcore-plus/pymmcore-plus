@@ -639,8 +639,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             yield
         after = [self.getProperty(device, p) for p in properties]
         if before != after:
-            for val in enumerate(after):
-                self.events.propertyChanged.emit(device, properties[0], val)
+            for i, val in enumerate(after):
+                self.events.propertyChanged.emit(device, properties[i], val)
 
 
 for name in (
