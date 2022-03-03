@@ -1,9 +1,9 @@
 from Pyro5 import api
 
-from ....core._signals import _CMMCoreSignaler
+from ....core._signals import CMMCoreSignaler
 
 
-class SynchronousCallback(_CMMCoreSignaler):
+class SynchronousCallback(CMMCoreSignaler):
     def __init__(self) -> None:
         super().__init__()
 

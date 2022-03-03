@@ -5,12 +5,12 @@ from psygnal import Signal, SignalGroup
 from useq import MDAEvent, MDASequence
 
 __all__ = [
-    "_CMMCoreSignaler",
+    "CMMCoreSignaler",
     "_get_auto_callback_class",
 ]
 
 
-class _CMMCoreSignaler(SignalGroup):
+class CMMCoreSignaler(SignalGroup):
     """Signals that will be emitted from CMMCorePlus and RemoteMMCore objects."""
 
     # native MMCore callback events
@@ -55,4 +55,4 @@ def _get_auto_callback_class():
 
                 return QCoreCallback
 
-    return _CMMCoreSignaler
+    return CMMCoreSignaler

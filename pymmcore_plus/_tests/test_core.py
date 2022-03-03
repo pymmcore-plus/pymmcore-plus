@@ -22,14 +22,14 @@ from pymmcore_plus import (
     Metadata,
     PropertyType,
 )
-from pymmcore_plus.core._signals import _CMMCoreSignaler
+from pymmcore_plus.core._signals import CMMCoreSignaler
 
 
 @pytest.fixture(params=["QSignal", "psygnal"], scope="function")
 def core(request):
     core = CMMCorePlus()
     if request.param == "psygnal":
-        core.events = _CMMCoreSignaler()
+        core.events = CMMCoreSignaler()
         core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(
             core.events
         )
@@ -97,7 +97,7 @@ def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot):
 
     # using this to avoid our setProperty override... which would immediately
     # raise the exception (we want it to be raised deeper)
-    if isinstance(core.events, _CMMCoreSignaler):
+    if isinstance(core.events, CMMCoreSignaler):
         pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
         msg = caplog.records[0].message
         assert msg == "Exception occured in MMCorePlus callback 'propertyChanged': Boom"
