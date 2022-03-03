@@ -1,12 +1,18 @@
 import sys
 from typing import TYPE_CHECKING
 
+from ._protocol import CoreSignaler
 from ._psygnal import CMMCoreSignaler
 
 if TYPE_CHECKING:
     from ._qsignals import QCoreSignaler
 
-__all__ = ["CMMCoreSignaler", "QCoreSignaler", "_get_auto_callback_class"]
+__all__ = [
+    "CMMCoreSignaler",
+    "QCoreSignaler",
+    "CoreSignaler",
+    "_get_auto_callback_class",
+]
 
 
 def _get_auto_callback_class():
