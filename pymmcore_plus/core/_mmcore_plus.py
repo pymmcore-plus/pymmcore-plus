@@ -626,6 +626,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         least guarantee that if we use `CMMCorePlus.setProperty` to change the property,
         then a `propertyChanged` event will be emitted if the value did indeed change.
 
+        NOTE: Depending on device adapter behavior the signal may be emitted twice.
+
         Parameters
         ----------
         device : str
