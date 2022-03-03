@@ -17,6 +17,7 @@ from typing import (
     List,
     Optional,
     Pattern,
+    Sequence,
     Tuple,
     TypeVar,
     Union,
@@ -111,38 +112,25 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setProperty(
         self, label: str, propName: str, propValue: Union[bool, float, int, str]
     ) -> None:
-        """setProperty with more reliable event emission.
-
-        As stated by Nico: "Callbacks are mainly used to give devices the opportunity to
-        signal back to the UI."
-        https://forum.image.sc/t/micromanager-events-core-events-not-coming-through/53014/2
-
-        Because it's left to the device adapter to emit a signal, in many cases uses
-        `setProperty()` will NOT lead to a new `propertyChanged` event getting emitted.
-        But that makes it hard to create listeners (i.e. in the gui or elsewhere).
-
-        While this method override cannot completely solve that problem (core-internal
-        changes will still lack an associated event emission in many cases), it can at
-        least guarantee that if we use `CMMCorePlus.setProperty` to change the property,
-        then a `propertyChanged` event will be emitted if the value did indeed change.
-
-        Parameters
-        ----------
-        label : str
-            device label
-        propName : str
-            property name
-        propValue : Union[bool, float, int, str]
-            new value
-        """
-        before = super().getProperty(label, propName)
-        with _blockSignal(
-            self.events, self.events.propertyChanged
-        ):  # block the native event.
+        """setProperty with reliable event emission."""
+        with self._property_change_emission_ensured(label, (propName,)):
             super().setProperty(label, propName, propValue)
-        after = super().getProperty(label, propName)
-        if before != after:
-            self.events.propertyChanged.emit(label, propName, after)
+
+    @synchronized(lock)
+    def setState(self, stateDeviceLabel: str, state: int) -> None:
+        """Set state (by position) on stateDeviceLabel, with reliable event emission."""
+        with self._property_change_emission_ensured(
+            stateDeviceLabel, ("State", "Label")
+        ):
+            super().setState(stateDeviceLabel, state)
+
+    @synchronized(lock)
+    def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
+        """Set state (by label) on stateDeviceLabel, with reliable event emission."""
+        with self._property_change_emission_ensured(
+            stateDeviceLabel, ("State", "Label")
+        ):
+            super().setStateLabel(stateDeviceLabel, stateLabel)
 
     def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]) -> None:
         # add to PATH as well for dynamic dlls
@@ -620,6 +608,41 @@ class CMMCorePlus(pymmcore.CMMCore):
             "XYStageDevice": self.getXYStageDevice(),  # 156 ns
             "ZPosition": self.getZPosition(),  # 1.03 µs
         }
+
+    @contextmanager
+    def _property_change_emission_ensured(self, device: str, properties: Sequence[str]):
+        """Context that emits events if any of `properties` change on device.
+
+        As stated by Nico: "Callbacks are mainly used to give devices the opportunity to
+        signal back to the UI."
+        https://forum.image.sc/t/micromanager-events-core-events-not-coming-through/53014/2
+
+        Because it's left to the device adapter to emit a signal, in many cases uses
+        `setProperty()` will NOT lead to a new `propertyChanged` event getting emitted.
+        But that makes it hard to create listeners (i.e. in the gui or elsewhere).
+
+        While this method override cannot completely solve that problem (core-internal
+        changes will still lack an associated event emission in many cases), it can at
+        least guarantee that if we use `CMMCorePlus.setProperty` to change the property,
+        then a `propertyChanged` event will be emitted if the value did indeed change.
+
+        NOTE: Depending on device adapter behavior the signal may be emitted twice.
+
+        Parameters
+        ----------
+        device : str
+            a device label
+        properties : Sequence[str]
+            a sequence of property names to monitor
+        """
+
+        before = [self.getProperty(device, p) for p in properties]
+        with _blockSignal(self.events, self.events.propertyChanged):
+            yield
+        after = [self.getProperty(device, p) for p in properties]
+        if before != after:
+            for i, val in enumerate(after):
+                self.events.propertyChanged.emit(device, properties[i], val)
 
 
 for name in (
