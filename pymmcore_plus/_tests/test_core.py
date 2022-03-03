@@ -10,6 +10,7 @@ import psygnal
 import pymmcore
 import pytest
 from pymmcore import CMMCore, PropertySetting
+from qtpy.QtCore import QObject
 from qtpy.QtCore import SignalInstance as QSignalInstance
 from useq import MDASequence
 
@@ -425,7 +426,7 @@ def test_guess_channel_group(core: CMMCorePlus):
 
 
 def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
-    if isinstance(core.events, psygnal.SignalGroup):
+    if not isinstance(core.events, QObject):
         pytest.skip(reason="Skip lock tests on psygnal until we can remove qtbot.")
 
     # when a function with a lock triggers a callback
