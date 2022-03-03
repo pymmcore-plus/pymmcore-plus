@@ -5,7 +5,7 @@ from Pyro5 import errors
 from Pyro5.api import behavior, expose, oneway
 
 from ...core._mmcore_plus import CMMCorePlus
-from ...core._signals import CMMCoreSignaler
+from ...core.events import CMMCoreSignaler
 from .._util import wrap_for_pyro
 
 if TYPE_CHECKING:

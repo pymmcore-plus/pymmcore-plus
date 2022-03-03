@@ -23,7 +23,7 @@ from pymmcore_plus import (
     Metadata,
     PropertyType,
 )
-from pymmcore_plus.core._signals import CMMCoreSignaler
+from pymmcore_plus.core.events import CMMCoreSignaler
 
 
 @pytest.fixture(params=["QSignal", "psygnal"], scope="function")
