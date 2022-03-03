@@ -1,7 +1,7 @@
 import sys
 
 import numpy as np
-from psygnal import Signal
+from psygnal import Signal, SignalGroup
 from useq import MDAEvent, MDASequence
 
 __all__ = [
@@ -10,7 +10,7 @@ __all__ = [
 ]
 
 
-class _CMMCoreSignaler:
+class _CMMCoreSignaler(SignalGroup):
     """Signals that will be emitted from CMMCorePlus and RemoteMMCore objects."""
 
     # native MMCore callback events

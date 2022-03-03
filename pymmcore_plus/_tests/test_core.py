@@ -425,6 +425,9 @@ def test_guess_channel_group(core: CMMCorePlus):
 
 
 def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
+    if isinstance(core.events, psygnal.SignalGroup):
+        pytest.skip(reason="Skip lock tests on psygnal until we can remove qtbot.")
+
     # when a function with a lock triggers a callback
     # that callback should be able to call locked functions
     # without hanging.
