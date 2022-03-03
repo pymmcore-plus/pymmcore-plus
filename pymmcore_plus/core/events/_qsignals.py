@@ -1,7 +1,7 @@
 from qtpy.QtCore import QObject, Signal
 
 
-class QCoreCallback(QObject):
+class QCoreSignaler(QObject):
 
     # native MMCore callback events
     propertiesChanged = Signal()

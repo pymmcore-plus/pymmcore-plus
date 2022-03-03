@@ -1,8 +1,12 @@
 import sys
+from typing import TYPE_CHECKING
 
 from ._psygnal import CMMCoreSignaler
 
-__all__ = ["CMMCoreSignaler", "_get_auto_callback_class"]
+if TYPE_CHECKING:
+    from ._qsignals import QCoreSignaler
+
+__all__ = ["CMMCoreSignaler", "QCoreSignaler", "_get_auto_callback_class"]
 
 
 def _get_auto_callback_class():
@@ -10,8 +14,26 @@ def _get_auto_callback_class():
         if qmodule := sys.modules.get(modname):
             QtWidgets = getattr(qmodule, "QtWidgets")
             if QtWidgets.QApplication.instance() is not None:
-                from .qcallback import QCoreCallback
+                from ._qsignals import QCoreSignaler
 
-                return QCoreCallback
+                return QCoreSignaler
 
     return CMMCoreSignaler
+
+
+def __dir__():
+    return list(globals()) + ["QCoreSignaler"]
+
+
+def __getattr__(name: str):
+    if name == "QCoreSignaler":
+        try:
+            from ._qsignals import QCoreSignaler
+
+            return QCoreSignaler
+        except ImportError as e:
+            raise ImportError(
+                f"{e}.\nQCoreSignaler requires qtpy and either PySide2 or PyQt5.`"
+            ) from e
+
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
