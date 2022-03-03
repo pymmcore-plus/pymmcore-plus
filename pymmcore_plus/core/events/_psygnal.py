@@ -1,16 +1,9 @@
-import sys
-
 import numpy as np
 from psygnal import Signal
 from useq import MDAEvent, MDASequence
 
-__all__ = [
-    "_CMMCoreSignaler",
-    "_get_auto_callback_class",
-]
 
-
-class _CMMCoreSignaler:
+class CMMCoreSignaler:
     """Signals that will be emitted from CMMCorePlus and RemoteMMCore objects."""
 
     # native MMCore callback events
@@ -43,16 +36,3 @@ class _CMMCoreSignaler:
     @property
     def sLMExposureChanged(self):
         return self.SLMExposureChanged
-
-
-def _get_auto_callback_class():
-    for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
-        qmodule = sys.modules.get(modname)
-        if qmodule:
-            QtWidgets = getattr(qmodule, "QtWidgets")
-            if QtWidgets.QApplication.instance() is not None:
-                from .qcallback import QCoreCallback
-
-                return QCoreCallback
-
-    return _CMMCoreSignaler

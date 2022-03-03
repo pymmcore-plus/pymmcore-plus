@@ -5,7 +5,7 @@ from useq import MDAEvent, MDASequence
 pytest.importorskip("Pyro5")
 from pymmcore_plus.remote import RemoteMMCore  # noqa
 from pymmcore_plus.remote.client.callbacks.basic import SynchronousCallback  # noqa
-from pymmcore_plus.remote.client.callbacks.qcallback import QCoreCallback  # noqa
+from pymmcore_plus.remote.client.callbacks.qcallback import QCoreSignaler  # noqa
 from pymmcore_plus.remote.server import DEFAULT_URI  # noqa
 
 
@@ -90,7 +90,7 @@ def test_cb_with_qt(qtbot, proxy):
     currently only works for Qt callbacks... need to figure out synchronous approach.
     """
     # because we're running with qt active
-    assert isinstance(proxy.events, QCoreCallback)
+    assert isinstance(proxy.events, QCoreSignaler)
     cam = [None]
 
     @proxy.events.systemConfigurationLoaded.connect

@@ -10,6 +10,7 @@ import psygnal
 import pymmcore
 import pytest
 from pymmcore import CMMCore, PropertySetting
+from qtpy.QtCore import QObject
 from qtpy.QtCore import SignalInstance as QSignalInstance
 from useq import MDASequence
 
@@ -22,14 +23,14 @@ from pymmcore_plus import (
     Metadata,
     PropertyType,
 )
-from pymmcore_plus.core._signals import _CMMCoreSignaler
+from pymmcore_plus.core.events import CMMCoreSignaler
 
 
 @pytest.fixture(params=["QSignal", "psygnal"], scope="function")
 def core(request):
     core = CMMCorePlus()
     if request.param == "psygnal":
-        core.events = _CMMCoreSignaler()
+        core.events = CMMCoreSignaler()
         core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(
             core.events
         )
@@ -97,7 +98,7 @@ def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot):
 
     # using this to avoid our setProperty override... which would immediately
     # raise the exception (we want it to be raised deeper)
-    if isinstance(core.events, _CMMCoreSignaler):
+    if isinstance(core.events, CMMCoreSignaler):
         pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
         msg = caplog.records[0].message
         assert msg == "Exception occured in MMCorePlus callback 'propertyChanged': Boom"
@@ -425,6 +426,9 @@ def test_guess_channel_group(core: CMMCorePlus):
 
 
 def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
+    if not isinstance(core.events, QObject):
+        pytest.skip(reason="Skip lock tests on psygnal until we can remove qtbot.")
+
     # when a function with a lock triggers a callback
     # that callback should be able to call locked functions
     # without hanging.

@@ -33,7 +33,7 @@ from .._util import find_micromanager
 from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._metadata import Metadata
-from ._signals import _CMMCoreSignaler, _get_auto_callback_class
+from .events import CMMCoreSignaler, _get_auto_callback_class
 
 if TYPE_CHECKING:
     import numpy as np
@@ -670,7 +670,7 @@ for name in (
 class _MMCallbackRelay(pymmcore.MMEventCallback):
     """Relays MMEventCallback methods to CMMCorePlus.signal."""
 
-    def __init__(self, emitter: _CMMCoreSignaler):
+    def __init__(self, emitter: CMMCoreSignaler):
         self._emitter = emitter
         super().__init__()
 

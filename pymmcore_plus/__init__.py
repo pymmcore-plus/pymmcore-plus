@@ -18,6 +18,7 @@ from .core import (
     PortType,
     PropertyType,
 )
+from .core.events import CMMCoreSignaler, PCoreSignaler
 
 if TYPE_CHECKING:
     from .remote import RemoteMMCore, server
@@ -25,16 +26,18 @@ if TYPE_CHECKING:
 __all__ = [
     "ActionType",
     "CMMCorePlus",
+    "CMMCorePlus",
+    "CMMCoreSignaler",
     "Configuration",
+    "PCoreSignaler",
     "DeviceDetectionStatus",
     "DeviceNotification",
     "DeviceType",
+    "find_micromanager",
     "FocusDirection",
     "Metadata",
     "PortType",
     "PropertyType",
-    "CMMCorePlus",
-    "find_micromanager",
     "RemoteMMCore",
     "server",
 ]
