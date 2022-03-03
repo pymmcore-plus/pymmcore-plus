@@ -15,7 +15,7 @@ __all__ = [
 ]
 
 
-def _get_auto_callback_class():
+def _get_auto_callback_class(default=CMMCoreSignaler):
     for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
         if qmodule := sys.modules.get(modname):
             QtWidgets = getattr(qmodule, "QtWidgets")
@@ -24,7 +24,7 @@ def _get_auto_callback_class():
 
                 return QCoreSignaler
 
-    return CMMCoreSignaler
+    return default
 
 
 def __dir__():

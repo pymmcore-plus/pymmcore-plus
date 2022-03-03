@@ -20,13 +20,12 @@ class CallbackProtocol(Protocol):
 
 def _get_auto_callback_class():
     for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
-        qmodule = sys.modules.get(modname)
-        if qmodule:
+        if qmodule := sys.modules.get(modname):
             QtWidgets = getattr(qmodule, "QtWidgets")
             if QtWidgets.QApplication.instance() is not None:
-                from .callbacks.qcallback import QCoreCallback
+                from .callbacks.qcallback import QCoreSignaler
 
-                return QCoreCallback
+                return QCoreSignaler
 
     from .callbacks.basic import SynchronousCallback
 
