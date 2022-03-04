@@ -22,7 +22,7 @@ from pymmcore_plus import (
     Metadata,
     PropertyType,
 )
-from pymmcore_plus.core.events import CMMCoreSignaler
+from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
 from pymmcore_plus.mda import MDAEngine
 
 
@@ -33,6 +33,9 @@ def test_core(core: CMMCorePlus):
     assert core.getDeviceAdapterSearchPaths()
     assert isinstance(
         core.events.propertyChanged, (psygnal.SignalInstance, QSignalInstance)
+    )
+    assert isinstance(
+        core.mda.events.frameReady, (psygnal.SignalInstance, QSignalInstance)
     )
     assert not core.mda._canceled
     assert not core.mda._paused
