@@ -22,7 +22,7 @@ from pymmcore_plus import (
     Metadata,
     PropertyType,
 )
-from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
+from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
 
 
@@ -243,7 +243,7 @@ def test_not_concurrent_mdas(core):
     core.mda.cancel()
     assert not core.mda.is_running()
     core.run_mda(mda)
-    core.cancel()
+    core.mda.cancel()
 
 
 def test_device_type_overrides(core: CMMCorePlus):
