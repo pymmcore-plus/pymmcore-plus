@@ -458,9 +458,8 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def register_mda_engine(self, engine):
         if not isinstance(engine, PMDAEngine):
-            raise TypeError("engine must conform to the Engine protocol.")
-        previous_engine = self._mda_engine
-        self._mda_engine = engine
+            raise TypeError("Engine does not conform to the Engine protocol.")
+        previous_engine, self._mda_engine = self._mda_engine, engine
         self.events.mdaEngineRegistered.emit(engine, previous_engine)
 
     def _fix_image(self, img: np.ndarray) -> np.ndarray:
