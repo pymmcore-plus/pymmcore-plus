@@ -452,11 +452,37 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self._mda_engine
 
     def run_mda(self, sequence: MDASequence) -> Thread:
+        """
+        Run MDA defined by *sequence* on a new thread. The currently
+        registered MDAEngine (``core.mda``) will be responsible for executing
+        the acquisition.
+
+        After starting the sequence you can pause or cancel with the mda with
+        the mda object's ``toggle_pause`` and ``cancel`` methods.
+
+        Parameters
+        ----------
+        sequence : useq.MDASequence
+
+        Returns
+        -------
+        Thread
+            The thread the MDA is running on.
+        """
         th = Thread(target=self._mda_engine.run, args=(sequence,))
         th.start()
         return th
 
     def register_mda_engine(self, engine):
+        """
+        Set the MDA Engine to be used on ``run_mda``. This will unregister
+        the previous engine and emit an ``mdaEngineRegistered`` signal.
+
+        Parameters
+        ----------
+        engine : PMDAEngine
+            Any object conforming to the PMDAEngine protocol.
+        """
         if not isinstance(engine, PMDAEngine):
             raise TypeError("Engine does not conform to the Engine protocol.")
         previous_engine, self._mda_engine = self._mda_engine, engine
