@@ -52,7 +52,7 @@ def find_micromanager() -> Optional[str]:
         return None
 
 
-def _check_qt():
+def _qt_app_is_running():
     for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
         if qmodule := sys.modules.get(modname):
             QtWidgets = getattr(qmodule, "QtWidgets")

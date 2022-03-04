@@ -1,4 +1,4 @@
-from ..._util import _check_qt
+from ..._util import _qt_app_is_running
 from ._protocol import PMDASignaler
 from ._psygnal import MDASignaler
 
@@ -11,8 +11,7 @@ __all__ = [
 
 
 def _get_auto_MDA_callback_class(default=MDASignaler):
-    if _check_qt():
-        print("here?")
+    if _qt_app_is_running():
         from ._qsignals import QMDASignaler
 
         return QMDASignaler

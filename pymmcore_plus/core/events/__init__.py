@@ -1,6 +1,6 @@
 from typing import TYPE_CHECKING
 
-from ..._util import _check_qt
+from ..._util import _qt_app_is_running
 from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
 
@@ -16,7 +16,7 @@ __all__ = [
 
 
 def _get_auto_core_callback_class(default=CMMCoreSignaler):
-    if _check_qt():
+    if _qt_app_is_running():
         from ._qsignals import QCoreSignaler
 
         return QCoreSignaler
