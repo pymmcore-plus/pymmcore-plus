@@ -75,3 +75,11 @@ acquisition engine and register it use {func}`~pymmcore_plus.core.register_mda_e
 
 Your engine must conform to the engine protocol defined by {class}`~pymmcore_plus.mda.PMDAEngine`. To ensure that your engine
 conforms you can inherit from the protocol.
+
+
+You can be alerted to the the registering of a new engine with the {class}`~pymmcore_plus.core.events.CMMCoreSignaler.mdaEngineRegistered` signal.
+```python
+def new_engine(new_engine, old_engine):
+    print('new engine registered!")
+mmc.events.mdaEngineRegistered(new_engine)
+```
