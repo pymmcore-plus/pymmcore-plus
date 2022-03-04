@@ -19,6 +19,10 @@ class PMDAEngine(Protocol):
         """Return the MDA events object."""
 
     @abstractmethod
+    def is_running(self) -> bool:
+        """Return whether currently running an Acquistion"""
+
+    @abstractmethod
     def cancel(self):
         """Cancel the MDA."""
 
@@ -41,13 +45,18 @@ class MDAEngine(PMDAEngine):
         self._events = _get_auto_MDA_callback_class()()
         self._canceled = False
         self._paused = False
+        self._running = False
 
     @property
     def events(self) -> PMDASignaler:
         return self._events
 
+    def is_running(self) -> bool:
+        return self._running
+
     def cancel(self):
         self._canceled = True
+        self._running = False
 
     def toggle_pause(self):
         self._paused = not self._paused
@@ -57,6 +66,7 @@ class MDAEngine(PMDAEngine):
         return self._paused
 
     def run(self, sequence: MDASequence) -> None:
+        self._running = True
         # instancing here rather than in init to avoid
         # recursion in the CMMCorePlus init
         from ..core import CMMCorePlus

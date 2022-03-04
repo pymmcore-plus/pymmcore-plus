@@ -476,7 +476,8 @@ class CMMCorePlus(pymmcore.CMMCore):
     def register_mda_engine(self, engine):
         """
         Set the MDA Engine to be used on ``run_mda``. This will unregister
-        the previous engine and emit an ``mdaEngineRegistered`` signal.
+        the previous engine and emit an ``mdaEngineRegistered`` signal. The
+        current Engine must not be running an MDA in order to register a new engine.
 
         Parameters
         ----------
@@ -485,6 +486,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         if not isinstance(engine, PMDAEngine):
             raise TypeError("Engine does not conform to the Engine protocol.")
+        if self._mda_engine.is_running():
+            raise ValueError(
+                "Cannot register a new engine when the current engine is running "
+                "an acquistion. Please cancel the current engine's acquistion "
+                "before registering"
+            )
         previous_engine, self._mda_engine = self._mda_engine, engine
         self.events.mdaEngineRegistered.emit(engine, previous_engine)
 
