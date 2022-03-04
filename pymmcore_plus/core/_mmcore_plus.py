@@ -93,7 +93,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
 
-        self._mda_engine = MDAEngine(self)
+        self._mda_engine = MDAEngine()
 
         self._objective_regex = _OBJECTIVE_DEVICE_RE
         self._channel_group_regex = _CHANNEL_REGEX
