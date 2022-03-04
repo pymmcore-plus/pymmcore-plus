@@ -48,6 +48,10 @@ _OBJECTIVE_DEVICE_RE = re.compile(
 )
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
+STATE = pymmcore.g_Keyword_State
+LABEL = pymmcore.g_Keyword_Label
+STATE_PROPS = (STATE, LABEL)
+
 
 @contextmanager
 def _blockSignal(obj, signal):
@@ -119,17 +123,13 @@ class CMMCorePlus(pymmcore.CMMCore):
     @synchronized(lock)
     def setState(self, stateDeviceLabel: str, state: int) -> None:
         """Set state (by position) on stateDeviceLabel, with reliable event emission."""
-        with self._property_change_emission_ensured(
-            stateDeviceLabel, ("State", "Label")
-        ):
+        with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             super().setState(stateDeviceLabel, state)
 
     @synchronized(lock)
     def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
         """Set state (by label) on stateDeviceLabel, with reliable event emission."""
-        with self._property_change_emission_ensured(
-            stateDeviceLabel, ("State", "Label")
-        ):
+        with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             super().setStateLabel(stateDeviceLabel, stateLabel)
 
     def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]) -> None:
@@ -639,10 +639,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         # make sure that changing either state device property emits both signals
         if (
             len(properties) == 1
-            and properties[0] in {"State", "Label"}
+            and properties[0] in STATE_PROPS
             and self.getDeviceType(device) is DeviceType.StateDevice
         ):
-            properties = ("State", "Label")
+            properties = STATE_PROPS
 
         before = [self.getProperty(device, p) for p in properties]
         with _blockSignal(self.events, self.events.propertyChanged):

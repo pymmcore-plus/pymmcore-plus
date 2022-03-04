@@ -1,6 +1,8 @@
 from unittest.mock import Mock, call
 
 import pytest
+from pymmcore import g_Keyword_Label as LABEL
+from pymmcore import g_Keyword_State as STATE
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler, QCoreSignaler
@@ -52,8 +54,8 @@ def test_set_state_events(core: CMMCorePlus):
     core.setState("Objective", 3)
     mock.assert_has_calls(
         [
-            call("Objective", "State", "3"),
-            call("Objective", "Label", "Nikon 20X Plan Fluor ELWD"),
+            call("Objective", STATE, "3"),
+            call("Objective", LABEL, "Nikon 20X Plan Fluor ELWD"),
         ]
     )
     assert core.getState("Objective") == 3
@@ -62,7 +64,7 @@ def test_set_state_events(core: CMMCorePlus):
     assert core.getState("Dichroic") == 0
     core.setStateLabel("Dichroic", "Q505LP")
     mock.assert_has_calls(
-        [call("Dichroic", "State", "1"), call("Dichroic", "Label", "Q505LP")]
+        [call("Dichroic", STATE, "1"), call("Dichroic", LABEL, "Q505LP")]
     )
     assert core.getState("Dichroic") == 1
 
@@ -71,23 +73,23 @@ def test_set_statedevice_property_emits_events(core: CMMCorePlus):
     mock = Mock()
     core.events.propertyChanged.connect(mock)
     assert core.getState("Objective") == 1
-    assert core.getProperty("Objective", "State") == "1"
-    core.setProperty("Objective", "State", "3")
+    assert core.getProperty("Objective", STATE) == "1"
+    core.setProperty("Objective", STATE, "3")
     mock.assert_has_calls(
         [
-            call("Objective", "State", "3"),
-            call("Objective", "Label", "Nikon 20X Plan Fluor ELWD"),
+            call("Objective", STATE, "3"),
+            call("Objective", LABEL, "Nikon 20X Plan Fluor ELWD"),
         ]
     )
     assert core.getState("Objective") == 3
-    assert core.getProperty("Objective", "State") == "3"
-    assert core.getProperty("Objective", "Label") == "Nikon 20X Plan Fluor ELWD"
+    assert core.getProperty("Objective", STATE) == "3"
+    assert core.getProperty("Objective", LABEL) == "Nikon 20X Plan Fluor ELWD"
 
     mock.reset_mock()
-    assert core.getProperty("Dichroic", "Label") == "400DCLP"
-    core.setProperty("Dichroic", "Label", "Q505LP")
+    assert core.getProperty("Dichroic", LABEL) == "400DCLP"
+    core.setProperty("Dichroic", LABEL, "Q505LP")
     mock.assert_has_calls(
-        [call("Dichroic", "State", "1"), call("Dichroic", "Label", "Q505LP")]
+        [call("Dichroic", STATE, "1"), call("Dichroic", LABEL, "Q505LP")]
     )
-    assert core.getProperty("Dichroic", "Label") == "Q505LP"
-    assert core.getProperty("Dichroic", "State") == "1"
+    assert core.getProperty("Dichroic", LABEL) == "Q505LP"
+    assert core.getProperty("Dichroic", STATE) == "1"
