@@ -636,6 +636,14 @@ class CMMCorePlus(pymmcore.CMMCore):
             a sequence of property names to monitor
         """
 
+        # make sure that changing either state device property emits both signals
+        if (
+            len(properties) == 1
+            and properties[0] in {"State", "Label"}
+            and self.getDeviceType(device) is DeviceType.StateDevice
+        ):
+            properties = ("State", "Label")
+
         before = [self.getProperty(device, p) for p in properties]
         with _blockSignal(self.events, self.events.propertyChanged):
             yield
