@@ -15,16 +15,19 @@
 
   ```py
   from pymmcore_plus import CMMCorePlus
+  core = CMMCorePlus.instance()
+  core.loadSystemConfiguration() # loads demo config
+  print(core.getLoadedDevices())
   ```
 - `CMMCorePlus` includes a `run_mda` method (name may change) "acquisition engine" that drives micro-manager for conventional multi-dimensional experiments. It accepts an [MDASequence](https://github.com/tlambert03/useq-schema#mdasequence) from [useq-schema](https://github.com/tlambert03/useq-schema) for experiment design/declaration.
 - Adds a callback system that adapts the CMMCore callback object to an existing python event loop (such as Qt, or perhaps asyncio/etc...)
-- Includes an experimental [Pyro5](https://pyro5.readthedocs.io/en/latest/)-based client/server that allows one to create and control and CMMCorePlus instance running in another process, or (conceivably) another computer.  To use this feature, install with `pip install pymmcore-plus[remote]`.  (Do try using the single-process `CMMCorePlus` first, as the interprocess variant is still buggy).
+- Includes an experimental [Pyro5](https://pyro5.readthedocs.io/en/latest/)-based client/server that allows one to create and control and CMMCorePlus instance running in another process, or (conceivably) another computer.  To use this feature, install with `pip install pymmcore-plus[remote]`.  (Do try using the single-process `CMMCorePlus` first, as the interprocess variant is still buggy and does not support MDAs).
 
   ```py
   from pymmcore_plus import RemoteMMCore
 
   with RemoteMMCore() as mmcore:
-      mmcore.loadSystemConfiguration("demo")
+      mmcore.loadSystemConfiguration()
       print(mmcore.getLoadedDevices())
   ```
 
@@ -66,7 +69,7 @@ instead of a Java process).
 Finally, the `CMMCorePlus` class here adds a callback mechanism that makes it
 easier to adapt the native MMCore callback system to multiple listeners, across
 multiple process, which makes it easier to incorporate `pymmcore-plus` into
-existing event loops (like a [Qt event loop](examples/qt_integration.py)).  See
+existing event loops (like a [Qt event loop](docs/examples/integration-with-qt.md)).  See
 [`napari-micromanager`](https://github.com/tlambert03/napari-micromanager) for a
 nascent project that adds Qt-based GUI interface for micro-manager.
 
@@ -139,7 +142,7 @@ sequence = MDASequence(
 
 mmc = CMMCorePlus()
 # this will load the `MMConfig_demo.cfg` in your micromanager path
-mmc.loadSystemConfiguration("demo")
+mmc.loadSystemConfiguration()
 mmc.run_mda(sequence)
 ```
 
@@ -154,22 +157,15 @@ python examples/basic_client.py
 from pymmcore_plus import RemoteMMCore
 
 with RemoteMMCore() as mmcore:
-    mmcore.loadSystemConfiguration("demo")
+    mmcore.loadSystemConfiguration()
     print("loaded:", mmcore.getLoadedDevices())
     ...
 ```
 
 #### use with an event loop
 
-see [`qt_integration`](examples/qt_integration.py) for a slightly more 'realistic'
-example that drives an experiment in another process using a `RemoteMMCore` proxy,
-while receiving feedback in a Qt event loop in the main python thread.
-
-```sh
-python examples/qt_integration.py
-```
-
-> note: you'll need to `pip install qtpy pyqt5` (or `pyside2`) for this to work
+see [`qt_integration`](docs/examples/integration-with-qt.md) for a slightly more 'realistic'
+example that drives an experiment using threads.
 
 
 ## Contributing
