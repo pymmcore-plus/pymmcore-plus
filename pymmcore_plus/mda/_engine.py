@@ -1,11 +1,14 @@
 import time
 from abc import abstractmethod
-from typing import Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 from loguru import logger
 from useq import MDASequence
 
 from .events import PMDASignaler, _get_auto_MDA_callback_class
+
+if TYPE_CHECKING:
+    from ..core import CMMCorePlus
 
 
 @runtime_checkable
@@ -38,7 +41,8 @@ class PMDAEngine(Protocol):
 
 
 class MDAEngine(PMDAEngine):
-    def __init__(self) -> None:
+    def __init__(self, mmc: "CMMCorePlus" = None) -> None:
+        self._mmc = mmc
         self._events = _get_auto_MDA_callback_class()()
         self._canceled = False
         self._paused = False
@@ -62,7 +66,7 @@ class MDAEngine(PMDAEngine):
         # recursion in the CMMCorePlus init
         from ..core import CMMCorePlus
 
-        mmc = CMMCorePlus.instance()
+        mmc = self._mmc or CMMCorePlus.instance()
         self._events.sequenceStarted.emit(sequence)
         logger.info("MDA Started: {}", sequence)
         self._paused = False
