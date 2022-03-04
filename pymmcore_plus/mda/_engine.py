@@ -17,27 +17,22 @@ class PMDAEngine(Protocol):
     @abstractmethod
     def events(self) -> PMDASignaler:
         """Return the MDA events object."""
-        ...
 
     @abstractmethod
     def cancel(self):
         """Cancel the MDA."""
-        ...
 
     @abstractmethod
     def toggle_pause(self):
         """Switch whether the MDA is paused."""
-        ...
 
     @abstractmethod
     def is_paused(self) -> bool:
         """Returns whether the acquistion is currently paused."""
-        ...
 
     @abstractmethod
     def run(self, sequence: MDASequence):
         """Start the acquisition loop blocking the current thread."""
-        ...
 
 
 class MDAEngine(PMDAEngine):
