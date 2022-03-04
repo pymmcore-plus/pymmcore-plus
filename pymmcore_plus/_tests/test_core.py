@@ -468,3 +468,9 @@ def test_setPosition_overload(core: CMMCorePlus):
     core.setPosition(5)
     dev = core.getFocusDevice()
     core.setPosition(dev, 4)
+
+
+def test_unload_devices(core: CMMCorePlus):
+    assert len(core.getLoadedDevices()) > 2
+    core.unloadAllDevices()
+    assert len(core.getLoadedDevices()) == 1
