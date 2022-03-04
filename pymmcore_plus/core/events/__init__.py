@@ -1,6 +1,6 @@
-import sys
 from typing import TYPE_CHECKING
 
+from ..._util import _check_qt
 from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
 
@@ -11,18 +11,15 @@ __all__ = [
     "CMMCoreSignaler",
     "QCoreSignaler",
     "PCoreSignaler",
-    "_get_auto_callback_class",
+    "_get_auto_core_callback_class",
 ]
 
 
-def _get_auto_callback_class(default=CMMCoreSignaler):
-    for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
-        if qmodule := sys.modules.get(modname):
-            QtWidgets = getattr(qmodule, "QtWidgets")
-            if QtWidgets.QApplication.instance() is not None:
-                from ._qsignals import QCoreSignaler
+def _get_auto_core_callback_class(default=CMMCoreSignaler):
+    if _check_qt():
+        from ._qsignals import QCoreSignaler
 
-                return QCoreSignaler
+        return QCoreSignaler
 
     return default
 

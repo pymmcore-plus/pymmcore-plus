@@ -50,3 +50,11 @@ def find_micromanager() -> Optional[str]:
     except StopIteration:
         logger.error(f"could not find micromanager directory in {app_path}")
         return None
+
+
+def _check_qt():
+    for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
+        if qmodule := sys.modules.get(modname):
+            QtWidgets = getattr(qmodule, "QtWidgets")
+            return QtWidgets.QApplication.instance() is not None
+    return False

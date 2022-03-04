@@ -33,8 +33,8 @@ def test_core(core: CMMCorePlus):
     assert isinstance(
         core.events.propertyChanged, (psygnal.SignalInstance, QSignalInstance)
     )
-    assert not core._canceled
-    assert not core._paused
+    assert not core.mda._canceled
+    assert not core.mda._paused
 
     # because the fixture loadsSystemConfig 'demo'
     assert len(core.getLoadedDevices()) == 12
@@ -121,14 +121,14 @@ def test_mda(core: CMMCorePlus, qtbot):
     stage_mock = MagicMock()
     exp_mock = MagicMock()
 
-    core.events.frameReady.connect(fr_mock)
-    core.events.sequenceStarted.connect(ss_mock)
-    core.events.sequenceFinished.connect(sf_mock)
+    core.mda.events.frameReady.connect(fr_mock)
+    core.mda.events.sequenceStarted.connect(ss_mock)
+    core.mda.events.sequenceFinished.connect(sf_mock)
     core.events.XYStagePositionChanged.connect(xystage_mock)
     core.events.stagePositionChanged.connect(stage_mock)
     core.events.exposureChanged.connect(exp_mock)
 
-    with qtbot.waitSignal(core.events.sequenceFinished):
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
         core.run_mda(mda)
     assert fr_mock.call_count == len(list(mda))
     for event, _call in zip(mda, fr_mock.call_args_list):
@@ -167,26 +167,26 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot):
     sf_mock = MagicMock()
     ss_mock = MagicMock()
 
-    core.events.sequenceStarted.connect(ss_mock)
-    core.events.sequencePauseToggled.connect(pause_mock)
-    core.events.sequenceCanceled.connect(cancel_mock)
-    core.events.sequenceFinished.connect(sf_mock)
+    core.mda.events.sequenceStarted.connect(ss_mock)
+    core.mda.events.sequencePauseToggled.connect(pause_mock)
+    core.mda.events.sequenceCanceled.connect(cancel_mock)
+    core.mda.events.sequenceFinished.connect(sf_mock)
 
     _fcount = 0
 
-    @core.events.frameReady.connect
+    @core.mda.events.frameReady.connect
     def _onframe(frame, event):
         nonlocal _fcount
         _fcount += 1
         if _fcount == 2:
-            core.toggle_pause()
+            core.mda.toggle_pause()
             pause_mock.assert_called_with(True)
-            core.toggle_pause()
+            core.mda.toggle_pause()
             pause_mock.assert_called_with(False)
         elif _fcount == 4:
-            core.cancel()
+            core.mda.cancel()
 
-    with qtbot.waitSignal(core.events.sequenceFinished):
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
         core.run_mda(mda)
 
     ss_mock.assert_called_once_with(mda)
@@ -395,7 +395,7 @@ def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
     assert got_lock
     got_lock = False
 
-    core.events.frameReady.connect(cb)
+    core.mda.events.frameReady.connect(cb)
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
         stage_positions=[(1, 1, 1)],
@@ -403,7 +403,7 @@ def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
         channels=[{"config": "DAPI", "exposure": 1}],
     )
 
-    with qtbot.waitSignal(core.events.sequenceFinished):
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
         core.run_mda(mda)
     assert got_lock
 
