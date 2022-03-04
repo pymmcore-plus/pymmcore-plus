@@ -3,7 +3,6 @@ from __future__ import annotations
 import atexit
 import os
 import re
-import time
 import weakref
 from contextlib import contextmanager
 from datetime import datetime
@@ -30,10 +29,11 @@ from psygnal import SignalInstance
 from wrapt import synchronized
 
 from .._util import find_micromanager
+from ..mda import MDAEngine, PMDAEngine
 from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._metadata import Metadata
-from .events import CMMCoreSignaler, _get_auto_callback_class
+from .events import CMMCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
     import numpy as np
@@ -89,11 +89,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         if adapter_paths:
             self.setDeviceAdapterSearchPaths(adapter_paths)
 
-        self.events = _get_auto_callback_class()()
+        self.events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
-        self._canceled = False
-        self._paused = False
+
+        self._mda_engine = MDAEngine(self)
 
         self._objective_regex = _OBJECTIVE_DEVICE_RE
         self._channel_group_regex = _CHANNEL_REGEX
@@ -447,81 +447,57 @@ class CMMCorePlus(pymmcore.CMMCore):
     def snapImage(self) -> None:
         return super().snapImage()
 
+    @property
+    def mda(self):
+        return self._mda_engine
+
     def run_mda(self, sequence: MDASequence) -> Thread:
-        th = Thread(target=self._mda, args=(sequence,))
+        """
+        Run MDA defined by *sequence* on a new thread. The currently
+        registered MDAEngine (``core.mda``) will be responsible for executing
+        the acquisition.
+
+        After starting the sequence you can pause or cancel with the mda with
+        the mda object's ``toggle_pause`` and ``cancel`` methods.
+
+        Parameters
+        ----------
+        sequence : useq.MDASequence
+
+        Returns
+        -------
+        Thread
+            The thread the MDA is running on.
+        """
+        if self._mda_engine.is_running():
+            raise ValueError(
+                "Cannot start an MDA while the previous MDA is still running."
+            )
+        th = Thread(target=self._mda_engine.run, args=(sequence,))
         th.start()
         return th
 
-    def _mda(self, sequence) -> None:
-        self.events.sequenceStarted.emit(sequence)
-        logger.info("MDA Started: {}", sequence)
-        self._paused = False
-        paused_time = 0.0
-        t0 = time.perf_counter()  # reference time, in seconds
+    def register_mda_engine(self, engine):
+        """
+        Set the MDA Engine to be used on ``run_mda``. This will unregister
+        the previous engine and emit an ``mdaEngineRegistered`` signal. The
+        current Engine must not be running an MDA in order to register a new engine.
 
-        def check_canceled():
-            if self._canceled:
-                logger.warning("MDA Canceled: {}", sequence)
-                self.events.sequenceCanceled.emit(sequence)
-                self._canceled = False
-                return True
-            return False
-
-        for event in sequence:
-            while self._paused and not self._canceled:
-                paused_time += 0.1  # fixme: be more precise
-                time.sleep(0.1)
-
-            if check_canceled():
-                break
-
-            if event.min_start_time:
-                go_at = event.min_start_time + paused_time
-                # We need to enter a loop here checking paused and canceled.
-                # otherwise you'll potentially wait a long time to cancel
-                to_go = go_at - (time.perf_counter() - t0)
-                while to_go > 0:
-                    while self._paused and not self._canceled:
-                        paused_time += 0.1  # fixme: be more precise
-                        to_go += 0.1
-                        time.sleep(0.1)
-
-                    if self._canceled:
-                        break
-                    if to_go > 0.5:
-                        time.sleep(0.5)
-                    else:
-                        time.sleep(to_go)
-                    to_go = go_at - (time.perf_counter() - t0)
-
-            # check canceled again in case it was canceled
-            # during the waiting loop
-            if check_canceled():
-                break
-
-            logger.info(event)
-
-            # prep hardware
-            if event.x_pos is not None or event.y_pos is not None:
-                x = event.x_pos or self.getXPosition()
-                y = event.y_pos or self.getYPosition()
-                self.setXYPosition(x, y)
-            if event.z_pos is not None:
-                self.setZPosition(event.z_pos)
-            if event.channel is not None:
-                self.setConfig(event.channel.group, event.channel.config)
-            if event.exposure is not None:
-                self.setExposure(event.exposure)
-
-            # acquire
-            self.waitForSystem()
-            self.snapImage()
-            img = self.getImage()
-
-            self.events.frameReady.emit(img, event)
-
-        logger.info("MDA Finished: {}", sequence)
-        self.events.sequenceFinished.emit(sequence)
+        Parameters
+        ----------
+        engine : PMDAEngine
+            Any object conforming to the PMDAEngine protocol.
+        """
+        if not isinstance(engine, PMDAEngine):
+            raise TypeError("Engine does not conform to the Engine protocol.")
+        if self._mda_engine.is_running():
+            raise ValueError(
+                "Cannot register a new engine when the current engine is running "
+                "an acquistion. Please cancel the current engine's acquistion "
+                "before registering"
+            )
+        previous_engine, self._mda_engine = self._mda_engine, engine
+        self.events.mdaEngineRegistered.emit(engine, previous_engine)
 
     def _fix_image(self, img: np.ndarray) -> np.ndarray:
         """Fix img shape/dtype based on `self.getNumberOfComponents()`.
@@ -577,13 +553,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         img = super().getImage(*args)
         return self._fix_image(img) if fix else img
-
-    def cancel(self):
-        self._canceled = True
-
-    def toggle_pause(self):
-        self._paused = not self._paused
-        self.events.sequencePauseToggled.emit(self._paused)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""

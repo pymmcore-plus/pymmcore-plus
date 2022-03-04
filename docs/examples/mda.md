@@ -26,7 +26,7 @@ sequence = MDASequence(
 )
 ```
 
-There are 5 signals on the `events` object that can be used to run callbacks when mda events happen. They are:
+There are 5 signals on the `mda.events` object that can be used to run callbacks when mda events happen. They are:
 
 ```python
 sequenceStarted = Signal(MDASequence)  # at the start of an MDA sequence
@@ -40,7 +40,7 @@ to use then connect a callback function like so:
 
 ```python
 # connect as a decorator
-@mmc.events.sequenceStarted.connect
+@mmc.mda.events.sequenceStarted.connect
 def seq_started(seq: MDASequence):
     print(seq)
 
@@ -48,7 +48,7 @@ def seq_started(seq: MDASequence):
 def frameReady(img: np.ndarray, event: MDAEvent)
     print(img)
 
-mmc.events.frameReady.connect(frameReady)
+mmc.mda.events.frameReady.connect(frameReady)
 ```
 
 
@@ -63,5 +63,23 @@ thead = mmc.run_mda(sequence)
 
 ## Cancelling or Pausing
 
-You can always pause or cancel the mda with the {func}`~pymmcore_plus.CMMCorePlus.toggle_pause`
-or {func}`~pymmcore_plus.CMMCorePlus.cancel` methods.
+You can always pause or cancel the mda with the {func}`~pymmcore_plus.mda.MDAEngine.toggle_pause`
+or {func}`~pymmcore_plus.mda.MDAEngine.cancel` methods.
+
+
+## Registering a new MDA Engine
+
+By default {class}`~pymmcore_plus.mda.MDAEngine` will be the engine used to run the MDA. However, you can create a custom
+acquisition engine and register it use {func}`~pymmcore_plus.core.register_mda_engine`.
+
+
+Your engine must conform to the engine protocol defined by {class}`~pymmcore_plus.mda.PMDAEngine`. To ensure that your engine
+conforms you can inherit from the protocol.
+
+
+You can be alerted to the the registering of a new engine with the {class}`~pymmcore_plus.core.events.CMMCoreSignaler.mdaEngineRegistered` signal.
+```python
+def new_engine(new_engine, old_engine):
+    print('new engine registered!")
+mmc.events.mdaEngineRegistered(new_engine)
+```

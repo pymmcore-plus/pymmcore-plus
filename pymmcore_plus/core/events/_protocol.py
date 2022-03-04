@@ -33,9 +33,5 @@ class PCoreSignaler(Protocol):
     sLMExposureChanged: PSignalInstance  # alias
 
     # added for CMMCorePlus
-    sequenceStarted: PSignalInstance
-    sequencePauseToggled: PSignalInstance
-    sequenceCanceled: PSignalInstance
-    sequenceFinished: PSignalInstance
-    frameReady: PSignalInstance
     imageSnapped: PSignalInstance
+    mdaEngineRegistered = PSignalInstance
