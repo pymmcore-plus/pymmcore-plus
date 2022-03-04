@@ -10,14 +10,21 @@ import numpy as np
 from qtpy.QtWidgets import QApplication, QPushButton
 from useq import MDAEvent, MDASequence
 
-from pymmcore_plus import RemoteMMCore
+from pymmcore_plus import CMMCorePlus
 
 app = QApplication([])
-
-# button for early stopping
+mmcore = CMMCorePlus.instance()
 stop = QPushButton("STOP")
-stop.clicked.connect(app.quit)
+
+
+def stop_clicked():
+    mmcore.mda.cancel()
+    app.quit()
+
+
+stop.clicked.connect(stop_clicked)
 stop.show()
+
 
 # see https://github.com/tlambert03/useq-schema
 sequence = MDASequence(
@@ -27,27 +34,29 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
-# start server in another process and connect to it
-with RemoteMMCore() as mmcore:
 
-    @mmcore.frameReady.connect
-    def on_frame(image: np.ndarray, event: MDAEvent):
-        print(
-            f"received frame: {image.shape}, {image.dtype} "
-            f"@ index {event.index}, z={event.z_pos}"
-        )
+@mmcore.mda.events.frameReady.connect
+def on_frame(image: np.ndarray, event: MDAEvent):
+    print(
+        f"received frame: {image.shape}, {image.dtype} "
+        f"@ index {event.index}, z={event.z_pos}"
+    )
 
-    @mmcore.propertyChanged.connect
-    def prop_changed(device, prop, value):
-        print(f"{device}.{prop} changed to {value!r}")
 
-    # setup some callbacks
-    mmcore.systemConfigurationLoaded.connect(lambda: print("config loaded!"))
-    mmcore.sequenceFinished.connect(app.quit)
+@mmcore.events.propertyChanged.connect
+def prop_changed(device, prop, value):
+    print(f"{device}.{prop} changed to {value!r}")
 
-    # load config and start an experiment
-    mmcore.loadSystemConfiguration("demo")
-    mmcore.run_mda(sequence)
 
-    # start the qt event loop
-    app.exec_()
+# setup some callbacks
+mmcore.events.systemConfigurationLoaded.connect(lambda: print("config loaded!"))
+mmcore.mda.events.sequenceFinished.connect(app.quit)
+
+# button for early stopping
+
+# load config and start an experiment
+mmcore.loadSystemConfiguration()
+mmcore.run_mda(sequence)
+
+# start the qt event loop
+app.exec_()
