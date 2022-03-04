@@ -469,6 +469,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         Thread
             The thread the MDA is running on.
         """
+        if self._mda_engine.is_running():
+            raise ValueError(
+                "Cannot start an MDA while the previous MDA is still running."
+            )
         th = Thread(target=self._mda_engine.run, args=(sequence,))
         th.start()
         return th

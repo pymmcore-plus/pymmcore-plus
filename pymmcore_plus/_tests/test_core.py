@@ -200,7 +200,7 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot):
     sf_mock.assert_called_once_with(mda)
 
 
-def test_register_engine(core: CMMCorePlus, qtbot):
+def test_register_mda_engine(core: CMMCorePlus, qtbot):
     mda = MDASequence(
         time_plan={"interval": 10, "loops": 2},
         stage_positions=[(1, 1, 1)],
@@ -227,6 +227,23 @@ def test_register_engine(core: CMMCorePlus, qtbot):
 
     with pytest.raises(TypeError):
         core.register_mda_engine(nonconforming_engine())
+
+
+def test_not_concurrent_mdas(core):
+    mda = MDASequence(
+        time_plan={"interval": 10, "loops": 2},
+        stage_positions=[(1, 1, 1)],
+        z_plan={"range": 3, "step": 1},
+        channels=[{"config": "DAPI", "exposure": 1}],
+    )
+    core.run_mda(mda)
+    assert core.mda.is_running()
+    with pytest.raises(ValueError):
+        core.run_mda(mda)
+    core.mda.cancel()
+    assert not core.mda.is_running()
+    core.run_mda(mda)
+    core.cancel()
 
 
 def test_device_type_overrides(core: CMMCorePlus):

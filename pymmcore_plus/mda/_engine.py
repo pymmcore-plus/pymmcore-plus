@@ -140,4 +140,5 @@ class MDAEngine(PMDAEngine):
             self._events.frameReady.emit(img, event)
 
         logger.info("MDA Finished: {}", sequence)
+        self._running = False
         self._events.sequenceFinished.emit(sequence)
