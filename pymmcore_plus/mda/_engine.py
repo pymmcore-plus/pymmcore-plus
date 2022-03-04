@@ -40,25 +40,30 @@ class PMDAEngine(Protocol):
         ...
 
 
-class MDAEngine:
-    def __init__(self, mmc: "CMMCorePlus") -> None:
-        self.events = _get_auto_MDA_callback_class()()
-        # we can't use the Instance approach here
-        # because this will be called from the init of CMMCorePlus
-        # which means that no instance exists yet and then... badness
-        self._mmc = mmc
+class MDAEngine(PMDAEngine):
+    def __init__(self) -> None:
+        self._events = _get_auto_MDA_callback_class()()
         self._canceled = False
         self._paused = False
+
+    def events(self) -> PMDASignaler:
+        return self._events
 
     def cancel(self):
         self._canceled = True
 
     def toggle_pause(self):
         self._paused = not self._paused
-        self.events.sequencePauseToggled.emit(self._paused)
+        self._events.sequencePauseToggled.emit(self._paused)
+
+    def is_paused(self) -> bool:
+        return self._paused
 
     def run(self, sequence: MDASequence) -> None:
-        self.events.sequenceStarted.emit(sequence)
+        # instancing here rather than in init to avoid
+        # recursion in the CMMCorePlus init
+        mmc = CMMCorePlus.instance()
+        self._events.sequenceStarted.emit(sequence)
         logger.info("MDA Started: {}", sequence)
         self._paused = False
         paused_time = 0.0
@@ -67,7 +72,7 @@ class MDAEngine:
         def check_canceled():
             if self._canceled:
                 logger.warning("MDA Canceled: {}", sequence)
-                self.events.sequenceCanceled.emit(sequence)
+                self._events.sequenceCanceled.emit(sequence)
                 self._canceled = False
                 return True
             return False
@@ -108,22 +113,22 @@ class MDAEngine:
 
             # prep hardware
             if event.x_pos is not None or event.y_pos is not None:
-                x = event.x_pos or self._mmc.getXPosition()
-                y = event.y_pos or self._mmc.getYPosition()
-                self._mmc.setXYPosition(x, y)
+                x = event.x_pos or mmc.getXPosition()
+                y = event.y_pos or mmc.getYPosition()
+                mmc.setXYPosition(x, y)
             if event.z_pos is not None:
-                self._mmc.setZPosition(event.z_pos)
+                mmc.setZPosition(event.z_pos)
             if event.channel is not None:
-                self._mmc.setConfig(event.channel.group, event.channel.config)
+                mmc.setConfig(event.channel.group, event.channel.config)
             if event.exposure is not None:
-                self._mmc.setExposure(event.exposure)
+                mmc.setExposure(event.exposure)
 
             # acquire
-            self._mmc.waitForSystem()
-            self._mmc.snapImage()
-            img = self._mmc.getImage()
+            mmc.waitForSystem()
+            mmc.snapImage()
+            img = mmc.getImage()
 
-            self.events.frameReady.emit(img, event)
+            self._events.frameReady.emit(img, event)
 
         logger.info("MDA Finished: {}", sequence)
-        self.events.sequenceFinished.emit(sequence)
+        self._events.sequenceFinished.emit(sequence)
