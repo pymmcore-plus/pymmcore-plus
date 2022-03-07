@@ -35,7 +35,7 @@ from ..mda import MDAEngine, PMDAEngine
 from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._metadata import Metadata
-from ._property import MMProperty
+from ._property import DeviceProperty
 from .events import CMMCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
@@ -288,6 +288,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def iterProperties(  # type: ignore
         self,
         device_type: Optional[DeviceType] = ...,
+        device_label: Optional[str] = ...,
         property_type: Optional[PropertyType] = ...,
         as_object: Literal[False] = False,
     ) -> Iterator[Tuple[str, str]]:
@@ -297,33 +298,37 @@ class CMMCorePlus(pymmcore.CMMCore):
     def iterProperties(
         self,
         device_type: Optional[DeviceType] = ...,
+        device_label: Optional[str] = ...,
         property_type: Optional[PropertyType] = ...,
         as_object: Literal[True] = ...,
-    ) -> Iterator[MMProperty]:
+    ) -> Iterator[DeviceProperty]:
         ...
 
     def iterProperties(
         self,
         device_type: Optional[DeviceType] = None,
+        device_label: Optional[str] = None,
         property_type: Optional[PropertyType] = None,
         as_object: bool = False,
-    ) -> Iterator[Union[MMProperty, Tuple[str, str]]]:
+    ) -> Iterator[Union[DeviceProperty, Tuple[str, str]]]:
         """Iterate over currently loaded (device_label, property_name) pairs.
 
         Parameters
         ----------
-        device_type : Optional[DeviceType], optional
+        device_type : Optional[DeviceType]
             DeviceType to filter by, by default all device types will be yielded.
-        property_type : Optional[PropertyType], optional
+        device_label : Optional[str]
+            Device label to filter by, by default all device labels will be yielded.
+        property_type : Optional[PropertyType]
             PropertyType to filter by, by default all property types will be yielded.
         as_object : bool, optional
-            If `True`, `MMProperty` objects will be yielded instead of
+            If `True`, `DeviceProperty` objects will be yielded instead of
             `(device_label, property_name)` tuples. By default False
 
         Yields
         ------
-        Iterator[Union[MMProperty, Tuple[str, str]]]
-            `MMProperty` objects (if `as_object==True`) or 2-tuples of (device_name,
+        Iterator[Union[DeviceProperty, Tuple[str, str]]]
+            `DeviceProperty` objects (if `as_object==True`) or 2-tuples of (device_name,
             property_name)
         """
         for dev in (
@@ -331,16 +336,20 @@ class CMMCorePlus(pymmcore.CMMCore):
             if device_type is not None
             else self.getLoadedDevices()
         ):
+            if device_label and dev != device_label:
+                continue
             for prop in self.getDevicePropertyNames(dev):
                 if (
                     property_type is None
                     or self.getPropertyType(dev, prop) == property_type
                 ):
-                    yield MMProperty(self, dev, prop) if as_object else (dev, prop)
+                    yield DeviceProperty(self, dev, prop) if as_object else (dev, prop)
 
-    def getPropertyObject(self, device_label: str, property_name: str) -> MMProperty:
-        """Return an MMProperty object bound to a device and property on this core."""
-        return MMProperty(self, device_label=device_label, property_name=property_name)
+    def getPropertyObject(
+        self, device_label: str, property_name: str
+    ) -> DeviceProperty:
+        """Return a DeviceProperty object bound to a device/property on this core."""
+        return DeviceProperty(self, device_label, property_name)
 
     def getDeviceProperties(self, device_label: str) -> Dict[str, Any]:
         """Return all current properties for device `device_label`."""
@@ -360,32 +369,26 @@ class CMMCorePlus(pymmcore.CMMCore):
             "type": "object",
             "properties": {},
         }
-        for prop_name in self.getDevicePropertyNames(device_label):
-            _type = self.getPropertyType(device_label, prop_name)
-            d["properties"][prop_name] = p = {}
-            if _type.to_json() != "null":
-                p["type"] = _type.to_json()
-            if self.hasPropertyLimits(device_label, prop_name):
-                min_ = self.getPropertyLowerLimit(device_label, prop_name)
-                max_ = self.getPropertyUpperLimit(device_label, prop_name)
-                p["minimum"] = min_
-                p["maximum"] = max_
-            allowed = self.getAllowedPropertyValues(device_label, prop_name)
-            if allowed:
-                if set(allowed) == {"0", "1"} and _type.to_json() == "integer":
+        for prop in self.iterProperties(device_label=device_label, as_object=True):
+            d["properties"][prop.name] = p = {}
+            if prop.type().to_json() != "null":
+                p["type"] = prop.type().to_json()
+            if prop.hasLimits():
+                p["minimum"] = prop.lowerLimit()
+                p["maximum"] = prop.upperLimit()
+            if allowed := prop.allowedValues():
+                if set(allowed) == {"0", "1"} and prop.type() == PropertyType.Integer:
                     p["type"] = "boolean"
                 else:
-                    cls = _type.to_python()
+                    cls = prop.type().to_python()
                     p["enum"] = [cls(i) if cls else i for i in allowed]
-            if self.isPropertyReadOnly(device_label, prop_name):
+            if prop.isReadOnly():
                 p["readOnly"] = True
-                p["default"] = self.getProperty(device_label, prop_name)
-            if self.isPropertySequenceable(device_label, prop_name):
+                p["default"] = prop.value
+            if prop.isSequenceable():
                 p["sequenceable"] = True
-                p["sequence_max_length"] = self.getPropertySequenceMaxLength(
-                    device_label, prop_name
-                )
-            if self.isPropertyPreInit(device_label, prop_name):
+                p["sequence_max_length"] = prop.sequenceMaxLength()
+            if prop.isPreInit():
                 p["preInit"] = True
         if not d["properties"]:
             del d["properties"]

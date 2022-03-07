@@ -7,7 +7,7 @@ __all__ = [
     "DeviceType",
     "FocusDirection",
     "Metadata",
-    "MMProperty",
+    "DeviceProperty",
     "PortType",
     "PropertyType",
 ]
@@ -24,4 +24,4 @@ from ._constants import (
 )
 from ._metadata import Metadata
 from ._mmcore_plus import CMMCorePlus
-from ._property import MMProperty
+from ._property import DeviceProperty

@@ -1,28 +1,30 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Sequence, Tuple
 
 from pymmcore import g_Keyword_Label, g_Keyword_State
+from typing_extensions import TypedDict
 
 from ._constants import DeviceType, PropertyType
 
 if TYPE_CHECKING:
-    from typing_extensions import TypedDict
-
     from ._mmcore_plus import CMMCorePlus
 
-    class InfoDict(TypedDict):
-        valid: bool
-        value: Optional[Any]
-        type: Optional[str]
-        device_type: Optional[str]
-        read_only: Optional[bool]
-        pre_init: Optional[bool]
-        range: Optional[Tuple[float, float]]
-        allowed: Optional[Tuple[str, ...]]
+
+class InfoDict(TypedDict):
+    valid: bool
+    value: Optional[Any]
+    type: Optional[str]
+    device_type: Optional[str]
+    read_only: Optional[bool]
+    sequenceable: Optional[bool]
+    sequence_max_length: Optional[int]
+    pre_init: Optional[bool]
+    range: Optional[Tuple[float, float]]
+    allowed_values: Optional[Tuple[str, ...]]
 
 
-class MMProperty:
+class DeviceProperty:
     """Convenience "View" onto a device property.
 
     Parameters
@@ -38,7 +40,7 @@ class MMProperty:
     --------
 
     >>> core = CMMCorePlus()
-    >>> prop = MMProperty(core, 'Objective', 'Label')
+    >>> prop = DeviceProperty(core, 'Objective', 'Label')
     >>> prop.isValid()  # points to a loaded device property in core
     >>> prop.value
     >>> prop.value = 'Objective-2'  # setter
@@ -81,6 +83,10 @@ class MMProperty:
     def value(self, val: Any) -> None:
         """Set current property value"""
         self.setValue(val)
+
+    def fromCache(self) -> Any:
+        """Return cached property value."""
+        return self._mmc.getPropertyFromCache(self.device, self.name)
 
     def setValue(self, val: Any) -> None:
         """Functional alternate to property setter."""
@@ -134,6 +140,33 @@ class MMProperty:
                 allowed = self._mmc.getStateLabels(self.device)
         return allowed
 
+    def isSequenceable(self) -> bool:
+        """Return `True` if property can be used in a sequence."""
+        return self._mmc.isPropertySequenceable(self.device, self.name)
+
+    def sequenceMaxLength(self) -> int:
+        """Return maximum number of property events that can be put in a sequence"""
+        return self._mmc.getPropertySequenceMaxLength(self.device, self.name)
+
+    def loadSequence(self, eventSequence: Sequence[str]) -> None:
+        """Transfer a sequence of events/states/whatever to the device.
+
+        Parameters
+        ----------
+        eventSequence : Sequence[str]
+            The sequence of events/states that the device will execute in response
+            to external triggers
+        """
+        self._mmc.loadPropertySequence(self.device, self.name, eventSequence)
+
+    def startSequence(self) -> None:
+        """Start an ongoing sequence of triggered events in a property."""
+        self._mmc.startPropertySequence(self.device, self.name)
+
+    def stopSequence(self) -> None:
+        """Stop an ongoing sequence of triggered events in a property."""
+        self._mmc.stopPropertySequence(self.device, self.name)
+
     def dict(self) -> InfoDict:
         """Return dict of info about this Property.
 
@@ -147,9 +180,13 @@ class MMProperty:
                 "type": self.type().to_json(),
                 "device_type": self.deviceType().name,
                 "read_only": self.isReadOnly(),
+                "sequenceable": self.isSequenceable(),
+                "sequence_max_length": (
+                    self.sequenceMaxLength() if self.isSequenceable() else None
+                ),
                 "pre_init": self.isPreInit(),
                 "range": self.range() if self.hasLimits() else None,
-                "allowed": self.allowedValues(),
+                "allowed_values": self.allowedValues(),
             }
         else:
             return {
@@ -158,10 +195,14 @@ class MMProperty:
                 "type": None,
                 "device_type": None,
                 "read_only": None,
+                "sequenceable": None,
+                "sequence_max_length": None,
                 "pre_init": None,
                 "range": None,
-                "allowed": None,
+                "allowed_values": None,
             }
+
+    InfoDict = InfoDict
 
     def __repr__(self) -> str:
         v = f"value={self.value!r}" if self.isValid() else "INVALID"
