@@ -152,7 +152,10 @@ class Device:
 
         (i.e. whether or not detectDevice() may be safely called).
         """
-        return self._mmc.supportsDeviceDetection(self.label)
+        try:
+            return self._mmc.supportsDeviceDetection(self.label)
+        except RuntimeError:
+            return False  # e.g. core devices
 
     def type(self) -> DeviceType:
         """Return device type."""
