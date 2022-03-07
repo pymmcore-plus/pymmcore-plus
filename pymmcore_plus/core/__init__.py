@@ -5,6 +5,7 @@ __all__ = [
     "DeviceDetectionStatus",
     "DeviceNotification",
     "DeviceType",
+    "Device",
     "FocusDirection",
     "Metadata",
     "DeviceProperty",
@@ -22,6 +23,7 @@ from ._constants import (
     PortType,
     PropertyType,
 )
+from ._device import Device
 from ._metadata import Metadata
 from ._mmcore_plus import CMMCorePlus
 from ._property import DeviceProperty

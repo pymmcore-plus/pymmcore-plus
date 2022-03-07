@@ -34,6 +34,7 @@ from .._util import find_micromanager
 from ..mda import MDAEngine, PMDAEngine
 from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
+from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from .events import CMMCoreSignaler, _get_auto_core_callback_class
@@ -285,6 +286,55 @@ class CMMCorePlus(pymmcore.CMMCore):
     # NEW methods
 
     @overload
+    def iterDevices(  # type: ignore
+        self,
+        device_type: Optional[DeviceType] = ...,
+        device_label: Optional[str] = ...,
+        as_object: Literal[False] = False,
+    ) -> Iterator[str]:
+        ...
+
+    @overload
+    def iterDevices(
+        self,
+        device_type: Optional[DeviceType] = ...,
+        device_label: Optional[str] = ...,
+        as_object: Literal[True] = ...,
+    ) -> Iterator[Device]:
+        ...
+
+    def iterDevices(
+        self,
+        device_type: Optional[DeviceType] = None,
+        device_label: Optional[str] = None,
+        as_object: bool = False,
+    ) -> Iterator[Union[Device, str]]:
+        """Iterate over currently loaded devices.
+
+        Parameters
+        ----------
+        device_type : Optional[DeviceType]
+            DeviceType to filter by, by default all device types will be yielded.
+        device_label : Optional[str]
+            Device label to filter by, by default all device labels will be yielded.
+        as_object : bool, optional
+            If `True`, `Device` objects will be yielded instead of
+            device label strings. By default False
+
+        Yields
+        ------
+        Iterator[Union[Device, str]]
+            `Device` objects (if `as_object==True`) or device label strings.
+        """
+        for dev in (
+            self.getLoadedDevicesOfType(device_type)
+            if device_type is not None
+            else self.getLoadedDevices()
+        ):
+            if not device_label or dev == device_label:
+                yield Device(self, dev) if as_object else dev
+
+    @overload
     def iterProperties(  # type: ignore
         self,
         device_type: Optional[DeviceType] = ...,
@@ -331,13 +381,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             `DeviceProperty` objects (if `as_object==True`) or 2-tuples of (device_name,
             property_name)
         """
-        for dev in (
-            self.getLoadedDevicesOfType(device_type)
-            if device_type is not None
-            else self.getLoadedDevices()
-        ):
-            if device_label and dev != device_label:
-                continue
+        for dev in self.iterDevices(device_type=device_type, device_label=device_label):
             for prop in self.getDevicePropertyNames(dev):
                 if (
                     property_type is None
@@ -351,15 +395,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Return a DeviceProperty object bound to a device/property on this core."""
         return DeviceProperty(self, device_label, property_name)
 
-    def getDeviceProperties(self, device_label: str) -> Dict[str, Any]:
-        """Return all current properties for device `device_label`."""
-        return {
-            name: self.getProperty(device_label, name)
-            for name in self.getDevicePropertyNames(device_label)
-        }
+    def getDeviceObject(self, device_label: str) -> Device:
+        """Return a Device object bound to device_label on this core."""
+        return Device(self, device_label)
 
     def getDeviceSchema(self, device_label: str) -> Dict[str, Any]:
-        """Return dict in JSON-schema format for propties of `device_label`.
+        """Return dict in JSON-schema format for properties of `device_label`.
 
         Use `json.dump` to convert this dict to a JSON string.
         """
