@@ -233,7 +233,6 @@ class DeviceProperty:
 
         Examples
         --------
-
         >>> prop = DeviceProperty(core, 'Camera', 'Gain')
         >>> prop.connect_change_callback(lambda v: print('gain changed to', v))
         >>> prop.value = 5
