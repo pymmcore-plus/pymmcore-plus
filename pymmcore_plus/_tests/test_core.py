@@ -3,6 +3,7 @@ import os
 import re
 from pathlib import Path
 from threading import Thread
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -24,6 +25,9 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
+
+if TYPE_CHECKING:
+    from pytestqt.qtbot import QtBot
 
 
 def test_core(core: CMMCorePlus):
@@ -77,7 +81,7 @@ def test_load_system_config(core: CMMCorePlus):
     )
 
 
-def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot):
+def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot: "QtBot"):
     @core.events.propertyChanged.connect
     def _raze():
         raise ValueError("Boom")
@@ -110,7 +114,7 @@ def test_new_position_methods(core: CMMCorePlus):
     assert round(z2, 2) == z1 + 1
 
 
-def test_mda(core: CMMCorePlus, qtbot):
+def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     """Test signal emission during MDA"""
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
@@ -157,10 +161,10 @@ def test_mda(core: CMMCorePlus, qtbot):
     )
 
 
-def test_mda_pause_cancel(core: CMMCorePlus, qtbot):
+def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
     """Test signal emission during MDA with cancelation"""
     mda = MDASequence(
-        time_plan={"interval": 0.1, "loops": 2},
+        time_plan={"interval": 0.25, "loops": 10},
         stage_positions=[(1, 1, 1)],
         z_plan={"range": 3, "step": 1},
         channels=[{"config": "DAPI", "exposure": 1}],
@@ -182,12 +186,12 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot):
     def _onframe(frame, event):
         nonlocal _fcount
         _fcount += 1
-        if _fcount == 2:
+        if _fcount == 1:
             core.mda.toggle_pause()
             pause_mock.assert_called_with(True)
             core.mda.toggle_pause()
             pause_mock.assert_called_with(False)
-        elif _fcount == 4:
+        elif _fcount == 2:
             core.mda.cancel()
 
     with qtbot.waitSignal(core.mda._events.sequenceFinished):
@@ -195,12 +199,11 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot):
 
     ss_mock.assert_called_once_with(mda)
     cancel_mock.assert_called_once_with(mda)
-    assert _fcount == 4
     assert _fcount < len(list(mda))
     sf_mock.assert_called_once_with(mda)
 
 
-def test_register_mda_engine(core: CMMCorePlus, qtbot):
+def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
     mda = MDASequence(
         time_plan={"interval": 10, "loops": 2},
         stage_positions=[(1, 1, 1)],
@@ -212,7 +215,8 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot):
     new_engine = MDAEngine(core)
     with pytest.raises(ValueError):
         core.register_mda_engine(new_engine)
-    core.mda.cancel()
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        core.mda.cancel()
     registered_mock = MagicMock()
     core.events.mdaEngineRegistered.connect(registered_mock)
 
@@ -229,7 +233,7 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot):
         core.register_mda_engine(nonconforming_engine())
 
 
-def test_not_concurrent_mdas(core):
+def test_not_concurrent_mdas(core, qtbot: "QtBot"):
     mda = MDASequence(
         time_plan={"interval": 10, "loops": 2},
         stage_positions=[(1, 1, 1)],
@@ -240,7 +244,8 @@ def test_not_concurrent_mdas(core):
     assert core.mda.is_running()
     with pytest.raises(ValueError):
         core.run_mda(mda)
-    core.mda.cancel()
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        core.mda.cancel()
     assert not core.mda.is_running()
     core.run_mda(mda)
     core.mda.cancel()
