@@ -29,18 +29,18 @@ class DeviceProperty:
 
     Parameters
     ----------
-    mmcore : CMMCore
-        CMMCore instance
     device_label : str
         Device this property belongs to
     property_name : str
         Name of this property
+    mmcore : CMMCorePlus
+        CMMCorePlus instance
 
     Examples
     --------
 
     >>> core = CMMCorePlus()
-    >>> prop = DeviceProperty(core, 'Objective', 'Label')
+    >>> prop = DeviceProperty('Objective', 'Label', core)
     >>> prop.isValid()  # points to a loaded device property in core
     >>> prop.value
     >>> prop.value = 'Objective-2'  # setter
@@ -51,7 +51,7 @@ class DeviceProperty:
     """
 
     def __init__(
-        self, mmcore: CMMCorePlus, device_label: str, property_name: str
+        self, device_label: str, property_name: str, mmcore: CMMCorePlus
     ) -> None:
 
         self.device = device_label

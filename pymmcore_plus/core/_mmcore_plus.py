@@ -332,7 +332,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             else self.getLoadedDevices()
         ):
             if not device_label or dev == device_label:
-                yield Device(self, dev) if as_object else dev
+                yield Device(dev, mmcore=self) if as_object else dev
 
     @overload
     def iterProperties(  # type: ignore
@@ -387,17 +387,17 @@ class CMMCorePlus(pymmcore.CMMCore):
                     property_type is None
                     or self.getPropertyType(dev, prop) == property_type
                 ):
-                    yield DeviceProperty(self, dev, prop) if as_object else (dev, prop)
+                    yield DeviceProperty(dev, prop, self) if as_object else (dev, prop)
 
     def getPropertyObject(
         self, device_label: str, property_name: str
     ) -> DeviceProperty:
         """Return a DeviceProperty object bound to a device/property on this core."""
-        return DeviceProperty(self, device_label, property_name)
+        return DeviceProperty(device_label, property_name, self)
 
     def getDeviceObject(self, device_label: str) -> Device:
         """Return a Device object bound to device_label on this core."""
-        return Device(self, device_label)
+        return Device(device_label, mmcore=self)
 
     def getDeviceSchema(self, device_label: str) -> Dict[str, Any]:
         """Return dict in JSON-schema format for properties of `device_label`.

@@ -14,15 +14,15 @@ class Device:
 
     Parameters
     ----------
-    mmcore : CMMCore
-        CMMCore instance
     device_label : str
         Device this property belongs to
+    mmcore : CMMCorePlus
+        CMMCorePlus instance
 
     Examples
     --------
     >>> core = CMMCorePlus()
-    >>> device = Device(core, 'Camera')
+    >>> device = Device('Camera', core)
     >>> device.isLoaded()
     >>> device.load('NotALib', 'DCam')  # useful error
     >>> device.load('DemoCamera', 'DCam')
@@ -36,7 +36,7 @@ class Device:
     >>> device.schema()  # JSON schema of device properties
     """
 
-    def __init__(self, mmcore: CMMCorePlus, device_label: str) -> None:
+    def __init__(self, device_label: str, mmcore: CMMCorePlus) -> None:
         self.label = device_label
         self._mmc = mmcore
 
@@ -81,7 +81,7 @@ class Device:
     def properties(self) -> Tuple[DeviceProperty, ...]:
         """Get all properties supported by device as DeviceProperty objects."""
         return tuple(
-            DeviceProperty(self._mmc, self.label, name) for name in self.propertyNames()
+            DeviceProperty(self.label, name, self._mmc) for name in self.propertyNames()
         )
 
     def initialize(self) -> None:
