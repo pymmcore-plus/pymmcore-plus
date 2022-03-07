@@ -1,11 +1,10 @@
 import pytest
 
-from pymmcore_plus import CMMCorePlus, MMProperty, iter_device_props
+from pymmcore_plus import CMMCorePlus
 
 
 def test_mmproperty(core: CMMCorePlus):
-    for dp in iter_device_props(core):
-        prop = MMProperty(*dp, mmcore=core)
+    for prop in core.iterProperties(as_object=True):
         assert prop.isValid()
         assert prop.dict()
 
