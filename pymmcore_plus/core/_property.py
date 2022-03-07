@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Sequence, Tuple
+from functools import partial
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, Tuple
 
 from pymmcore import g_Keyword_Label, g_Keyword_State
 from typing_extensions import TypedDict
@@ -94,7 +95,13 @@ class DeviceProperty:
             import warnings
 
             warnings.warn(f"'{self.device}::{self.name}' is a read-only property.")
-        self._mmc.setProperty(self.device, self.name, val)
+        try:
+            self._mmc.setProperty(self.device, self.name, val)
+        except RuntimeError as e:
+            msg = str(e)
+            if allowed := self.allowedValues():
+                msg += f". Allowed values: {allowed}"
+            raise RuntimeError(msg) from None
 
     def isReadOnly(self) -> bool:
         """Return `True` if property is read only."""
@@ -208,3 +215,26 @@ class DeviceProperty:
         v = f"value={self.value!r}" if self.isValid() else "INVALID"
         core = repr(self._mmc).strip("<>")
         return f"<Property '{self.device}::{self.name}' on {core}: {v}>"
+
+    def connect_change_callback(
+        self, callback: Callable[[Any], None]
+    ) -> Callable[[], None]:
+        """Connect a callback to be called when this property changes.
+
+        Parameters
+        ----------
+        callback : Callable[[Any], None]
+            Callback that accepts a single parameter (the new value of this property).
+
+        Returns
+        -------
+        Callable[[], None]
+            A callable object that will disconnect `callback` from change events.
+        """
+
+        def _on_prop_change(device: str, label: str, new_value: Any) -> None:
+            if device == self.device and label == self.name:
+                callback(new_value)
+
+        self._mmc.events.propertyChanged.connect(_on_prop_change)
+        return partial(self._mmc.events.propertyChanged.disconnect, _on_prop_change)
