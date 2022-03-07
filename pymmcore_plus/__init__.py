@@ -5,7 +5,7 @@ except ImportError:  # pragma: no cover
 
 from typing import TYPE_CHECKING
 
-from ._util import find_micromanager
+from ._util import find_micromanager, iter_device_props
 from .core import (
     ActionType,
     CMMCorePlus,
@@ -15,6 +15,7 @@ from .core import (
     DeviceType,
     FocusDirection,
     Metadata,
+    MMProperty,
     PortType,
     PropertyType,
 )
@@ -26,16 +27,17 @@ if TYPE_CHECKING:
 __all__ = [
     "ActionType",
     "CMMCorePlus",
-    "CMMCorePlus",
     "CMMCoreSignaler",
     "Configuration",
-    "PCoreSignaler",
     "DeviceDetectionStatus",
     "DeviceNotification",
     "DeviceType",
     "find_micromanager",
     "FocusDirection",
+    "iter_device_props",
     "Metadata",
+    "MMProperty",
+    "PCoreSignaler",
     "PortType",
     "PropertyType",
     "RemoteMMCore",

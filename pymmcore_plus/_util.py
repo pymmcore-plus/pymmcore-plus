@@ -2,7 +2,9 @@ import os
 import re
 import sys
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional, Tuple
+
+from pymmcore import CMMCore
 
 camel_to_snake = re.compile(r"(?<!^)(?=[A-Z])")
 
@@ -58,3 +60,26 @@ def _qt_app_is_running() -> bool:
             QtWidgets = getattr(qmodule, "QtWidgets")
             return QtWidgets.QApplication.instance() is not None
     return False
+
+
+def iter_device_props(mmcore: Optional[CMMCore] = None) -> Iterator[Tuple[str, str]]:
+    """Yield all pairs of currently loaded (device_label, property_name).
+
+    Parameters
+    ----------
+    mmcore : Optional[CMMCore]
+        MMCore instance. If `None` (the default), will use the global
+        CMMCorePlus.instance()
+
+    Yields
+    ------
+    Iterator[Tuple[str, str]]
+        Pairs of loaded (device_label, property_name) tuples.
+    """
+    if not mmcore:
+        from pymmcore_plus import CMMCorePlus
+
+        mmcore = CMMCorePlus.instance()
+    for dev in mmcore.getLoadedDevices():
+        for prop in mmcore.getDevicePropertyNames(dev):
+            yield dev, prop
