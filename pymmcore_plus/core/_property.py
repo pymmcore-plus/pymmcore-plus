@@ -230,6 +230,14 @@ class DeviceProperty:
         -------
         Callable[[], None]
             A callable object that will disconnect `callback` from change events.
+
+        Examples
+        --------
+
+        >>> prop = DeviceProperty(core, 'Camera', 'Gain')
+        >>> prop.connect_change_callback(lambda v: print('gain changed to', v))
+        >>> prop.value = 5
+        gain changed to 5
         """
 
         def _on_prop_change(device: str, label: str, new_value: Any) -> None:
