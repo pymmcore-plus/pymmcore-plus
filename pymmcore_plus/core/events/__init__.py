@@ -7,8 +7,6 @@ from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
 
 if TYPE_CHECKING:
-    pass
-
     from ._qsignals import QCoreSignaler
 
 __all__ = [

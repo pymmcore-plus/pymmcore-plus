@@ -32,7 +32,7 @@ class QCoreSignaler(QObject):
         super().__init__()
         self._prop_callbacks: PropKeyDict = {}
 
-    def devicePropertyEvent(
+    def devicePropertyChanged(
         self, device_label: str, property_label: Optional[str] = None
     ):
         return _PropertySignal(self, device_label, property_label)

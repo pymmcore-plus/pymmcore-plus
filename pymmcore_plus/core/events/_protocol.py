@@ -34,4 +34,4 @@ class PCoreSignaler(Protocol):
 
     # added for CMMCorePlus
     imageSnapped: PSignalInstance
-    mdaEngineRegistered = PSignalInstance
+    mdaEngineRegistered: PSignalInstance
