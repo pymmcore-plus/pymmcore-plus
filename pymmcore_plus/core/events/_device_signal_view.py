@@ -23,3 +23,6 @@ class _DevicePropValueSignal:
         return self._mmc.events.devicePropertyChanged(self._dev, self._prop).disconnect(
             callback
         )
+
+    def __call__(self, property: str):
+        return _DevicePropValueSignal(self._dev, property, self._mmc)
