@@ -52,18 +52,54 @@ class MDAEngine(PMDAEngine):
         return self._events
 
     def is_running(self) -> bool:
+        """
+        Return whether an acquistion is currently underway.
+
+        This will return True at any point between the emission of the
+        ``sequenceStarted`` and ``sequenceFinished`` signals, including when
+        the acquisition is currently paused.
+
+        Returns
+        -------
+        bool
+            Whether an acquistion is underway.
+        """
         return self._running
 
     def cancel(self):
+        """
+        Cancel the currently running acquisition.
+
+        This is a no-op if no acquisition is currently running.
+        If an acquisition is running then this will cancel the acquistion and
+        a sequenceCanceled signal, followed by a sequenceFinished signal will
+        be emitted.
+        """
         self._canceled = True
         self._paused_time = 0
         self._t0 = None
 
     def toggle_pause(self):
+        """
+        Toggle the paused state of the current acquisition.
+
+        To get whether the acquisition is currently paused use the
+        ``is_paused`` method.
+        """
         self._paused = not self._paused
         self._events.sequencePauseToggled.emit(self._paused)
 
     def is_paused(self) -> bool:
+        """
+        Return whether the acquistion is currently paused.
+
+        Use ``toggle_pause`` to change the paused state.
+
+        Returns
+        -------
+        bool
+            Whether the current acquistion is paused.
+        """
         return self._paused
 
     def _prepare_to_run(self, sequence: MDASequence):
@@ -199,6 +235,18 @@ class MDAEngine(PMDAEngine):
         self._events.sequenceFinished.emit(sequence)
 
     def run(self, sequence: MDASequence) -> None:
+        """
+        Run the multi-dimensional acquistion defined by `sequence`.
+
+        Most users should not use this directly as it will block further
+        execution. Instead use ``run_mda`` on CMMCorePlus which will run on
+        a thread.
+
+        Parameters
+        ----------
+        sequence : MDASequence
+            The sequence of events to run.
+        """
         self._prepare_to_run(sequence)
 
         for event in sequence:
