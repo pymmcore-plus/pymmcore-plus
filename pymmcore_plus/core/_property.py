@@ -1,44 +1,14 @@
 from __future__ import annotations
 
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Dict,
-    Optional,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-)
+from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, Tuple, TypeVar
 
-from psygnal._signal import _normalize_slot
 from pymmcore import g_Keyword_Label, g_Keyword_State
 from typing_extensions import TypedDict
 
 from ._constants import DeviceType, PropertyType
 
 if TYPE_CHECKING:
-    from psygnal._signal import NormedCallback
-
     from ._mmcore_plus import CMMCorePlus
-
-
-def _denorm_slot(slot: NormedCallback) -> Optional[Callable]:
-    if not isinstance(slot, tuple):
-        return slot
-
-    _ref, name, method = slot
-    obj = _ref()
-    if obj is None:
-        return None
-    if method is not None:
-        return method
-    _cb = getattr(obj, name, None)
-    if _cb is None:  # pragma: no cover
-        return None
-    return _cb
 
 
 class InfoDict(TypedDict):
@@ -52,55 +22,6 @@ class InfoDict(TypedDict):
     pre_init: Optional[bool]
     range: Optional[Tuple[float, float]]
     allowed_values: Optional[Tuple[str, ...]]
-
-
-T = TypeVar("T", bound=Callable[[Any], Any])
-
-
-class PropertySignal:
-    def __init__(
-        self,
-        dev: Union[str, DeviceProperty],
-        prop: Optional[str] = None,
-        mmc: Optional[CMMCorePlus] = None,
-    ) -> None:
-        from ._mmcore_plus import CMMCorePlus
-
-        if isinstance(dev, DeviceProperty):
-            prop, mmc = dev.name, dev._mmc
-            dev = dev.device
-        elif not isinstance(prop, str) and isinstance(mmc, CMMCorePlus):
-            raise ValueError(
-                "Must provide either a DeviceProperty as the first argument, or "
-                "(device: str, property: str, core: CMMCorePlus)"
-            )
-
-        self._dev = dev
-        self._prop = cast(str, prop)
-        self._mmc = cast(CMMCorePlus, mmc)
-        self._refs: Dict[NormedCallback, Callable] = {}
-
-    def connect(self, callback: T) -> T:
-        slot = _normalize_slot(callback)
-
-        def _wrapper(dev, prop, new_value):
-            cb = _denorm_slot(slot)
-            if cb is None:
-                self._refs.pop(slot)
-                return
-            if dev == self._dev and prop == self._prop:
-                cb(new_value)
-
-        self._refs[slot] = _wrapper
-        self._mmc.events.propertyChanged.connect(_wrapper)
-        return callback
-
-    def disconnect(self, callback: T):
-        slot = _normalize_slot(callback)
-        if slot not in self._refs:
-            raise ValueError("callback not connected")
-
-        self._mmc.events.propertyChanged.disconnect(self._refs.pop(slot))
 
 
 class DeviceProperty:
@@ -136,7 +57,7 @@ class DeviceProperty:
         self.device = device_label
         self.name = property_name
         self._mmc = mmcore
-        self.valueChanged = PropertySignal(self)
+        self.valueChanged = _PropertySignal(self)
 
     def isValid(self) -> bool:
         """Return `True` if device is loaded and has a property by this name."""
@@ -294,3 +215,19 @@ class DeviceProperty:
         v = f"value={self.value!r}" if self.isValid() else "INVALID"
         core = repr(self._mmc).strip("<>")
         return f"<Property '{self.device}::{self.name}' on {core}: {v}>"
+
+
+_C = TypeVar("_C", bound=Callable[[Any], Any])
+
+
+class _PropertySignal:
+    def __init__(self, prop: DeviceProperty) -> None:
+        self._prop = prop
+
+    def connect(self, callback: _C) -> _C:
+        d, p, core = self._prop.device, self._prop.name, self._prop._mmc
+        return core.connectPropertyChangeCallback(d, p, callback)
+
+    def disconnect(self, callback: _C):
+        d, p, core = self._prop.device, self._prop.name, self._prop._mmc
+        core.disconnectPropertyChangeCallback(d, p, callback)
