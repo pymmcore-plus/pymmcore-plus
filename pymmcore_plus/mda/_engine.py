@@ -84,10 +84,12 @@ class MDAEngine(PMDAEngine):
         Toggle the paused state of the current acquisition.
 
         To get whether the acquisition is currently paused use the
-        ``is_paused`` method.
+        ``is_paused`` method. This method is a no-op if no acquistion is
+        currently underway.
         """
-        self._paused = not self._paused
-        self._events.sequencePauseToggled.emit(self._paused)
+        if self._running:
+            self._paused = not self._paused
+            self._events.sequencePauseToggled.emit(self._paused)
 
     def is_paused(self) -> bool:
         """
