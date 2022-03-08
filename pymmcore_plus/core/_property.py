@@ -226,8 +226,8 @@ class _PropertySignal:
 
     def connect(self, callback: _C) -> _C:
         d, p, core = self._prop.device, self._prop.name, self._prop._mmc
-        return core.events.devicePropertyEvent(d, p).connect(callback)
+        return core.events.devicePropertyChanged(d, p).connect(callback)
 
     def disconnect(self, callback: _C):
         d, p, core = self._prop.device, self._prop.name, self._prop._mmc
-        return core.events.devicePropertyEvent(d, p).disconnect(callback)
+        return core.events.devicePropertyChanged(d, p).disconnect(callback)

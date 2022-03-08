@@ -32,7 +32,7 @@ class pyroCMMCore(CMMCorePlus):
         for name in _SIGNAL_NAMES:
             attr = getattr(self.events, name)
             if hasattr(attr, "connect"):
-                # FIXME: devicePropertyEvent will not work on Remote
+                # FIXME: devicePropertyChanged will not work on Remote
                 attr.connect(partial(self.emit_signal, name))
 
     def connect_remote_callback(self, handler: "CallbackProtocol"):
