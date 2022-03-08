@@ -103,13 +103,13 @@ def test_device_property_events(core: CMMCorePlus):
 
     core.setProperty("Camera", "Gain", "6")
     mock1.assert_called_once_with("6")
-    mock2.assert_called_once_with("6")
+    mock2.assert_called_once_with("Gain", "6")
 
     mock1.reset_mock()
     mock2.reset_mock()
     core.setProperty("Camera", "Binning", "2")
     mock1.assert_not_called()
-    mock2.assert_called_once_with("2")
+    mock2.assert_called_once_with("Binning", "2")
 
     mock1.reset_mock()
     mock2.reset_mock()

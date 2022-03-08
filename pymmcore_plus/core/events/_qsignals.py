@@ -33,6 +33,31 @@ class QCoreSignaler(QObject):
         self._prop_callbacks: PropKeyDict = {}
 
     def devicePropertyChanged(
-        self, device_label: str, property_label: Optional[str] = None
-    ):
-        return _PropertySignal(self, device_label, property_label)
+        self, device: str, property: Optional[str] = None
+    ) -> _PropertySignal:
+        """Return object to connect/disconnect to device/property-specific changes.
+
+        Note that the callback provided to `.connect()` must take *two* parameters
+        (property_name, new_value) if only `device` is provided, and *one* parameter
+        (new_value) of both `device` and `property` are provided.
+
+        Parameters
+        ----------
+        device : str
+            A device label
+        property : Optional[str], optional
+            Optional property label.  If not provided, all property changes on `device`
+            will trigger an event emission. by default None
+
+        Returns
+        -------
+        _PropertySignal
+            Object with `connect` and `disconnect` methods that attach a callback to
+            the change event of a specific property or device.
+
+        Examples
+        --------
+        >>> core.events.devicePropertyChanged('Camera', 'Gain').connect(callback)
+        >>> core.events.devicePropertyChanged('Camera').connect(callback)
+        """
+        return _PropertySignal(self, device, property)

@@ -4,7 +4,7 @@ from psygnal._signal import NormedCallback, _normalize_slot
 
 from ._protocol import PCoreSignaler
 
-_C = TypeVar("_C", bound=Callable[[Any], Any])
+_C = TypeVar("_C", bound=Callable[..., Any])
 PropKey = Tuple[str, Optional[str], NormedCallback]
 PropKeyDict = Dict[PropKey, Callable]
 
@@ -37,6 +37,24 @@ class _PropertySignal:
         self._property = property
 
     def connect(self, callback: _C) -> _C:
+        """Connect callback to this device and/or property.
+
+        If only `device` was provided, the callback must take *two* parameters
+        (property_name, new_value). If both `device` and `property` were provided, the
+        callback must take *one* parameter (new_value).
+
+        Parameters
+        ----------
+        callback : Callable
+            If only `device` was provided, the callback must take *two* parameters
+            (property_name, new_value). If both `device` and `property` were provided,
+            the callback must take *one* parameter (new_value).
+
+        Returns
+        -------
+        callback
+            the callback is returned for use as a decorator.
+        """
         slot = _normalize_slot(callback)
         key = (self._device, self._property, slot)
 
@@ -45,14 +63,19 @@ class _PropertySignal:
             if cb is None:
                 self._events._prop_callbacks.pop(key)
                 return
-            if dev == self._device and (not self._property or prop == self._property):
-                cb(new_value)
+            if dev == self._device:
+                if self._property:
+                    if prop == self._property:
+                        cb(new_value)
+                else:
+                    cb(prop, new_value)
 
         self._events._prop_callbacks[key] = _wrapper
         self._events.propertyChanged.connect(_wrapper)
         return callback
 
     def disconnect(self, callback: Callable) -> None:
+        """Disconnect `callback` from this device and/or property."""
         key = (self._device, self._property, _normalize_slot(callback))
         if key not in self._events._prop_callbacks:
             raise ValueError("callback not connected")
@@ -63,6 +86,31 @@ class _DevicePropertyEventMixin(PCoreSignaler):
     _prop_callbacks: PropKeyDict = {}
 
     def devicePropertyChanged(
-        self, device_label: str, property_label: Optional[str] = None
+        self, device: str, property: Optional[str] = None
     ) -> _PropertySignal:
-        return _PropertySignal(self, device_label, property_label)
+        """Return object to connect/disconnect to device/property-specific changes.
+
+        Note that the callback provided to `.connect()` must take *two* parameters
+        (property_name, new_value) if only `device` is provided, and *one* parameter
+        (new_value) of both `device` and `property` are provided.
+
+        Parameters
+        ----------
+        device : str
+            A device label
+        property : Optional[str]
+            Optional property label.  If not provided, all property changes on `device`
+            will trigger an event emission. by default None
+
+        Returns
+        -------
+        _PropertySignal
+            Object with `connect` and `disconnect` methods that attach a callback to
+            the change event of a specific property or device.
+
+        Examples
+        --------
+        >>> core.events.devicePropertyChanged('Camera', 'Gain').connect(callback)
+        >>> core.events.devicePropertyChanged('Camera').connect(callback)
+        """
+        return _PropertySignal(self, device, property)
