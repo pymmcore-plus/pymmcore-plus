@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from functools import partial
-from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Optional, Sequence, Tuple
 
+from psygnal import Signal
 from pymmcore import g_Keyword_Label, g_Keyword_State
 from typing_extensions import TypedDict
 
@@ -51,6 +51,8 @@ class DeviceProperty:
     >>> prop.dict()  # all the info in one dict.
     """
 
+    valueChanged = Signal(str)
+
     def __init__(
         self, device_label: str, property_name: str, mmcore: CMMCorePlus
     ) -> None:
@@ -58,6 +60,7 @@ class DeviceProperty:
         self.device = device_label
         self.name = property_name
         self._mmc = mmcore
+        self._mmc.events.propertyChanged.connect(self._maybe_emit)
 
     def isValid(self) -> bool:
         """Return `True` if device is loaded and has a property by this name."""
@@ -216,32 +219,12 @@ class DeviceProperty:
         core = repr(self._mmc).strip("<>")
         return f"<Property '{self.device}::{self.name}' on {core}: {v}>"
 
-    def connect_change_callback(
-        self, callback: Callable[[Any], None]
-    ) -> Callable[[], None]:
-        """Connect a callback to be called when this property changes.
+    def _maybe_emit(self, device: str, label: str, new_value: Any) -> None:
+        if device == self.device and label == self.name:
+            self.valueChanged.emit(new_value)
 
-        Parameters
-        ----------
-        callback : Callable[[Any], None]
-            Callback that accepts a single parameter (the new value of this property).
-
-        Returns
-        -------
-        Callable[[], None]
-            A callable object that will disconnect `callback` from change events.
-
-        Examples
-        --------
-        >>> prop = DeviceProperty(core, 'Camera', 'Gain')
-        >>> prop.connect_change_callback(lambda v: print('gain changed to', v))
-        >>> prop.value = 5
-        gain changed to 5
-        """
-
-        def _on_prop_change(device: str, label: str, new_value: Any) -> None:
-            if device == self.device and label == self.name:
-                callback(new_value)
-
-        self._mmc.events.propertyChanged.connect(_on_prop_change)
-        return partial(self._mmc.events.propertyChanged.disconnect, _on_prop_change)
+    def __del__(self):
+        try:
+            self._mmc.events.propertyChanged.disconnect(self._maybe_emit)
+        except Exception:
+            pass

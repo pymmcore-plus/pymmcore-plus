@@ -18,6 +18,11 @@ def test_mmproperty(core: CMMCorePlus):
 def test_property_callbacks(core: CMMCorePlus):
     prop = DeviceProperty("Camera", "Gain", core)
     mock = Mock()
-    prop.connect_change_callback(mock)
+    prop.valueChanged.connect(mock)
     prop.value = 6
     mock.assert_called_once_with("6")
+
+    mock.reset_mock()
+    prop.valueChanged.disconnect(mock)
+    prop.value = 4
+    mock.assert_not_called()
