@@ -62,6 +62,10 @@ class DeviceProperty:
         self._mmc = mmcore
         self._mmc.events.propertyChanged.connect(self._maybe_emit)
 
+    def _maybe_emit(self, device: str, label: str, new_value: Any) -> None:
+        if device == self.device and label == self.name:
+            self.valueChanged.emit(new_value)
+
     def isValid(self) -> bool:
         """Return `True` if device is loaded and has a property by this name."""
         return self.isLoaded() and self._mmc.hasProperty(self.device, self.name)
@@ -218,13 +222,3 @@ class DeviceProperty:
         v = f"value={self.value!r}" if self.isValid() else "INVALID"
         core = repr(self._mmc).strip("<>")
         return f"<Property '{self.device}::{self.name}' on {core}: {v}>"
-
-    def _maybe_emit(self, device: str, label: str, new_value: Any) -> None:
-        if device == self.device and label == self.name:
-            self.valueChanged.emit(new_value)
-
-    def __del__(self):
-        try:
-            self._mmc.events.propertyChanged.disconnect(self._maybe_emit)
-        except Exception:
-            pass
