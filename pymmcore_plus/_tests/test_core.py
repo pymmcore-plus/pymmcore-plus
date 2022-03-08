@@ -240,7 +240,8 @@ def test_not_concurrent_mdas(core, qtbot: "QtBot"):
         z_plan={"range": 3, "step": 1},
         channels=[{"config": "DAPI", "exposure": 1}],
     )
-    core.run_mda(mda)
+    with qtbot.waitSignal(core.mda.events.sequenceStarted):
+        core.run_mda(mda)
     assert core.mda.is_running()
     with pytest.raises(ValueError):
         core.run_mda(mda)
