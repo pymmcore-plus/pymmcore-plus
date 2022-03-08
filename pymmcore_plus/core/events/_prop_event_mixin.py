@@ -45,9 +45,8 @@ class _PropertySignal:
             if cb is None:
                 self._events._prop_callbacks.pop(key)
                 return
-            if dev == self._device:
-                if not prop or prop == self._property:
-                    cb(new_value)
+            if dev == self._device and (not self._property or prop == self._property):
+                cb(new_value)
 
         self._events._prop_callbacks[key] = _wrapper
         self._events.propertyChanged.connect(_wrapper)

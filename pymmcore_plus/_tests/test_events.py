@@ -93,3 +93,28 @@ def test_set_statedevice_property_emits_events(core: CMMCorePlus):
     )
     assert core.getProperty("Dichroic", LABEL) == "Q505LP"
     assert core.getProperty("Dichroic", STATE) == "1"
+
+
+def test_device_property_events(core: CMMCorePlus):
+    mock1 = Mock()
+    mock2 = Mock()
+    core.events.devicePropertyEvent("Camera", "Gain").connect(mock1)
+    core.events.devicePropertyEvent("Camera").connect(mock2)
+
+    core.setProperty("Camera", "Gain", "6")
+    mock1.assert_called_once_with("6")
+    mock2.assert_called_once_with("6")
+
+    mock1.reset_mock()
+    mock2.reset_mock()
+    core.setProperty("Camera", "Binning", "2")
+    mock1.assert_not_called()
+    mock2.assert_called_once_with("2")
+
+    mock1.reset_mock()
+    mock2.reset_mock()
+    core.events.devicePropertyEvent("Camera", "Gain").disconnect(mock1)
+    core.events.devicePropertyEvent("Camera").disconnect(mock2)
+    core.setProperty("Camera", "Gain", "5")
+    mock1.assert_not_called()
+    mock2.assert_not_called()
