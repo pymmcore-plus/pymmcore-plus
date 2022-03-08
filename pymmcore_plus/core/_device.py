@@ -3,6 +3,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Tuple
 
 from ._property import DeviceProperty
+from .events._device_signal_view import _DevicePropValueSignal
 
 if TYPE_CHECKING:
     from ._constants import DeviceDetectionStatus, DeviceType
@@ -39,6 +40,7 @@ class Device:
     def __init__(self, device_label: str, mmcore: CMMCorePlus) -> None:
         self.label = device_label
         self._mmc = mmcore
+        self.propertyChanged = _DevicePropValueSignal(device_label, None, mmcore)
 
     @property
     def core(self) -> CMMCorePlus:

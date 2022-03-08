@@ -1,11 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Optional, Sequence, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, Sequence, Tuple
 
 from pymmcore import g_Keyword_Label, g_Keyword_State
 from typing_extensions import TypedDict
 
 from ._constants import DeviceType, PropertyType
+from .events._device_signal_view import _DevicePropValueSignal
 
 if TYPE_CHECKING:
     from ._mmcore_plus import CMMCorePlus
@@ -57,7 +58,7 @@ class DeviceProperty:
         self.device = device_label
         self.name = property_name
         self._mmc = mmcore
-        self.valueChanged = _PropertySignal(self)
+        self.valueChanged = _DevicePropValueSignal(device_label, property_name, mmcore)
 
     def isValid(self) -> bool:
         """Return `True` if device is loaded and has a property by this name."""
@@ -215,19 +216,3 @@ class DeviceProperty:
         v = f"value={self.value!r}" if self.isValid() else "INVALID"
         core = repr(self._mmc).strip("<>")
         return f"<Property '{self.device}::{self.name}' on {core}: {v}>"
-
-
-_C = TypeVar("_C", bound=Callable[[Any], Any])
-
-
-class _PropertySignal:
-    def __init__(self, prop: DeviceProperty) -> None:
-        self._prop = prop
-
-    def connect(self, callback: _C) -> _C:
-        d, p, core = self._prop.device, self._prop.name, self._prop._mmc
-        return core.events.devicePropertyChanged(d, p).connect(callback)
-
-    def disconnect(self, callback: _C):
-        d, p, core = self._prop.device, self._prop.name, self._prop._mmc
-        return core.events.devicePropertyChanged(d, p).disconnect(callback)

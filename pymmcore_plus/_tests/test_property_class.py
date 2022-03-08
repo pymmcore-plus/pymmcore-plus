@@ -19,7 +19,7 @@ def test_mmproperty(core: CMMCorePlus):
 
 
 @pytest.mark.parametrize("cbtype", ["method", "func"])
-def test_property_callbacks_method(cbtype, core: CMMCorePlus):
+def test_property_callbacks(cbtype, core: CMMCorePlus):
     prop = DeviceProperty("Camera", "Gain", core)
     mock = Mock()
 

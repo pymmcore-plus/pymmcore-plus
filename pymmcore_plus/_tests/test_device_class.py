@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 
 from pymmcore_plus import CMMCorePlus, Device, DeviceDetectionStatus, DeviceType
@@ -42,3 +44,22 @@ def test_device_load_errors(core: CMMCorePlus):
 
     with pytest.warns(UserWarning):
         dev.load("DemoCamera", "DCam")
+
+
+def test_device_callbacks(core: CMMCorePlus):
+    dev = Device("Camera", core)
+    mock = Mock()
+
+    # regular connection
+    dev.propertyChanged.connect(mock)
+    core.setProperty("Camera", "Gain", "6")
+    mock.assert_called_once_with("Gain", "6")
+    mock.reset_mock()
+    core.setProperty("Camera", "Binning", "2")
+    mock.assert_called_once_with("Binning", "2")
+
+    # regular disconnection
+    mock.reset_mock()
+    dev.propertyChanged.disconnect(mock)
+    core.setProperty("Camera", "Gain", "4")
+    mock.assert_not_called()
