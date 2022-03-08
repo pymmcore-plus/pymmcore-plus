@@ -6,6 +6,7 @@ from pymmcore import g_Keyword_Label, g_Keyword_State
 from typing_extensions import TypedDict
 
 from ._constants import DeviceType, PropertyType
+from .events._device_signal_view import _DevicePropValueSignal
 
 if TYPE_CHECKING:
     from ._mmcore_plus import CMMCorePlus
@@ -57,6 +58,7 @@ class DeviceProperty:
         self.device = device_label
         self.name = property_name
         self._mmc = mmcore
+        self.valueChanged = _DevicePropValueSignal(device_label, property_name, mmcore)
 
     def isValid(self) -> bool:
         """Return `True` if device is loaded and has a property by this name."""
@@ -94,7 +96,13 @@ class DeviceProperty:
             import warnings
 
             warnings.warn(f"'{self.device}::{self.name}' is a read-only property.")
-        self._mmc.setProperty(self.device, self.name, val)
+        try:
+            self._mmc.setProperty(self.device, self.name, val)
+        except RuntimeError as e:
+            msg = str(e)
+            if allowed := self.allowedValues():
+                msg += f". Allowed values: {allowed}"
+            raise RuntimeError(msg) from None
 
     def isReadOnly(self) -> bool:
         """Return `True` if property is read only."""

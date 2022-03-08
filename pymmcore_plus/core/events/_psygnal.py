@@ -2,9 +2,10 @@ import numpy as np
 from psygnal import Signal
 
 from ...mda import MDAEngine
+from ._prop_event_mixin import _DevicePropertyEventMixin
 
 
-class CMMCoreSignaler:
+class CMMCoreSignaler(_DevicePropertyEventMixin):
     """Signals that will be emitted from CMMCorePlus and RemoteMMCore objects."""
 
     # native MMCore callback events
