@@ -1,4 +1,8 @@
+from typing import Optional
+
 from qtpy.QtCore import QObject, Signal
+
+from ._prop_event_mixin import PropKeyDict, _PropertySignal
 
 
 class QCoreSignaler(QObject):
@@ -22,3 +26,13 @@ class QCoreSignaler(QObject):
     # added for CMMCorePlus
     imageSnapped = Signal(object)  # after an image is snapped
     mdaEngineRegistered = Signal(object, object)  # new engine, old engine
+
+    # can't use _DevicePropertyEventMixin due to metaclass conflict
+    def __init__(self) -> None:
+        super().__init__()
+        self._prop_callbacks: PropKeyDict = {}
+
+    def devicePropertyEvent(
+        self, device_label: str, property_label: Optional[str] = None
+    ):
+        return _PropertySignal(self, device_label, property_label)

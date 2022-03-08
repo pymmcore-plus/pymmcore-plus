@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Optional
+from typing import TYPE_CHECKING
 
 from psygnal._signal import _normalize_slot
 
@@ -7,7 +7,7 @@ from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
 
 if TYPE_CHECKING:
-    from psygnal._signal import NormedCallback
+    pass
 
     from ._qsignals import QCoreSignaler
 
@@ -28,22 +28,6 @@ def _get_auto_core_callback_class(default=CMMCoreSignaler):
         return QCoreSignaler
 
     return default
-
-
-def _denormalize_slot(slot: "NormedCallback") -> Optional[Callable]:
-    if not isinstance(slot, tuple):
-        return slot
-
-    _ref, name, method = slot
-    obj = _ref()
-    if obj is None:
-        return None
-    if method is not None:
-        return method
-    _cb = getattr(obj, name, None)
-    if _cb is None:  # pragma: no cover
-        return None
-    return _cb
 
 
 def __dir__():

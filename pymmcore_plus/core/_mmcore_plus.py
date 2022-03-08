@@ -12,7 +12,6 @@ from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Dict,
     Iterator,
     List,
@@ -38,16 +37,10 @@ from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
-from .events import (
-    CMMCoreSignaler,
-    _denormalize_slot,
-    _get_auto_core_callback_class,
-    _normalize_slot,
-)
+from .events import CMMCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
     import numpy as np
-    from psygnal._signal import NormedCallback
     from useq import MDASequence
 
 _T = TypeVar("_T")
@@ -77,7 +70,6 @@ def _blockSignal(obj, signal):
 
 
 _instance = None
-_C = TypeVar("_C", bound=Callable[[Any], Any])
 
 
 class CMMCorePlus(pymmcore.CMMCore):
@@ -114,8 +106,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         # garbage collected
         self._weak_clean = weakref.WeakMethod(self.unloadAllDevices)
         atexit.register(self._weak_clean)
-
-        self._prop_callbacks: Dict[Tuple[str, str, NormedCallback], Callable] = dict()
 
     def __repr__(self) -> str:
         return f"<{type(self).__name__} at {hex(id(self))}>"
@@ -735,32 +725,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         if before != after:
             for i, val in enumerate(after):
                 self.events.propertyChanged.emit(device, properties[i], val)
-
-    def connectPropertyChangeCallback(
-        self, device: str, property: str, callback: _C
-    ) -> _C:
-        slot = _normalize_slot(callback)
-        key = (device, property, slot)
-
-        def _wrapper(dev, prop, new_value):
-            cb = _denormalize_slot(slot)
-            if cb is None:
-                self._prop_callbacks.pop(key)
-                return
-            if dev == device and prop == property:
-                cb(new_value)
-
-        self._prop_callbacks[key] = _wrapper
-        self.events.propertyChanged.connect(_wrapper)
-        return callback
-
-    def disconnectPropertyChangeCallback(
-        self, device: str, property: str, callback: _C
-    ) -> None:
-        key = (device, property, _normalize_slot(callback))
-        if key not in self._prop_callbacks:
-            raise ValueError("callback not connected")
-        self.events.propertyChanged.disconnect(self._prop_callbacks.pop(key))
 
 
 for name in (
