@@ -204,25 +204,23 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
 
 
 def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
-    mda = MDASequence(
-        time_plan={"interval": 10, "loops": 2},
-        stage_positions=[(1, 1, 1)],
-        z_plan={"range": 3, "step": 1},
-        channels=[{"config": "DAPI", "exposure": 1}],
-    )
     orig_engine = core.mda
-    core.run_mda(mda)
-    new_engine = MDAEngine(core)
-    with pytest.raises(ValueError):
-        core.register_mda_engine(new_engine)
-    with qtbot.waitSignal(core.mda.events.sequenceFinished):
-        core.mda.cancel()
+
     registered_mock = MagicMock()
     core.events.mdaEngineRegistered.connect(registered_mock)
 
+    # fake that mda is running
+    # with an actual mda the threading and timing is
+    # such that this ends up being a flaky test if we
+    # use `core.run_mda`
+    core.mda._running = True
+    new_engine = MDAEngine(core)
+    with pytest.raises(ValueError):
+        core.register_mda_engine(new_engine)
+    core.mda._running = False
+
     with qtbot.waitSignal(core.events.mdaEngineRegistered):
         core.register_mda_engine(new_engine)
-    registered_mock.assert_called_once_with(new_engine, orig_engine)
     assert core._mda_engine is new_engine
 
     # invalid engine
@@ -231,23 +229,21 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
 
     with pytest.raises(TypeError):
         core.register_mda_engine(nonconforming_engine())
+    registered_mock.assert_called_once_with(new_engine, orig_engine)
 
 
 def test_not_concurrent_mdas(core, qtbot: "QtBot"):
     mda = MDASequence(
-        time_plan={"interval": 10, "loops": 2},
+        time_plan={"interval": 0.1, "loops": 2},
         stage_positions=[(1, 1, 1)],
         z_plan={"range": 3, "step": 1},
         channels=[{"config": "DAPI", "exposure": 1}],
     )
-    with qtbot.waitSignal(core.mda.events.sequenceStarted):
-        core.run_mda(mda)
+    core.mda._running = True
     assert core.mda.is_running()
     with pytest.raises(ValueError):
         core.run_mda(mda)
-    with qtbot.waitSignal(core.mda.events.sequenceFinished):
-        core.mda.cancel()
-    assert not core.mda.is_running()
+    core.mda._running = False
     core.run_mda(mda)
     core.mda.cancel()
 
