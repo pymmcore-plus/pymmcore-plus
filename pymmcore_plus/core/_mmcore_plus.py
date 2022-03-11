@@ -3,31 +3,41 @@ from __future__ import annotations
 import atexit
 import os
 import re
-import time
 import weakref
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 from textwrap import dedent
+from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
     Dict,
+    Iterator,
     List,
     Optional,
     Pattern,
+    Sequence,
     Tuple,
     TypeVar,
     Union,
+    overload,
 )
 
 import pymmcore
 from loguru import logger
+from psygnal import SignalInstance
+from typing_extensions import Literal
+from wrapt import synchronized
 
 from .._util import find_micromanager
+from ..mda import MDAEngine, PMDAEngine
 from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
+from ._device import Device
 from ._metadata import Metadata
-from ._signals import _CMMCoreSignaler
+from ._property import DeviceProperty
+from .events import CMMCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
     import numpy as np
@@ -42,8 +52,38 @@ _OBJECTIVE_DEVICE_RE = re.compile(
 )
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
+STATE = pymmcore.g_Keyword_State
+LABEL = pymmcore.g_Keyword_Label
+STATE_PROPS = (STATE, LABEL)
+
+
+@contextmanager
+def _blockSignal(obj, signal):
+    if isinstance(signal, SignalInstance):
+        signal.block()
+        yield
+        signal.unblock()
+    else:
+        obj.blockSignals(True)
+        yield
+        obj.blockSignals(False)
+
+
+_instance = None
+
 
 class CMMCorePlus(pymmcore.CMMCore):
+    lock = RLock()
+
+    @classmethod
+    def instance(
+        cls, mm_path=None, adapter_paths: ListOrTuple[str] = ()
+    ) -> CMMCorePlus:
+        global _instance
+        if _instance is None:
+            _instance = cls(mm_path, adapter_paths)
+        return _instance
+
     def __init__(self, mm_path=None, adapter_paths: ListOrTuple[str] = ()):
         super().__init__()
 
@@ -53,11 +93,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         if adapter_paths:
             self.setDeviceAdapterSearchPaths(adapter_paths)
 
-        self.events = _CMMCoreSignaler()
+        self.events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
-        self._canceled = False
-        self._paused = False
+
+        self._mda_engine = MDAEngine(self)
 
         self._objective_regex = _OBJECTIVE_DEVICE_RE
         self._channel_group_regex = _CHANNEL_REGEX
@@ -76,39 +116,25 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # Re-implemented methods from the CMMCore API
 
+    @synchronized(lock)
     def setProperty(
         self, label: str, propName: str, propValue: Union[bool, float, int, str]
     ) -> None:
-        """setProperty with more reliable event emission.
-
-        As stated by Nico: "Callbacks are mainly used to give devices the opportunity to
-        signal back to the UI."
-        https://forum.image.sc/t/micromanager-events-core-events-not-coming-through/53014/2
-
-        Because it's left to the device adapter to emit a signal, in many cases uses
-        `setProperty()` will NOT lead to a new `propertyChanged` event getting emitted.
-        But that makes it hard to create listeners (i.e. in the gui or elsewhere).
-
-        While this method override cannot completely solve that problem (core-internal
-        changes will still lack an associated event emission in many cases), it can at
-        least guarantee that if we use `CMMCorePlus.setProperty` to change the property,
-        then a `propertyChanged` event will be emitted if the value did indeed change.
-
-        Parameters
-        ----------
-        label : str
-            device label
-        propName : str
-            property name
-        propValue : Union[bool, float, int, str]
-            new value
-        """
-        before = super().getProperty(label, propName)
-        with self.events.propertyChanged.blocked():  # block the native event.
+        """setProperty with reliable event emission."""
+        with self._property_change_emission_ensured(label, (propName,)):
             super().setProperty(label, propName, propValue)
-        after = super().getProperty(label, propName)
-        if before != after:
-            self.events.propertyChanged.emit(label, propName, after)
+
+    @synchronized(lock)
+    def setState(self, stateDeviceLabel: str, state: int) -> None:
+        """Set state (by position) on stateDeviceLabel, with reliable event emission."""
+        with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
+            super().setState(stateDeviceLabel, state)
+
+    @synchronized(lock)
+    def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
+        """Set state (by label) on stateDeviceLabel, with reliable event emission."""
+        with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
+            super().setStateLabel(stateDeviceLabel, stateLabel)
 
     def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]) -> None:
         # add to PATH as well for dynamic dlls
@@ -126,15 +152,21 @@ class CMMCorePlus(pymmcore.CMMCore):
         logger.info(f"setting adapter search paths: {adapter_paths}")
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
-    def loadSystemConfiguration(self, fileName="demo") -> None:
-        if fileName.lower() == "demo":
-            if not self._mm_path:
-                raise ValueError(  # pragma: no cover
-                    "No micro-manager path provided. Cannot load 'demo' file.\nTry "
-                    "installing micro-manager with `python install_mm.py`"
-                )
-            fileName = (Path(self._mm_path) / "MMConfig_demo.cfg").resolve()
-        super().loadSystemConfiguration(str(fileName))
+    @synchronized(lock)
+    def loadSystemConfiguration(
+        self, fileName: str | Path = "MMConfig_demo.cfg"
+    ) -> None:
+        """Load a config file.
+
+        For relative paths first checks relative to the current
+        working directory, then in the device adapter path.
+        """
+        fpath = Path(fileName).expanduser()
+        if not fpath.exists() and not fpath.is_absolute() and self._mm_path:
+            fpath = Path(self._mm_path) / fileName
+        if not fpath.exists():
+            raise FileNotFoundError(f"Path does not exist: {fpath}")
+        super().loadSystemConfiguration(str(fpath.resolve()))
 
     def unloadAllDevices(self) -> None:
         # this log won't appear when exiting ipython
@@ -165,6 +197,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Returns the configuration object for a given group and name."""
 
         cfg = super().getConfigData(configGroup, configName)
+        return cfg if native else Configuration.from_configuration(cfg)
+
+    def getPixelSizeConfigData(self, configName: str, *, native=False) -> Configuration:
+        """Returns the configuration object for a given pixel size preset."""
+        cfg = super().getPixelSizeConfigData(configName)
         return cfg if native else Configuration.from_configuration(cfg)
 
     def getConfigGroupState(self, group: str, *, native=False) -> Configuration:
@@ -207,6 +244,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # metadata overloads that don't require instantiating metadata first
 
+    @synchronized(lock)
     def getLastImageMD(
         self, md: Optional[Metadata] = None
     ) -> Tuple[np.ndarray, Metadata]:
@@ -215,6 +253,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().getLastImageMD(md)
         return img, md
 
+    @synchronized(lock)
     def popNextImageMD(
         self, md: Optional[Metadata] = None
     ) -> Tuple[np.ndarray, Metadata]:
@@ -223,6 +262,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().popNextImageMD(md)
         return img, md
 
+    @synchronized(lock)
     def popNextImage(self) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
 
@@ -231,6 +271,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self._fix_image(super().popNextImage())
 
+    @synchronized(lock)
     def getNBeforeLastImageMD(
         self, n: int, md: Optional[Metadata] = None
     ) -> Tuple[np.ndarray, Metadata]:
@@ -249,15 +290,122 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # NEW methods
 
-    def getDeviceProperties(self, device_label: str) -> Dict[str, Any]:
-        """Return all current properties for device `device_label`."""
-        return {
-            name: self.getProperty(device_label, name)
-            for name in self.getDevicePropertyNames(device_label)
-        }
+    @overload
+    def iterDevices(  # type: ignore
+        self,
+        device_type: Optional[DeviceType] = ...,
+        device_label: Optional[str] = ...,
+        as_object: Literal[False] = False,
+    ) -> Iterator[str]:
+        ...
+
+    @overload
+    def iterDevices(
+        self,
+        device_type: Optional[DeviceType] = ...,
+        device_label: Optional[str] = ...,
+        as_object: Literal[True] = ...,
+    ) -> Iterator[Device]:
+        ...
+
+    def iterDevices(
+        self,
+        device_type: Optional[DeviceType] = None,
+        device_label: Optional[str] = None,
+        as_object: bool = False,
+    ) -> Iterator[Union[Device, str]]:
+        """Iterate over currently loaded devices.
+
+        Parameters
+        ----------
+        device_type : Optional[DeviceType]
+            DeviceType to filter by, by default all device types will be yielded.
+        device_label : Optional[str]
+            Device label to filter by, by default all device labels will be yielded.
+        as_object : bool, optional
+            If `True`, `Device` objects will be yielded instead of
+            device label strings. By default False
+
+        Yields
+        ------
+        Iterator[Union[Device, str]]
+            `Device` objects (if `as_object==True`) or device label strings.
+        """
+        for dev in (
+            self.getLoadedDevicesOfType(device_type)
+            if device_type is not None
+            else self.getLoadedDevices()
+        ):
+            if not device_label or dev == device_label:
+                yield Device(dev, mmcore=self) if as_object else dev
+
+    @overload
+    def iterProperties(  # type: ignore
+        self,
+        device_type: Optional[DeviceType] = ...,
+        device_label: Optional[str] = ...,
+        property_type: Optional[PropertyType] = ...,
+        as_object: Literal[False] = False,
+    ) -> Iterator[Tuple[str, str]]:
+        ...
+
+    @overload
+    def iterProperties(
+        self,
+        device_type: Optional[DeviceType] = ...,
+        device_label: Optional[str] = ...,
+        property_type: Optional[PropertyType] = ...,
+        as_object: Literal[True] = ...,
+    ) -> Iterator[DeviceProperty]:
+        ...
+
+    def iterProperties(
+        self,
+        device_type: Optional[DeviceType] = None,
+        device_label: Optional[str] = None,
+        property_type: Optional[PropertyType] = None,
+        as_object: bool = False,
+    ) -> Iterator[Union[DeviceProperty, Tuple[str, str]]]:
+        """Iterate over currently loaded (device_label, property_name) pairs.
+
+        Parameters
+        ----------
+        device_type : Optional[DeviceType]
+            DeviceType to filter by, by default all device types will be yielded.
+        device_label : Optional[str]
+            Device label to filter by, by default all device labels will be yielded.
+        property_type : Optional[PropertyType]
+            PropertyType to filter by, by default all property types will be yielded.
+        as_object : bool, optional
+            If `True`, `DeviceProperty` objects will be yielded instead of
+            `(device_label, property_name)` tuples. By default False
+
+        Yields
+        ------
+        Iterator[Union[DeviceProperty, Tuple[str, str]]]
+            `DeviceProperty` objects (if `as_object==True`) or 2-tuples of (device_name,
+            property_name)
+        """
+        for dev in self.iterDevices(device_type=device_type, device_label=device_label):
+            for prop in self.getDevicePropertyNames(dev):
+                if (
+                    property_type is None
+                    or self.getPropertyType(dev, prop) == property_type
+                ):
+                    yield DeviceProperty(dev, prop, self) if as_object else (dev, prop)
+
+    def getPropertyObject(
+        self, device_label: str, property_name: str
+    ) -> DeviceProperty:
+        """Return a DeviceProperty object bound to a device/property on this core."""
+        return DeviceProperty(device_label, property_name, self)
+
+    def getDeviceObject(self, device_label: str) -> Device:
+        """Return a Device object bound to device_label on this core."""
+        return Device(device_label, mmcore=self)
 
     def getDeviceSchema(self, device_label: str) -> Dict[str, Any]:
-        """Return dict in JSON-schema format for propties of `device_label`.
+        """Return dict in JSON-schema format for properties of `device_label`.
 
         Use `json.dump` to convert this dict to a JSON string.
         """
@@ -267,32 +415,26 @@ class CMMCorePlus(pymmcore.CMMCore):
             "type": "object",
             "properties": {},
         }
-        for prop_name in self.getDevicePropertyNames(device_label):
-            _type = self.getPropertyType(device_label, prop_name)
-            d["properties"][prop_name] = p = {}
-            if _type.to_json() != "null":
-                p["type"] = _type.to_json()
-            if self.hasPropertyLimits(device_label, prop_name):
-                min_ = self.getPropertyLowerLimit(device_label, prop_name)
-                max_ = self.getPropertyUpperLimit(device_label, prop_name)
-                p["minimum"] = min_
-                p["maximum"] = max_
-            allowed = self.getAllowedPropertyValues(device_label, prop_name)
-            if allowed:
-                if set(allowed) == {"0", "1"} and _type.to_json() == "integer":
+        for prop in self.iterProperties(device_label=device_label, as_object=True):
+            d["properties"][prop.name] = p = {}
+            if prop.type().to_json() != "null":
+                p["type"] = prop.type().to_json()
+            if prop.hasLimits():
+                p["minimum"] = prop.lowerLimit()
+                p["maximum"] = prop.upperLimit()
+            if allowed := prop.allowedValues():
+                if set(allowed) == {"0", "1"} and prop.type() == PropertyType.Integer:
                     p["type"] = "boolean"
                 else:
-                    cls = _type.to_python()
+                    cls = prop.type().to_python()
                     p["enum"] = [cls(i) if cls else i for i in allowed]
-            if self.isPropertyReadOnly(device_label, prop_name):
+            if prop.isReadOnly():
                 p["readOnly"] = True
-                p["default"] = self.getProperty(device_label, prop_name)
-            if self.isPropertySequenceable(device_label, prop_name):
+                p["default"] = prop.value
+            if prop.isSequenceable():
                 p["sequenceable"] = True
-                p["sequence_max_length"] = self.getPropertySequenceMaxLength(
-                    device_label, prop_name
-                )
-            if self.isPropertyPreInit(device_label, prop_name):
+                p["sequence_max_length"] = prop.sequenceMaxLength()
+            if prop.isPreInit():
                 p["preInit"] = True
         if not d["properties"]:
             del d["properties"]
@@ -346,9 +488,9 @@ class CMMCorePlus(pymmcore.CMMCore):
                 devices.append(device)
         return devices
 
-    def getOrGuessChannelGroup(self) -> str | None:
+    def getOrGuessChannelGroup(self) -> List[str]:
         """
-        Get the channelGroup or find a likely candidate.
+        Get the channelGroup or find a likely set of candidates.
 
         If the group is not defined via ``.getChannelGroup`` then likely candidates
         will be found by searching for config groups with names that match this
@@ -357,19 +499,16 @@ class CMMCorePlus(pymmcore.CMMCore):
 
             reg = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
-
-        If the config group name does not match one of the available config groups
-        then *None* will be returned.
-
         """
         chan_group = self.getChannelGroup()
-        if chan_group == "":
-            # not set in core. Try "Channel" and other variations as fallbacks
-            for group in self.getAvailableConfigGroups():
-                if self._channel_group_regex.match(group):
-                    return group
-        elif chan_group in self.getAvailableConfigGroups():
-            return chan_group
+        if chan_group:
+            return [chan_group]
+        # not set in core. Try "Channel" and other variations as fallbacks
+        channel_guess = []
+        for group in self.getAvailableConfigGroups():
+            if self._channel_group_regex.match(group):
+                channel_guess.append(group)
+        return channel_guess
 
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0
@@ -390,82 +529,85 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setZPosition(self, val: float) -> None:
         return self.setPosition(self.getFocusDevice(), val)
 
+    @overload
+    def setPosition(self, stageLabel: str, position: float):
+        ...
+
+    @overload
+    def setPosition(self, position: float):
+        ...
+
+    @synchronized(lock)
+    def setPosition(self, *args) -> None:
+        """Set position of the stage in microns."""
+        return super().setPosition(*args)
+
+    @synchronized(lock)
+    def setXYPosition(self, x: float, y: float) -> None:
+        return super().setXYPosition(x, y)
+
+    @synchronized(lock)
     def getCameraChannelNames(self) -> Tuple[str, ...]:
         return tuple(
             self.getCameraChannelName(i)
             for i in range(self.getNumberOfCameraChannels())
         )
 
-    def run_mda(self, sequence: MDASequence) -> None:
-        self.events.sequenceStarted.emit(sequence)
-        logger.info("MDA Started: {}", sequence)
-        self._paused = False
-        paused_time = 0.0
-        t0 = time.perf_counter()  # reference time, in seconds
+    @synchronized(lock)
+    def snapImage(self) -> None:
+        return super().snapImage()
 
-        def check_canceled():
-            if self._canceled:
-                logger.warning("MDA Canceled: {}", sequence)
-                self.events.sequenceCanceled.emit(sequence)
-                self._canceled = False
-                return True
-            return False
+    @property
+    def mda(self):
+        return self._mda_engine
 
-        for event in sequence:
-            while self._paused and not self._canceled:
-                paused_time += 0.1  # fixme: be more precise
-                time.sleep(0.1)
+    def run_mda(self, sequence: MDASequence) -> Thread:
+        """
+        Run MDA defined by *sequence* on a new thread. The currently
+        registered MDAEngine (``core.mda``) will be responsible for executing
+        the acquisition.
 
-            if check_canceled():
-                break
+        After starting the sequence you can pause or cancel with the mda with
+        the mda object's ``toggle_pause`` and ``cancel`` methods.
 
-            if event.min_start_time:
-                go_at = event.min_start_time + paused_time
-                # We need to enter a loop here checking paused and canceled.
-                # otherwise you'll potentially wait a long time to cancel
-                to_go = go_at - (time.perf_counter() - t0)
-                while to_go > 0:
-                    while self._paused and not self._canceled:
-                        paused_time += 0.1  # fixme: be more precise
-                        to_go += 0.1
-                        time.sleep(0.1)
+        Parameters
+        ----------
+        sequence : useq.MDASequence
 
-                    if self._canceled:
-                        break
-                    if to_go > 0.5:
-                        time.sleep(0.5)
-                    else:
-                        time.sleep(to_go)
-                    to_go = go_at - (time.perf_counter() - t0)
+        Returns
+        -------
+        Thread
+            The thread the MDA is running on.
+        """
+        if self._mda_engine.is_running():
+            raise ValueError(
+                "Cannot start an MDA while the previous MDA is still running."
+            )
+        th = Thread(target=self._mda_engine.run, args=(sequence,))
+        th.start()
+        return th
 
-            # check canceled again in case it was canceled
-            # during the waiting loop
-            if check_canceled():
-                break
+    def register_mda_engine(self, engine):
+        """
+        Set the MDA Engine to be used on ``run_mda``. This will unregister
+        the previous engine and emit an ``mdaEngineRegistered`` signal. The
+        current Engine must not be running an MDA in order to register a new engine.
 
-            logger.info(event)
-
-            # prep hardware
-            if event.x_pos is not None or event.y_pos is not None:
-                x = event.x_pos or self.getXPosition()
-                y = event.y_pos or self.getYPosition()
-                self.setXYPosition(x, y)
-            if event.z_pos is not None:
-                self.setZPosition(event.z_pos)
-            if event.channel is not None:
-                self.setConfig(event.channel.group, event.channel.config)
-            if event.exposure is not None:
-                self.setExposure(event.exposure)
-
-            # acquire
-            self.waitForSystem()
-            self.snapImage()
-            img = self.getImage()
-
-            self.events.frameReady.emit(img, event)
-
-        logger.info("MDA Finished: {}", sequence)
-        self.events.sequenceFinished.emit(sequence)
+        Parameters
+        ----------
+        engine : PMDAEngine
+            Any object conforming to the PMDAEngine protocol.
+        """
+        if not isinstance(engine, PMDAEngine):
+            raise TypeError("Engine does not conform to the Engine protocol.")
+        if self._mda_engine.is_running():
+            raise ValueError(
+                "Cannot register a new engine when the current engine is running "
+                "an acquistion. Please cancel the current engine's acquistion "
+                "before registering"
+            )
+        previous_engine, self._mda_engine = self._mda_engine, engine
+        self.events.mdaEngineRegistered.emit(engine, previous_engine)
 
     def _fix_image(self, img: np.ndarray) -> np.ndarray:
         """Fix img shape/dtype based on `self.getNumberOfComponents()`.
@@ -489,6 +631,30 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
 
+    def snap(self, *args, fix=True) -> np.ndarray:
+        """
+        snap and return an image.
+
+        In contrast to ``snapImage`` this will directly return the image
+        without also calling ``getImage``.
+
+        Parameters
+        ----------
+        *args :
+            Passed through to ``getImage``
+        fix : bool, default: True
+            Whether to fix the shape of images with n_components >1
+            Pass on to ``getImage``
+
+        Returns
+        -------
+        img : np.ndarray
+        """
+        self.snapImage()
+        img = self.getImage()
+        self.events.imageSnapped.emit(img)
+        return img
+
     def getImage(self, *args, fix=True) -> np.ndarray:
         """Exposes the internal image buffer.
 
@@ -497,13 +663,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         img = super().getImage(*args)
         return self._fix_image(img) if fix else img
-
-    def cancel(self):
-        self._canceled = True
-
-    def toggle_pause(self):
-        self._paused = not self._paused
-        self.events.sequencePauseToggled.emit(self._paused)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
@@ -528,6 +687,49 @@ class CMMCorePlus(pymmcore.CMMCore):
             "XYStageDevice": self.getXYStageDevice(),  # 156 ns
             "ZPosition": self.getZPosition(),  # 1.03 µs
         }
+
+    @contextmanager
+    def _property_change_emission_ensured(self, device: str, properties: Sequence[str]):
+        """Context that emits events if any of `properties` change on device.
+
+        As stated by Nico: "Callbacks are mainly used to give devices the opportunity to
+        signal back to the UI."
+        https://forum.image.sc/t/micromanager-events-core-events-not-coming-through/53014/2
+
+        Because it's left to the device adapter to emit a signal, in many cases uses
+        `setProperty()` will NOT lead to a new `propertyChanged` event getting emitted.
+        But that makes it hard to create listeners (i.e. in the gui or elsewhere).
+
+        While this method override cannot completely solve that problem (core-internal
+        changes will still lack an associated event emission in many cases), it can at
+        least guarantee that if we use `CMMCorePlus.setProperty` to change the property,
+        then a `propertyChanged` event will be emitted if the value did indeed change.
+
+        NOTE: Depending on device adapter behavior the signal may be emitted twice.
+
+        Parameters
+        ----------
+        device : str
+            a device label
+        properties : Sequence[str]
+            a sequence of property names to monitor
+        """
+
+        # make sure that changing either state device property emits both signals
+        if (
+            len(properties) == 1
+            and properties[0] in STATE_PROPS
+            and self.getDeviceType(device) is DeviceType.StateDevice
+        ):
+            properties = STATE_PROPS
+
+        before = [self.getProperty(device, p) for p in properties]
+        with _blockSignal(self.events, self.events.propertyChanged):
+            yield
+        after = [self.getProperty(device, p) for p in properties]
+        if before != after:
+            for i, val in enumerate(after):
+                self.events.propertyChanged.emit(device, properties[i], val)
 
 
 for name in (
@@ -555,7 +757,7 @@ for name in (
 class _MMCallbackRelay(pymmcore.MMEventCallback):
     """Relays MMEventCallback methods to CMMCorePlus.signal."""
 
-    def __init__(self, emitter: _CMMCoreSignaler):
+    def __init__(self, emitter: CMMCoreSignaler):
         self._emitter = emitter
         super().__init__()
 

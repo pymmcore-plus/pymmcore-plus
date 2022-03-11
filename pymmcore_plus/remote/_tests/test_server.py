@@ -1,11 +1,14 @@
 from unittest.mock import MagicMock, patch
 
-from pymmcore_plus.server import pyroCMMCore, serve
+import pytest
+
+pytest.importorskip("Pyro5")
+from pymmcore_plus.remote.server import pyroCMMCore, serve  # noqa
 
 
 def test_server():
     core = pyroCMMCore()
-    core.loadSystemConfiguration("demo")
+    core.loadSystemConfiguration()
 
     assert core.getDeviceAdapterSearchPaths()
     cb = MagicMock()

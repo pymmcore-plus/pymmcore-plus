@@ -1,9 +1,11 @@
 import numpy as np
 from psygnal import Signal
-from useq import MDAEvent, MDASequence
+
+from ...mda import MDAEngine
+from ._prop_event_mixin import _DevicePropertyEventMixin
 
 
-class _CMMCoreSignaler:
+class CMMCoreSignaler(_DevicePropertyEventMixin):
     """Signals that will be emitted from CMMCorePlus and RemoteMMCore objects."""
 
     # native MMCore callback events
@@ -21,11 +23,8 @@ class _CMMCoreSignaler:
     SLMExposureChanged = Signal(str, float)
 
     # added for CMMCorePlus
-    sequenceStarted = Signal(MDASequence)  # at the start of an MDA sequence
-    sequencePauseToggled = Signal(bool)  # when MDA is paused/unpaused
-    sequenceCanceled = Signal(MDASequence)  # when mda is canceled
-    sequenceFinished = Signal(MDASequence)  # when mda is done (whether canceled or not)
-    frameReady = Signal(np.ndarray, MDAEvent)  # after each event in the sequence
+    imageSnapped = Signal(np.ndarray)  # whenever snap is called
+    mdaEngineRegistered = Signal(MDAEngine, MDAEngine)
 
     # aliases for lower casing
     @property

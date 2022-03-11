@@ -1,6 +1,9 @@
 import json
 import os
 import re
+from pathlib import Path
+from threading import Thread
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -8,6 +11,8 @@ import psygnal
 import pymmcore
 import pytest
 from pymmcore import CMMCore, PropertySetting
+from qtpy.QtCore import QObject
+from qtpy.QtCore import SignalInstance as QSignalInstance
 from useq import MDASequence
 
 from pymmcore_plus import (
@@ -18,17 +23,11 @@ from pymmcore_plus import (
     Metadata,
     PropertyType,
 )
+from pymmcore_plus.core.events import CMMCoreSignaler
+from pymmcore_plus.mda import MDAEngine
 
-
-@pytest.fixture
-def core():
-    core = CMMCorePlus()
-    if not core.getDeviceAdapterSearchPaths():
-        pytest.fail(
-            "To run tests, please install MM with `python -m pymmcore_plus.install`"
-        )
-    core.loadSystemConfiguration("demo")
-    return core
+if TYPE_CHECKING:
+    from pytestqt.qtbot import QtBot
 
 
 def test_core(core: CMMCorePlus):
@@ -36,9 +35,14 @@ def test_core(core: CMMCorePlus):
     assert isinstance(core, CMMCore)
     # because the fixture tries to find micromanager, this should be populated
     assert core.getDeviceAdapterSearchPaths()
-    assert isinstance(core.events.propertyChanged, psygnal.SignalInstance)
-    assert not core._canceled
-    assert not core._paused
+    assert isinstance(
+        core.events.propertyChanged, (psygnal.SignalInstance, QSignalInstance)
+    )
+    assert isinstance(
+        core.mda.events.frameReady, (psygnal.SignalInstance, QSignalInstance)
+    )
+    assert not core.mda._canceled
+    assert not core.mda._paused
 
     # because the fixture loadsSystemConfig 'demo'
     assert len(core.getLoadedDevices()) == 12
@@ -55,17 +59,45 @@ def test_search_paths(core: CMMCorePlus):
         core.setDeviceAdapterSearchPaths("test_path")
 
 
-def test_cb_exceptions(core: CMMCorePlus, caplog):
+def test_load_system_config(core: CMMCorePlus):
+    with pytest.raises(FileNotFoundError):
+        core.loadSystemConfiguration("nonexistent")
+
+    config_path = Path(__file__).parent / "local_config.cfg"
+    core.loadSystemConfiguration(str(config_path))
+    assert core.getLoadedDevices() == (
+        "DHub",
+        "Camera",
+        "Dichroic",
+        "Emission",
+        "Excitation",
+        "Objective",
+        "Z",
+        "Path",
+        "XY",
+        "Shutter",
+        "Autofocus",
+        "Core",
+    )
+
+
+def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot: "QtBot"):
     @core.events.propertyChanged.connect
     def _raze():
         raise ValueError("Boom")
 
     # using this to avoid our setProperty override... which would immediately
     # raise the exception (we want it to be raised deeper)
-    pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
-
-    msg = caplog.records[0].message
-    assert msg == "Exception occured in MMCorePlus callback 'propertyChanged': Boom"
+    if isinstance(core.events, CMMCoreSignaler):
+        pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
+        msg = caplog.records[0].message
+        assert msg == "Exception occured in MMCorePlus callback 'propertyChanged': Boom"
+    else:
+        with qtbot.capture_exceptions() as exceptions:
+            with qtbot.waitSignal(core.events.propertyChanged):
+                pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
+        assert len(exceptions) == 1
+        assert str(exceptions[0][1]) == "Boom"
 
 
 def test_new_position_methods(core: CMMCorePlus):
@@ -82,7 +114,7 @@ def test_new_position_methods(core: CMMCorePlus):
     assert round(z2, 2) == z1 + 1
 
 
-def test_mda(core: CMMCorePlus):
+def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     """Test signal emission during MDA"""
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
@@ -97,14 +129,15 @@ def test_mda(core: CMMCorePlus):
     stage_mock = MagicMock()
     exp_mock = MagicMock()
 
-    core.events.frameReady.connect(fr_mock)
-    core.events.sequenceStarted.connect(ss_mock)
-    core.events.sequenceFinished.connect(sf_mock)
+    core.mda._events.frameReady.connect(fr_mock)
+    core.mda._events.sequenceStarted.connect(ss_mock)
+    core.mda._events.sequenceFinished.connect(sf_mock)
     core.events.XYStagePositionChanged.connect(xystage_mock)
     core.events.stagePositionChanged.connect(stage_mock)
     core.events.exposureChanged.connect(exp_mock)
 
-    core.run_mda(mda)
+    with qtbot.waitSignal(core.mda._events.sequenceFinished):
+        core.run_mda(mda)
     assert fr_mock.call_count == len(list(mda))
     for event, _call in zip(mda, fr_mock.call_args_list):
         assert isinstance(_call.args[0], np.ndarray)
@@ -128,10 +161,10 @@ def test_mda(core: CMMCorePlus):
     )
 
 
-def test_mda_pause_cancel(core: CMMCorePlus):
+def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
     """Test signal emission during MDA with cancelation"""
     mda = MDASequence(
-        time_plan={"interval": 0.1, "loops": 2},
+        time_plan={"interval": 0.25, "loops": 10},
         stage_positions=[(1, 1, 1)],
         z_plan={"range": 3, "step": 1},
         channels=[{"config": "DAPI", "exposure": 1}],
@@ -142,32 +175,77 @@ def test_mda_pause_cancel(core: CMMCorePlus):
     sf_mock = MagicMock()
     ss_mock = MagicMock()
 
-    core.events.sequenceStarted.connect(ss_mock)
-    core.events.sequencePauseToggled.connect(pause_mock)
-    core.events.sequenceCanceled.connect(cancel_mock)
-    core.events.sequenceFinished.connect(sf_mock)
+    core.mda._events.sequenceStarted.connect(ss_mock)
+    core.mda._events.sequencePauseToggled.connect(pause_mock)
+    core.mda._events.sequenceCanceled.connect(cancel_mock)
+    core.mda._events.sequenceFinished.connect(sf_mock)
 
     _fcount = 0
 
-    @core.events.frameReady.connect
+    @core.mda._events.frameReady.connect
     def _onframe(frame, event):
         nonlocal _fcount
         _fcount += 1
-        if _fcount == 2:
-            core.toggle_pause()
+        if _fcount == 1:
+            core.mda.toggle_pause()
             pause_mock.assert_called_with(True)
-            core.toggle_pause()
+            core.mda.toggle_pause()
             pause_mock.assert_called_with(False)
-        elif _fcount == 4:
-            core.cancel()
+        elif _fcount == 2:
+            core.mda.cancel()
 
-    core.run_mda(mda)
+    with qtbot.waitSignal(core.mda._events.sequenceFinished):
+        core.run_mda(mda)
 
     ss_mock.assert_called_once_with(mda)
     cancel_mock.assert_called_once_with(mda)
-    assert _fcount == 4
     assert _fcount < len(list(mda))
     sf_mock.assert_called_once_with(mda)
+
+
+def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
+    orig_engine = core.mda
+
+    registered_mock = MagicMock()
+    core.events.mdaEngineRegistered.connect(registered_mock)
+
+    # fake that mda is running
+    # with an actual mda the threading and timing is
+    # such that this ends up being a flaky test if we
+    # use `core.run_mda`
+    core.mda._running = True
+    new_engine = MDAEngine(core)
+    with pytest.raises(ValueError):
+        core.register_mda_engine(new_engine)
+    core.mda._running = False
+
+    with qtbot.waitSignal(core.events.mdaEngineRegistered):
+        core.register_mda_engine(new_engine)
+    assert core._mda_engine is new_engine
+
+    # invalid engine
+    class nonconforming_engine:
+        pass
+
+    with pytest.raises(TypeError):
+        core.register_mda_engine(nonconforming_engine())
+    registered_mock.assert_called_once_with(new_engine, orig_engine)
+
+
+def test_not_concurrent_mdas(core, qtbot: "QtBot"):
+    mda = MDASequence(
+        time_plan={"interval": 0.1, "loops": 2},
+        stage_positions=[(1, 1, 1)],
+        z_plan={"range": 3, "step": 1},
+        channels=[{"config": "DAPI", "exposure": 1}],
+    )
+    core.mda._running = True
+    assert core.mda.is_running()
+    with pytest.raises(ValueError):
+        core.run_mda(mda)
+    core.mda._running = False
+    core.run_mda(mda)
+    core.mda.cancel()
 
 
 def test_device_type_overrides(core: CMMCorePlus):
@@ -198,8 +276,8 @@ def test_metadata(core: CMMCorePlus):
     image, md = core.getLastImageMD()
     assert isinstance(md, Metadata)
     assert md["Height"] == "512"
-    assert "Binning" in md.keys()
-    assert ("ImageNumber", "0") in md.items()
+    assert "ImageNumber" in md.keys()
+    assert ("Binning", "1") in md.items()
     assert "GRAY16" in md.values()
 
     assert "Camera" in md
@@ -289,27 +367,6 @@ def test_property_schema(core: CMMCorePlus):
     assert schema["properties"]["AllowMultiROI"] == {"type": "boolean"}
 
 
-def test_set_property_events(core: CMMCorePlus):
-    """Test that using setProperty always emits a propertyChanged event."""
-    mock = MagicMock()
-    core.events.propertyChanged.connect(mock)
-    core.setProperty("Camera", "Binning", "2")
-    mock.assert_called_once_with("Camera", "Binning", "2")
-
-    mock.reset_mock()
-    core.setProperty("Camera", "Binning", "1")
-    mock.assert_called_once_with("Camera", "Binning", "1")
-
-    mock.reset_mock()
-    core.setProperty("Camera", "Binning", "1")
-    mock.assert_not_called()  # value didn't change
-
-    # this is not a property that the DemoCamera emits...
-    # so with regular pymmcore, this would not be emitted.
-    core.setProperty("Camera", "AllowMultiROI", "1")
-    mock.assert_called_once_with("Camera", "AllowMultiROI", "1")
-
-
 def test_get_objectives(core: CMMCorePlus):
     devices = core.guessObjectiveDevices()
     assert len(devices) == 1
@@ -330,28 +387,92 @@ def test_get_objectives(core: CMMCorePlus):
 
 
 def test_guess_channel_group(core: CMMCorePlus):
+
     chan_group = core.getChannelGroup()
-    assert core.getOrGuessChannelGroup() == chan_group
+    assert chan_group == "Channel"
+
+    assert core.getOrGuessChannelGroup() == ["Channel"]
+
     with patch.object(core, "getChannelGroup", return_value=""):
-        assert core.getOrGuessChannelGroup() == "Channel"
+        assert core.getOrGuessChannelGroup() == ["Channel"]
 
         with pytest.raises(TypeError):
             core.channelGroup_pattern = 4
 
         # assign a new regex that won't match Channel using a str
-        # this will return Camera, but that's because this a bad regex
+        # this will return all the mm groups, but that's because this a bad regex
         # to use
         core.channelGroup_pattern = "^((?!(Channel)).)*$"
-        assert core.getOrGuessChannelGroup() == "Camera"
+        assert core.getOrGuessChannelGroup() == [
+            "Camera",
+            "LightPath",
+            "Objective",
+            "System",
+        ]
 
         # assign new using a pre-compile pattern
         core.channelGroup_pattern = re.compile("Channel")
         chan_group = core.getOrGuessChannelGroup()
-        assert chan_group == "Channel"
+        assert chan_group == ["Channel"]
 
 
-def test_aliased_signals(core: CMMCorePlus):
-    xy_cb = MagicMock()
-    core.events.xYStagePositionChanged.connect(xy_cb)
-    core.setXYPosition(1.0, 1.5)
-    xy_cb.assert_has_calls([call("XY", 1.005, 1.5), call("XY", 1.0, 1.5)])
+def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
+    if not isinstance(core.events, QObject):
+        pytest.skip(reason="Skip lock tests on psygnal until we can remove qtbot.")
+
+    # when a function with a lock triggers a callback
+    # that callback should be able to call locked functions
+    # without hanging.
+
+    # do some threading silliness here so we don't accidentally hang our
+    # test if things go wrong have to use *got_lock* to check because we
+    # can't assert in the function as theads don't throw their exceptions
+    # back into the calling thread.
+    got_lock = False
+
+    def cb(*args, **kwargs):
+        nonlocal got_lock
+        got_lock = core.lock.acquire(timeout=0.1)
+        if got_lock:
+            core.lock.release()
+
+    core.events.XYStagePositionChanged.connect(cb)
+
+    def trigger_cb():
+        core.setXYPosition(4, 5)
+
+    th = Thread(target=trigger_cb)
+    with qtbot.waitSignal(core.events.XYStagePositionChanged):
+        th.start()
+    assert got_lock
+    got_lock = False
+
+    core.mda._events.frameReady.connect(cb)
+    mda = MDASequence(
+        time_plan={"interval": 0.1, "loops": 2},
+        stage_positions=[(1, 1, 1)],
+        z_plan={"range": 3, "step": 1},
+        channels=[{"config": "DAPI", "exposure": 1}],
+    )
+
+    with qtbot.waitSignal(core.mda._events.sequenceFinished):
+        core.run_mda(mda)
+    assert got_lock
+
+
+def test_single_instance():
+    core1 = CMMCorePlus.instance()
+    core2 = CMMCorePlus.instance()
+    assert core1 is core2
+
+
+def test_setPosition_overload(core: CMMCorePlus):
+    core.setPosition(5)
+    dev = core.getFocusDevice()
+    core.setPosition(dev, 4)
+
+
+def test_unload_devices(core: CMMCorePlus):
+    assert len(core.getLoadedDevices()) > 2
+    core.unloadAllDevices()
+    assert len(core.getLoadedDevices()) == 1

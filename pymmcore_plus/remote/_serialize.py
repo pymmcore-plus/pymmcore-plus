@@ -11,7 +11,7 @@ import Pyro5.api
 import useq
 from pydantic.datetime_parse import parse_duration
 
-from .core import Configuration, Metadata
+from ..core import Configuration, Metadata
 
 Pyro5.config.SERIALIZER = "msgpack"
 T = TypeVar("T")

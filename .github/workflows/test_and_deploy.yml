@@ -21,7 +21,7 @@ jobs:
       fail-fast: false
       matrix:
         platform: [windows-latest, macos-latest]
-        python-version: [3.8, 3.9]
+        python-version: ['3.8', '3.9', '3.10']
 
     steps:
       - uses: actions/checkout@v2
@@ -34,23 +34,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[testing]
-
-      - uses: actions/cache@v2
-        id: cache
-        with:
-          path: pymmcore_plus/Micro-Manager-*
-          key: ${{ hashFiles('pymmcore_plus/install.py') }}
+          pip install -e .[remote,testing]
 
       - name: Install Micro-Manager
-        if: steps.cache.outputs.cache-hit != 'true'
         run: python -m pymmcore_plus.install
 
       - name: Test
         run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
 
       - name: Coverage
-        uses: codecov/codecov-action@v1
+        uses: codecov/codecov-action@v2
 
   deploy:
     needs: test
@@ -63,12 +56,16 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -U setuptools setuptools_scm wheel twine
+          python -m pip install build twine
       - name: Build and publish
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.TWINE_API_KEY }}
         run: |
           git tag
-          python setup.py sdist bdist_wheel
+          python -m build
+          twine check dist/*
           twine upload dist/*
+      - uses: softprops/action-gh-release@v1
+        with:
+          generate_release_notes: true

@@ -1,14 +1,16 @@
 __all__ = [
+    "ActionType",
     "CMMCorePlus",
     "Configuration",
-    "Metadata",
-    "DeviceType",
-    "PropertyType",
-    "ActionType",
-    "PortType",
-    "FocusDirection",
-    "DeviceNotification",
     "DeviceDetectionStatus",
+    "DeviceNotification",
+    "DeviceType",
+    "Device",
+    "FocusDirection",
+    "Metadata",
+    "DeviceProperty",
+    "PortType",
+    "PropertyType",
 ]
 
 from ._config import Configuration
@@ -21,5 +23,7 @@ from ._constants import (
     PortType,
     PropertyType,
 )
+from ._device import Device
 from ._metadata import Metadata
 from ._mmcore_plus import CMMCorePlus
+from ._property import DeviceProperty

@@ -41,8 +41,8 @@ def serve():
     import Pyro5
     from loguru import logger
 
-    from pymmcore_plus._serialize import register_serializers
-    from pymmcore_plus.server import pyroCMMCore
+    from pymmcore_plus.remote._serialize import register_serializers
+    from pymmcore_plus.remote.server import pyroCMMCore
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT, help="port")

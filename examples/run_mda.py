@@ -10,6 +10,13 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
-mmc = CMMCorePlus()
-mmc.loadSystemConfiguration("demo")
-mmc.run_mda(sequence)
+mmc = CMMCorePlus.instance()
+mmc.loadSystemConfiguration()
+
+
+@mmc.mda.events.frameReady.connect
+def new_frame(img, event):
+    print(img.shape)
+
+
+mda_thread = mmc.run_mda(sequence)

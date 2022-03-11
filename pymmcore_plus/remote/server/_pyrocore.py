@@ -4,15 +4,15 @@ from typing import TYPE_CHECKING, Set
 from Pyro5 import errors
 from Pyro5.api import behavior, expose, oneway
 
+from ...core._mmcore_plus import CMMCorePlus
+from ...core.events import CMMCoreSignaler
 from .._util import wrap_for_pyro
-from ..core._mmcore_plus import CMMCorePlus
-from ..core._signals import _CMMCoreSignaler
 
 if TYPE_CHECKING:
     from ..client._client import CallbackProtocol
 
 
-_SIGNAL_NAMES = {name for name in dir(_CMMCoreSignaler) if not name.startswith("_")}
+_SIGNAL_NAMES = {name for name in dir(CMMCoreSignaler) if not name.startswith("_")}
 
 
 @expose
@@ -30,7 +30,10 @@ class pyroCMMCore(CMMCorePlus):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         for name in _SIGNAL_NAMES:
-            getattr(self.events, name).connect(partial(self.emit_signal, name))
+            attr = getattr(self.events, name)
+            if hasattr(attr, "connect"):
+                # FIXME: devicePropertyChanged will not work on Remote
+                attr.connect(partial(self.emit_signal, name))
 
     def connect_remote_callback(self, handler: "CallbackProtocol"):
         self._callback_handlers.add(handler)

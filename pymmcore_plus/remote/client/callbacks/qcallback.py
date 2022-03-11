@@ -1,8 +1,12 @@
 from Pyro5.api import expose
 from qtpy.QtCore import QObject, Signal
 
+# For some reason, subclassing from core.events._qsignals seems to sometimes affect
+# the event emission order in the tests.  Not sure why, so keeping this as it's own
+# class for now
 
-class QCoreCallback(QObject):
+
+class QCoreSignaler(QObject):
 
     # native MMCore callback events
     propertiesChanged = Signal()
@@ -26,6 +30,7 @@ class QCoreCallback(QObject):
     sequenceCanceled = Signal(object)  # when mda is canceled
     sequenceFinished = Signal(object)  # when mda is done (whether canceled or not)
     frameReady = Signal(object, object)  # after each event in the sequence
+    imageSnapped = Signal(object)  # after an image is snapped
 
     @expose
     def receive_core_callback(self, signal_name, args):
