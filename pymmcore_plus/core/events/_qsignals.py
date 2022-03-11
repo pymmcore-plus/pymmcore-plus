@@ -26,6 +26,9 @@ class QCoreSignaler(QObject):
     # added for CMMCorePlus
     imageSnapped = Signal(object)  # after an image is snapped
     mdaEngineRegistered = Signal(object, object)  # new engine, old engine
+    continuousSequenceAcquisition = Signal(bool)  # for continuousSequenceAcquisition
+    groupDeleted = Signal(str)  # when a group is deleted
+    presetDeleted = Signal(str, str)  # when a  preset is deleted
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:

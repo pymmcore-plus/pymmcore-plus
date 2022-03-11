@@ -25,6 +25,9 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     # added for CMMCorePlus
     imageSnapped = Signal(np.ndarray)  # whenever snap is called
     mdaEngineRegistered = Signal(MDAEngine, MDAEngine)
+    continuousSequenceAcquisition = Signal(bool)
+    groupDeleted = Signal(str)
+    presetDeleted = Signal(str, str)
 
     # aliases for lower casing
     @property
