@@ -661,22 +661,22 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def startContinuousSeqAcquisition(self) -> None:
         """Start a ContinuousSequenceAcquisition."""
-        DeviceType(super().startContinuousSequenceAcquisition(0))
+        super().startContinuousSequenceAcquisition(0)
         self.events.continuousSequenceAcquisition.emit(True)
         
     def stopSeqAcquisition(self) -> None:
         """Stop a ContinuousSequenceAcquisition."""
-        DeviceType(super().stopSequenceAcquisition())
+        super().stopSequenceAcquisition()
         self.events.continuousSequenceAcquisition.emit(False)
         
     def deleteGroup(self, group_name: str)-> None:
         """Delete a group from the system configuration."""
-        DeviceType(super().deleteConfigGroup(group_name))
+        super().deleteConfigGroup(group_name)
         self.events.groupDeleted.emit(group_name)
     
     def deletePreset(self, group_name: str, preset_name: str)-> None:
         """Delete a preset from the system configuration."""
-        DeviceType(super().deleteConfig(group_name, preset_name))
+        super().deleteConfig(group_name, preset_name)
         self.events.groupDeleted.emit(group_name, preset_name)
 
     def state(self, exclude=()) -> dict:
