@@ -663,7 +663,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Start a ContinuousSequenceAcquisition."""
         super().startContinuousSequenceAcquisition(0)
         self.events.continuousSequenceAcquisition.emit(True)
-        
+
     def stopSeqAcquisition(self) -> None:
         """Stop a ContinuousSequenceAcquisition."""
         super().stopSequenceAcquisition()
