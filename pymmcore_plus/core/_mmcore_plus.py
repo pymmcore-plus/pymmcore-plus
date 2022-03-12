@@ -668,16 +668,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Stop a ContinuousSequenceAcquisition."""
         super().stopSequenceAcquisition()
         self.events.continuousSequenceAcquisition.emit(False)
-        
-    def deleteGroup(self, group_name: str)-> None:
-        """Delete a group from the system configuration."""
-        super().deleteConfigGroup(group_name)
-        self.events.groupDeleted.emit(group_name)
-    
-    def deletePreset(self, group_name: str, preset_name: str)-> None:
-        """Delete a preset from the system configuration."""
-        super().deleteConfig(group_name, preset_name)
-        self.events.groupDeleted.emit(group_name, preset_name)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
