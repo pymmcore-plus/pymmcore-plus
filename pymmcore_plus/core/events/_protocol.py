@@ -36,5 +36,3 @@ class PCoreSignaler(Protocol):
     imageSnapped: PSignalInstance
     mdaEngineRegistered: PSignalInstance
     continuousSequenceAcquisition: PSignalInstance
-    groupDeleted: PSignalInstance
-    presetDeleted: PSignalInstance
