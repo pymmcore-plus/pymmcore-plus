@@ -35,4 +35,7 @@ class PCoreSignaler(Protocol):
     # added for CMMCorePlus
     imageSnapped: PSignalInstance
     mdaEngineRegistered: PSignalInstance
-    continuousSequenceAcquisition: PSignalInstance
+    startContinuousSequenceAcquisition: PSignalInstance
+    startSequenceAcquisition: PSignalInstance
+    stopSequenceAcquisition: PSignalInstance
+

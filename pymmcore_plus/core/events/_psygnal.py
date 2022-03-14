@@ -1,6 +1,8 @@
 import numpy as np
 from psygnal import Signal
 
+from typing import Optional
+
 from ...mda import MDAEngine
 from ._prop_event_mixin import _DevicePropertyEventMixin
 
@@ -25,7 +27,9 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     # added for CMMCorePlus
     imageSnapped = Signal(np.ndarray)  # whenever snap is called
     mdaEngineRegistered = Signal(MDAEngine, MDAEngine)
-    continuousSequenceAcquisition = Signal(bool)
+    startContinuousSequenceAcquisition = Signal()
+    startSequenceAcquisition = Signal(str, int, float, bool)
+    stopSequenceAcquisition = Signal()
 
     # aliases for lower casing
     @property

@@ -659,15 +659,33 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().getImage(*args)
         return self._fix_image(img) if fix else img
 
-    def startContinuousSeqAcquisition(self) -> None:
+    def startContinuousSequenceAcquisition(
+        self, intervalMs: float = 0
+    ) -> None:
         """Start a ContinuousSequenceAcquisition."""
-        super().startContinuousSequenceAcquisition(0)
-        self.events.continuousSequenceAcquisition.emit(True)
-        
-    def stopSeqAcquisition(self) -> None:
+        super().startContinuousSequenceAcquisition(intervalMs)
+        self.events.startContinuousSequenceAcquisition.emit()
+
+    def startSequenceAcquisition(
+        self,
+        numImages: int,
+        intervalMs: float,
+        stopOnOverflow: bool,
+        cameraLabel: Optional[str] = None
+    ) -> None:
+        cameraLabel = cameraLabel or super().getCameraDevice()
+        super().startSequenceAcquisition(
+            cameraLabel, numImages, intervalMs, stopOnOverflow
+        )
+        self.events.startSequenceAcquisition.emit(
+            cameraLabel, numImages, intervalMs, stopOnOverflow
+        )
+
+    def stopSequenceAcquisition(self, cameraLabel: Optional[str] = None) -> None:
         """Stop a ContinuousSequenceAcquisition."""
-        super().stopSequenceAcquisition()
-        self.events.continuousSequenceAcquisition.emit(False)
+        cameraLabel = cameraLabel or super().getCameraDevice()
+        super().stopSequenceAcquisition(cameraLabel)
+        self.events.stopSequenceAcquisition.emit()
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
