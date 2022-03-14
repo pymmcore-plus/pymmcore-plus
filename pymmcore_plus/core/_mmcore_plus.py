@@ -659,9 +659,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().getImage(*args)
         return self._fix_image(img) if fix else img
 
-    def startContinuousSequenceAcquisition(
-        self, intervalMs: float = 0
-    ) -> None:
+    def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition."""
         super().startContinuousSequenceAcquisition(intervalMs)
         self.events.startContinuousSequenceAcquisition.emit()
