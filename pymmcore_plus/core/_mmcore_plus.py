@@ -669,7 +669,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         numImages: int,
         intervalMs: float,
         stopOnOverflow: bool,
-        cameraLabel: Optional[str] = None
+        cameraLabel: Optional[str] = None,
     ) -> None:
         cameraLabel = cameraLabel or super().getCameraDevice()
         super().startSequenceAcquisition(
