@@ -1,8 +1,6 @@
 import numpy as np
 from psygnal import Signal
 
-from typing import Optional
-
 from ...mda import MDAEngine
 from ._prop_event_mixin import _DevicePropertyEventMixin
 

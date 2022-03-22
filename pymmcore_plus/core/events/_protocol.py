@@ -38,4 +38,3 @@ class PCoreSignaler(Protocol):
     startContinuousSequenceAcquisition: PSignalInstance
     startSequenceAcquisition: PSignalInstance
     stopSequenceAcquisition: PSignalInstance
-
