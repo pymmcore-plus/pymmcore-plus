@@ -26,6 +26,7 @@ class QCoreSignaler(QObject):
     # added for CMMCorePlus
     imageSnapped = Signal(object)  # after an image is snapped
     mdaEngineRegistered = Signal(object, object)  # new engine, old engine
+    autoShutterSet = Signal(bool)
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:
