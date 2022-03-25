@@ -36,3 +36,4 @@ class PCoreSignaler(Protocol):
     imageSnapped: PSignalInstance
     mdaEngineRegistered: PSignalInstance
     autoShutterSet: PSignalInstance
+    shutterSet: PSignalInstance
