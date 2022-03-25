@@ -671,12 +671,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         intervalMs: float,
         stopOnOverflow: bool,
     ) -> None:
-        super().startSequenceAcquisition(
-            numImages, intervalMs, stopOnOverflow
-        )
-        self.events.startSequenceAcquisition.emit(
-            super().getCameraDevice(), numImages, intervalMs, stopOnOverflow,
-        )
+        ...
 
     @overload
     def startSequenceAcquisition(
@@ -686,12 +681,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         intervalMs: float,
         stopOnOverflow: bool,
     ) -> None:
-        super().startSequenceAcquisition(
-            cameraLabel, numImages, intervalMs, stopOnOverflow
-        )
-        self.events.startSequenceAcquisition.emit(
-            cameraLabel, numImages, intervalMs, stopOnOverflow
-        )
+        ...
 
     def startSequenceAcquisition(self, *args) -> None:
         if len(args) == 3:
