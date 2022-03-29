@@ -43,4 +43,5 @@ API <api/pymmcore_plus>
 examples/mda
 examples/integration-with-qt
 examples/napari-micromanager
+examples/context-set
 ```
