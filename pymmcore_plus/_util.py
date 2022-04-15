@@ -1,10 +1,12 @@
 import os
-import re
 import sys
 from pathlib import Path
 from typing import Optional
 
-camel_to_snake = re.compile(r"(?<!^)(?=[A-Z])")
+__all__ = [
+    "find_micromanager",
+    "_qt_app_is_running",
+]
 
 
 def find_micromanager() -> Optional[str]:
