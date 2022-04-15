@@ -1,3 +1,4 @@
+import importlib
 import os
 import sys
 from pathlib import Path
@@ -56,7 +57,7 @@ def find_micromanager() -> Optional[str]:
 
 def _qt_app_is_running() -> bool:
     for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
-        if qmodule := sys.modules.get(modname):
-            QtWidgets = getattr(qmodule, "QtWidgets")
+        if modname in sys.modules:
+            QtWidgets = importlib.import_module(".QtWidgets", modname)
             return QtWidgets.QApplication.instance() is not None
     return False
