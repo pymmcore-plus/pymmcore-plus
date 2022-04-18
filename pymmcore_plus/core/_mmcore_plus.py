@@ -662,11 +662,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setAutoShutter(self, state: bool):
         super().setAutoShutter(state)
         self.events.autoShutterSet.emit(state)
-    
+
     @overload
     def setShutterOpen(self, state: bool) -> int:
         ...
-    
+
     @overload
     def setShutterOpen(self, shutterLabel: str, state: bool) -> str:
         ...
@@ -680,7 +680,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             state = args
             super().setShutterOpen(state)
         self.events.shutterSet.emit(shutterLabel, state)
-    
+
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
         # approx retrieval cost in comment (for demoCam)
@@ -805,4 +805,3 @@ MMCallbackRelay = type(
         if n.startswith("on")
     },
 )
-
