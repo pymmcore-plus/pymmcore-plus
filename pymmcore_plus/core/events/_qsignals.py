@@ -33,8 +33,8 @@ class QCoreSignaler(QObject):
         str, int, float, bool
     )  # when SequenceAcquisition is started
     stopSequenceAcquisition = (
-        Signal()
-    )  # when (continuous)SequenceAcquisition is stopped
+        Signal(object)
+    )  # when (Continuous)SequenceAcquisition is stopped
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:

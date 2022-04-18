@@ -27,7 +27,7 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     mdaEngineRegistered = Signal(MDAEngine, MDAEngine)
     startContinuousSequenceAcquisition = Signal()
     startSequenceAcquisition = Signal(str, int, float, bool)
-    stopSequenceAcquisition = Signal()
+    stopSequenceAcquisition = Signal(str)
 
     # aliases for lower casing
     @property

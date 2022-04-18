@@ -118,3 +118,38 @@ def test_device_property_events(core: CMMCorePlus):
     core.setProperty("Camera", "Gain", "5")
     mock1.assert_not_called()
     mock2.assert_not_called()
+
+
+def test_sequence_acquisition_events(core: CMMCorePlus):
+
+    mock1 = Mock()
+    mock2 = Mock()
+    mock3 = Mock()
+
+    core.events.startContinuousSequenceAcquisition.connect(mock1)
+    core.events.stopSequenceAcquisition.connect(mock2)
+    core.events.startSequenceAcquisition.connect(mock3)
+
+    core.startContinuousSequenceAcquisition()
+    mock1.assert_has_calls([call(),])
+
+    core.stopSequenceAcquisition()
+    mock2.assert_has_calls([call(core.getCameraDevice()),])
+
+    # without camera label
+    core.startSequenceAcquisition(5, 100.0, True)
+    mock3.assert_has_calls(
+        [call(core.getCameraDevice(), 5, 100.0, True),]
+    )
+    core.stopSequenceAcquisition()
+    mock2.assert_has_calls([call(core.getCameraDevice()),])
+
+    # with camera label
+    cam = core.getCameraDevice()
+    core.startSequenceAcquisition(cam, 5, 100.0, True)
+    mock3.assert_has_calls(
+        [call(cam, 5, 100.0, True),]
+    )
+    core.stopSequenceAcquisition(cam)
+    mock2.assert_has_calls([call(cam),])
+

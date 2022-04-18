@@ -697,11 +697,23 @@ class CMMCorePlus(pymmcore.CMMCore):
             cameraLabel, numImages, intervalMs, stopOnOverflow
         )
 
-    def stopSequenceAcquisition(self, cameraLabel: Optional[str] = None) -> None:
-        """Stop a ContinuousSequenceAcquisition."""
-        cameraLabel = cameraLabel or super().getCameraDevice()
-        super().stopSequenceAcquisition(cameraLabel)
-        self.events.stopSequenceAcquisition.emit()
+    @overload
+    def stopSequenceAcquisition(self) -> None:
+        ...
+
+    @overload
+    def stopSequenceAcquisition(self, cameraLabel: str) -> None:
+        ...
+
+    def stopSequenceAcquisition(self, *args) -> None:
+        """Stop a SequenceAcquisition."""
+        if args:    
+            cameraLabel = args[0]
+            super().stopSequenceAcquisition(cameraLabel)
+        else:
+            super().stopSequenceAcquisition()
+            cameraLabel = super().getCameraDevice()
+        self.events.stopSequenceAcquisition.emit(cameraLabel)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
