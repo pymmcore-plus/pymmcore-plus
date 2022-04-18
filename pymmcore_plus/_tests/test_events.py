@@ -131,25 +131,44 @@ def test_sequence_acquisition_events(core: CMMCorePlus):
     core.events.startSequenceAcquisition.connect(mock3)
 
     core.startContinuousSequenceAcquisition()
-    mock1.assert_has_calls([call(),])
+    mock1.assert_has_calls(
+        [
+            call(),
+        ]
+    )
 
     core.stopSequenceAcquisition()
-    mock2.assert_has_calls([call(core.getCameraDevice()),])
+    mock2.assert_has_calls(
+        [
+            call(core.getCameraDevice()),
+        ]
+    )
 
     # without camera label
     core.startSequenceAcquisition(5, 100.0, True)
     mock3.assert_has_calls(
-        [call(core.getCameraDevice(), 5, 100.0, True),]
+        [
+            call(core.getCameraDevice(), 5, 100.0, True),
+        ]
     )
     core.stopSequenceAcquisition()
-    mock2.assert_has_calls([call(core.getCameraDevice()),])
+    mock2.assert_has_calls(
+        [
+            call(core.getCameraDevice()),
+        ]
+    )
 
     # with camera label
     cam = core.getCameraDevice()
     core.startSequenceAcquisition(cam, 5, 100.0, True)
     mock3.assert_has_calls(
-        [call(cam, 5, 100.0, True),]
+        [
+            call(cam, 5, 100.0, True),
+        ]
     )
     core.stopSequenceAcquisition(cam)
-    mock2.assert_has_calls([call(cam),])
-
+    mock2.assert_has_calls(
+        [
+            call(cam),
+        ]
+    )
