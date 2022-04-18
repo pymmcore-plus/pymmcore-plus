@@ -707,7 +707,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def stopSequenceAcquisition(self, *args) -> None:
         """Stop a SequenceAcquisition."""
-        if args:    
+        if args:
             cameraLabel = args[0]
             super().stopSequenceAcquisition(cameraLabel)
         else:
