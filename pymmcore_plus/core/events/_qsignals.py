@@ -33,7 +33,7 @@ class QCoreSignaler(QObject):
         str, int, float, bool
     )  # when SequenceAcquisition is started
     stopSequenceAcquisition = Signal(
-        object
+        str
     )  # when (Continuous)SequenceAcquisition is stopped
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
