@@ -684,15 +684,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         ...
 
     def startSequenceAcquisition(self, *args) -> None:
+        super().startSequenceAcquisition(numImages, intervalMs, stopOnOverflow)
         if len(args) == 3:
             numImages, intervalMs, stopOnOverflow = args
-            super().startSequenceAcquisition(numImages, intervalMs, stopOnOverflow)
             cameraLabel = super().getCameraDevice()
         else:
             cameraLabel, numImages, intervalMs, stopOnOverflow = args
-            super().startSequenceAcquisition(
-                cameraLabel, numImages, intervalMs, stopOnOverflow
-            )
         self.events.startSequenceAcquisition.emit(
             cameraLabel, numImages, intervalMs, stopOnOverflow
         )
