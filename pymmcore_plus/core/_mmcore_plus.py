@@ -684,7 +684,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         ...
 
     def startSequenceAcquisition(self, *args) -> None:
-        super().startSequenceAcquisition(numImages, intervalMs, stopOnOverflow)
+        super().startSequenceAcquisition(*args)
         if len(args) == 3:
             numImages, intervalMs, stopOnOverflow = args
             cameraLabel = super().getCameraDevice()
@@ -704,12 +704,8 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def stopSequenceAcquisition(self, *args) -> None:
         """Stop a SequenceAcquisition."""
-        if args:
-            cameraLabel = args[0]
-            super().stopSequenceAcquisition(cameraLabel)
-        else:
-            super().stopSequenceAcquisition()
-            cameraLabel = super().getCameraDevice()
+        super().stopSequenceAcquisition(*args)
+        cameraLabel = args[0] if args else super().getCameraDevice()
         self.events.stopSequenceAcquisition.emit(cameraLabel)
 
     def state(self, exclude=()) -> dict:
