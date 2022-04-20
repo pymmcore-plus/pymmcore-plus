@@ -672,13 +672,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         ...
 
     def setShutterOpen(self, *args):
+        super().setShutterOpen(*args)
         if len(args) > 1:
             shutterLabel, state = args
-            super().setShutterOpen(shutterLabel, state)
         else:
             shutterLabel = super().getShutterDevice()
             state = args
-            super().setShutterOpen(state)
         self.events.shutterSet.emit(shutterLabel, state)
     
     def state(self, exclude=()) -> dict:
