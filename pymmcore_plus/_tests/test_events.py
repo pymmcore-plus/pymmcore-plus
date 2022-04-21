@@ -172,6 +172,8 @@ def test_sequence_acquisition_events(core: CMMCorePlus):
             call(cam),
         ]
     )
+
+
 def test_shutter_device_events(core: CMMCorePlus):
     mock = Mock()
     core.events.shutterSet.connect(mock)

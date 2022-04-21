@@ -30,7 +30,7 @@ class QCoreSignaler(QObject):
     startContinuousSequenceAcquisition = Signal()
     # when SequenceAcquisition is started
     startSequenceAcquisition = Signal(str, int, float, bool)
-    # when (Continuous)SequenceAcquisition is stopped 
+    # when (Continuous)SequenceAcquisition is stopped
     stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
     shutterSet = Signal(str, bool)
