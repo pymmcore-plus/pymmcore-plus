@@ -681,7 +681,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         intervalMs: float,
         stopOnOverflow: bool,
     ) -> None:
-        ... # pragma: no cover
+        ...  # pragma: no cover
 
     def startSequenceAcquisition(self, *args) -> None:
         super().startSequenceAcquisition(*args)
