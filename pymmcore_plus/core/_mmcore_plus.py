@@ -702,6 +702,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             super().stopSequenceAcquisition(cameraLabel)
         cameraLabel = cameraLabel or super().getCameraDevice()
         self.events.stopSequenceAcquisition.emit(cameraLabel)
+
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
         # approx retrieval cost in comment (for demoCam)
