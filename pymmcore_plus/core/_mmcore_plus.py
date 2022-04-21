@@ -665,7 +665,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @overload
     def setShutterOpen(self, state: bool) -> int:
-        ... # pragma: no cover
+        ...  # pragma: no cover
 
     @overload
     def setShutterOpen(self, shutterLabel: str, state: bool) -> str:
