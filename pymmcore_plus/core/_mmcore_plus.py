@@ -671,7 +671,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         intervalMs: float,
         stopOnOverflow: bool,
     ) -> None:
-        ...
+        ...  # pragma: no cover
 
     @overload
     def startSequenceAcquisition(
