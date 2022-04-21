@@ -694,19 +694,35 @@ class CMMCorePlus(pymmcore.CMMCore):
             cameraLabel, numImages, intervalMs, stopOnOverflow
         )
 
-    @overload
-    def stopSequenceAcquisition(self) -> None:
-        ...
-
-    @overload
-    def stopSequenceAcquisition(self, cameraLabel: str) -> None:
-        ...
-
-    def stopSequenceAcquisition(self, *args) -> None:
+    def stopSequenceAcquisition(self, cameraLabel: Optional[str] = None) -> None:
         """Stop a SequenceAcquisition."""
-        super().stopSequenceAcquisition(*args)
-        cameraLabel = args[0] if args else super().getCameraDevice()
+        if cameraLabel is None:
+            super().stopSequenceAcquisition()
+        else:
+            super().stopSequenceAcquisition(cameraLabel)
+        cameraLabel = cameraLabel or super().getCameraDevice()
         self.events.stopSequenceAcquisition.emit(cameraLabel)
+
+    def setAutoShutter(self, state: bool):
+        super().setAutoShutter(state)
+        self.events.autoShutterSet.emit(state)
+
+    @overload
+    def setShutterOpen(self, state: bool) -> int:
+        ...  # pragma: no cover
+
+    @overload
+    def setShutterOpen(self, shutterLabel: str, state: bool) -> str:
+        ...  # pragma: no cover
+
+    def setShutterOpen(self, *args):
+        super().setShutterOpen(*args)
+        if len(args) > 1:
+            shutterLabel, state = args
+        else:
+            shutterLabel = super().getShutterDevice()
+            state = args
+        self.events.shutterSet.emit(shutterLabel, state)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""

@@ -26,15 +26,14 @@ class QCoreSignaler(QObject):
     # added for CMMCorePlus
     imageSnapped = Signal(object)  # after an image is snapped
     mdaEngineRegistered = Signal(object, object)  # new engine, old engine
-    startContinuousSequenceAcquisition = (
-        Signal()
-    )  # when continuousSequenceAcquisition is started
-    startSequenceAcquisition = Signal(
-        str, int, float, bool
-    )  # when SequenceAcquisition is started
-    stopSequenceAcquisition = Signal(
-        str
-    )  # when (Continuous)SequenceAcquisition is stopped
+    # when continuousSequenceAcquisition is started
+    startContinuousSequenceAcquisition = Signal()
+    # when SequenceAcquisition is started
+    startSequenceAcquisition = Signal(str, int, float, bool)
+    # when (Continuous)SequenceAcquisition is stopped 
+    stopSequenceAcquisition = Signal(str)
+    autoShutterSet = Signal(bool)
+    shutterSet = Signal(str, bool)
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:
