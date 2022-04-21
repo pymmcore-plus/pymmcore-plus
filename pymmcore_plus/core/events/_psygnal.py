@@ -25,6 +25,9 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     # added for CMMCorePlus
     imageSnapped = Signal(np.ndarray)  # whenever snap is called
     mdaEngineRegistered = Signal(MDAEngine, MDAEngine)
+    startContinuousSequenceAcquisition = Signal()
+    startSequenceAcquisition = Signal(str, int, float, bool)
+    stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
     shutterSet = Signal(str, bool)
 

@@ -659,6 +659,50 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().getImage(*args)
         return self._fix_image(img) if fix else img
 
+    def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
+        """Start a ContinuousSequenceAcquisition."""
+        super().startContinuousSequenceAcquisition(intervalMs)
+        self.events.startContinuousSequenceAcquisition.emit()
+
+    @overload
+    def startSequenceAcquisition(
+        self,
+        numImages: int,
+        intervalMs: float,
+        stopOnOverflow: bool,
+    ) -> None:
+        ...  # pragma: no cover
+
+    @overload
+    def startSequenceAcquisition(
+        self,
+        cameraLabel: str,
+        numImages: int,
+        intervalMs: float,
+        stopOnOverflow: bool,
+    ) -> None:
+        ...  # pragma: no cover
+
+    def startSequenceAcquisition(self, *args) -> None:
+        super().startSequenceAcquisition(*args)
+        if len(args) == 3:
+            numImages, intervalMs, stopOnOverflow = args
+            cameraLabel = super().getCameraDevice()
+        else:
+            cameraLabel, numImages, intervalMs, stopOnOverflow = args
+        self.events.startSequenceAcquisition.emit(
+            cameraLabel, numImages, intervalMs, stopOnOverflow
+        )
+
+    def stopSequenceAcquisition(self, cameraLabel: Optional[str] = None) -> None:
+        """Stop a SequenceAcquisition."""
+        if cameraLabel is None:
+            super().stopSequenceAcquisition()
+        else:
+            super().stopSequenceAcquisition(cameraLabel)
+        cameraLabel = cameraLabel or super().getCameraDevice()
+        self.events.stopSequenceAcquisition.emit(cameraLabel)
+
     def setAutoShutter(self, state: bool):
         super().setAutoShutter(state)
         self.events.autoShutterSet.emit(state)
