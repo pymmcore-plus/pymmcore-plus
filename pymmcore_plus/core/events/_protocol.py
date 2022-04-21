@@ -35,3 +35,5 @@ class PCoreSignaler(Protocol):
     # added for CMMCorePlus
     imageSnapped: PSignalInstance
     mdaEngineRegistered: PSignalInstance
+    autoShutterSet: PSignalInstance
+    shutterSet: PSignalInstance
