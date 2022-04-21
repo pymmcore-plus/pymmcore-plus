@@ -659,6 +659,27 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().getImage(*args)
         return self._fix_image(img) if fix else img
 
+    def setAutoShutter(self, state: bool):
+        super().setAutoShutter(state)
+        self.events.autoShutterSet.emit(state)
+
+    @overload
+    def setShutterOpen(self, state: bool) -> int:
+        ...  # pragma: no cover
+
+    @overload
+    def setShutterOpen(self, shutterLabel: str, state: bool) -> str:
+        ...  # pragma: no cover
+
+    def setShutterOpen(self, *args):
+        super().setShutterOpen(*args)
+        if len(args) > 1:
+            shutterLabel, state = args
+        else:
+            shutterLabel = super().getShutterDevice()
+            state = args
+        self.events.shutterSet.emit(shutterLabel, state)
+
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
         # approx retrieval cost in comment (for demoCam)

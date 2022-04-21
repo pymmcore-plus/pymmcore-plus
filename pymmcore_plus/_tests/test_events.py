@@ -118,3 +118,27 @@ def test_device_property_events(core: CMMCorePlus):
     core.setProperty("Camera", "Gain", "5")
     mock1.assert_not_called()
     mock2.assert_not_called()
+
+
+def test_shutter_device_events(core: CMMCorePlus):
+    mock = Mock()
+    core.events.shutterSet.connect(mock)
+    core.setShutterOpen("Shutter", True)
+    mock.assert_has_calls(
+        [
+            call("Shutter", True),
+        ]
+    )
+    assert core.getShutterOpen("Shutter")
+
+
+def test_autoshutter_device_events(core: CMMCorePlus):
+    mock = Mock()
+    core.events.autoShutterSet.connect(mock)
+    core.setAutoShutter(True)
+    mock.assert_has_calls(
+        [
+            call(True),
+        ]
+    )
+    assert core.getAutoShutter()
