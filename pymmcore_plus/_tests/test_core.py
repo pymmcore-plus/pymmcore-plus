@@ -476,3 +476,22 @@ def test_unload_devices(core: CMMCorePlus):
     assert len(core.getLoadedDevices()) > 2
     core.unloadAllDevices()
     assert len(core.getLoadedDevices()) == 1
+
+
+def test_setContext(core: CMMCorePlus):
+    # should work with either leading capitalization
+    with core.setContext(shutterOpen=False):
+        assert not core.getShutterOpen()
+    with core.setContext(ShutterOpen=False):
+        assert not core.getShutterOpen()
+
+    # if we set an invalid value make sure initial state is still restored
+    with pytest.raises(TypeError):
+        with core.setContext(autoShutter=False, shutterOpen="sadfsd"):
+            assert not core.getAutoShutter()
+    assert core.getAutoShutter()
+
+    with pytest.raises(ValueError):
+        with core.setContext(autoShutter=False):
+            raise ValueError
+    assert core.getAutoShutter()

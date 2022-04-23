@@ -791,6 +791,28 @@ class CMMCorePlus(pymmcore.CMMCore):
             for i, val in enumerate(after):
                 self.events.propertyChanged.emit(device, properties[i], val)
 
+    @contextmanager
+    def setContext(self, **kwargs):
+        """
+        Set core properties in a context restoring the initial values on exit.
+        """
+        orig_values = {}
+        try:
+            for name, v in kwargs.items():
+                name = name[0].upper() + name[1:]
+                try:
+                    orig_values[name] = getattr(self, f"get{name}")()
+                    getattr(self, f"set{name}")(v)
+                except AttributeError:
+                    logger.warning(f"{name} is not a valid property, skipping.")
+            yield
+        finally:
+            for k, v in orig_values.items():
+                try:
+                    getattr(self, f"set{k}")(v)
+                except AttributeError:
+                    pass
+
 
 for name in (
     "getConfigData",
