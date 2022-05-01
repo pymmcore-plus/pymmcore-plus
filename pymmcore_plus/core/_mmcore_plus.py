@@ -3,7 +3,6 @@ from __future__ import annotations
 import atexit
 import os
 import re
-from tkinter.messagebox import NO
 import weakref
 from contextlib import contextmanager
 from datetime import datetime
