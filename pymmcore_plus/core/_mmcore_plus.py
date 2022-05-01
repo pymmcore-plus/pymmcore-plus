@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import os
 import re
+from tkinter.messagebox import NO
 import weakref
 from contextlib import contextmanager
 from datetime import datetime
@@ -708,11 +709,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.autoShutterSet.emit(state)
 
     @overload
-    def setShutterOpen(self, state: bool) -> int:
+    def setShutterOpen(self, state: bool) -> None:
         ...  # pragma: no cover
 
     @overload
-    def setShutterOpen(self, shutterLabel: str, state: bool) -> str:
+    def setShutterOpen(self, shutterLabel: str, state: bool) -> None:
         ...  # pragma: no cover
 
     def setShutterOpen(self, *args):
@@ -722,7 +723,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         else:
             shutterLabel = super().getShutterDevice()
             state = args
-        self.events.shutterSet.emit(shutterLabel, state)
+        self.events.propertyChanged.emit(shutterLabel, "State", state)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
