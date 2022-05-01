@@ -3,7 +3,6 @@ from unittest.mock import Mock, call
 import pytest
 from pymmcore import g_Keyword_Label as LABEL
 from pymmcore import g_Keyword_State as STATE
-from yaml import emit
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler, QCoreSignaler
