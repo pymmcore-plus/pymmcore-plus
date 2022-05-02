@@ -39,4 +39,3 @@ class PCoreSignaler(Protocol):
     startSequenceAcquisition: PSignalInstance
     stopSequenceAcquisition: PSignalInstance
     autoShutterSet: PSignalInstance
-    shutterSet: PSignalInstance

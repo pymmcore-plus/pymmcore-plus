@@ -708,11 +708,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.autoShutterSet.emit(state)
 
     @overload
-    def setShutterOpen(self, state: bool) -> int:
+    def setShutterOpen(self, state: bool) -> None:
         ...  # pragma: no cover
 
     @overload
-    def setShutterOpen(self, shutterLabel: str, state: bool) -> str:
+    def setShutterOpen(self, shutterLabel: str, state: bool) -> None:
         ...  # pragma: no cover
 
     def setShutterOpen(self, *args):
@@ -722,7 +722,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         else:
             shutterLabel = super().getShutterDevice()
             state = args
-        self.events.shutterSet.emit(shutterLabel, state)
+        self.events.propertyChanged.emit(shutterLabel, "State", state)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
