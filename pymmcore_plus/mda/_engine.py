@@ -77,7 +77,6 @@ class MDAEngine(PMDAEngine):
         """
         self._canceled = True
         self._paused_time = 0
-        self._t0 = None
 
     def toggle_pause(self):
         """
