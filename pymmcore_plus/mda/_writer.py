@@ -32,6 +32,9 @@ class MDAWriterBase:
     def onMDAFrame(self, img: np.ndarray, event: MDAEvent):
         ...  # pragma: no cover
 
+    def onMDAFinished(self, sequence: MDASequence):
+        ...
+
     def _on_mda_engine_registered(
         self, newEngine: PMDAEngine, oldEngine: Optional[PMDAEngine] = None
     ):
@@ -39,10 +42,12 @@ class MDAWriterBase:
             self._disconnect(oldEngine)
         newEngine.events.sequenceStarted.connect(self.onMDAStarted)
         newEngine.events.frameReady.connect(self.onMDAFrame)
+        newEngine.events.sequenceFinished.connect(self.onMDAFinished)
 
     def _disconnect(self, engine: PMDAEngine):
         engine.events.sequenceStarted.disconnect(self.onMDAStarted)
         engine.events.frameReady.disconnect(self.onMDAFrame)
+        engine.events.sequenceFinished.disconnect(self.onMDAFinished)
 
     def disconnect(self):
         "Disconnect this writer from processing any more events"
@@ -56,6 +61,7 @@ class MDAWriterBase:
     ) -> Path:
         """
         Get a unique foldername of the form '{folder_base_name}_{i}
+
         Parameters
         ----------
         folder_base_name : str or Path
@@ -98,7 +104,7 @@ class MDAWriterBase:
         return tuple(event.index[a] for a in axis_order)
 
 
-class SimpleMultiFileTiffWriter(MDAWriterBase):
+class MDATiffWriter(MDAWriterBase):
     def __init__(
         self, data_folder_name: Union[str, Path], core: CMMCorePlus = None
     ) -> None:

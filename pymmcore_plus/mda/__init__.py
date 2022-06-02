@@ -1,9 +1,9 @@
 from ._engine import MDAEngine, PMDAEngine
-from ._writer import MDAWriterBase, SimpleMultiFileTiffWriter
+from ._writer import MDATiffWriter, MDAWriterBase
 
 __all__ = [
     "MDAEngine",
     "PMDAEngine",
     "MDAWriterBase",
-    "SimpleMultiFileTiffWriter",
+    "MDATiffWriter",
 ]

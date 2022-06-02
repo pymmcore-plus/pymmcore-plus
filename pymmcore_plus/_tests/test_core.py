@@ -20,12 +20,11 @@ from pymmcore_plus import (
     Configuration,
     DeviceDetectionStatus,
     DeviceType,
-    MDAWriter,
     Metadata,
     PropertyType,
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
-from pymmcore_plus.mda import MDAEngine
+from pymmcore_plus.mda import MDAEngine, MDAWriterBase
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -117,11 +116,13 @@ def test_new_position_methods(core: CMMCorePlus):
 
 def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     """Test signal emission during MDA"""
+    axis_order = "tpcz"
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
         stage_positions=[(1, 1, 1)],
         z_plan={"range": 3, "step": 1},
         channels=[{"config": "DAPI", "exposure": 1}],
+        axis_order=axis_order,
     )
     fr_mock = MagicMock()
     ss_mock = MagicMock()
@@ -130,24 +131,29 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     stage_mock = MagicMock()
     exp_mock = MagicMock()
 
-    class MockWriter(MDAWriter):
+    core.mda.events.frameReady.connect(fr_mock)
+    core.mda.events.sequenceStarted.connect(ss_mock)
+    core.mda.events.sequenceFinished.connect(sf_mock)
+    core.events.XYStagePositionChanged.connect(xystage_mock)
+    core.events.stagePositionChanged.connect(stage_mock)
+    core.events.exposureChanged.connect(exp_mock)
+
+    class MockWriter(MDAWriterBase):
         indices = []
 
         # custom addFrame to avoid having to know the images
         # in order to check called
-        def addFrame(self, image, index, event):
-            self.indices.append(index)
+        def onMDAFrame(self, image, event):
+            self.indices.append(self.event_to_index(axis_order, event))
 
     writer = MockWriter()
-    writer.initialize = MagicMock()
-    writer.finalize = MagicMock()
 
-    core.events.frameReady.connect(fr_mock)
-    core.events.sequenceStarted.connect(ss_mock)
-    core.events.sequenceFinished.connect(sf_mock)
-    core.events.XYStagePositionChanged.connect(xystage_mock)
-    core.events.stagePositionChanged.connect(stage_mock)
-    core.events.exposureChanged.connect(exp_mock)
+    # disconnect to remove the methods we will override
+    writer.disconnect()
+    writer.onMDAStarted = MagicMock()
+    writer.onMDAFinished = MagicMock()
+    # reregister to account for our mocks not being registered
+    writer._on_mda_engine_registered(core.mda)
 
     with qtbot.waitSignal(core.mda._events.sequenceFinished):
         core.run_mda(mda)
@@ -156,9 +162,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
         assert isinstance(_call.args[0], np.ndarray)
         assert _call.args[1] == event
 
-    writer.initialize.assert_called_once_with(
-        (2, 1, 1, 4), ("t", "p", "c", "z"), mda, dtype=np.dtype("uint16")
-    )
+    writer.onMDAStarted.assert_called_once_with(mda)
     np.testing.assert_array_equal(
         np.asarray(writer.indices),
         np.asarray(
@@ -174,7 +178,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
             ]
         ),
     )
-    writer.finalize.assert_called_once()
+    writer.onMDAFinished.assert_called_once()
 
     ss_mock.assert_called_once_with(mda)
     sf_mock.assert_called_once_with(mda)
