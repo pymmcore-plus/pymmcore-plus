@@ -209,8 +209,8 @@ class MDAEngine(PMDAEngine):
         if not self._running:
             return
         if event.x_pos is not None or event.y_pos is not None:
-            x = event.x_pos or self._mmc.getXPosition()
-            y = event.y_pos or self._mmc.getYPosition()
+            x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
+            y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
             self._mmc.setXYPosition(x, y)
         if event.z_pos is not None:
             self._mmc.setZPosition(event.z_pos)
