@@ -1,8 +1,15 @@
 import time
+from typing import TYPE_CHECKING
+from unittest.mock import patch
 
+import pytest
 from useq import MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus
+from pymmcore_plus.mda.events import MDASignaler
+
+if TYPE_CHECKING:
+    from pytestqt.qtbot import QtBot
 
 
 def test_mda_waiting(core: CMMCorePlus):
@@ -37,3 +44,51 @@ def test_setting_position(core: CMMCorePlus):
     assert tuple(core.getXYPosition()) == (0, 0)
     assert core.getPosition() == 0
     assert core.getExposure() == 321
+
+
+def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
+    mda = MDASequence(
+        channels=["Cy5"],
+        time_plan={"interval": 1.5, "loops": 2},
+        axis_order="tpcz",
+        stage_positions=[(222, 1, 1), (111, 0, 0)],
+    )
+
+    # error in user callback
+    def cb(img, event):
+        raise ValueError("uh oh")
+
+    core.mda.events.frameReady.connect(cb)
+
+    # only test the psygnal branch
+    # qt signals seem to push through this just fine
+
+    if isinstance(core.mda.events, MDASignaler):
+        with qtbot.waitSignal(core.mda.events.sequenceFinished):
+            with pytest.raises(ValueError):
+                core.mda.run(mda)
+    assert not core.mda.is_running()
+    assert not core.mda.is_paused()
+    assert not core.mda._canceled
+    core.mda.events.frameReady.disconnect(cb)
+
+    # Hardware failure
+    # e.g. a serial connection error
+    # we should fail gracefully
+    with patch.object(
+        core.mda,
+        "_prep_hardware",
+        return_value="",
+        side_effect=ValueError("something broke"),
+    ):
+        if isinstance(core.mda.events, MDASignaler):
+            with qtbot.waitSignal(core.mda.events.sequenceFinished):
+                with pytest.raises(ValueError):
+                    core.mda.run(mda)
+        else:
+            with qtbot.waitSignal(core.mda.events.sequenceFinished):
+                with pytest.raises(ValueError):
+                    core.mda.run(mda)
+    assert not core.mda.is_running()
+    assert not core.mda.is_paused()
+    assert not core.mda._canceled
