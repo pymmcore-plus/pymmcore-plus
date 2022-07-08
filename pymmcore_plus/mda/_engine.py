@@ -1,3 +1,4 @@
+import contextlib
 import time
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -265,14 +266,11 @@ class MDAEngine(PMDAEngine):
                 img = self._mmc.getImage()
 
                 self._events.frameReady.emit(img, event)
-            self._finish_run(sequence)
         except Exception as e:  # noqa E722
             # clean up so future MDAs can be run
             self._canceled = False
             self._running = False
-            try:
+            with contextlib.suppress(Exception):
                 self._finish_run(sequence)
-            except:  # noqa E722
-                # ignore this one and raise the first failure
-                pass
             raise e
+        self._finish_run(sequence)
