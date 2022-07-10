@@ -724,6 +724,23 @@ class CMMCorePlus(pymmcore.CMMCore):
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
+    @overload
+    def setROI(self, x: int, y: int, width: int, height: int) -> None:
+        ...  # pragma: no cover
+
+    @overload
+    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None:
+        ...  # pragma: no cover
+
+    def setROI(self, *args) -> None:
+        if len(args) == 4:
+            x , y , width , height = args
+            cam_label = super().getCameraDevice()
+        else:
+            cam_label, x , y , width , height = args
+        super().setROI(cam_label, x, y, width, height)
+        self.events.camRoiSet.emit(cam_label, x, y, width, height)
+
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
         # approx retrieval cost in comment (for demoCam)

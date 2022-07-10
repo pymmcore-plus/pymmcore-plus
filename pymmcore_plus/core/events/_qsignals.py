@@ -33,6 +33,7 @@ class QCoreSignaler(QObject):
     # when (Continuous)SequenceAcquisition is stopped
     stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
+    camRoiSet = Signal(str, int, int, int, int)
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:
