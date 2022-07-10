@@ -48,7 +48,7 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'tlambert03/pymmcore-plus' && contains(github.ref, 'tags') }}
+    if: ${{ github.repository == 'pymmcore-plus/pymmcore-plus' && contains(github.ref, 'tags') }}
     steps:
       - uses: actions/checkout@v2
       - name: Set up Python

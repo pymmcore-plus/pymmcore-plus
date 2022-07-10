@@ -1,10 +1,10 @@
 # Contributing
 
-Thanks for thinking of a way to help improve this library! Remember that contributions come in all shapes and sizes beyond writing bug fixes. Contributing to [documentation](#documentation), opening new [issues](https://github.com/tlambert03/pymmcore-plus/issues) for bugs, asking for clarification on things you find unclear, and requesting new features, are all super valuable contributions.
+Thanks for thinking of a way to help improve this library! Remember that contributions come in all shapes and sizes beyond writing bug fixes. Contributing to [documentation](#documentation), opening new [issues](https://github.com/pymmcore-plus/pymmcore-plus/issues) for bugs, asking for clarification on things you find unclear, and requesting new features, are all super valuable contributions.
 
 ## Code Improvements
 
-All development for this library happens on GitHub [here](https://github.com/tlambert03/pymmcore-plus). We recommend you work with a [Conda](https://www.anaconda.com/products/individual) environment (or an alternative virtual environment like [`venv`](https://docs.python.org/3/library/venv.html)).
+All development for this library happens on GitHub [here](https://github.com/pymmcore-plus/pymmcore-plus). We recommend you work with a [Conda](https://www.anaconda.com/products/individual) environment (or an alternative virtual environment like [`venv`](https://docs.python.org/3/library/venv.html)).
 
 The below instructions also use [Mamba](https://github.com/mamba-org/mamba#the-fast-cross-platform-package-manager) which is a very fast implementation of `conda`.
 
@@ -25,7 +25,7 @@ The {command}`-e .` flag installs the `pymmcore_plus` folder in ["editable" mode
 
 pymmcore-plus is developed using the [github flow](https://docs.github.com/en/get-started/quickstart/github-flow). Using Git/GitHub can confusing (<https://xkcd.com/1597>), so if you're new to Git, you may find it helpful to use a program like [GitHub Desktop](https://desktop.github.com) and to follow a [guide](https://github.com/firstcontributions/first-contributions#first-contributions).
 
-Also feel free to ask for help/advice on the relevant GitHub [issue](https://github.com/tlambert03/pymmcore-plus/issues).
+Also feel free to ask for help/advice on the relevant GitHub [issue](https://github.com/pymmcore-plus/pymmcore-plus/issues).
 
 ## Documentation
 

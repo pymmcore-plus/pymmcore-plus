@@ -1,7 +1,7 @@
 # Multidimensional Acquisition (mda)
 
 `pymmcore-plus` includes a basic `mda` acquisition loop {func}`~pymmcore_plus.CMMCorePlus.run_mda` that
-accepts experimental sequences defined using [useq-schema](https://github.com/tlambert03/useq-schema).
+accepts experimental sequences defined using [useq-schema](https://github.com/pymmcore-plus/useq-schema).
 
 
 ```python

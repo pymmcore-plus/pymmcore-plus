@@ -205,4 +205,4 @@ def linkcode_resolve(domain, info):
     startdir = Path(pymmcore_plus.__file__).parent
     fn = os.path.relpath(fn, start=startdir).replace(os.path.sep, "/")
 
-    return f"https://github.com/tlambert03/pymmcore-plus/blob/main/pymmcore_plus/{fn}{linespec}"  # noqa
+    return f"https://github.com/pymmcore-plus/pymmcore-plus/blob/main/pymmcore_plus/{fn}{linespec}"  # noqa
