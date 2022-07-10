@@ -77,7 +77,6 @@ class MDAEngine(PMDAEngine):
         """
         self._canceled = True
         self._paused_time = 0
-        self._t0 = None
 
     def toggle_pause(self):
         """
@@ -171,24 +170,24 @@ class MDAEngine(PMDAEngine):
             if self._check_canceled():
                 return True
 
-            if event.min_start_time:
-                go_at = event.min_start_time + self._paused_time
-                # We need to enter a loop here checking paused and canceled.
-                # otherwise you'll potentially wait a long time to cancel
-                to_go = go_at - (time.perf_counter() - self._t0)
-                while to_go > 0:
-                    while self._paused and not self._canceled:
-                        self._paused_time += 0.1  # fixme: be more precise
-                        to_go += 0.1
-                        time.sleep(0.1)
+        if event.min_start_time:
+            go_at = event.min_start_time + self._paused_time
+            # We need to enter a loop here checking paused and canceled.
+            # otherwise you'll potentially wait a long time to cancel
+            to_go = go_at - (time.perf_counter() - self._t0)
+            while to_go > 0:
+                while self._paused and not self._canceled:
+                    self._paused_time += 0.1  # fixme: be more precise
+                    to_go += 0.1
+                    time.sleep(0.1)
 
-                    if self._canceled:
-                        break
-                    if to_go > 0.5:
-                        time.sleep(0.5)
-                    else:
-                        time.sleep(to_go)
-                    to_go = go_at - (time.perf_counter() - self._t0)
+                if self._canceled:
+                    break
+                if to_go > 0.5:
+                    time.sleep(0.5)
+                else:
+                    time.sleep(to_go)
+                to_go = go_at - (time.perf_counter() - self._t0)
 
         # check canceled again in case it was canceled
         # during the waiting loop
@@ -210,8 +209,8 @@ class MDAEngine(PMDAEngine):
         if not self._running:
             return
         if event.x_pos is not None or event.y_pos is not None:
-            x = event.x_pos or self._mmc.getXPosition()
-            y = event.y_pos or self._mmc.getYPosition()
+            x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
+            y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
             self._mmc.setXYPosition(x, y)
         if event.z_pos is not None:
             self._mmc.setZPosition(event.z_pos)

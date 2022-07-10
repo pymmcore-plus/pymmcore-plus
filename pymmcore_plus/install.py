@@ -36,7 +36,7 @@ def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=
         fname = "Micro-Manager-x86_64-latest.dmg"
         dst = dest_dir / "Micro-Manager-latest_mac"
     else:
-        url = "https://valelab4.ucsf.edu/~MM/builds/2.0/Mac/"
+        url = "https://download.micro-manager.org/nightly/2.0/Mac/"
         fname = f"Micro-Manager-{version}-{release}.dmg"
         dst = dest_dir / f"{fname[:-4]}_mac"
 
@@ -79,7 +79,7 @@ def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=
         fname = "MMSetup_x64_latest.exe"
         dst = dest_dir / "Micro-Manager-latest_win"
     else:
-        url = f"https://valelab4.ucsf.edu/~MM/nightlyBuilds/{version}/Windows/"
+        url = "https://download.micro-manager.org/nightly/2.0/Windows/"
         dst = dest_dir / f"Micro-Manager-{version}-{release}_win"
         fname = f"MMSetup_64bit_{version}_{release}.exe"
 

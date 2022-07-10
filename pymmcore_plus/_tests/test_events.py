@@ -176,14 +176,15 @@ def test_sequence_acquisition_events(core: CMMCorePlus):
 
 def test_shutter_device_events(core: CMMCorePlus):
     mock = Mock()
-    core.events.shutterSet.connect(mock)
+    core.events.propertyChanged.connect(mock)
     core.setShutterOpen("Shutter", True)
     mock.assert_has_calls(
         [
-            call("Shutter", True),
+            call("Shutter", STATE, True),
         ]
     )
     assert core.getShutterOpen("Shutter")
+    assert core.getProperty("Shutter", STATE) == "1"
 
 
 def test_autoshutter_device_events(core: CMMCorePlus):
