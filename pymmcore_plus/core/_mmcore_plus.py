@@ -723,6 +723,29 @@ class CMMCorePlus(pymmcore.CMMCore):
             shutterLabel = super().getShutterDevice()
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
+    
+    def deleteConfig(self, group: str, preset: str) -> None:
+        super().deleteConfig(group, preset)
+        self.events.presetDeleted.emit(group, preset)
+
+    def deleteConfigGroup(self, group: str) -> None:
+        super().deleteConfigGroup(group)
+        self.events.groupDeleted.emit(group)
+
+    def defineConfig(
+        self, group: str, preset: str, device_label: str, device_property: str, value: str
+    ) -> None:
+
+        if not preset:
+            idx = sum('NewPreset' in p for p in self.getAvailableConfigs(group))
+            preset = f"NewPreset_{idx}" if idx > 0 else "NewPreset"
+
+        super().defineConfig(group, preset, device_label, device_property, value)
+        self.events.newGroupPreset.emit(group, preset)
+    
+    def defineConfigGroup(self, group: str) -> None:
+        super().defineConfigGroup(group)
+        self.events.newGroup.emit(group)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
