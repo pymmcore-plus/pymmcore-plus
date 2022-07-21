@@ -35,7 +35,7 @@ class QCoreSignaler(QObject):
     autoShutterSet = Signal(bool)
     groupDeleted = Signal(str)
     presetDeleted = Signal(str, str)
-    newGroupPreset = Signal(str, str)
+    newGroupPreset = Signal(str, str, list)
     newGroup = Signal(str)
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict

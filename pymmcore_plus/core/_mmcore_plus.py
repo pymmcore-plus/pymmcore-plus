@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import os
 import re
+import warnings
 import weakref
 from contextlib import contextmanager
 from datetime import datetime
@@ -732,20 +733,76 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().deleteConfigGroup(group)
         self.events.groupDeleted.emit(group)
 
+    @overload
+    def defineConfig(
+        self, group: str, preset: str) -> None:
+        ...  # pragma: no cover
+
+    @overload
     def defineConfig(
         self, group: str, preset: str, device_label: str, device_property: str, value: str
     ) -> None:
+        ...  # pragma: no cover
+
+    def defineConfig(self, *args) -> None:
+
+        group = args[0]
+        preset = args[1]
 
         if not preset:
             idx = sum('NewPreset' in p for p in self.getAvailableConfigs(group))
             preset = f"NewPreset_{idx}" if idx > 0 else "NewPreset"
 
-        super().defineConfig(group, preset, device_label, device_property, value)
-        self.events.newGroupPreset.emit(group, preset)
+        if len(args) == 2:
+            super().defineConfig(group, preset)
+            dev_prop_val_list = [("", "", "")]
+        else:
+            _, _, device_label, device_property, value = args
+            super().defineConfig(group, preset, device_label, device_property, value)
+            dev_prop_val_list = [(device_label, device_property, value)]
+
+        self.events.newGroupPreset.emit(group, preset, dev_prop_val_list)
     
     def defineConfigGroup(self, group: str) -> None:
         super().defineConfigGroup(group)
         self.events.newGroup.emit(group)
+    
+    def defineConfigFromDevicePropertyValueList(
+        self, group: str, preset: str, list_of_dev_prop_val: List[Tuple[str, str, str]]
+    ) -> None:
+        """
+        Create a new group-preset configuration using a list of (device, property, value).
+
+        This method will emit the "newGroupPreset" signal with group and preset info 
+        only one time, when the group-preset has been created.
+
+        If the group is already defined, any of the (device, property) that are 
+        not already present in the group will be excluded from the preset.  
+        """
+
+        if not preset:
+            idx = sum('NewPreset' in p for p in self.getAvailableConfigs(group))
+            preset = f"NewPreset_{idx}" if idx > 0 else "NewPreset"
+
+        group_dev_props = []
+        for prs in self.getAvailableConfigs(group):
+            group_dev_props.extend(
+                [(k[0], k[1]) for k in self.getConfigData(group, prs)]
+            )
+
+        is_defined = self.isGroupDefined(group)
+
+        dev_prop_val_list = []
+        for d, p, v in list_of_dev_prop_val:
+            if (d, p) not in set(group_dev_props) and is_defined:
+                warnings.warn(
+                f"{group} group does not include ({d}, {p}), they will not be added to the {preset} preset! "
+            )
+                continue
+            super().defineConfig(group, preset, d, p, v)
+            dev_prop_val_list.append((d, p, v))
+
+        self.events.newGroupPreset.emit(group, preset, dev_prop_val_list)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
