@@ -755,7 +755,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         if len(args) == 2:
             super().defineConfig(group, preset)
-            dev_prop_val_list = [("", "", "")]
+            dev_prop_val_list = []
         else:
             _, _, device_label, device_property, value = args
             super().defineConfig(group, preset, device_label, device_property, value)
