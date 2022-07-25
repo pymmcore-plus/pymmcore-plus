@@ -794,13 +794,13 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.events.newGroupPreset.emit(group, preset, dev_prop_val)
 
     def defineConfigFromDevicePropertyValueList(
-        self, group: str, preset: str, list_of_dev_prop_val: List[Tuple[str, str, str]], emit: bool = True
+        self, group: str, preset: str, list_of_dev_prop_val: List[Tuple[str, str, str]]
     ) -> None:
         """
         Create a new group-preset configuration using a list of (device, property, value).
 
         This method will emit the "newGroupPreset" signal with group and preset info 
-        only one time, when the group-preset has been created (if the 'emit' arguments is True).
+        only one time, when the group-preset has been created.
 
         If the group is already defined, any of the (device, property) that are 
         not already present in the group will be excluded from the preset.  
@@ -827,8 +827,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             super().defineConfig(group, preset, d, p, v)
             dev_prop_val_list.append((d, p, v))
 
-        if emit:
-            self.events.newGroupPreset.emit(group, preset, dev_prop_val_list)
+        self.events.newGroupPreset.emit(group, preset, dev_prop_val_list)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
