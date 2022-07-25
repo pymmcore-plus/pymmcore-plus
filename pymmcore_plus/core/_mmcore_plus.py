@@ -766,20 +766,45 @@ class CMMCorePlus(pymmcore.CMMCore):
     def defineConfigGroup(self, group: str) -> None:
         super().defineConfigGroup(group)
         self.events.newGroup.emit(group)
-    
+
+    def deletePresetDeviceProperties(
+        self, group: str, preset: str, device_property_list: List[Tuple[str, str]], emit: bool = True
+    ) -> None:
+        """
+        Delete the specified list of (device, property) from the specified preset.
+        
+        This method will emit the "newGroupPreset" signal with group and preset info 
+        (if the 'emit' arguments is True).
+        """
+        dev_prop_val = [(k[0], k[1], k[2]) for k in self.getConfigData(group, preset)]
+        dev_prop = [(k[0], k[1]) for k in dev_prop_val]
+        
+        for d, p in device_property_list:
+            if (d, p) not in dev_prop:
+                continue
+            idx = dev_prop.index((d, p))
+            dev_prop_val.pop(idx)
+
+        super().deleteConfig(group, preset)
+
+        for d, p, v in dev_prop_val:
+            super().defineConfig(group, preset, d, p, v)
+        
+        if emit:
+            self.events.newGroupPreset.emit(group, preset, dev_prop_val)
+
     def defineConfigFromDevicePropertyValueList(
-        self, group: str, preset: str, list_of_dev_prop_val: List[Tuple[str, str, str]]
+        self, group: str, preset: str, list_of_dev_prop_val: List[Tuple[str, str, str]], emit: bool = True
     ) -> None:
         """
         Create a new group-preset configuration using a list of (device, property, value).
 
         This method will emit the "newGroupPreset" signal with group and preset info 
-        only one time, when the group-preset has been created.
+        only one time, when the group-preset has been created (if the 'emit' arguments is True).
 
         If the group is already defined, any of the (device, property) that are 
         not already present in the group will be excluded from the preset.  
         """
-
         if not preset:
             idx = sum('NewPreset' in p for p in self.getAvailableConfigs(group))
             preset = f"NewPreset_{idx}" if idx > 0 else "NewPreset"
@@ -796,13 +821,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         for d, p, v in list_of_dev_prop_val:
             if (d, p) not in set(group_dev_props) and is_defined:
                 warnings.warn(
-                f"{group} group does not include ({d}, {p}), they will not be added to the {preset} preset! "
+                f"{group} group does not include ({d}, {p}) and will not be added to the {preset} preset! "
             )
                 continue
             super().defineConfig(group, preset, d, p, v)
             dev_prop_val_list.append((d, p, v))
 
-        self.events.newGroupPreset.emit(group, preset, dev_prop_val_list)
+        if emit:
+            self.events.newGroupPreset.emit(group, preset, dev_prop_val_list)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
