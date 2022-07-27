@@ -1,3 +1,4 @@
+import contextlib
 import time
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
@@ -248,20 +249,28 @@ class MDAEngine(PMDAEngine):
         sequence : MDASequence
             The sequence of events to run.
         """
-        self._prepare_to_run(sequence)
+        try:
+            self._prepare_to_run(sequence)
 
-        for event in sequence:
-            cancelled = self._wait_until_event(event, sequence)
+            for event in sequence:
+                cancelled = self._wait_until_event(event, sequence)
 
-            # If cancelled break out of the loop
-            if cancelled:
-                break
+                # If cancelled break out of the loop
+                if cancelled:
+                    break
 
-            logger.info(event)
-            self._prep_hardware(event)
+                logger.info(event)
+                self._prep_hardware(event)
 
-            self._mmc.snapImage()
-            img = self._mmc.getImage()
+                self._mmc.snapImage()
+                img = self._mmc.getImage()
 
-            self._events.frameReady.emit(img, event)
+                self._events.frameReady.emit(img, event)
+        except Exception as e:  # noqa E722
+            # clean up so future MDAs can be run
+            self._canceled = False
+            self._running = False
+            with contextlib.suppress(Exception):
+                self._finish_run(sequence)
+            raise e
         self._finish_run(sequence)

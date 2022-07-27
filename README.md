@@ -1,11 +1,11 @@
 # pymmcore-plus
 
 [![Documentation Status](https://readthedocs.org/projects/pymmcore-plus/badge/?version=latest)](https://pymmcore-plus.readthedocs.io/en/latest/?badge=latest)
-[![License](https://img.shields.io/pypi/l/pymmcore-plus.svg?color=green)](https://github.com/tlambert03/pymmcore-plus/raw/master/LICENSE)
+[![License](https://img.shields.io/pypi/l/pymmcore-plus.svg?color=green)](https://github.com/pymmcore-plus/pymmcore-plus/raw/master/LICENSE)
 [![PyPI](https://img.shields.io/pypi/v/pymmcore-plus.svg?color=green)](https://pypi.org/project/pymmcore-plus)
 [![Python Version](https://img.shields.io/pypi/pyversions/pymmcore-plus.svg?color=green)](https://python.org)
-[![CI](https://github.com/tlambert03/pymmcore-plus/actions/workflows/test_and_deploy.yml/badge.svg)](https://github.com/tlambert03/pymmcore-plus/actions/workflows/test_and_deploy.yml)
-[![codecov](https://codecov.io/gh/tlambert03/pymmcore-plus/branch/main/graph/badge.svg)](https://codecov.io/gh/tlambert03/pymmcore-plus)
+[![CI](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/test_and_deploy.yml/badge.svg)](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/test_and_deploy.yml)
+[![codecov](https://codecov.io/gh/pymmcore-plus/pymmcore-plus/branch/main/graph/badge.svg)](https://codecov.io/gh/pymmcore-plus/pymmcore-plus)
 
 #### 🧪🧪 pre-alpha software: work in progress!  🧪🧪
 
@@ -19,7 +19,7 @@
   core.loadSystemConfiguration() # loads demo config
   print(core.getLoadedDevices())
   ```
-- `CMMCorePlus` includes a `run_mda` method (name may change) "acquisition engine" that drives micro-manager for conventional multi-dimensional experiments. It accepts an [MDASequence](https://github.com/tlambert03/useq-schema#mdasequence) from [useq-schema](https://github.com/tlambert03/useq-schema) for experiment design/declaration.
+- `CMMCorePlus` includes a `run_mda` method (name may change) "acquisition engine" that drives micro-manager for conventional multi-dimensional experiments. It accepts an [MDASequence](https://github.com/pymmcore-plus/useq-schema#mdasequence) from [useq-schema](https://github.com/pymmcore-plus/useq-schema) for experiment design/declaration.
 - Adds a callback system that adapts the CMMCore callback object to an existing python event loop (such as Qt, or perhaps asyncio/etc...)
 - Includes an experimental [Pyro5](https://pyro5.readthedocs.io/en/latest/)-based client/server that allows one to create and control and CMMCorePlus instance running in another process, or (conceivably) another computer.  To use this feature, install with `pip install pymmcore-plus[remote]`.  (Do try using the single-process `CMMCorePlus` first, as the interprocess variant is still buggy and does not support MDAs).
 
@@ -62,7 +62,7 @@ instead of a Java process).
 
 > side-note: the `useq.MDASequence` object that this library uses to define
 > experiments can also generate events [consumable by
-> pycro-manager](https://github.com/tlambert03/useq-schema#example-mdasequence-usage).
+> pycro-manager](https://github.com/pymmcore-plus/useq-schema#example-mdasequence-usage).
 > So if you prefer the `pycro-manager` approach, but also like the `MDASequence`
 > schema, you can use both.
 
@@ -70,7 +70,7 @@ Finally, the `CMMCorePlus` class here adds a callback mechanism that makes it
 easier to adapt the native MMCore callback system to multiple listeners, across
 multiple process, which makes it easier to incorporate `pymmcore-plus` into
 existing event loops (like a [Qt event loop](docs/examples/integration-with-qt.md)).  See
-[`napari-micromanager`](https://github.com/tlambert03/napari-micromanager) for a
+[`napari-micromanager`](https://github.com/pymmcore-plus/napari-micromanager) for a
 nascent project that adds Qt-based GUI interface for micro-manager.
 
 ## Quickstart
@@ -85,7 +85,7 @@ pip install pymmcore-plus
 pip install pymmcore-plus[remote]
 
 # or from source tree
-pip install git+https://github.com/tlambert03/pymmcore-plus.git
+pip install git+https://github.com/pymmcore-plus/pymmcore-plus.git
 ```
 
 #### device adapters
@@ -120,7 +120,7 @@ The device interface version of a given Micro-Manager installation can be viewed
 
 You can find for some basic examples in the [examples](examples) directory.
 
-#### run a basic MDASequence from [`useq-schema`](https://github.com/tlambert03/useq-schema)
+#### run a basic MDASequence from [`useq-schema`](https://github.com/pymmcore-plus/useq-schema)
 
 create `MMCore` in the main thread.
 
