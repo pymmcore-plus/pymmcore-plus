@@ -775,6 +775,19 @@ class CMMCorePlus(pymmcore.CMMCore):
         
         This method will emit the "newGroupPreset" signal with group and preset info 
         (if the 'emit' arguments is True).
+
+        Parameters
+        ----------
+        group: str
+            the group name.
+        preset: str
+            the preset name.
+        device_property_list: List[Tuple[str, str]]
+            list of (device, property) that will be removed from the preset.
+        emit: bool
+            if True, the pymmcore-plus newGroupPreset signal will be emitted.
+            default = True
+
         """
         dev_prop_val = [(k[0], k[1], k[2]) for k in self.getConfigData(group, preset)]
         dev_prop = [(k[0], k[1]) for k in dev_prop_val]
@@ -803,7 +816,18 @@ class CMMCorePlus(pymmcore.CMMCore):
         only one time, when the group-preset has been created.
 
         If the group is already defined, any of the (device, property) that are 
-        not already present in the group will be excluded from the preset.  
+        not already present in the group will be excluded from the preset.
+
+        Parameters
+        ----------
+
+        group: str
+            the group name.
+        preset: str
+            the preset name.
+        list_of_dev_prop_val: List[Tuple[str, str, str]]
+            list of (device, property, value) that will be added to the group/preset.
+ 
         """
         if not preset:
             idx = sum('NewPreset' in p for p in self.getAvailableConfigs(group))
