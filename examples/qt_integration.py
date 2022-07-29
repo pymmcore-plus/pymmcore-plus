@@ -26,7 +26,7 @@ stop.clicked.connect(stop_clicked)
 stop.show()
 
 
-# see https://github.com/tlambert03/useq-schema
+# see https://github.com/pymmcore-plus/useq-schema
 sequence = MDASequence(
     channels=["DAPI", {"config": "FITC", "exposure": 50}],
     time_plan={"interval": 1.5, "loops": 5},

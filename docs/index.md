@@ -2,7 +2,7 @@
 
 `pymmcore-plus` aims to extend [pymmcore](https://github.com/micro-manager/pymmcore) (python bindings for the C++ [micro-manager core](https://github.com/micro-manager/mmCoreAndDevices/)) with a number of features designed to facilitate working with **Micro-manager in pure python/C environments**.
 
-While you can easily use pymmcore-plus from a script or IPython/Jupyter you can also use it in combination with the [napari](https://napari.org/) based gui [napari-micromanager](https://github.com/tlambert03/napari-micromanager#napari-micromanager). See the {doc}`examples/napari-micromanager` example for how to use them together.
+While you can easily use pymmcore-plus from a script or IPython/Jupyter you can also use it in combination with the [napari](https://napari.org/) based gui [napari-micromanager](https://github.com/pymmcore-plus/napari-micromanager#napari-micromanager). See the {doc}`examples/napari-micromanager` example for how to use them together.
 
 ## Basic Usage
 
