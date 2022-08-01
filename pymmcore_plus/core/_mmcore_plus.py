@@ -753,6 +753,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             idx = sum('NewPreset' in p for p in self.getAvailableConfigs(group))
             preset = f"NewPreset_{idx}" if idx > 0 else "NewPreset"
 
+        super().defineConfigGroup(group)
+
         if len(args) == 2:
             super().defineConfig(group, preset)
             dev_prop_val_list = []
@@ -800,6 +802,8 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         super().deleteConfig(group, preset)
 
+        super().defineConfigGroup(group)
+
         for d, p, v in dev_prop_val:
             super().defineConfig(group, preset, d, p, v)
         
@@ -840,6 +844,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             )
 
         is_defined = self.isGroupDefined(group)
+
+        super().defineConfigGroup(group)
 
         dev_prop_val_list = []
         for d, p, v in list_of_dev_prop_val:
