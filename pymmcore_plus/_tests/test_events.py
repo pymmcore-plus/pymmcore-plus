@@ -208,8 +208,4 @@ def test_set_camera_roi_event(core: CMMCorePlus):
             call(core.getCameraDevice(), 10, 20, 100, 200),
         ]
     )
-    assert  list(core.getROI()) == [10, 20, 100, 200]
-
-
-
-
+    assert list(core.getROI()) == [10, 20, 100, 200]
