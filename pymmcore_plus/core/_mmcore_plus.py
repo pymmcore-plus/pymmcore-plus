@@ -754,7 +754,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             preset = f"NewPreset_{idx}" if idx > 0 else "NewPreset"
 
 
-        super().defineConfigGroup(group)
+        super().defineConfigGroup(group)  # needed to refresh pymmcore 'ChannelGroup' options
 
         if len(args) == 2:
             super().defineConfig(group, preset)
@@ -803,7 +803,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         super().deleteConfig(group, preset)
 
-        super().defineConfigGroup(group)
+        super().defineConfigGroup(group)  # needed to refresh pymmcore 'ChannelGroup' options
 
         for d, p, v in dev_prop_val:
             super().defineConfig(group, preset, d, p, v)
