@@ -802,7 +802,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         self, group: str, preset: str, list_of_dev_prop_val: List[Tuple[str, str, str]]
     ) -> None:
         """
-        Create a new group-preset configuration using a list of (device, property, value).
+        Create a new group-preset configuration using a list of
+        (device, property, value).
 
         This method will emit the "newGroupPreset" signal with group and preset info
         only one time, when the group-preset has been created.
