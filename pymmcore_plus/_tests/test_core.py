@@ -389,7 +389,7 @@ def test_get_objectives(core: CMMCorePlus):
 def test_guess_channel_group(core: CMMCorePlus):
 
     chan_group = core.getChannelGroup()
-    assert chan_group == ""
+    assert chan_group == "Channel"
 
     assert core.getOrGuessChannelGroup() == ["Channel"]
 
