@@ -3,7 +3,6 @@ from __future__ import annotations
 import atexit
 import os
 import re
-import warnings
 import weakref
 from contextlib import contextmanager
 from datetime import datetime
@@ -56,7 +55,7 @@ _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)
-UNNAMED_PRESET = 'NewPreset'
+UNNAMED_PRESET = "NewPreset"
 
 
 @contextmanager
@@ -725,7 +724,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             shutterLabel = super().getShutterDevice()
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
-    
+
     def deleteConfig(self, group: str, preset: str) -> None:
         super().deleteConfig(group, preset)
         self.events.presetDeleted.emit(group, preset)
@@ -733,13 +732,13 @@ class CMMCorePlus(pymmcore.CMMCore):
     def deleteConfigGroup(self, group: str) -> None:
         super().deleteConfigGroup(group)
         self.events.groupDeleted.emit(group)
-    
+
     def deletePresetDeviceProperties(
         self, group: str, preset: str, device_property_list: List[Tuple[str, str]]
     ) -> None:
         """
         Delete the specified list of (device, property) from the specified preset.
-        
+
         This method will emit the "newGroupPreset" signal with group and preset info.
 
         Parameters
@@ -752,7 +751,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             list of (device, property) that will be removed from the preset.
         """
         dev_prop_val = [(k[0], k[1], k[2]) for k in self.getConfigData(group, preset)]
-   
+
         super().deleteConfig(group, preset)
 
         _to_emit = []
@@ -760,7 +759,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if (d, p) not in device_property_list:
                 _to_emit.append((d, p, v))
                 super().defineConfig(group, preset, d, p, v)
-        
+
         self.events.newGroupPreset.emit(group, preset, _to_emit)
 
     def defineConfigGroup(self, group: str) -> None:
@@ -768,13 +767,17 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.newGroup.emit(group)
 
     @overload
-    def defineConfig(
-        self, group: str, preset: str) -> None:
+    def defineConfig(self, group: str, preset: str) -> None:
         ...  # pragma: no cover
 
     @overload
     def defineConfig(
-        self, group: str, preset: str, device_label: str, device_property: str, value: str
+        self,
+        group: str,
+        preset: str,
+        device_label: str,
+        device_property: str,
+        value: str,
     ) -> None:
         ...  # pragma: no cover
 
@@ -784,8 +787,10 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.defineConfigFromDevicePropertyValueList(group, preset, [args])
         else:
             if not self.isGroupDefined(group):
-                super().defineConfigGroup(group)  # needed to refresh pymmcore 'ChannelGroup' options
-            
+                super().defineConfigGroup(
+                    group
+                )  # needed to refresh pymmcore 'ChannelGroup' options
+
             if not preset:
                 idx = sum(UNNAMED_PRESET in p for p in self.getAvailableConfigs(group))
                 preset = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
@@ -799,7 +804,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         Create a new group-preset configuration using a list of (device, property, value).
 
-        This method will emit the "newGroupPreset" signal with group and preset info 
+        This method will emit the "newGroupPreset" signal with group and preset info
         only one time, when the group-preset has been created.
 
         Parameters
@@ -817,7 +822,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             preset = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
 
         if not self.isGroupDefined(group):
-            super().defineConfigGroup(group)  # needed to refresh pymmcore 'ChannelGroup' options
+            super().defineConfigGroup(
+                group
+            )  # needed to refresh pymmcore 'ChannelGroup' options
 
         dev_prop_val_list = []
         for d, p, v in list_of_dev_prop_val:
