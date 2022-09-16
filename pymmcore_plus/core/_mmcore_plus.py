@@ -730,28 +730,28 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().setPixelSizeUm(resolutionID, pixSize)
         self.events.pixelSizeSet.emit(resolutionID, pixSize)
     
-    def deletePixelSizeConfig(self, resulutionID: str):
-        super().deletePixelSizeConfig(resulutionID)
-        self.events.pixelSizeDeleted.emit(resulutionID)
+    def deletePixelSizeConfig(self, resolutionID: str):
+        super().deletePixelSizeConfig(resolutionID)
+        self.events.pixelSizeDeleted.emit(resolutionID)
 
     @overload
-    def definePixelSizeConfig(self, resulutionID: str) -> None:
+    def definePixelSizeConfig(self, resolutionID: str) -> None:
         ...
 
     @overload
     def definePixelSizeConfig(
-        self, resulutionID: str, deviceLabel: str, propName: str, value: str
+        self, resolutionID: str, deviceLabel: str, propName: str, value: str
     ) -> None:
         ...
 
     def definePixelSizeConfig(self, *args) -> None:
         if len(args) == 1:
-            resulutionID = args
-            super().definePixelSizeConfig(resulutionID)
+            resolutionID = args
+            super().definePixelSizeConfig(resolutionID)
         else:
-            resulutionID, deviceLabel, propName, value = args
-            super().definePixelSizeConfig(resulutionID, deviceLabel, propName, value)
-            self.events.pixelSizeDefined.emit(resulutionID, deviceLabel, propName, value)
+            resolutionID, deviceLabel, propName, value = args
+            super().definePixelSizeConfig(resolutionID, deviceLabel, propName, value)
+            self.events.pixelSizeDefined.emit(resolutionID, deviceLabel, propName, value)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
