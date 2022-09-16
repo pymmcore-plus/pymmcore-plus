@@ -1,5 +1,7 @@
 from __future__ import annotations
+import itertools
 
+import itertools
 import atexit
 import os
 import re
@@ -749,6 +751,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         else:
             resulutionID, deviceLabel, propName, value = args
 
+        if value:
+            # remove resulutionID if contains obj_label in ConfigData
+            for cfg in self.getAvailablePixelSizeConfigs():
+                cfg_data = list(
+                    itertools.chain(*self.getPixelSizeConfigData(cfg))
+                )
+                if value in cfg_data:
+                    super().deletePixelSizeConfig(cfg)
+                    break
+        
         resolutionId_list = list(super().getAvailablePixelSizeConfigs())
         if resulutionID in resolutionId_list:
             super().deletePixelSizeConfig(resulutionID)
