@@ -747,29 +747,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def definePixelSizeConfig(self, *args) -> None:
         if len(args) == 1:
             resulutionID = args
-            deviceLabel, propName, value = ("", "", "")
-        else:
-            resulutionID, deviceLabel, propName, value = args
-
-        if value:
-            # remove resulutionID if contains obj_label in ConfigData
-            for cfg in self.getAvailablePixelSizeConfigs():
-                cfg_data = list(
-                    itertools.chain(*self.getPixelSizeConfigData(cfg))
-                )
-                if value in cfg_data:
-                    super().deletePixelSizeConfig(cfg)
-                    break
-        
-        resolutionId_list = list(super().getAvailablePixelSizeConfigs())
-        if resulutionID in resolutionId_list:
-            super().deletePixelSizeConfig(resulutionID)
-
-        if len(args) == 1:
             super().definePixelSizeConfig(resulutionID)
         else:
+            resulutionID, deviceLabel, propName, value = args
             super().definePixelSizeConfig(resulutionID, deviceLabel, propName, value)
-        self.events.pixelSizeDefined.emit(resulutionID, deviceLabel, propName, value)
+            self.events.pixelSizeDefined.emit(resulutionID, deviceLabel, propName, value)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
