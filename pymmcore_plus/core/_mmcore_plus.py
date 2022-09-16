@@ -724,6 +724,25 @@ class CMMCorePlus(pymmcore.CMMCore):
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
+    @overload
+    def definePixelSizeConfig(self, resulutionID: str) -> None:
+        ...
+
+    @overload
+    def definePixelSizeConfig(
+        self, resulutionID: str, deviceLabel: str, propName: str, value: str
+    ) -> None:
+        ...
+
+    def definePixelSizeConfig(self, *args) -> None:
+        if len(args) == 1:
+            resolutionId = args
+            super().definePixelSizeConfig(resolutionId)
+        else:
+            resulutionID, deviceLabel, propName, value = args
+            super().definePixelSizeConfig(resulutionID, deviceLabel, propName, value)
+            self.events.pixelSizeDefined.emit(resulutionID, deviceLabel, propName, value)
+
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
         # approx retrieval cost in comment (for demoCam)

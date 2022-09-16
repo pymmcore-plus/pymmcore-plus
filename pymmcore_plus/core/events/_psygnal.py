@@ -29,6 +29,7 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     startSequenceAcquisition = Signal(str, int, float, bool)
     stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
+    pixelSizeDefined: Signal(str, str, str, str)
 
     # aliases for lower casing
     @property
