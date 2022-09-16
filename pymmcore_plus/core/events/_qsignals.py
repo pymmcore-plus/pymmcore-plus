@@ -33,6 +33,9 @@ class QCoreSignaler(QObject):
     # when (Continuous)SequenceAcquisition is stopped
     stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
+    
+    pixelSizeSet = Signal(str, float)
+    pixelSizeDeleted = Signal(str)
     pixelSizeDefined = Signal(str, str, str, str)
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
