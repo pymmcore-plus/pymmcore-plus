@@ -583,7 +583,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self._mda_runner.run, args=(sequence,))
+        th = Thread(target=self.mda.run, args=(sequence,))
         th.start()
         if block:
             th.join()
@@ -600,16 +600,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         engine : PMDAEngine
             Any object conforming to the PMDAEngine protocol.
         """
-        if not isinstance(engine, PMDAEngine):
-            raise TypeError("Engine does not conform to the Engine protocol.")
-
-        if self.mda.is_running():
-            raise ValueError(
-                "Cannot register a new engine when the current engine is running "
-                "an acquistion. Please cancel the current engine's acquistion "
-                "before registering"
-            )
-
         old_engine = self.mda.set_engine(engine)
         self.events.mdaEngineRegistered.emit(engine, old_engine)
 

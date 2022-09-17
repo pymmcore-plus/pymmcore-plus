@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import time
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 from loguru import logger
 
@@ -35,8 +35,16 @@ class MDARunner:
         ----------
         engine : PMDAEngine
         """
+
         if not isinstance(engine, PMDAEngine):
-            raise TypeError("Engine must be a PMDAEngine.")
+            raise TypeError("Engine does not conform to the Engine protocol.")
+
+        if self.is_running():
+            raise RuntimeError(
+                "Cannot register a new engine when the current engine is running "
+                "an acquistion. Please cancel the current engine's acquistion "
+                "before registering"
+            )
 
         old_engine, self._engine = self._engine, engine
         return old_engine
@@ -112,7 +120,9 @@ class MDARunner:
             The sequence of events to run.
         """
         try:
-            engine = self._prepare_to_run(sequence)
+            self._prepare_to_run(sequence)
+            self._engine = cast("PMDAEngine", self._engine)
+            teardown_event = getattr(self._engine, "teardown_event", lambda e: None)
 
             for event in sequence:
                 cancelled = self._wait_until_event(event)
@@ -125,24 +135,21 @@ class MDARunner:
                 if not self._running:
                     break
 
-                engine.setup_event(event)
+                self._engine.setup_event(event)
 
-                output = engine.exec_event(event)
+                output = self._engine.exec_event(event)
                 self._events.frameReady.emit(output, event)
 
-                if hasattr(engine, "teardown_event"):
-                    engine.teardown_event(event)
+                teardown_event(event)
 
         except Exception as e:  # noqa E722
             # clean up so future MDAs can be run
-            self._canceled = False
-            self._running = False
             with contextlib.suppress(Exception):
-                self._finish_run(sequence, engine)
+                self._finish_run(sequence)
             raise e
-        self._finish_run(sequence, engine)
+        self._finish_run(sequence)
 
-    def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
+    def _prepare_to_run(self, sequence: MDASequence):
         """Set up for the MDA run.
 
         Parameters
@@ -162,7 +169,6 @@ class MDARunner:
 
         self._events.sequenceStarted.emit(sequence)
         self._reset_timer()
-        return self._engine
 
     def _reset_timer(self):
         self._t0 = time.perf_counter()  # reference time, in seconds
@@ -234,7 +240,7 @@ class MDARunner:
         # during the waiting loop
         return self._check_canceled()
 
-    def _finish_run(self, sequence: MDASequence, engine: PMDAEngine):
+    def _finish_run(self, sequence: MDASequence):
         """
         To be called at the end of an acquisition.
 
@@ -244,8 +250,10 @@ class MDARunner:
             The sequence that was finished.
         """
         self._running = False
-        if hasattr(engine, "teardown_sequence"):
-            engine.teardown_sequence(sequence)
+        self._canceled = False
+
+        if hasattr(self._engine, "teardown_sequence"):
+            self._engine.teardown_sequence(sequence)  # type: ignore
 
         logger.info("MDA Finished: {}", sequence)
         self._events.sequenceFinished.emit(sequence)

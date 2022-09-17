@@ -215,7 +215,7 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
     # use `core.run_mda`
     core.mda._running = True
     new_engine = MDAEngine(core)
-    with pytest.raises(ValueError):
+    with pytest.raises(RuntimeError):
         core.register_mda_engine(new_engine)
     core.mda._running = False
 

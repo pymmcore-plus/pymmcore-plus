@@ -1,5 +1,6 @@
 import time
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 from useq import MDAEvent, MDASequence
@@ -85,16 +86,15 @@ def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
     # Hardware failure
     # e.g. a serial connection error
     # we should fail gracefully
-    core.mda.set_engine(BrokenEngine())
-
-    if isinstance(core.mda.events, MDASignaler):
-        with qtbot.waitSignal(core.mda.events.sequenceFinished):
-            with pytest.raises(ValueError):
-                core.mda.run(mda)
-    else:
-        with qtbot.waitSignal(core.mda.events.sequenceFinished):
-            with pytest.raises(ValueError):
-                core.mda.run(mda)
-    assert not core.mda.is_running()
-    assert not core.mda.is_paused()
-    assert not core.mda._canceled
+    with patch.object(core.mda, "_engine", BrokenEngine()):
+        if isinstance(core.mda.events, MDASignaler):
+            with qtbot.waitSignal(core.mda.events.sequenceFinished):
+                with pytest.raises(ValueError):
+                    core.mda.run(mda)
+        else:
+            with qtbot.waitSignal(core.mda.events.sequenceFinished):
+                with pytest.raises(ValueError):
+                    core.mda.run(mda)
+        assert not core.mda.is_running()
+        assert not core.mda.is_paused()
+        assert not core.mda._canceled
