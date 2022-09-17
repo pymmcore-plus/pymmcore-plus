@@ -1,6 +1,5 @@
 import time
 from typing import TYPE_CHECKING
-from unittest.mock import patch
 
 import pytest
 from useq import MDAEvent, MDASequence
@@ -32,7 +31,7 @@ def test_mda_waiting(core: CMMCorePlus):
 def test_setting_position(core: CMMCorePlus):
     core.mda._running = True
     event1 = MDAEvent(exposure=123, x_pos=123, y_pos=456, z_pos=1)
-    core.mda._prep_hardware(event1)
+    core.mda.engine.setup_event(event1)
     assert tuple(core.getXYPosition()) == (123, 456)
     assert core.getPosition() == 1
     assert core.getExposure() == 123
@@ -40,10 +39,21 @@ def test_setting_position(core: CMMCorePlus):
     # check that we aren't check things like: if event.x_pos
     # because then we will not set to zero
     event2 = MDAEvent(exposure=321, x_pos=0, y_pos=0, z_pos=0)
-    core.mda._prep_hardware(event2)
+    core.mda.engine.setup_event(event2)
     assert tuple(core.getXYPosition()) == (0, 0)
     assert core.getPosition() == 0
     assert core.getExposure() == 321
+
+
+class BrokenEngine:
+    def setup_sequence(self, sequence):
+        ...
+
+    def setup_event(self, event):
+        raise ValueError("something broke")
+
+    def exec_event(self, event):
+        ...
 
 
 def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
@@ -75,20 +85,16 @@ def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
     # Hardware failure
     # e.g. a serial connection error
     # we should fail gracefully
-    with patch.object(
-        core.mda,
-        "_prep_hardware",
-        return_value="",
-        side_effect=ValueError("something broke"),
-    ):
-        if isinstance(core.mda.events, MDASignaler):
-            with qtbot.waitSignal(core.mda.events.sequenceFinished):
-                with pytest.raises(ValueError):
-                    core.mda.run(mda)
-        else:
-            with qtbot.waitSignal(core.mda.events.sequenceFinished):
-                with pytest.raises(ValueError):
-                    core.mda.run(mda)
+    core.mda.set_engine(BrokenEngine())
+
+    if isinstance(core.mda.events, MDASignaler):
+        with qtbot.waitSignal(core.mda.events.sequenceFinished):
+            with pytest.raises(ValueError):
+                core.mda.run(mda)
+    else:
+        with qtbot.waitSignal(core.mda.events.sequenceFinished):
+            with pytest.raises(ValueError):
+                core.mda.run(mda)
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
     assert not core.mda._canceled

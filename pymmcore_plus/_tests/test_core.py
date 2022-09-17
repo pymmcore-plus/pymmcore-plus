@@ -204,7 +204,7 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
 
 
 def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
-    orig_engine = core.mda
+    orig_engine = core.mda.engine
 
     registered_mock = MagicMock()
     core.events.mdaEngineRegistered.connect(registered_mock)
@@ -221,7 +221,7 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
 
     with qtbot.waitSignal(core.events.mdaEngineRegistered):
         core.register_mda_engine(new_engine)
-    assert core._mda_engine is new_engine
+    assert core.mda.engine is new_engine
 
     # invalid engine
     class nonconforming_engine:
