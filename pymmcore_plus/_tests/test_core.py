@@ -417,7 +417,8 @@ def test_guess_channel_group(core: CMMCorePlus):
 
 
 @pytest.mark.skipif(
-    os.name == "nt" and os.getenv("CI"), reason="CI on windows is broken"
+    os.getenv("CI", None) is not None and os.name == "nt",
+    reason="CI on windows is broken",
 )
 def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
     if not isinstance(core.events, QObject):
