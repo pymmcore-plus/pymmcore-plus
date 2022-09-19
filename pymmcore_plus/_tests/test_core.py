@@ -416,6 +416,9 @@ def test_guess_channel_group(core: CMMCorePlus):
         assert chan_group == ["Channel"]
 
 
+@pytest.mark.skipif(
+    os.name == "nt" and os.getenv("CI"), reason="CI on windows is broken"
+)
 def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
     if not isinstance(core.events, QObject):
         pytest.skip(reason="Skip lock tests on psygnal until we can remove qtbot.")
