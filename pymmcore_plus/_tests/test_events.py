@@ -201,7 +201,7 @@ def test_autoshutter_device_events(core: CMMCorePlus):
 
 def test_set_camera_roi_event(core: CMMCorePlus):
     mock = Mock()
-    core.events.camRoiSet.connect(mock)
+    core.events.ROISet.connect(mock)
     core.setROI(10, 20, 100, 200)
     mock.assert_has_calls(
         [

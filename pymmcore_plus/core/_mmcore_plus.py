@@ -732,14 +732,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None:
         ...  # pragma: no cover
 
-    def setROI(self, *args) -> None:
+    def setROI(self, *args) -> None:  # type: ignore
+        super().setROI(*args)
         if len(args) == 4:
-            x, y, width, height = args
-            cam_label = super().getCameraDevice()
-        else:
-            cam_label, x, y, width, height = args
-        super().setROI(cam_label, x, y, width, height)
-        self.events.camRoiSet.emit(cam_label, x, y, width, height)
+            args = (super().getCameraDevice(),) + args
+        self.events.ROISet.emit(*args)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""

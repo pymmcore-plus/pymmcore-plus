@@ -29,7 +29,7 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     startSequenceAcquisition = Signal(str, int, float, bool)
     stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
-    camRoiSet = Signal(str, int, int, int, int)
+    ROISet = Signal(str, int, int, int, int)
 
     # aliases for lower casing
     @property

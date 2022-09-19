@@ -39,4 +39,5 @@ class PCoreSignaler(Protocol):
     startSequenceAcquisition: PSignalInstance
     stopSequenceAcquisition: PSignalInstance
     autoShutterSet: PSignalInstance
-    camRoiSet: PSignalInstance
+    ROISet: PSignalInstance
+    rOISet: PSignalInstance  # alias
