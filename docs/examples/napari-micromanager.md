@@ -1,6 +1,6 @@
 # Using with napari-micromanager
 
-If you want a nice GUI to interact with in addition to being able to script you can use [napari-micromanager](https://github.com/tlambert03/napari-micromanager#napari-micromanager) which implements a GUI in [napari](https://napari.org/) using this library as a backend.
+If you want a nice GUI to interact with in addition to being able to script you can use [napari-micromanager](https://github.com/pymmcore-plus/napari-micromanager#napari-micromanager) which implements a GUI in [napari](https://napari.org/) using this library as a backend.
 
 
 ## Launching napari from a script

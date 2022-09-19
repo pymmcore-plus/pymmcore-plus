@@ -1,6 +1,6 @@
 # Qt Integration
 
-For a complex Qt application based on `pymmcore-plus` check out [napari-micromanager](https://github.com/tlambert03/napari-micromanager#napari-micromanager) which implements a GUI to control microscopes.
+For a complex Qt application based on `pymmcore-plus` check out [napari-micromanager](https://github.com/pymmcore-plus/napari-micromanager#napari-micromanager) which implements a GUI to control microscopes.
 
 `pymmcore-plus` is designed seamlessly integrate with Qt GUIs. It accomplishes this in two ways:
 
