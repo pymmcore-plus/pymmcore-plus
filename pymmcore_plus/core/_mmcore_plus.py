@@ -736,7 +736,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().setROI(*args)
         if len(args) == 4:
             args = (super().getCameraDevice(),) + args
-        self.events.ROISet.emit(*args)
+        self.events.roiSet.emit(*args)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
