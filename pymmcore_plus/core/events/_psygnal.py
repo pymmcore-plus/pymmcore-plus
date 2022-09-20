@@ -29,7 +29,7 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     startSequenceAcquisition = Signal(str, int, float, bool)
     stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
-
+    roiSet = Signal(str, int, int, int, int)
     pixelSizeSet = Signal(str, float)
     pixelSizeDeleted = Signal(str)
     pixelSizeDefined = Signal(str, str, str, str)

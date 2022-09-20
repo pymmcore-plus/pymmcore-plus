@@ -752,6 +752,19 @@ class CMMCorePlus(pymmcore.CMMCore):
             resolutionID, deviceLabel, propName, value = args
             super().definePixelSizeConfig(resolutionID, deviceLabel, propName, value)
             self.events.pixelSizeDefined.emit(resolutionID, deviceLabel, propName, value)
+    @overload
+    def setROI(self, x: int, y: int, width: int, height: int) -> None:
+        ...  # pragma: no cover
+
+    @overload
+    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None:
+        ...  # pragma: no cover
+
+    def setROI(self, *args) -> None:  # type: ignore
+        super().setROI(*args)
+        if len(args) == 4:
+            args = (super().getCameraDevice(),) + args
+        self.events.roiSet.emit(*args)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
