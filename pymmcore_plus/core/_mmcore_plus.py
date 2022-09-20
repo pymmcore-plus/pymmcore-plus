@@ -1,7 +1,5 @@
 from __future__ import annotations
-import itertools
 
-import itertools
 import atexit
 import os
 import re
@@ -729,7 +727,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setPixelSizeUm(self, resolutionID: str, pixSize: float) -> None:
         super().setPixelSizeUm(resolutionID, pixSize)
         self.events.pixelSizeSet.emit(resolutionID, pixSize)
-    
+
     def deletePixelSizeConfig(self, resolutionID: str):
         super().deletePixelSizeConfig(resolutionID)
         self.events.pixelSizeDeleted.emit(resolutionID)
@@ -751,7 +749,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         else:
             resolutionID, deviceLabel, propName, value = args
             super().definePixelSizeConfig(resolutionID, deviceLabel, propName, value)
-            self.events.pixelSizeDefined.emit(resolutionID, deviceLabel, propName, value)
+            self.events.pixelSizeDefined.emit(
+                resolutionID, deviceLabel, propName, value
+            )
+
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None:
         ...  # pragma: no cover
