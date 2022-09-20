@@ -33,6 +33,7 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     presetDeleted = Signal(str, str)
     newGroupPreset = Signal(str, str, list)
     newGroup = Signal(str)
+    roiSet = Signal(str, int, int, int, int)
 
     # aliases for lower casing
     @property

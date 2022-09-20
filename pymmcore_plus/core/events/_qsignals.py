@@ -37,6 +37,7 @@ class QCoreSignaler(QObject):
     presetDeleted = Signal(str, str)
     newGroupPreset = Signal(str, str, list)
     newGroup = Signal(str)
+    roiSet = Signal(str, int, int, int, int)
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:

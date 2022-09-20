@@ -833,6 +833,19 @@ class CMMCorePlus(pymmcore.CMMCore):
             dev_prop_val_list.append((d, p, v))
 
         self.events.newGroupPreset.emit(group, preset, dev_prop_val_list)
+    @overload
+    def setROI(self, x: int, y: int, width: int, height: int) -> None:
+        ...  # pragma: no cover
+
+    @overload
+    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None:
+        ...  # pragma: no cover
+
+    def setROI(self, *args) -> None:  # type: ignore
+        super().setROI(*args)
+        if len(args) == 4:
+            args = (super().getCameraDevice(),) + args
+        self.events.roiSet.emit(*args)
 
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""

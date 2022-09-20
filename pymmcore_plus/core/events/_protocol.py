@@ -43,3 +43,4 @@ class PCoreSignaler(Protocol):
     presetDeleted: PSignalInstance
     newGroupPreset: PSignalInstance
     newGroup: PSignalInstance
+    roiSet: PSignalInstance
