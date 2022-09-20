@@ -833,6 +833,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             dev_prop_val_list.append((d, p, v))
 
         self.events.newGroupPreset.emit(group, preset, dev_prop_val_list)
+
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None:
         ...  # pragma: no cover

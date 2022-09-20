@@ -301,6 +301,8 @@ def test_groups_and_presets_events(core: CMMCorePlus):
     )
     dpv = [(k[0], k[1], k[2]) for k in core.getConfigData("TestGroup", "TestPreset")]
     assert ("Emission", "Label", "Chroma-HQ700") not in dpv
+
+
 def test_set_camera_roi_event(core: CMMCorePlus):
     mock = Mock()
     core.events.roiSet.connect(mock)
