@@ -43,4 +43,3 @@ class PCoreSignaler(Protocol):
     pixelSizeSet: PSignalInstance
     pixelSizeDeleted: PSignalInstance
     pixelSizeDefined: PSignalInstance
-    

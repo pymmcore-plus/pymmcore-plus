@@ -34,7 +34,6 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     pixelSizeDeleted = Signal(str)
     pixelSizeDefined = Signal(str, str, str, str)
 
-
     # aliases for lower casing
     @property
     def xYStagePositionChanged(self):

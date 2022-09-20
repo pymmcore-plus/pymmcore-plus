@@ -37,7 +37,6 @@ class QCoreSignaler(QObject):
     pixelSizeSet = Signal(str, float)
     pixelSizeDeleted = Signal(str)
     pixelSizeDefined = Signal(str, str, str, str)
-    
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:
