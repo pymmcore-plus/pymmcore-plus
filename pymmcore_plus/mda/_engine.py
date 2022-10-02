@@ -259,7 +259,7 @@ class MDAEngine(PMDAEngine):
                 if cancelled:
                     break
 
-                logger.info(event)
+                logger.debug(event)
                 self._prep_hardware(event)
 
                 self._mmc.snapImage()

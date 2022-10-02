@@ -35,6 +35,7 @@ def set_log_level(level: str = DEFAULT_LOG_LEVEL):
     if sys.stderr:
         logger.add(sys.stderr, level=level, backtrace=False)
 
+    logger.debug('log level set to "{}"', level)
     # TODO: add file outputs
 
 

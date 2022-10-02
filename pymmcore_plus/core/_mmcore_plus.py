@@ -149,7 +149,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if p not in env_path:
                 env_path = p + os.pathsep + env_path
         os.environ["PATH"] = env_path
-        logger.info(f"setting adapter search paths: {adapter_paths}")
+        logger.debug(f"setting adapter search paths: {adapter_paths}")
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
     @synchronized(lock)
@@ -171,7 +171,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def unloadAllDevices(self) -> None:
         # this log won't appear when exiting ipython
         # but the method is still called
-        logger.info("Unloading all devices")
+        logger.debug("Unloading all devices")
         return super().unloadAllDevices()
 
     def getDeviceType(self, label: str) -> DeviceType:

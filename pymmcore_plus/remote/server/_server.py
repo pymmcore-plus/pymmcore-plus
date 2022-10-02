@@ -30,9 +30,9 @@ def try_kill_server(host: str = None, port: int = None):
     proc = _get_remote_pid(host, port)
     if proc is not None:
         proc.kill()
-        logger.info(f"Killed process on {host=}:{port=}")
+        logger.debug(f"Killed process on {host=}:{port=}")
     else:
-        logger.info("No process found")
+        logger.debug("No process found")
 
 
 def serve():
