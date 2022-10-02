@@ -3,10 +3,10 @@ import time
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from loguru import logger
 from psygnal import EmitLoopError
 from useq import MDAEvent, MDASequence
 
+from .._logger import logger
 from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
@@ -260,7 +260,7 @@ class MDAEngine(PMDAEngine):
                 if cancelled:
                     break
 
-                logger.info(event)
+                logger.debug(event)
                 self._prep_hardware(event)
 
                 self._mmc.snapImage()

@@ -25,11 +25,11 @@ from typing import (
 )
 
 import pymmcore
-from loguru import logger
 from psygnal import SignalInstance
 from typing_extensions import Literal
 from wrapt import synchronized
 
+from .._logger import logger
 from .._util import find_micromanager
 from ..mda import MDAEngine, PMDAEngine
 from ._config import Configuration
@@ -149,7 +149,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if p not in env_path:
                 env_path = p + os.pathsep + env_path
         os.environ["PATH"] = env_path
-        logger.info(f"setting adapter search paths: {adapter_paths}")
+        logger.debug(f"setting adapter search paths: {adapter_paths}")
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
     @synchronized(lock)
@@ -171,7 +171,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def unloadAllDevices(self) -> None:
         # this log won't appear when exiting ipython
         # but the method is still called
-        logger.info("Unloading all devices")
+        logger.debug("Unloading all devices")
         return super().unloadAllDevices()
 
     def getDeviceType(self, label: str) -> DeviceType:
@@ -865,11 +865,8 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
             try:
                 getattr(self._emitter, sig_name).emit(*args)
             except Exception as e:
-                import logging
-
-                logging.getLogger(__name__).error(
-                    "Exception occured in MMCorePlus callback %s: %s"
-                    % (repr(sig_name), str(e))
+                logger.error(
+                    f"Exception occured in MMCorePlus callback {sig_name!r}: {e}"
                 )
 
         return reemit
