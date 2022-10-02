@@ -5,10 +5,10 @@ import threading
 import time
 from typing import Optional
 
-from loguru import logger
 from Pyro5 import api, core, errors
 from typing_extensions import Protocol
 
+from ..._logger import logger
 from .. import server
 from .._serialize import register_serializers
 
