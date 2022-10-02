@@ -3,6 +3,7 @@ import time
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
+from psygnal import EmitLoopError
 from useq import MDAEvent, MDASequence
 
 from .._logger import logger
@@ -265,7 +266,9 @@ class MDAEngine(PMDAEngine):
                 self._mmc.snapImage()
                 img = self._mmc.getImage()
 
-                self._events.frameReady.emit(img, event)
+                with contextlib.suppress(EmitLoopError):
+                    self._events.frameReady.emit(img, event)
+
         except Exception as e:  # noqa E722
             # clean up so future MDAs can be run
             self._canceled = False
