@@ -25,11 +25,11 @@ from typing import (
 )
 
 import pymmcore
-from loguru import logger
 from psygnal import SignalInstance
 from typing_extensions import Literal
 from wrapt import synchronized
 
+from .._logger import logger
 from .._util import find_micromanager
 from ..mda import MDAEngine, PMDAEngine
 from ._config import Configuration
@@ -865,11 +865,8 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
             try:
                 getattr(self._emitter, sig_name).emit(*args)
             except Exception as e:
-                import logging
-
-                logging.getLogger(__name__).error(
-                    "Exception occured in MMCorePlus callback %s: %s"
-                    % (repr(sig_name), str(e))
+                logger.error(
+                    f"Exception occured in MMCorePlus callback {sig_name!r}: {e}"
                 )
 
         return reemit

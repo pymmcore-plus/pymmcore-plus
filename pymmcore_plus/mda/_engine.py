@@ -3,9 +3,9 @@ import time
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
-from loguru import logger
 from useq import MDAEvent, MDASequence
 
+from .._logger import logger
 from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:

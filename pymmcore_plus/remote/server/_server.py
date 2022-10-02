@@ -20,7 +20,7 @@ def _get_remote_pid(host, port) -> Optional["Process"]:
 
 
 def try_kill_server(host: str = None, port: int = None):
-    from loguru import logger
+    from ..._logger import logger
 
     if host is None:
         host = DEFAULT_HOST
@@ -39,10 +39,11 @@ def serve():
     import argparse
 
     import Pyro5
-    from loguru import logger
 
     from pymmcore_plus.remote._serialize import register_serializers
     from pymmcore_plus.remote.server import pyroCMMCore
+
+    from ..._logger import logger
 
     parser = argparse.ArgumentParser()
     parser.add_argument("-p", "--port", type=int, default=DEFAULT_PORT, help="port")
