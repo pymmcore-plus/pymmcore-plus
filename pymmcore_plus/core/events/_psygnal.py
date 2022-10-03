@@ -31,7 +31,7 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     autoShutterSet = Signal(bool)
     groupDeleted = Signal(str)
     presetDeleted = Signal(str, str)
-    newGroupPreset = Signal(str, str, list)
+    newGroupPreset = Signal(str, str, str, str, str)
     newGroup = Signal(str)
     roiSet = Signal(str, int, int, int, int)
 
