@@ -201,7 +201,7 @@ def test_autoshutter_device_events(core: CMMCorePlus):
 
 def test_groups_and_presets_events(core: CMMCorePlus):
     mock = Mock()
-    core.events.presetDeleted.connect(mock)
+    core.events.configDeleted.connect(mock)
     core.deleteConfig("Camera", "HighRes")
     mock.assert_has_calls(
         [
@@ -211,7 +211,7 @@ def test_groups_and_presets_events(core: CMMCorePlus):
     assert "HighRes" not in core.getAvailableConfigs("Camera")
 
     mock = Mock()
-    core.events.groupDeleted.connect(mock)
+    core.events.configGroupDeleted.connect(mock)
     core.deleteConfigGroup("Objective")
     mock.assert_has_calls(
         [
@@ -221,86 +221,39 @@ def test_groups_and_presets_events(core: CMMCorePlus):
     assert "Objective" not in core.getAvailableConfigGroups()
 
     mock = Mock()
-    core.events.newGroup.connect(mock)
-    core.defineConfigGroup("Test")
-    mock.assert_has_calls(
-        [
-            call("Test"),
-        ]
-    )
-    assert "Test" in core.getAvailableConfigGroups()
-
-    mock = Mock()
-    core.events.newGroupPreset.connect(mock)
+    core.events.configDefined.connect(mock)
     core.defineConfig("NewGroup", "")
     mock.assert_has_calls(
         [
-            call("NewGroup", "NewPreset", []),
+            call("NewGroup", "NewPreset", "", "", ""),
         ]
     )
     assert "NewGroup" in core.getAvailableConfigGroups()
     assert "NewPreset" in core.getAvailableConfigs("NewGroup")
 
     mock = Mock()
-    core.events.newGroupPreset.connect(mock)
+    core.events.configDefined.connect(mock)
     core.defineConfig("NewGroup_1", "New")
     mock.assert_has_calls(
         [
-            call("NewGroup_1", "New", []),
+            call("NewGroup_1", "New", "", "", ""),
         ]
     )
     assert "NewGroup_1" in core.getAvailableConfigGroups()
     assert "New" in core.getAvailableConfigs("NewGroup_1")
 
     mock = Mock()
-    core.events.newGroupPreset.connect(mock)
+    core.events.configDefined.connect(mock)
     core.defineConfig("NewGroup_2", "New", "Dichroic", "Label", "Q505LP")
     mock.assert_has_calls(
         [
-            call("NewGroup_2", "New", [("Dichroic", "Label", "Q505LP")]),
+            call("NewGroup_2", "New", "Dichroic", "Label", "Q505LP"),
         ]
     )
     assert "NewGroup_2" in core.getAvailableConfigGroups()
     assert "New" in core.getAvailableConfigs("NewGroup_2")
     dpv = [(k[0], k[1], k[2]) for k in core.getConfigData("NewGroup_2", "New")]
     assert ("Dichroic", "Label", "Q505LP") in dpv
-
-    mock = Mock()
-    core.events.newGroupPreset.connect(mock)
-    core.defineConfigFromDevicePropertyValueList(
-        "TestGroup",
-        "TestPreset",
-        [("Dichroic", "Label", "Q505LP"), ("Emission", "Label", "Chroma-HQ700")],
-    )
-    mock.assert_has_calls(
-        [
-            call(
-                "TestGroup",
-                "TestPreset",
-                [
-                    ("Dichroic", "Label", "Q505LP"),
-                    ("Emission", "Label", "Chroma-HQ700"),
-                ],
-            ),
-        ]
-    )
-    assert "TestGroup" in core.getAvailableConfigGroups()
-    assert "TestPreset" in core.getAvailableConfigs("TestGroup")
-    dpv = [(k[0], k[1], k[2]) for k in core.getConfigData("TestGroup", "TestPreset")]
-    assert (
-        ("Dichroic", "Label", "Q505LP") and ("Emission", "Label", "Chroma-HQ700")
-    ) in dpv
-
-    core.deletePresetDeviceProperties(
-        "TestGroup", "TestPreset", [("Emission", "Label")]
-    )
-    mock.assert_has_calls(
-        [
-            call("TestGroup", "TestPreset", [("Dichroic", "Label", "Q505LP")]),
-        ]
-    )
-    dpv = [(k[0], k[1], k[2]) for k in core.getConfigData("TestGroup", "TestPreset")]
-    assert ("Emission", "Label", "Chroma-HQ700") not in dpv
 
 
 def test_set_camera_roi_event(core: CMMCorePlus):
