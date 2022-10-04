@@ -753,7 +753,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if not preset:
             idx = sum(UNNAMED_PRESET in p for p in self.getAvailableConfigs(group))
             preset = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
-        
+
         if not self.isGroupDefined(group):
             super().defineConfigGroup(
                 group
