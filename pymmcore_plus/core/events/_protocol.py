@@ -39,8 +39,7 @@ class PCoreSignaler(Protocol):
     startSequenceAcquisition: PSignalInstance
     stopSequenceAcquisition: PSignalInstance
     autoShutterSet: PSignalInstance
-    groupDeleted: PSignalInstance
-    presetDeleted: PSignalInstance
-    newGroupPreset: PSignalInstance
-    newGroup: PSignalInstance
+    configGroupDeleted: PSignalInstance
+    configDeleted: PSignalInstance
+    configDefined: PSignalInstance
     roiSet: PSignalInstance

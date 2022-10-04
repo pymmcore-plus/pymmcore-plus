@@ -33,10 +33,9 @@ class QCoreSignaler(QObject):
     # when (Continuous)SequenceAcquisition is stopped
     stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
-    groupDeleted = Signal(str)
-    presetDeleted = Signal(str, str)
-    newGroupPreset = Signal(str, str, str, str, str)
-    newGroup = Signal(str)
+    configGroupDeleted = Signal(str)
+    configDeleted = Signal(str, str)
+    configDefined = Signal(str, str, str, str, str)
     roiSet = Signal(str, int, int, int, int)
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict

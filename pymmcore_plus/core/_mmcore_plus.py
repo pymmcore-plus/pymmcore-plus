@@ -727,11 +727,11 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def deleteConfig(self, group: str, preset: str) -> None:
         super().deleteConfig(group, preset)
-        self.events.presetDeleted.emit(group, preset)
+        self.events.configDeleted.emit(group, preset)
 
     def deleteConfigGroup(self, group: str) -> None:
         super().deleteConfigGroup(group)
-        self.events.groupDeleted.emit(group)
+        self.events.configGroupDeleted.emit(group)
 
     @overload
     def defineConfig(self, group: str, preset: str) -> None:
@@ -766,7 +766,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             device_label, device_property, value = ("", "", "")
             super().defineConfig(group, preset)
 
-        self.events.newGroupPreset.emit(
+        self.events.configDefined.emit(
                 group, preset, device_label, device_property, value
             )
 
