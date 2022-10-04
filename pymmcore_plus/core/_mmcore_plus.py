@@ -767,8 +767,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             super().defineConfig(group, preset)
 
         self.events.configDefined.emit(
-                group, preset, device_label, device_property, value
-            )
+            group, preset, device_label, device_property, value
+        )
 
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None:
