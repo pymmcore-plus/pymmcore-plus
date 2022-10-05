@@ -34,9 +34,6 @@ class QCoreSignaler(QObject):
     stopSequenceAcquisition = Signal(str)
     autoShutterSet = Signal(bool)
     roiSet = Signal(str, int, int, int, int)
-    pixelSizeSet = Signal(str, float)
-    pixelSizeDeleted = Signal(str)
-    pixelSizeDefined = Signal(str, str, str, str)
 
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:

@@ -40,6 +40,3 @@ class PCoreSignaler(Protocol):
     stopSequenceAcquisition: PSignalInstance
     autoShutterSet: PSignalInstance
     roiSet: PSignalInstance
-    pixelSizeSet: PSignalInstance
-    pixelSizeDeleted: PSignalInstance
-    pixelSizeDefined: PSignalInstance

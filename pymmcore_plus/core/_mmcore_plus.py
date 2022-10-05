@@ -726,11 +726,11 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def setPixelSizeUm(self, resolutionID: str, pixSize: float) -> None:
         super().setPixelSizeUm(resolutionID, pixSize)
-        self.events.pixelSizeSet.emit(resolutionID, pixSize)
+        self.events.pixelSizeChanged.emit(pixSize)
 
     def deletePixelSizeConfig(self, resolutionID: str):
         super().deletePixelSizeConfig(resolutionID)
-        self.events.pixelSizeDeleted.emit(resolutionID)
+        self.events.pixelSizeChanged.emit(0.0)
 
     @overload
     def definePixelSizeConfig(self, resolutionID: str) -> None:
@@ -749,9 +749,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         else:
             resolutionID, deviceLabel, propName, value = args
             super().definePixelSizeConfig(resolutionID, deviceLabel, propName, value)
-            self.events.pixelSizeDefined.emit(
-                resolutionID, deviceLabel, propName, value
-            )
+        self.events.pixelSizeChanged.emit(0.0)
 
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None:
