@@ -214,7 +214,7 @@ def test_set_camera_roi_event(core: CMMCorePlus):
 def test_pixel_changed_event(core: CMMCorePlus):
     mock = Mock()
     core.events.pixelSizeChanged.connect(mock)
-    
+
     core.deletePixelSizeConfig("Res10x")
     mock.assert_has_calls([call(0.0)])
     assert "Res10x" not in core.getAvailablePixelSizeConfigs()
