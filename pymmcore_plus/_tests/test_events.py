@@ -211,38 +211,18 @@ def test_set_camera_roi_event(core: CMMCorePlus):
     assert list(core.getROI()) == [10, 20, 100, 200]
 
 
-def test_define_px_cfg_events(core: CMMCorePlus):
+def test_pixel_changed_event(core: CMMCorePlus):
     mock = Mock()
-    core.events.pixelSizeDefined.connect(mock)
-    core.definePixelSizeConfig("test", "Objective", "Label", "Nikon 10X S Fluor")
-    mock.assert_has_calls(
-        [
-            call("test", "Objective", "Label", "Nikon 10X S Fluor"),
-        ]
-    )
-    assert "test" in core.getAvailablePixelSizeConfigs()
-
-
-def test_delete_px_cfg_events(core: CMMCorePlus):
-    assert "Res10x" in core.getAvailablePixelSizeConfigs()
-    mock = Mock()
-    core.events.pixelSizeDeleted.connect(mock)
+    core.events.pixelSizeChanged.connect(mock)
+    
     core.deletePixelSizeConfig("Res10x")
-    mock.assert_has_calls(
-        [
-            call("Res10x"),
-        ]
-    )
+    mock.assert_has_calls([call(0.0)])
     assert "Res10x" not in core.getAvailablePixelSizeConfigs()
 
+    core.definePixelSizeConfig("test", "Objective", "Label", "Nikon 10X S Fluor")
+    mock.assert_has_calls([call(0.0)])
+    assert "test" in core.getAvailablePixelSizeConfigs()
 
-def test_set_px_cfg_events(core: CMMCorePlus):
-    mock = Mock()
-    core.events.pixelSizeSet.connect(mock)
-    core.setPixelSizeUm("Res10x", 6.5)
-    mock.assert_has_calls(
-        [
-            call("Res10x", 6.5),
-        ]
-    )
-    assert core.getPixelSizeUmByID("Res10x") == 6.5
+    core.setPixelSizeUm("test", 6.5)
+    mock.assert_has_calls([call(6.5)])
+    assert core.getPixelSizeUmByID("test") == 6.5
