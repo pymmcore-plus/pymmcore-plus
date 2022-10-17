@@ -743,12 +743,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         ...
 
     def definePixelSizeConfig(self, *args) -> None:
-        if len(args) == 1:
-            resolutionID = args
-            super().definePixelSizeConfig(resolutionID)
-        else:
-            resolutionID, deviceLabel, propName, value = args
-            super().definePixelSizeConfig(resolutionID, deviceLabel, propName, value)
+        super().definePixelSizeConfig(*args)
         self.events.pixelSizeChanged.emit(0.0)
 
     @overload
