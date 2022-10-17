@@ -724,6 +724,28 @@ class CMMCorePlus(pymmcore.CMMCore):
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
+    def setPixelSizeUm(self, resolutionID: str, pixSize: float) -> None:
+        super().setPixelSizeUm(resolutionID, pixSize)
+        self.events.pixelSizeChanged.emit(pixSize)
+
+    def deletePixelSizeConfig(self, resolutionID: str):
+        super().deletePixelSizeConfig(resolutionID)
+        self.events.pixelSizeChanged.emit(0.0)
+
+    @overload
+    def definePixelSizeConfig(self, resolutionID: str) -> None:
+        ...
+
+    @overload
+    def definePixelSizeConfig(
+        self, resolutionID: str, deviceLabel: str, propName: str, value: str
+    ) -> None:
+        ...
+
+    def definePixelSizeConfig(self, *args) -> None:
+        super().definePixelSizeConfig(*args)
+        self.events.pixelSizeChanged.emit(0.0)
+
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None:
         ...  # pragma: no cover
