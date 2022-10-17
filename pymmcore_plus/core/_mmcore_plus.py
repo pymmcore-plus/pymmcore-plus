@@ -755,9 +755,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             preset = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
 
         if not self.isGroupDefined(group):
-            super().defineConfigGroup(
-                group
-            )  # needed to refresh pymmcore 'ChannelGroup' options
+            # needed to refresh pymmcore 'ChannelGroup' options
+            super().defineConfigGroup(group)
 
         if args:
             device_label, device_property, value = args
