@@ -55,6 +55,7 @@ _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)
+UNNAMED_PRESET = "NewPreset"
 
 
 @contextmanager
@@ -723,6 +724,50 @@ class CMMCorePlus(pymmcore.CMMCore):
             shutterLabel = super().getShutterDevice()
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
+
+    def deleteConfig(self, group: str, preset: str) -> None:
+        super().deleteConfig(group, preset)
+        self.events.configDeleted.emit(group, preset)
+
+    def deleteConfigGroup(self, group: str) -> None:
+        super().deleteConfigGroup(group)
+        self.events.configGroupDeleted.emit(group)
+
+    @overload
+    def defineConfig(self, group: str, preset: str) -> None:
+        ...  # pragma: no cover
+
+    @overload
+    def defineConfig(
+        self,
+        group: str,
+        preset: str,
+        device_label: str,
+        device_property: str,
+        value: str,
+    ) -> None:
+        ...  # pragma: no cover
+
+    def defineConfig(self, group: str, preset: str, *args) -> None:
+
+        if not preset:
+            idx = sum(UNNAMED_PRESET in p for p in self.getAvailableConfigs(group))
+            preset = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
+
+        if not self.isGroupDefined(group):
+            # needed to refresh pymmcore 'ChannelGroup' options
+            super().defineConfigGroup(group)
+
+        if args:
+            device_label, device_property, value = args
+            super().defineConfig(group, preset, device_label, device_property, value)
+        else:
+            device_label, device_property, value = ("", "", "")
+            super().defineConfig(group, preset)
+
+        self.events.configDefined.emit(
+            group, preset, device_label, device_property, value
+        )
 
     def setPixelSizeUm(self, resolutionID: str, pixSize: float) -> None:
         super().setPixelSizeUm(resolutionID, pixSize)
