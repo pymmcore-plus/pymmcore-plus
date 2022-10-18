@@ -1,6 +1,8 @@
 import pytest
+from _pytest.logging import LogCaptureFixture
 
 import pymmcore_plus
+from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler, QMDASignaler
 
@@ -22,3 +24,12 @@ def core(request):
         )
     core.loadSystemConfiguration()
     return core
+
+
+@pytest.fixture
+def caplog(caplog: LogCaptureFixture):
+    handler_id = logger.add(caplog.handler, format="{message}")
+    try:
+        yield caplog
+    finally:
+        logger.remove(handler_id)

@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Set
 from Pyro5 import errors
 from Pyro5.api import behavior, expose, oneway
 
+from ..._logger import logger
 from ...core._mmcore_plus import CMMCorePlus
 from ...core.events import CMMCoreSignaler
 from .._util import wrap_for_pyro
@@ -47,7 +48,6 @@ class pyroCMMCore(CMMCorePlus):
 
     @oneway
     def emit_signal(self, signal_name: str, *args):
-        from loguru import logger
 
         logger.debug("{}: {}", signal_name, args)
         for handler in list(self._callback_handlers):
