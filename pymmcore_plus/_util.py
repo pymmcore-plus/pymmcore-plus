@@ -4,6 +4,8 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+from ._logger import logger
+
 __all__ = [
     "find_micromanager",
     "_qt_app_is_running",
@@ -22,7 +24,6 @@ def find_micromanager() -> Optional[str]:
         - `/Applications` on mac
         - `/usr/local/lib` on linux
     """
-    from loguru import logger
 
     # environment variable takes precedence
     env_path = os.getenv("MICROMANAGER_PATH")

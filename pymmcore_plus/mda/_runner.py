@@ -5,6 +5,7 @@ import time
 from typing import TYPE_CHECKING, cast
 
 from loguru import logger
+from psygnal import EmitLoopError
 
 from ._protocol import PMDAEngine
 from .events import PMDASignaler, _get_auto_MDA_callback_class
@@ -138,7 +139,9 @@ class MDARunner:
                 self._engine.setup_event(event)
 
                 output = self._engine.exec_event(event)
-                self._events.frameReady.emit(output, event)
+
+                with contextlib.suppress(EmitLoopError):
+                    self._events.frameReady.emit(output, event)
 
                 teardown_event(event)
 

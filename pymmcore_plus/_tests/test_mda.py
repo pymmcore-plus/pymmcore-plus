@@ -71,13 +71,10 @@ def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
 
     core.mda.events.frameReady.connect(cb)
 
-    # only test the psygnal branch
-    # qt signals seem to push through this just fine
-
     if isinstance(core.mda.events, MDASignaler):
         with qtbot.waitSignal(core.mda.events.sequenceFinished):
-            with pytest.raises(ValueError):
-                core.mda.run(mda)
+            core.mda.run(mda)
+
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
     assert not core.mda._canceled

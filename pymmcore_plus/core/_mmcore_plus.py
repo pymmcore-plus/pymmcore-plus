@@ -25,11 +25,11 @@ from typing import (
 )
 
 import pymmcore
-from loguru import logger
 from psygnal import SignalInstance
 from typing_extensions import Literal
 from wrapt import synchronized
 
+from .._logger import logger
 from .._util import find_micromanager
 from ..mda import MDAEngine, MDARunner, PMDAEngine
 from ._config import Configuration
@@ -55,6 +55,7 @@ _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)
+UNNAMED_PRESET = "NewPreset"
 
 
 @contextmanager
@@ -150,7 +151,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if p not in env_path:
                 env_path = p + os.pathsep + env_path
         os.environ["PATH"] = env_path
-        logger.info(f"setting adapter search paths: {adapter_paths}")
+        logger.debug(f"setting adapter search paths: {adapter_paths}")
         super().setDeviceAdapterSearchPaths(adapter_paths)
 
     @synchronized(lock)
@@ -172,7 +173,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def unloadAllDevices(self) -> None:
         # this log won't appear when exiting ipython
         # but the method is still called
-        logger.info("Unloading all devices")
+        logger.debug("Unloading all devices")
         return super().unloadAllDevices()
 
     def getDeviceType(self, label: str) -> DeviceType:
@@ -723,6 +724,86 @@ class CMMCorePlus(pymmcore.CMMCore):
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
+    def deleteConfig(self, group: str, preset: str) -> None:
+        super().deleteConfig(group, preset)
+        self.events.configDeleted.emit(group, preset)
+
+    def deleteConfigGroup(self, group: str) -> None:
+        super().deleteConfigGroup(group)
+        self.events.configGroupDeleted.emit(group)
+
+    @overload
+    def defineConfig(self, group: str, preset: str) -> None:
+        ...  # pragma: no cover
+
+    @overload
+    def defineConfig(
+        self,
+        group: str,
+        preset: str,
+        device_label: str,
+        device_property: str,
+        value: str,
+    ) -> None:
+        ...  # pragma: no cover
+
+    def defineConfig(self, group: str, preset: str, *args) -> None:
+
+        if not preset:
+            idx = sum(UNNAMED_PRESET in p for p in self.getAvailableConfigs(group))
+            preset = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
+
+        if not self.isGroupDefined(group):
+            # needed to refresh pymmcore 'ChannelGroup' options
+            super().defineConfigGroup(group)
+
+        if args:
+            device_label, device_property, value = args
+            super().defineConfig(group, preset, device_label, device_property, value)
+        else:
+            device_label, device_property, value = ("", "", "")
+            super().defineConfig(group, preset)
+
+        self.events.configDefined.emit(
+            group, preset, device_label, device_property, value
+        )
+
+    def setPixelSizeUm(self, resolutionID: str, pixSize: float) -> None:
+        super().setPixelSizeUm(resolutionID, pixSize)
+        self.events.pixelSizeChanged.emit(pixSize)
+
+    def deletePixelSizeConfig(self, resolutionID: str):
+        super().deletePixelSizeConfig(resolutionID)
+        self.events.pixelSizeChanged.emit(0.0)
+
+    @overload
+    def definePixelSizeConfig(self, resolutionID: str) -> None:
+        ...
+
+    @overload
+    def definePixelSizeConfig(
+        self, resolutionID: str, deviceLabel: str, propName: str, value: str
+    ) -> None:
+        ...
+
+    def definePixelSizeConfig(self, *args) -> None:
+        super().definePixelSizeConfig(*args)
+        self.events.pixelSizeChanged.emit(0.0)
+
+    @overload
+    def setROI(self, x: int, y: int, width: int, height: int) -> None:
+        ...  # pragma: no cover
+
+    @overload
+    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None:
+        ...  # pragma: no cover
+
+    def setROI(self, *args) -> None:  # type: ignore
+        super().setROI(*args)
+        if len(args) == 4:
+            args = (super().getCameraDevice(),) + args
+        self.events.roiSet.emit(*args)
+
     def state(self, exclude=()) -> dict:
         """A dict with commonly accessed state values.  Faster than getSystemState."""
         # approx retrieval cost in comment (for demoCam)
@@ -850,11 +931,8 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
             try:
                 getattr(self._emitter, sig_name).emit(*args)
             except Exception as e:
-                import logging
-
-                logging.getLogger(__name__).error(
-                    "Exception occured in MMCorePlus callback %s: %s"
-                    % (repr(sig_name), str(e))
+                logger.error(
+                    f"Exception occured in MMCorePlus callback {sig_name!r}: {e}"
                 )
 
         return reemit
