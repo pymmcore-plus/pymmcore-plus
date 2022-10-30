@@ -1,8 +1,11 @@
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from qtpy.QtCore import QObject, Signal
 
-from ._prop_event_mixin import PropKeyDict, _PropertySignal
+from ._prop_event_mixin import _PropertySignal
+
+if TYPE_CHECKING:
+    from ._prop_event_mixin import PropKeyDict
 
 
 class QCoreSignaler(QObject):

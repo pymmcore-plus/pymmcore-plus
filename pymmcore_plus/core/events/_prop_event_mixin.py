@@ -1,15 +1,21 @@
-from typing import Any, Callable, Dict, Optional, Tuple, TypeVar
+from __future__ import annotations
 
-from psygnal._signal import NormedCallback, _normalize_slot
+from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar
+
+from psygnal._signal import _normalize_slot
+
+if TYPE_CHECKING:
+    from psygnal._signal import NormedCallback
+
+    PropKey = Tuple[str, Optional[str], NormedCallback]
+    PropKeyDict = Dict[PropKey, Callable]
 
 from ._protocol import PCoreSignaler
 
 _C = TypeVar("_C", bound=Callable[..., Any])
-PropKey = Tuple[str, Optional[str], NormedCallback]
-PropKeyDict = Dict[PropKey, Callable]
 
 
-def _denormalize_slot(slot: "NormedCallback") -> Optional[Callable]:
+def _denormalize_slot(slot: NormedCallback) -> Optional[Callable]:
     if not isinstance(slot, tuple):
         return slot
 
@@ -28,7 +34,7 @@ def _denormalize_slot(slot: "NormedCallback") -> Optional[Callable]:
 class _PropertySignal:
     def __init__(
         self,
-        core_events: "_DevicePropertyEventMixin",
+        core_events: _DevicePropertyEventMixin,
         device: str,
         property: Optional[str] = None,
     ) -> None:
