@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 
 from useq import MDAEvent, MDASequence
 
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from ..core import CMMCorePlus
 
 
@@ -43,4 +45,8 @@ class MDAEngine(PMDAEngine):
     def exec_event(self, event: MDAEvent) -> Any:
         # TODO: add non-aquisition event-specific logic here later
         self._mmc.snapImage()
-        return self._mmc.getImage()
+        return EventPayload(image=self._mmc.getImage())
+
+
+class EventPayload(NamedTuple):
+    image: np.ndarray

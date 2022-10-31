@@ -140,8 +140,9 @@ class MDARunner:
 
                 output = self._engine.exec_event(event)
 
-                with contextlib.suppress(EmitLoopError):
-                    self._events.frameReady.emit(output, event)
+                if (img := getattr(output, "image", None)) is not None:
+                    with contextlib.suppress(EmitLoopError):
+                        self._events.frameReady.emit(img, event)
 
                 teardown_event(event)
 
