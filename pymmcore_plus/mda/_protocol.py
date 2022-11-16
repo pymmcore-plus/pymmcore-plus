@@ -1,0 +1,66 @@
+from __future__ import annotations
+
+from abc import abstractmethod
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+
+if TYPE_CHECKING:
+    from useq import MDAEvent, MDASequence
+
+
+# NOTE: This whole thing could potentially go in useq-schema
+# as it makes no assumptions about pymmcore-plus
+
+
+@runtime_checkable
+class PMDAEngine(Protocol):
+    """Protocol that all MDA engines must implement."""
+
+    @abstractmethod
+    def setup_sequence(self, sequence: MDASequence) -> None:
+        """Setup state of system (hardware, etc.) before an MDA is run.
+
+        This method is called once at the beginning of a sequence.
+        """
+
+    @abstractmethod
+    def setup_event(self, event: MDAEvent) -> None:
+        """Prepare state of system (hardware, etc.) for `event`.
+
+        This method is called before each event in the sequence.  It is
+        responsible for preparing the state of the system for the event.
+        The engine should be in a state where it can call `exec_event`
+        without any additional preparation.  (This means that the engine
+        should perform any waits or blocks required for system state
+        changes to complete.)
+        """
+
+    @abstractmethod
+    def exec_event(self, event: MDAEvent) -> Any:
+        """Execute `event`.
+
+        This method is called after `setup_event` and is responsible for
+        executing the event.  The default assumption is to acquire an image,
+        but more elaborate events will be possible.
+        Any products of the event (such as an image) should be returned by this
+        function.
+        """
+        # TODO: nail down a spec for the return object.
+
+
+class FullPMDAEngine(PMDAEngine, Protocol):
+    """Optional methods that a PMDAEngine MAY implement."""
+
+    def teardown_event(self, event: MDAEvent) -> None:
+        """Teardown state of system (hardware, etc.) after `event`.
+
+        If the engine provides this function, it will be called after
+        `exec_event` to perform any cleanup or teardown required after
+        the event has been executed.
+        """
+
+    def teardown_sequence(self, sequence: MDASequence) -> None:
+        """Perform any teardown required after the sequence has been executed.
+
+        If the engine provides this function, it will be called after the
+        last event in the sequence has been executed.
+        """

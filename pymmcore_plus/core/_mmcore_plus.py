@@ -31,7 +31,7 @@ from wrapt import synchronized
 
 from .._logger import logger
 from .._util import find_micromanager
-from ..mda import MDAEngine, PMDAEngine
+from ..mda import MDAEngine, MDARunner, PMDAEngine
 from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._device import Device
@@ -98,7 +98,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
 
-        self._mda_engine = MDAEngine(self)
+        self._mda_runner = MDARunner()
+        self._mda_runner.set_engine(MDAEngine(self))
 
         self._objective_regex = _OBJECTIVE_DEVICE_RE
         self._channel_group_regex = _CHANNEL_REGEX
@@ -554,10 +555,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         return super().snapImage()
 
     @property
-    def mda(self):
-        return self._mda_engine
+    def mda(self) -> MDARunner:
+        return self._mda_runner
 
-    def run_mda(self, sequence: MDASequence) -> Thread:
+    def run_mda(self, sequence: MDASequence, block=False) -> Thread:
         """
         Run MDA defined by *sequence* on a new thread. The currently
         registered MDAEngine (``core.mda``) will be responsible for executing
@@ -569,21 +570,27 @@ class CMMCorePlus(pymmcore.CMMCore):
         Parameters
         ----------
         sequence : useq.MDASequence
+            The useq.MDASequence to run.
+        block : bool, optional
+            If True, block until the sequence is complete, by default False.
 
         Returns
         -------
         Thread
-            The thread the MDA is running on.
+            The thread the MDA is running on.  Use ``thread.join()`` to block until
+            done, or ``thread.is_alive()`` to check if the sequence is complete.
         """
-        if self._mda_engine.is_running():
+        if self.mda.is_running():
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self._mda_engine.run, args=(sequence,))
+        th = Thread(target=self.mda.run, args=(sequence,))
         th.start()
+        if block:
+            th.join()
         return th
 
-    def register_mda_engine(self, engine):
+    def register_mda_engine(self, engine: PMDAEngine) -> None:
         """
         Set the MDA Engine to be used on ``run_mda``. This will unregister
         the previous engine and emit an ``mdaEngineRegistered`` signal. The
@@ -594,16 +601,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         engine : PMDAEngine
             Any object conforming to the PMDAEngine protocol.
         """
-        if not isinstance(engine, PMDAEngine):
-            raise TypeError("Engine does not conform to the Engine protocol.")
-        if self._mda_engine.is_running():
-            raise ValueError(
-                "Cannot register a new engine when the current engine is running "
-                "an acquistion. Please cancel the current engine's acquistion "
-                "before registering"
-            )
-        previous_engine, self._mda_engine = self._mda_engine, engine
-        self.events.mdaEngineRegistered.emit(engine, previous_engine)
+        old_engine = self.mda.set_engine(engine)
+        self.events.mdaEngineRegistered.emit(engine, old_engine)
 
     def _fix_image(self, img: np.ndarray) -> np.ndarray:
         """Fix img shape/dtype based on `self.getNumberOfComponents()`.
