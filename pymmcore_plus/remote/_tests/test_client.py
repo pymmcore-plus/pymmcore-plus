@@ -85,6 +85,7 @@ def test_cb_without_qt(proxy):
     proxy.loadSystemConfiguration()
     assert cam[0] == "Camera"
 
+
 @pytest.mark.skip(reason="this stopped working around Nov 2022, not sure why")
 def test_cb_with_qt(qtbot, proxy):
     """This tests that we can call a core method within a callback
