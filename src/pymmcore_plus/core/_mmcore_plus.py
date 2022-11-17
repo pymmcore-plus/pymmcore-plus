@@ -55,7 +55,7 @@ UNNAMED_PRESET = "NewPreset"
 
 
 @contextmanager
-def _blockSignal(obj, signal):
+def _blockSignal(obj: Any, signal: Any) -> Iterator[None]:
     if isinstance(signal, SignalInstance):
         signal.block()
         yield
@@ -74,14 +74,14 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @classmethod
     def instance(
-        cls, mm_path=None, adapter_paths: ListOrTuple[str] = ()
+        cls, mm_path: str | None = None, adapter_paths: Sequence[str] = ()
     ) -> CMMCorePlus:
         global _instance
         if _instance is None:
             _instance = cls(mm_path, adapter_paths)
         return _instance
 
-    def __init__(self, mm_path=None, adapter_paths: ListOrTuple[str] = ()):
+    def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__()
 
         self._mm_path = mm_path or find_micromanager()
@@ -108,7 +108,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def __repr__(self) -> str:
         return f"<{type(self).__name__} at {hex(id(self))}>"
 
-    def __del__(self):
+    def __del__(self) -> None:
         atexit.unregister(self._weak_clean)
         self.unloadAllDevices()
 
@@ -188,19 +188,59 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # config overrides
 
+    @overload
     def getConfigData(
-        self, configGroup: str, configName: str, *, native=False
+        self, configGroup: str, configName: str, *, native: Literal[True]
+    ) -> pymmcore.Configuration:
+        ...
+
+    @overload
+    def getConfigData(
+        self, configGroup: str, configName: str, *, native: Literal[False] = False
     ) -> Configuration:
+        ...
+
+    def getConfigData(
+        self, configGroup: str, configName: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
         """Returns the configuration object for a given group and name."""
         cfg = super().getConfigData(configGroup, configName)
         return cfg if native else Configuration.from_configuration(cfg)
 
-    def getPixelSizeConfigData(self, configName: str, *, native=False) -> Configuration:
+    @overload
+    def getPixelSizeConfigData(
+        self, configName: str, *, native: Literal[True]
+    ) -> pymmcore.Configuration:
+        ...
+
+    @overload
+    def getPixelSizeConfigData(
+        self, configName: str, *, native: Literal[False] = False
+    ) -> Configuration:
+        ...
+
+    def getPixelSizeConfigData(
+        self, configName: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
         """Returns the configuration object for a given pixel size preset."""
         cfg = super().getPixelSizeConfigData(configName)
         return cfg if native else Configuration.from_configuration(cfg)
 
-    def getConfigGroupState(self, group: str, *, native=False) -> Configuration:
+    @overload
+    def getConfigGroupState(
+        self, group: str, *, native: Literal[True]
+    ) -> pymmcore.Configuration:
+        ...
+
+    @overload
+    def getConfigGroupState(
+        self, group: str, *, native: Literal[False] = False
+    ) -> Configuration:
+        ...
+
+    def getConfigGroupState(
+        self, group: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
         """Returns the partial state of the system, for the devices included in the
 
         specified group.
@@ -209,8 +249,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         return cfg if native else Configuration.from_configuration(cfg)
 
     def getConfigGroupStateFromCache(
-        self, group: str, *, native=False
-    ) -> Configuration:
+        self, group: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
         """Returns the partial state of the system cache, for the devices included
 
         in the specified group.
@@ -218,7 +258,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         cfg = super().getConfigGroupStateFromCache(group)
         return cfg if native else Configuration.from_configuration(cfg)
 
-    def getConfigState(self, group: str, config: str, *, native=False) -> Configuration:
+    def getConfigState(
+        self, group: str, config: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
         """Returns a partial state of the system, for devices included in the
 
         specified configuration.
@@ -226,12 +268,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         cfg = super().getConfigState(group, config)
         return cfg if native else Configuration.from_configuration(cfg)
 
-    def getSystemState(self, *, native=False) -> Configuration:
+    def getSystemState(
+        self, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
         """Returns the entire system state."""
         cfg = super().getSystemState()
         return cfg if native else Configuration.from_configuration(cfg)
 
-    def getSystemStateCache(self, *, native=False) -> Configuration:
+    def getSystemStateCache(
+        self, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
         """Returns the entire system state from cache"""
         cfg = super().getSystemStateCache()
         return cfg if native else Configuration.from_configuration(cfg)
@@ -399,6 +445,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Use `json.dump` to convert this dict to a JSON string.
         """
+        # TODO: make TypeDict
         d: dict[str, Any] = {
             "title": self.getDeviceName(device_label),
             "description": self.getDeviceDescription(device_label),
@@ -406,7 +453,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             "properties": {},
         }
         for prop in self.iterProperties(device_label=device_label, as_object=True):
-            d["properties"][prop.name] = p = {}
+            d["properties"][prop.name] = {}
+            p: dict[str, Any] = {}
             if prop.type().to_json() != "null":
                 p["type"] = prop.type().to_json()
             if prop.hasLimits():

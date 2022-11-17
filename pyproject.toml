@@ -67,6 +67,8 @@ dev = [
     "pytest",
     "rich",
     "ruff",
+    "types-psutil",
+    "types-PyYAML",
 ]
 
 [project.urls]
@@ -145,8 +147,16 @@ disallow_untyped_calls = false
 disallow_untyped_defs = false
 show_error_codes = true
 pretty = true
-follow_imports = "silent"
+
+[[tool.mypy.overrides]]
+module = ["pymmcore_plus.remote.*"]
+ignore_errors = true
+
+
+[[tool.mypy.overrides]]
+module = ["Pyro5.*", "wrapt"]
 ignore_missing_imports = true
+
 
 # https://coverage.readthedocs.io/en/6.4/config.html
 [tool.coverage.report]

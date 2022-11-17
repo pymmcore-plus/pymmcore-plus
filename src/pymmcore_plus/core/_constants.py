@@ -1,6 +1,6 @@
-from enum import IntEnum, auto
+from __future__ import annotations
 
-# Enums
+from enum import IntEnum, auto
 
 
 class DeviceType(IntEnum):
@@ -40,7 +40,7 @@ class DeviceType(IntEnum):
     Hub = HubDevice
     Galvo = GalvoDevice
 
-    def __str__(self):
+    def __str__(self) -> str:
         return self.name.replace("Type", "").replace("Device", "")
 
 
@@ -50,10 +50,10 @@ class PropertyType(IntEnum):
     Float = auto()
     Integer = auto()
 
-    def to_python(self):
+    def to_python(self) -> type | None:
         return {0: None, 1: str, 2: float, 3: int}[self]
 
-    def to_json(self):
+    def to_json(self) -> str:
         return {0: "null", 1: "string", 2: "number", 3: "integer"}[self]
 
 

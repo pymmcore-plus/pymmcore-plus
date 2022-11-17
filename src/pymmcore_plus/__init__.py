@@ -3,7 +3,7 @@ try:
 except ImportError:  # pragma: no cover
     __version__ = "unknown"
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, List
 
 from ._util import find_micromanager
 from .core import (
@@ -46,11 +46,11 @@ __all__ = [
 ]
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return list(globals()) + ["RemoteMMCore", "server"]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name in {"RemoteMMCore", "server"}:
         try:
             from . import remote

@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
     from psutil import Process
+
 CORE_NAME = "pymmcore_plus.CMMCorePlus"
 DEFAULT_PORT = 54333
 DEFAULT_HOST = "127.0.0.1"
@@ -13,7 +14,8 @@ def _get_remote_pid(host, port) -> Optional["Process"]:
     import psutil
 
     for proc in psutil.process_iter(["connections"]):
-        for pconn in proc.info["connections"] or []:
+        info: dict = getattr(proc, "info", {})
+        for pconn in info["connections"] or []:
             if pconn.laddr.port == port and pconn.laddr.ip == host:
                 return proc
     return None

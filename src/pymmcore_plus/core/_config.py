@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Dict, Iterator, Tuple
+from typing import Any, DefaultDict, Dict, Iterator, Tuple, cast
 
 import pymmcore
 
@@ -89,7 +89,7 @@ class Configuration(pymmcore.Configuration):
             ps = self.getSetting(i)
             yield ps.getDeviceLabel(), ps.getPropertyName(), ps.getPropertyValue()
 
-    def __getitem__(self, key):
+    def __getitem__(self, key: int | tuple[str, str]) -> str:
         """Get property setting by index or (devLabel, propLabel) key."""
         if isinstance(key, int):
             return self.getSetting(key).getPropertyValue()
@@ -97,7 +97,7 @@ class Configuration(pymmcore.Configuration):
             return self.getSetting(*key).getPropertyValue()
         raise TypeError("key must be either an int or 2-tuple of strings.")
 
-    def __contains__(self, query):
+    def __contains__(self, query: object) -> bool:
         if isinstance(query, pymmcore.Configuration):
             return self.isConfigurationIncluded(query)
         if isinstance(query, pymmcore.PropertySetting):
@@ -137,10 +137,10 @@ class Configuration(pymmcore.Configuration):
         except ImportError:  # pragma: no cover
             raise ImportError("Could not import yaml.  Please `pip install PyYAML`.")
 
-        return safe_dump(self.dict())
+        return cast(str, safe_dump(self.dict()))
 
     @classmethod
-    def from_configuration(cls, config: pymmcore.Configuration):
+    def from_configuration(cls, config: pymmcore.Configuration) -> Configuration:
         """Create Configuration (Plus) from pymmcore.Configuration."""
         new = cls()
         for s in range(config.size()):
@@ -148,7 +148,7 @@ class Configuration(pymmcore.Configuration):
         return new
 
     @classmethod
-    def create(cls, *args, **kwargs):
+    def create(cls, *args: Any, **kwargs: Any) -> Configuration:
         """More flexible init to create a `Configuration`.
 
         Can create from:

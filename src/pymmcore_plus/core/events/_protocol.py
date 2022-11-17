@@ -3,13 +3,13 @@ from typing import Any, Callable, Protocol, runtime_checkable
 
 @runtime_checkable
 class PSignalInstance(Protocol):
-    def connect(self, slot: Callable, **kwargs: Any):
+    def connect(self, slot: Callable, **kwargs: Any) -> Any:
         ...
 
-    def disconnect(self, slot: Callable, **kwargs: Any):
+    def disconnect(self, slot: Callable, **kwargs: Any) -> Any:
         ...
 
-    def emit(self, args: Any):
+    def emit(self, args: Any) -> Any:
         ...
 
 

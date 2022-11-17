@@ -41,4 +41,5 @@ repos:
       - id: mypy
         additional_dependencies:
           - types-PyYAML
+          - pymmcore
         files: "^src/"
