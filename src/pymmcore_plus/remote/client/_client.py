@@ -72,7 +72,7 @@ class RemoteMMCore(api.Proxy):
 
 
 def new_server_process(
-    host: str, port: int, timeout: int = 5, verbose: bool = False
+    host: str, port: int, timeout: float = 5, verbose: bool = False
 ) -> subprocess.Popen:
     """Create a new daemon process."""
     cmd = [sys.executable, "-m", server.__name__, "-p", str(port), "--host", host]

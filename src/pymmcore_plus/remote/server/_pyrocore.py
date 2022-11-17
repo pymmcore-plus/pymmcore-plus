@@ -1,4 +1,5 @@
 from functools import partial
+from threading import Thread
 from typing import TYPE_CHECKING, Set
 
 from Pyro5 import errors
@@ -43,7 +44,7 @@ class pyroCMMCore(CMMCorePlus):
         self._callback_handlers.discard(handler)
 
     @oneway
-    def run_mda(self, sequence) -> None:  # pragma: no cover
+    def run_mda(self, sequence) -> Thread:  # pragma: no cover
         return super().run_mda(sequence)
 
     @oneway

@@ -74,4 +74,5 @@ class QCoreSignaler(QObject):
         >>> core.events.devicePropertyChanged('Camera', 'Gain').connect(callback)
         >>> core.events.devicePropertyChanged('Camera').connect(callback)
         """
-        return _PropertySignal(self, device, property)
+        # type ignored: can't use _DevicePropertyEventMixin due to metaclass conflict
+        return _PropertySignal(self, device, property)  # type: ignore

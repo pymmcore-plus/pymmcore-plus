@@ -12,13 +12,9 @@ from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
-    Dict,
     Iterator,
-    List,
-    Optional,
     Pattern,
     Sequence,
-    Tuple,
     TypeVar,
     Union,
     overload,
@@ -43,9 +39,9 @@ if TYPE_CHECKING:
     import numpy as np
     from useq import MDASequence
 
-_T = TypeVar("_T")
+    _T = TypeVar("_T")
+    ListOrTuple = Union[list[_T], tuple[_T, ...]]
 
-ListOrTuple = Union[List[_T], Tuple[_T, ...]]
 
 _OBJECTIVE_DEVICE_RE = re.compile(
     "(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE
@@ -138,21 +134,20 @@ class CMMCorePlus(pymmcore.CMMCore):
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             super().setStateLabel(stateDeviceLabel, stateLabel)
 
-    def setDeviceAdapterSearchPaths(self, adapter_paths: ListOrTuple[str]) -> None:
+    def setDeviceAdapterSearchPaths(self, paths: Sequence[str]) -> None:
+        """Set the device adapter search paths."""
         # add to PATH as well for dynamic dlls
-        if (
-            not isinstance(adapter_paths, (list, tuple))
-            and adapter_paths
-            and all(isinstance(i, str) for i in adapter_paths)
-        ):
-            raise TypeError("adapter paths must be a sequence of strings")
+        if not paths:
+            return
+        if isinstance(paths, str) or any(not isinstance(p, str) for p in paths):
+            raise TypeError("paths must be a sequence of strings")
         env_path = os.environ["PATH"]
-        for p in adapter_paths:
+        for p in paths:
             if p not in env_path:
                 env_path = p + os.pathsep + env_path
         os.environ["PATH"] = env_path
-        logger.debug(f"setting adapter search paths: {adapter_paths}")
-        super().setDeviceAdapterSearchPaths(adapter_paths)
+        logger.debug(f"setting adapter search paths: {paths}")
+        super().setDeviceAdapterSearchPaths(paths)
 
     @synchronized(lock)
     def loadSystemConfiguration(
@@ -244,18 +239,14 @@ class CMMCorePlus(pymmcore.CMMCore):
     # metadata overloads that don't require instantiating metadata first
 
     @synchronized(lock)
-    def getLastImageMD(
-        self, md: Optional[Metadata] = None
-    ) -> Tuple[np.ndarray, Metadata]:
+    def getLastImageMD(self, md: Metadata | None = None) -> tuple[np.ndarray, Metadata]:
         if md is None:
             md = Metadata()
         img = super().getLastImageMD(md)
         return img, md
 
     @synchronized(lock)
-    def popNextImageMD(
-        self, md: Optional[Metadata] = None
-    ) -> Tuple[np.ndarray, Metadata]:
+    def popNextImageMD(self, md: Metadata | None = None) -> tuple[np.ndarray, Metadata]:
         if md is None:
             md = Metadata()
         img = super().popNextImageMD(md)
@@ -272,8 +263,8 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @synchronized(lock)
     def getNBeforeLastImageMD(
-        self, n: int, md: Optional[Metadata] = None
-    ) -> Tuple[np.ndarray, Metadata]:
+        self, n: int, md: Metadata | None = None
+    ) -> tuple[np.ndarray, Metadata]:
         if md is None:
             md = Metadata()
         img = super().getNBeforeLastImageMD(n, md)
@@ -292,8 +283,8 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def iterDevices(  # type: ignore
         self,
-        device_type: Optional[DeviceType] = ...,
-        device_label: Optional[str] = ...,
+        device_type: DeviceType | None = ...,
+        device_label: str | None = ...,
         as_object: Literal[False] = False,
     ) -> Iterator[str]:
         ...
@@ -301,25 +292,25 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def iterDevices(
         self,
-        device_type: Optional[DeviceType] = ...,
-        device_label: Optional[str] = ...,
+        device_type: DeviceType | None = ...,
+        device_label: str | None = ...,
         as_object: Literal[True] = ...,
     ) -> Iterator[Device]:
         ...
 
     def iterDevices(
         self,
-        device_type: Optional[DeviceType] = None,
-        device_label: Optional[str] = None,
+        device_type: DeviceType | None = None,
+        device_label: str | None = None,
         as_object: bool = False,
-    ) -> Iterator[Union[Device, str]]:
+    ) -> Iterator[Device | str]:
         """Iterate over currently loaded devices.
 
         Parameters
         ----------
-        device_type : Optional[DeviceType]
+        device_type : DeviceType | None
             DeviceType to filter by, by default all device types will be yielded.
-        device_label : Optional[str]
+        device_label : str | None
             Device label to filter by, by default all device labels will be yielded.
         as_object : bool, optional
             If `True`, `Device` objects will be yielded instead of
@@ -341,39 +332,39 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def iterProperties(  # type: ignore
         self,
-        device_type: Optional[DeviceType] = ...,
-        device_label: Optional[str] = ...,
-        property_type: Optional[PropertyType] = ...,
+        device_type: DeviceType | None = ...,
+        device_label: str | None = ...,
+        property_type: PropertyType | None = ...,
         as_object: Literal[False] = False,
-    ) -> Iterator[Tuple[str, str]]:
+    ) -> Iterator[tuple[str, str]]:
         ...
 
     @overload
     def iterProperties(
         self,
-        device_type: Optional[DeviceType] = ...,
-        device_label: Optional[str] = ...,
-        property_type: Optional[PropertyType] = ...,
+        device_type: DeviceType | None = ...,
+        device_label: str | None = ...,
+        property_type: PropertyType | None = ...,
         as_object: Literal[True] = ...,
     ) -> Iterator[DeviceProperty]:
         ...
 
     def iterProperties(
         self,
-        device_type: Optional[DeviceType] = None,
-        device_label: Optional[str] = None,
-        property_type: Optional[PropertyType] = None,
+        device_type: DeviceType | None = None,
+        device_label: str | None = None,
+        property_type: PropertyType | None = None,
         as_object: bool = False,
-    ) -> Iterator[Union[DeviceProperty, Tuple[str, str]]]:
+    ) -> Iterator[DeviceProperty | tuple[str, str]]:
         """Iterate over currently loaded (device_label, property_name) pairs.
 
         Parameters
         ----------
-        device_type : Optional[DeviceType]
+        device_type : DeviceType | None
             DeviceType to filter by, by default all device types will be yielded.
-        device_label : Optional[str]
+        device_label : str | None
             Device label to filter by, by default all device labels will be yielded.
-        property_type : Optional[PropertyType]
+        property_type : PropertyType | None
             PropertyType to filter by, by default all property types will be yielded.
         as_object : bool, optional
             If `True`, `DeviceProperty` objects will be yielded instead of
@@ -381,7 +372,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Yields
         ------
-        Iterator[Union[DeviceProperty, Tuple[str, str]]]
+        Iterator[Union[DeviceProperty, tuple[str, str]]]
             `DeviceProperty` objects (if `as_object==True`) or 2-tuples of (device_name,
             property_name)
         """
@@ -403,12 +394,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Return a Device object bound to device_label on this core."""
         return Device(device_label, mmcore=self)
 
-    def getDeviceSchema(self, device_label: str) -> Dict[str, Any]:
+    def getDeviceSchema(self, device_label: str) -> dict[str, Any]:
         """Return dict in JSON-schema format for properties of `device_label`.
 
         Use `json.dump` to convert this dict to a JSON string.
         """
-        d = {
+        d: dict[str, Any] = {
             "title": self.getDeviceName(device_label),
             "description": self.getDeviceDescription(device_label),
             "type": "object",
@@ -470,7 +461,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             )
         self._channel_group_regex = value
 
-    def guessObjectiveDevices(self) -> List[str]:
+    def guessObjectiveDevices(self) -> list[str]:
         """
         Find any loaded devices that are likely to be an Objective/Nosepiece.
 
@@ -480,16 +471,14 @@ class CMMCorePlus(pymmcore.CMMCore):
 
             re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)``
         """
-        devices = []
+        return [
+            device
+            for device in self.getLoadedDevicesOfType(DeviceType.StateDevice)
+            if self._objective_regex.match(device)
+        ]
 
-        for device in self.getLoadedDevicesOfType(DeviceType.StateDevice):
-            if self._objective_regex.match(device):
-                devices.append(device)
-        return devices
-
-    def getOrGuessChannelGroup(self) -> List[str]:
-        """
-        Get the channelGroup or find a likely set of candidates.
+    def getOrGuessChannelGroup(self) -> list[str]:
+        """Get the channelGroup or find a likely set of candidates.
 
         If the group is not defined via ``.getChannelGroup`` then likely candidates
         will be found by searching for config groups with names that match this
@@ -503,11 +492,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         if chan_group:
             return [chan_group]
         # not set in core. Try "Channel" and other variations as fallbacks
-        channel_guess = []
-        for group in self.getAvailableConfigGroups():
-            if self._channel_group_regex.match(group):
-                channel_guess.append(group)
-        return channel_guess
+        return [
+            group
+            for group in self.getAvailableConfigGroups()
+            if self._channel_group_regex.match(group)
+        ]
 
     def setRelativeXYZPosition(
         self, dx: float = 0, dy: float = 0, dz: float = 0
@@ -529,24 +518,24 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self.setPosition(self.getFocusDevice(), val)
 
     @overload
-    def setPosition(self, stageLabel: str, position: float):
-        ...
-
-    @overload
     def setPosition(self, position: float):
         ...
 
+    @overload
+    def setPosition(self, stageLabel: str, position: float):
+        ...
+
     @synchronized(lock)
-    def setPosition(self, *args) -> None:
+    def setPosition(self, *args, **kwargs) -> None:
         """Set position of the stage in microns."""
-        return super().setPosition(*args)
+        return super().setPosition(*args, **kwargs)
 
     @synchronized(lock)
     def setXYPosition(self, x: float, y: float) -> None:
         return super().setXYPosition(x, y)
 
     @synchronized(lock)
-    def getCameraChannelNames(self) -> Tuple[str, ...]:
+    def getCameraChannelNames(self) -> tuple[str, ...]:
         return tuple(
             self.getCameraChannelName(i)
             for i in range(self.getNumberOfCameraChannels())
@@ -686,8 +675,8 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> None:
         ...  # pragma: no cover
 
-    def startSequenceAcquisition(self, *args) -> None:
-        super().startSequenceAcquisition(*args)
+    def startSequenceAcquisition(self, *args, **kwargs) -> None:
+        super().startSequenceAcquisition(*args, **kwargs)
         if len(args) == 3:
             numImages, intervalMs, stopOnOverflow = args
             cameraLabel = super().getCameraDevice()
@@ -697,7 +686,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             cameraLabel, numImages, intervalMs, stopOnOverflow
         )
 
-    def stopSequenceAcquisition(self, cameraLabel: Optional[str] = None) -> None:
+    def stopSequenceAcquisition(self, cameraLabel: str | None = None) -> None:
         """Stop a SequenceAcquisition."""
         if cameraLabel is None:
             super().stopSequenceAcquisition()
@@ -727,48 +716,73 @@ class CMMCorePlus(pymmcore.CMMCore):
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
-    def deleteConfig(self, group: str, preset: str) -> None:
-        super().deleteConfig(group, preset)
-        self.events.configDeleted.emit(group, preset)
+    @overload
+    def deleteConfig(self, groupName: str, configName: str) -> None:
+        ...
+
+    @overload
+    def deleteConfig(
+        self, groupName: str, configName: str, deviceLabel: str, propName: str
+    ) -> None:
+        ...
+
+    def deleteConfig(
+        self,
+        groupName: str,
+        configName: str,
+        deviceLabel: str | None = None,
+        propName: str | None = None,
+    ) -> None:
+        """Deletes a configuration from a group."""
+        args: tuple[str, ...] = (groupName, configName)
+        if deviceLabel is not None and propName is not None:
+            args = args + (deviceLabel, propName)
+        super().deleteConfig(*args)
+        self.events.configDeleted.emit(groupName, configName)
 
     def deleteConfigGroup(self, group: str) -> None:
         super().deleteConfigGroup(group)
         self.events.configGroupDeleted.emit(group)
 
     @overload
-    def defineConfig(self, group: str, preset: str) -> None:
+    def defineConfig(self, groupName: str, configName: str) -> None:
         ...  # pragma: no cover
 
     @overload
     def defineConfig(
         self,
-        group: str,
-        preset: str,
-        device_label: str,
-        device_property: str,
+        groupName: str,
+        configName: str,
+        deviceLabel: str,
+        propName: str,
         value: str,
     ) -> None:
         ...  # pragma: no cover
 
-    def defineConfig(self, group: str, preset: str, *args) -> None:
+    def defineConfig(
+        self,
+        groupName: str,
+        configName: str,
+        deviceLabel: str | None = None,
+        propName: str | None = None,
+        value: str | None = None,
+    ) -> None:
+        if not configName:
+            idx = sum(UNNAMED_PRESET in p for p in self.getAvailableConfigs(groupName))
+            configName = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
 
-        if not preset:
-            idx = sum(UNNAMED_PRESET in p for p in self.getAvailableConfigs(group))
-            preset = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
-
-        if not self.isGroupDefined(group):
+        if not self.isGroupDefined(groupName):
             # needed to refresh pymmcore 'ChannelGroup' options
-            super().defineConfigGroup(group)
+            super().defineConfigGroup(groupName)
 
-        if args:
-            device_label, device_property, value = args
-            super().defineConfig(group, preset, device_label, device_property, value)
+        if (deviceLabel is not None) and (propName is not None) and (value is not None):
+            super().defineConfig(groupName, configName, deviceLabel, propName, value)
         else:
-            device_label, device_property, value = ("", "", "")
-            super().defineConfig(group, preset)
+            deviceLabel, propName, value = ("", "", "")
+            super().defineConfig(groupName, configName)
 
         self.events.configDefined.emit(
-            group, preset, device_label, device_property, value
+            groupName, configName, deviceLabel, propName, value
         )
 
     def setPixelSizeUm(self, resolutionID: str, pixSize: float) -> None:
@@ -789,8 +803,8 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> None:
         ...
 
-    def definePixelSizeConfig(self, *args) -> None:
-        super().definePixelSizeConfig(*args)
+    def definePixelSizeConfig(self, *args: str, **kwargs: str) -> None:
+        super().definePixelSizeConfig(*args, **kwargs)
         self.events.pixelSizeChanged.emit(0.0)
 
     @overload
@@ -826,7 +840,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             "PixelSizeUm": self.getPixelSizeUm(True),  # 2.2 µs  (True==cached)
             "ShutterDevice": self.getShutterDevice(),  # 152 ns
             "SLMDevice": self.getSLMDevice(),  # 110 ns
-            "XYPosition": self.getXYPosition(),  # 1.1 µs
+            "XYPosition": self.getXYPosition(),  # type: ignore  # 1.1 µs
             "XYStageDevice": self.getXYStageDevice(),  # 156 ns
             "ZPosition": self.getZPosition(),  # 1.03 µs
         }

@@ -26,9 +26,7 @@ def _denormalize_slot(slot: NormedCallback) -> Optional[Callable]:
     if method is not None:
         return method
     _cb = getattr(obj, name, None)
-    if _cb is None:  # pragma: no cover
-        return None
-    return _cb
+    return None if _cb is None else _cb
 
 
 class _PropertySignal:

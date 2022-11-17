@@ -138,13 +138,15 @@ filterwarnings = ["error"]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
-files = "src/**/"
-strict = true
+files = "src/**/*/*.py"
 disallow_any_generics = false
 disallow_subclassing_any = false
+disallow_untyped_calls = false
+disallow_untyped_defs = false
 show_error_codes = true
 pretty = true
-
+follow_imports = "silent"
+ignore_missing_imports = true
 
 # https://coverage.readthedocs.io/en/6.4/config.html
 [tool.coverage.report]

@@ -122,7 +122,9 @@ class SerNDArray(Serializer[np.ndarray]):
     def from_dict(self, classname: str, d: dict):
         """Convert dict from `ndarray_to_dict` back to np.ndarray."""
         shm = SharedMemory(name=d["shm"], create=False)
-        array = np.ndarray(d["shape"], dtype=d["dtype"], buffer=shm.buf).copy()
+        array: np.ndarray = np.ndarray(
+            d["shape"], dtype=d["dtype"], buffer=shm.buf
+        ).copy()
         shm.close()
         shm.unlink()
         return array
