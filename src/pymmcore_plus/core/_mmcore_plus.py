@@ -453,8 +453,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             "properties": {},
         }
         for prop in self.iterProperties(device_label=device_label, as_object=True):
-            d["properties"][prop.name] = {}
-            p: dict[str, Any] = {}
+            p: dict[str, Any]
+            d["properties"][prop.name] = p = {}
             if prop.type().to_json() != "null":
                 p["type"] = prop.type().to_json()
             if prop.hasLimits():
