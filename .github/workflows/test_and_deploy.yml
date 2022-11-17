@@ -37,9 +37,7 @@ jobs:
           pip install -e .[remote,testing]
 
       - name: Install Micro-Manager
-        # pinning install until upstream is fixed:
-        # https://github.com/micro-manager/mmCoreAndDevices/issues/288
-        run: python -m pymmcore_plus.install -r 20221024
+        run: python -m pymmcore_plus.install
 
       - name: Test
         run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
