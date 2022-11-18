@@ -1,0 +1,51 @@
+site_name: pymmcore-plus
+site_description: Pure python extensions of the C++ micro-manager core
+strict: true
+site_url: https://pymmcore-plus.readthedocs.io/
+
+repo_name: pymmcore-plus/pymmcore-plus
+repo_url: https://github.com/pymmcore-plus/pymmcore-plus
+edit_uri: edit/main/docs/
+
+theme:
+  name: 'material'
+  icon:
+    logo: fontawesome/solid/microscope
+  palette:
+  # Palette toggle for light mode
+  - media: "(prefers-color-scheme: light)"
+    scheme: default
+    primary: teal
+    accent: indigo
+    toggle:
+      icon: material/lightbulb-outline
+      name: "Switch to dark mode"
+  # Palette toggle for dark mode
+  - media: "(prefers-color-scheme: dark)"
+    scheme: slate
+    primary: teal
+    accent: light green
+    toggle:
+      icon: material/lightbulb
+      name: "Switch to light mode"
+  features:
+    - content.tabs.link
+
+markdown_extensions:
+  - tables
+  - toc:
+      permalink: true
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.extra
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
+
+extra_css:
+  - stylesheets/extra.css
