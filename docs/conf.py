@@ -38,14 +38,13 @@ subprocess.call(
             "--no-toc",
             "--templatedir _templates",
             "--separate",
-            "../pymmcore_plus/",
+            str(Path(pymmcore_plus.__file__).parent),
             # excluded modules
             # nothing here for cookiecutter
         ]
     ),
     shell=True,
 )
-
 
 # -- General configuration ---------------------------------------------------
 
