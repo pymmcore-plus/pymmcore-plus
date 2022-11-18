@@ -6,14 +6,21 @@ from typing import Optional
 
 from ._logger import logger
 
-__all__ = [
-    "find_micromanager",
-    "_qt_app_is_running",
-]
+__all__ = ["find_micromanager", "_qt_app_is_running"]
 
 
 def find_micromanager() -> Optional[str]:
-    """Locate a Micro-Manager folder (for device adapters)."""
+    """Locate a Micro-Manager folder (for device adapters).
+
+    In order, this will look for:
+    1. An environment variable named MICROMANAGER_PATH
+    2. An installation in the pymmcore_plus package directory (this is the
+       default install location when running python -m pymmcore_plus.install)
+    3. The default micromanager install location:
+        - `C:/Program Files/` on windows
+        - `/Applications` on mac
+        - `/usr/local/lib` on linux
+    """
     # environment variable takes precedence
     env_path = os.getenv("MICROMANAGER_PATH")
     if env_path and os.path.isdir(env_path):
