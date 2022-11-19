@@ -1,4 +1,4 @@
-from typing import Any, Callable, Protocol, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 
 @runtime_checkable
@@ -9,7 +9,7 @@ class PSignalInstance(Protocol):
     def disconnect(self, slot: Callable, **kwargs: Any) -> Any:
         ...
 
-    def emit(self, args: Any) -> Any:
+    def emit(self, *args: Any) -> Any:
         ...
 
 
@@ -43,3 +43,8 @@ class PCoreSignaler(Protocol):
     configDeleted: PSignalInstance
     configDefined: PSignalInstance
     roiSet: PSignalInstance
+
+    def devicePropertyChanged(
+        self, device: str, property: Optional[str] = None
+    ) -> PSignalInstance:
+        ...
