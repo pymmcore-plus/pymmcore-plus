@@ -47,12 +47,9 @@ dependencies = [
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
 docs = [
-    "Sphinx>=1.5",
-    "furo",
-    "myst-nb",
-    "sphinx-copybutton",
-    "sphinx-panels",
-    "sphinx-togglebutton",
+    "mkdocs",
+    "mkdocs-material",
+    "mkdocstrings-python",
 ]
 remote = ["Pyro5>=5.10", "msgpack", "psutil"]
 testing = ["PySide2", "pytest", "pytest-cov", "pytest-qt", "qtpy"]

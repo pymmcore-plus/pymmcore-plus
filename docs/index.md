@@ -45,7 +45,7 @@ pure python/C environments**.
     ecosystem, including the GUI and plugins. A disadvantage is that it requires a
     Java runtime environment and cross-process communication and data sharing.
 
-![micro-manager ecosystem components](images/components.png)
+    ![micro-manager ecosystem components](images/components.png){ loading=lazy }
 ## Basic Usage
 
 ```python

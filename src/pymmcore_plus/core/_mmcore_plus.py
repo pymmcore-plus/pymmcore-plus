@@ -70,6 +70,16 @@ _instance = None
 
 
 class CMMCorePlus(pymmcore.CMMCore):
+    """Wrapper for CMMCore with extended functionality.
+
+    Parameters
+    ----------
+    mm_path : str | None, optional
+        Path to the Micro-Manager installation, by default None
+    adapter_paths : Sequence[str], optional
+        Paths to search for device adapters, by default ()
+    """
+
     lock = RLock()
 
     @classmethod

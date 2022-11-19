@@ -1,6 +1,6 @@
 site_name: pymmcore-plus
 site_description: Pure python extensions of the C++ micro-manager core
-strict: true
+# strict: true
 site_url: https://pymmcore-plus.readthedocs.io/
 
 repo_name: pymmcore-plus/pymmcore-plus
@@ -8,26 +8,26 @@ repo_url: https://github.com/pymmcore-plus/pymmcore-plus
 edit_uri: edit/main/docs/
 
 theme:
-  name: 'material'
+  name: "material"
   icon:
     logo: fontawesome/solid/microscope
   palette:
-  # Palette toggle for light mode
-  - media: "(prefers-color-scheme: light)"
-    scheme: default
-    primary: teal
-    accent: indigo
-    toggle:
-      icon: material/lightbulb-outline
-      name: "Switch to dark mode"
-  # Palette toggle for dark mode
-  - media: "(prefers-color-scheme: dark)"
-    scheme: slate
-    primary: teal
-    accent: light green
-    toggle:
-      icon: material/lightbulb
-      name: "Switch to light mode"
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: indigo
+      toggle:
+        icon: material/lightbulb-outline
+        name: "Switch to dark mode"
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: light green
+      toggle:
+        icon: material/lightbulb
+        name: "Switch to light mode"
   features:
     - content.tabs.link
 
@@ -46,6 +46,44 @@ markdown_extensions:
 
 plugins:
   - search
+  - mkdocstrings:
+      handlers:
+        python:
+          import:
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+          options:
+            ## Headings options:
+            # heading_level: 2 # default is 2
+            # show_root_heading: true # default is false
+            show_root_toc_entry: false # default is true
+            # show_root_full_path: false # default is true
+            # show_root_members_full_path: true # default is false
+            # show_object_full_path: true # default is false
+            # show_category_heading: true # default is false
 
+            ## Members options:
+            # members: [] # default is None
+            # members_order: 'source' # default is 'alphabetical'
+            filters: ['^[^_]'] # list of filters to filter objects by name
+            # group_by_category: false # default is true
+            # show_submodules: true # default is false
+
+            ## Docstrings options:
+            docstring_style: 'numpy'
+            # docstring_options: {}  # griffe.docstrings options
+            # docstring_section_style: 'list'  # default is 'table' (or spacy)
+            line_length: 50  # default is 60
+            # merge_init_into_class: true  # default is false
+            show_if_no_docstring: true  # default is false
+
+            ## Signatures/annotations options:
+            # show_signature: false  # default is true
+            show_signature_annotations: true # default is false
+            annotations_path: 'source' # default is 'brief'
+            # separate_signature: true # default is false
+
+            show_bases: false # default is true
+            show_source: false # default is true
 extra_css:
   - stylesheets/extra.css
