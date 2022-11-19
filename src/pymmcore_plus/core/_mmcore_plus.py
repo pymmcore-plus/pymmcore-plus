@@ -32,7 +32,7 @@ from .._logger import logger
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from .._util import find_micromanager
-from .events import CMMCoreSignaler, _get_auto_core_callback_class, PCoreSignaler
+from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 from ..mda import MDAEngine, MDARunner, PMDAEngine
 
 if TYPE_CHECKING:
