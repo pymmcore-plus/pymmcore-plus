@@ -7,6 +7,9 @@ repo_name: pymmcore-plus/pymmcore-plus
 repo_url: https://github.com/pymmcore-plus/pymmcore-plus
 edit_uri: edit/main/docs/
 
+watch:
+  - src/pymmcore_plus
+
 theme:
   name: "material"
   icon:
@@ -45,6 +48,9 @@ markdown_extensions:
       alternate_style: true
 
 plugins:
+  - pymmcore-docs
+  - macros:
+      include_dir: docs/_includes
   - search
   - mkdocstrings:
       handlers:
@@ -55,8 +61,8 @@ plugins:
           options:
             ## Headings options:
             # heading_level: 2 # default is 2
-            # show_root_heading: true # default is false
-            show_root_toc_entry: false # default is true
+            show_root_heading: true # default is false
+            # show_root_toc_entry: false # default is true
             # show_root_full_path: false # default is true
             # show_root_members_full_path: true # default is false
             # show_object_full_path: true # default is false

@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-def _get_auto_core_callback_class(default=CMMCoreSignaler):
+def _get_auto_core_callback_class(default=CMMCoreSignaler) -> PCoreSignaler:
     if _qt_app_is_running():
         from ._qsignals import QCoreSignaler
 

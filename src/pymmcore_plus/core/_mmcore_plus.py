@@ -32,7 +32,7 @@ from .._logger import logger
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from .._util import find_micromanager
-from .events import CMMCoreSignaler, _get_auto_core_callback_class
+from .events import CMMCoreSignaler, _get_auto_core_callback_class, PCoreSignaler
 from ..mda import MDAEngine, MDARunner, PMDAEngine
 
 if TYPE_CHECKING:
@@ -80,7 +80,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         Paths to search for device adapters, by default ()
     """
 
-    lock = RLock()
+    _lock = RLock()
+    events: PCoreSignaler
 
     @classmethod
     def instance(
@@ -124,7 +125,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # Re-implemented methods from the CMMCore API
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def setProperty(
         self, label: str, propName: str, propValue: Union[bool, float, int, str]
     ) -> None:
@@ -132,13 +133,13 @@ class CMMCorePlus(pymmcore.CMMCore):
         with self._property_change_emission_ensured(label, (propName,)):
             super().setProperty(label, propName, propValue)
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def setState(self, stateDeviceLabel: str, state: int) -> None:
         """Set state (by position) on stateDeviceLabel, with reliable event emission."""
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             super().setState(stateDeviceLabel, state)
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
         """Set state (by label) on stateDeviceLabel, with reliable event emission."""
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
@@ -159,7 +160,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         logger.debug(f"setting adapter search paths: {paths}")
         super().setDeviceAdapterSearchPaths(paths)
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
     ) -> None:
@@ -294,21 +295,21 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # metadata overloads that don't require instantiating metadata first
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def getLastImageMD(self, md: Metadata | None = None) -> tuple[np.ndarray, Metadata]:
         if md is None:
             md = Metadata()
         img = super().getLastImageMD(md)
         return img, md
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def popNextImageMD(self, md: Metadata | None = None) -> tuple[np.ndarray, Metadata]:
         if md is None:
             md = Metadata()
         img = super().popNextImageMD(md)
         return img, md
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def popNextImage(self) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
 
@@ -317,7 +318,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self._fix_image(super().popNextImage())
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def getNBeforeLastImageMD(
         self, n: int, md: Metadata | None = None
     ) -> tuple[np.ndarray, Metadata]:
@@ -583,23 +584,23 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setPosition(self, stageLabel: str, position: float):
         ...
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def setPosition(self, *args, **kwargs) -> None:
         """Set position of the stage in microns."""
         return super().setPosition(*args, **kwargs)
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def setXYPosition(self, x: float, y: float) -> None:
         return super().setXYPosition(x, y)
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def getCameraChannelNames(self) -> tuple[str, ...]:
         return tuple(
             self.getCameraChannelName(i)
             for i in range(self.getNumberOfCameraChannels())
         )
 
-    @synchronized(lock)
+    @synchronized(_lock)
     def snapImage(self) -> None:
         return super().snapImage()
 
@@ -825,6 +826,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         propName: str | None = None,
         value: str | None = None,
     ) -> None:
+        """Defines a configuration."""
         if not configName:
             idx = sum(UNNAMED_PRESET in p for p in self.getAvailableConfigs(groupName))
             configName = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET

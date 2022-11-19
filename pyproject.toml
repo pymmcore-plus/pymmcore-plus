@@ -47,7 +47,10 @@ dependencies = [
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
 docs = [
+    # bugfix until https://github.com/mkdocstrings/griffe/pull/115
+    "griffe @ git+https://github.com/tlambert03/griffe@recursion#egg=griffe",
     "mkdocs",
+    "mkdocs-macros-plugin",
     "mkdocs-material",
     "mkdocstrings-python",
 ]
@@ -78,12 +81,15 @@ Documentation = "https://pymmcore-plus.readthedocs.io/"
 
 # Entry points
 # https://peps.python.org/pep-0621/#entry-points
-# [project.entry-points."spam.magical"]
-# tomatoes = "spam:main_tomatoes"
+[project.entry-points."mkdocs.plugins"]
+pymmcore-docs = "pymmcore_plus._docs_plugin:SomeClass"
 
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/pymmcore_plus/_version.py"
