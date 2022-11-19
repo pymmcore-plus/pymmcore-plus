@@ -11,7 +11,7 @@ PLUS_MEMBERS = "_cmmcoreplus_members.md"
 CORE_MEMBERS = "_cmmcore_members.md"
 
 
-class SomeClass(BasePlugin):
+class PymmcoreDocs(BasePlugin):
     def on_pre_build(self, *, config: MkDocsConfig) -> None:
         import pymmcore
         import pymmcore_plus
