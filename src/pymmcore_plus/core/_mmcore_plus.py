@@ -22,6 +22,7 @@ from typing import (
 
 import pymmcore
 from psygnal import SignalInstance
+from pymmcore_plus.core.events import PCoreSignaler
 from typing_extensions import Literal
 from wrapt import synchronized
 
@@ -100,7 +101,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if adapter_paths:
             self.setDeviceAdapterSearchPaths(adapter_paths)
 
-        self.events = _get_auto_core_callback_class()()
+        self._events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
 
@@ -114,6 +115,15 @@ class CMMCorePlus(pymmcore.CMMCore):
         # garbage collected
         self._weak_clean = weakref.WeakMethod(self.unloadAllDevices)
         atexit.register(self._weak_clean)
+
+    @property
+    def events(self) -> PCoreSignaler:
+        """Signaler for core events.
+
+        See [`pymmcore_plus.core.events.PCoreSignaler`][] documentation for details
+        of the available signals, and how to connect to them.
+        """
+        return self._events
 
     def __repr__(self) -> str:
         return f"<{type(self).__name__} at {hex(id(self))}>"

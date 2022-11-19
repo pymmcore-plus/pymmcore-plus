@@ -15,6 +15,7 @@ nav:
   - install.md
   - API:
     - api/cmmcoreplus.md
+    - api/events.md
   - Examples:
     - examples/mda.md
     - examples/integration-with-qt.md
