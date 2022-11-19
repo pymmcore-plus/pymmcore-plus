@@ -13,6 +13,11 @@ CORE_MEMBERS = "_cmmcore_members.md"
 
 class PymmcoreDocs(BasePlugin):
     def on_pre_build(self, *, config: MkDocsConfig) -> None:
+        if config.site_name != "pymmcore-plus":
+            # just in case were building something else...
+            # we don't need this
+            return
+
         import pymmcore
         import pymmcore_plus
 
