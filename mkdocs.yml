@@ -21,7 +21,6 @@ nav:
     - api/configuration.md
     - api/constants.md
     - api/utils.md
-    - api/install_cli.md
   - Examples:
     - examples/mda.md
     - examples/integration-with-qt.md
