@@ -16,6 +16,8 @@ nav:
   - API:
     - api/cmmcoreplus.md
     - api/events.md
+    - api/constants.md
+    - api/utilities.md
   - Examples:
     - examples/mda.md
     - examples/integration-with-qt.md
