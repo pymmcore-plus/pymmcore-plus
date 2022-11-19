@@ -42,18 +42,32 @@ _NULL = object()
 
 
 class Configuration(pymmcore.Configuration):
-    """Encapsulation of the configuration information, with convenience methods.
+    """Encapsulation of configuration information.
 
-    This pymmcore_plus variant provides additional conveniences:
-        __len__ - number of settings
-        __str__ - pretty printing of Config
-        __contains__ - check if (devLabel, propLabel) is in the config
-        __getitem__ - get property setting by index or (devLabel, propLabel) key
-        __iter__ - iterate over (devLabeL, propLabel, value) tuples
-        dict() - convert Configuration to nested dict
-        json() - convert to JSON string
-        yaml() - convert to YAML string (requires PyYAML)
-        html() - convert to HTML string
+    This class is a subclass of `pymmcore.Configuration` that implements an
+    [`collections.abc.Mapping`][] interface (i.e. it behaves like a Python `dict`),
+    and adds a few convenience methods:
+
+    - `__len__` - number of settings
+    - `__str__` - pretty printing of Config
+    - `__contains__` - check if (devLabel, propLabel) is in the config
+    - `__getitem__` - get property setting by index or (devLabel, propLabel) key
+    - `__iter__` - iterate over (devLabeL, propLabel, value) tuples
+    - `dict()` - convert Configuration to nested dict
+    - `json()` - convert to JSON string
+    - `yaml()` - convert to YAML string (requires PyYAML)
+    - `html()` - convert to HTML string
+
+    !!! tip
+
+        All of the methods in `pymmcore_plus.CMMCorePlus` that would have returned a
+        `pymmcore.Configuration` in `pymmcore` (e.g.
+        [`pymmcore_plus.CMMCorePlus.getConfigData`][],
+        [`pymmcore_plus.CMMCorePlus.getConfigState`][], etc...).
+        have been reimplemented to return a `pymmcore_plus.Configuration` object. This
+        object has the same API as `pymmcore.Configuration`, but if you'd like to opt
+        out of the new API, you can request a "native" `pymmcore` object by passing
+        `native=True` to the method.
     """
 
     # pymmcore API:

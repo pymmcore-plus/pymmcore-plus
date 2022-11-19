@@ -9,6 +9,13 @@ _NULL = object()
 
 
 class Metadata(pymmcore.Metadata):
+    """Subclass of `pymmcore.Metadata` with a pythonic interface.
+
+    This subclass fully implements a [`collections.abc.Mapping`][] interface (i.e. it
+    behaves like a Python `dict`).  It also adds a `json()` convenience method to
+    convert to a JSON string.
+    """
+
     def __init__(self, *args, **kwargs) -> None:
         super().__init__()
         if args and isinstance(args[0], Mapping):
