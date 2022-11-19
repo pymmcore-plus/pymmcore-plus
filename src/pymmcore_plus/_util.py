@@ -13,13 +13,22 @@ def find_micromanager() -> Optional[str]:
     """Locate a Micro-Manager folder (for device adapters).
 
     In order, this will look for:
-    1. An environment variable named MICROMANAGER_PATH
-    2. An installation in the pymmcore_plus package directory (this is the
-       default install location when running python -m pymmcore_plus.install)
-    3. The default micromanager install location:
+
+    1. An environment variable named `MICROMANAGER_PATH`
+    2. An installation in the `pymmcore_plus` package directory (this is the
+       default install location when running `python -m pymmcore_plus.install`)
+    3. The default micro-manager install location:
         - `C:/Program Files/` on windows
         - `/Applications` on mac
         - `/usr/local/lib` on linux
+
+    !!! note
+
+        This function is used by [`pymmcore_plus.CMMCorePlus`][] to locate the
+        micro-manager device adapters.  By default, the output of this function
+        is passed to
+        [`setDeviceAdapterSearchPaths`][pymmcore_plus.CMMCorePlus.setDeviceAdapterSearchPaths]
+        when creating a new `CMMCorePlus` instance.
     """
     # environment variable takes precedence
     env_path = os.getenv("MICROMANAGER_PATH")
