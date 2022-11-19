@@ -8,9 +8,9 @@ pure python/C environments**.
 
 - `pymmcore-plus` itself is a superset of
   [`pymmcore`](https://github.com/micro-manager/pymmcore): python bindings
-  for Micro-manager's C++ `CMMCore`. `pymmcore_plus.CMMCorePlus` aims to be a
-  drop-in replacement for `pymmcore.CMMCore`, while adding a number of
-  additional features including:
+  for Micro-manager's C++ `CMMCore`.  [`pymmcore_plus.CMMCorePlus`][] (the main object in this library)
+  aims to be a drop-in replacement for `pymmcore.CMMCore`, while adding a number
+  of additional features including:
 
     - A pure python implementation of a multi-dimensional acquisition engine
     - More flexible callback handling and event connections.
@@ -64,6 +64,8 @@ print(mmc.getLoadedDevices())
 img = mmc.snap()
 ```
 
+See the [`CMMCorePlus` API documentation](api/cmmcoreplus.md) for more information.
+
 While you can easily use `pymmcore-plus` from a script or IPython/Jupyter you can
 also use it in combination with the [napari](https://napari.org/) based gui
 [napari-micromanager](https://github.com/pymmcore-plus/napari-micromanager#napari-micromanager).
@@ -80,3 +82,8 @@ conda install -c conda-forge pymmcore-plus
 
 You will also need the micro-manager device adapters on your system.
 See [install](install) for details.
+
+## Contributions
+
+We welcome contributions to `pymmcore-plus` and related libraries.  Please see
+[contributing](contributing) for more information.

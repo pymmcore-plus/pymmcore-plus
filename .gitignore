@@ -141,7 +141,6 @@ src/pymmcore_plus/_version.py
 Micro-Manager-*
 .vscode
 
-docs/api
 docs/_includes/_cmmcore_members.md
 docs/_includes/_cmmcore_table.md
 docs/_includes/_cmmcoreplus_members.md

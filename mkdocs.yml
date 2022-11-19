@@ -10,6 +10,18 @@ edit_uri: edit/main/docs/
 watch:
   - src/pymmcore_plus
 
+nav:
+  - index.md
+  - install.md
+  - API:
+    - api/cmmcoreplus.md
+  - Examples:
+    - examples/mda.md
+    - examples/integration-with-qt.md
+    - examples/context-set.md
+    - examples/napari-micromanager.md
+  - Contributing: contributing.md
+
 theme:
   name: "material"
   icon:

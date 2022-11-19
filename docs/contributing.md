@@ -2,15 +2,16 @@
 
 Thanks for thinking of a way to help improve this library! Remember that
 contributions come in all shapes and sizes beyond writing bug fixes.
-Contributing to [documentation](#documentation), opening new
+Contributing to [documentation](#contributing-documentation), opening new
 [issues](https://github.com/pymmcore-plus/pymmcore-plus/issues) for bugs, asking
 for clarification on things you find unclear, and requesting new features, are
 all super valuable contributions.
 
 ## Contributing Code
 
-All development for this library happens on GitHub
-[here](https://github.com/pymmcore-plus/pymmcore-plus). We recommend you work
+All development for this library happens in the
+[pymmcore-plus/pymmcore-plus
+](https://github.com/pymmcore-plus/pymmcore-plus) repo on GitHub. We recommend you work
 with a [Conda](https://www.anaconda.com/products/individual) environment (or an
 alternative virtual environment like
 [`venv`](https://docs.python.org/3/library/venv.html)).
@@ -48,13 +49,14 @@ mode](https://pip.pypa.io/en/stable/cli/pip_install/#editable-installs) and
 
 ## Contributing Documentation
 
-Our documentation on Read the Docs
-([pymmcore-plus.rtfd.io](https://pymmcore-plus.readthedocs.io)) is built with
-[mkdocs](https://www.mkdocs.org/) from the files in the `docs` folder.  To build
-docs locally, make sure you have installed the optional dependencies for
-development (`pip install -e ".[docs]"`) and then run:
+Our documentation is built with [mkdocs](https://www.mkdocs.org/) from the files
+in the `docs` folder.  To build docs locally:
 
 ```shell
+# install docs dependencies
+pip install -e ".[docs]"
+
+# build docs and serve locally
 mkdocs serve
 ```
 
