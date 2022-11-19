@@ -54,7 +54,7 @@ class RemoteMMCore(api.Proxy):
         uri = f"PYRO:{server.CORE_NAME}@{host}:{port}"
         super().__init__(uri, connected_socket=connected_socket)
 
-        self.events = callback_class()
+        self._events = callback_class()
         cb_thread = DaemonThread(name="CallbackDaemon")
         cb_thread._daemon.register(self.events)
         self.connect_remote_callback(self.events)  # must come after register()
