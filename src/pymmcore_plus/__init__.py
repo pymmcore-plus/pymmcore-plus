@@ -1,6 +1,6 @@
 try:
     from ._version import version as __version__
-except ImportError:  # pragma: no cover
+except ImportError:
     __version__ = "unknown"
 
 from typing import TYPE_CHECKING, Any, List
