@@ -69,7 +69,7 @@ def _build_table():
     base_only_names = base_names - plus_names
     overridden_names = base_names & plus_names
 
-    header = ["Method", "Source", "Description"]
+    header = ["Method", "", "Description"]
 
     out = "|" + "|".join(header) + "|\n"
     out += "| :-- | :--: | :-- |\n"
@@ -82,7 +82,7 @@ def _build_table():
         elif name in plus_only_names:
             icon = ":sparkles:"
         elif name in overridden_names:
-            icon = ":heavy_plus_sign:"
+            icon = ":material-plus-thick:"
 
         doc = ""
         if name in plus.members:

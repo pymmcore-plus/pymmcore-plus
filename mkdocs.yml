@@ -30,8 +30,8 @@ theme:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
-      primary: teal
-      accent: indigo
+      primary: dark blue
+      accent: dark blue
       toggle:
         icon: material/lightbulb-outline
         name: "Switch to dark mode"

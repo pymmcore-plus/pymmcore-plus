@@ -9,10 +9,10 @@ functionality, and some overrides for the sake of convenience or fixed behavior.
 
 This table presents all methods available in the `CMMCorePlus` class, and
 indicates which methods are unique to `CMMCorePlus` (:sparkles:) and which
-methods are overriden from `CMMCore` (:heavy_plus_sign:).
+methods are overriden from `CMMCore` (:material-plus-thick:).
 
 <small>
-:heavy_plus_sign:  *This method is overriden by `CMMCorePlus`.*
+:material-plus-thick:  *This method is overriden by `CMMCorePlus`.*
 :sparkles:  *This method only exists in `CMMCorePlus`.*
 </small>
 
