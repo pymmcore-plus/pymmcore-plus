@@ -19,9 +19,11 @@ method is implemented in `CMMCorePlus` or not).
 :sparkles:  *This method only exists in `CMMCorePlus`.*
 </small>
 
-{% include '_cmmcore_table.md' %}
+<!-- These are built dynamically in _hooks.py -->
 
-{% include '_cmmcoreplus_members.md' %}
+{{ CMMCorePlus_API_Table }}
+
+{{ CMMCorePlus_Members }}
 
 ----------------
 
@@ -31,4 +33,8 @@ method is implemented in `CMMCorePlus` or not).
     but are not reimplemented in the `CMMCorePlus` subclass.  They are
     documented here for completeness.
 
-{% include '_cmmcore_members.md' %}
+{{ CMMCore_Members }}
+
+----------------
+
+::: pymmcore_plus.core._mmcore_plus.StateDict

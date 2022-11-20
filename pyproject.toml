@@ -49,8 +49,7 @@ dependencies = [
 docs = [
     # bugfix until https://github.com/mkdocstrings/griffe/pull/115
     "griffe @ git+https://github.com/tlambert03/griffe@recursion#egg=griffe",
-    "mkdocs",
-    "mkdocs-macros-plugin",
+    "mkdocs >=1.4",
     "mkdocs-material",
     "mkdocstrings-python",
 ]

@@ -72,8 +72,6 @@ hooks:
   - docs/_hooks.py
 
 plugins:
-  - macros:
-      include_dir: docs/_includes
   - search
   - mkdocstrings:
       handlers:

@@ -12,11 +12,13 @@ from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
+    Iterable,
     Iterator,
     Pattern,
     Sequence,
     TypeVar,
     Union,
+    cast,
     overload,
 )
 
@@ -38,15 +40,39 @@ from ..mda import MDAEngine, MDARunner, PMDAEngine
 
 if TYPE_CHECKING:
     import numpy as np
+    from typing_extensions import TypedDict
     from useq import MDASequence
 
     _T = TypeVar("_T")
     ListOrTuple = Union[list[_T], tuple[_T, ...]]
 
+    class StateDict(TypedDict, total=False):
+        """Dictionary of state values for a device.
 
-_OBJECTIVE_DEVICE_RE = re.compile(
-    "(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE
-)
+        This object should only be imported inside a `TYPE_CHECKING` block.
+        """
+
+        AutoFocusDevice: str
+        BytesPerPixel: int
+        CameraChannelNames: tuple[str, ...]
+        CameraDevice: str
+        Datetime: str
+        Exposure: float
+        FocusDevice: str
+        GalvoDevice: str
+        ImageBitDepth: int
+        ImageHeight: int
+        ImageProcessorDevice: str
+        ImageWidth: int
+        PixelSizeUm: float
+        ShutterDevice: str
+        SLMDevice: str
+        XYPosition: tuple[float, float]
+        XYStageDevice: str
+        ZPosition: float
+
+
+_OBJDEV_REGEX = re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
 STATE = pymmcore.g_Keyword_State
@@ -108,8 +134,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._mda_runner = MDARunner()
         self._mda_runner.set_engine(MDAEngine(self))
 
-        self._objective_regex = _OBJECTIVE_DEVICE_RE
-        self._channel_group_regex = _CHANNEL_REGEX
+        self._objective_regex: Pattern = _OBJDEV_REGEX
+        self._channel_group_regex: Pattern = _CHANNEL_REGEX
 
         # use weakref to avoid atexit keeping us from being
         # garbage collected
@@ -122,6 +148,8 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         See [`pymmcore_plus.core.events.PCoreSignaler`][] documentation for details
         of the available signals, and how to connect to them.
+
+        :sparkles: *This method does not exist in `pymmcore.CMMCore`.*
         """
         return self._events
 
@@ -138,24 +166,53 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setProperty(
         self, label: str, propName: str, propValue: Union[bool, float, int, str]
     ) -> None:
-        """setProperty with reliable event emission."""
+        """Set property named `propName` on device `label` to `propValue`.
+
+        **Why Override?**  In `MMCore`, the calling of the `onPropertyChanged`
+        callback is left to the underlying device adapter, which means it is not always
+        called.  This method overrides the default implementation to ensure that
+        `events.propertyChanged` is *always* emitted when `setProperty` has been called
+        and the property Value has actually changed.
+        """
         with self._property_change_emission_ensured(label, (propName,)):
             super().setProperty(label, propName, propValue)
 
     @synchronized(_lock)
     def setState(self, stateDeviceLabel: str, state: int) -> None:
-        """Set state (by position) on stateDeviceLabel, with reliable event emission."""
+        """Set state (by position) on `stateDeviceLabel`, with reliable event emission.
+
+        **Why Override?**  In `MMCore`, the calling of the `onPropertyChanged`
+        callback is left to the underlying device adapter, which means it is not always
+        called.  This method overrides the default implementation to ensure that
+        `events.propertyChanged` is *always* emitted when `setProperty` has been called
+        and the property Value has actually changed.
+        """
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             super().setState(stateDeviceLabel, state)
 
     @synchronized(_lock)
     def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
-        """Set state (by label) on stateDeviceLabel, with reliable event emission."""
+        """Set state (by label) on `stateDeviceLabel`, with reliable event emission.
+
+        **Why Override?**  In `MMCore`, the calling of the `onPropertyChanged`
+        callback is left to the underlying device adapter, which means it is not always
+        called.  This method overrides the default implementation to ensure that
+        `events.propertyChanged` is *always* emitted when `setProperty` has been called
+        and the property Value has actually changed.
+        """
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             super().setStateLabel(stateDeviceLabel, stateLabel)
 
     def setDeviceAdapterSearchPaths(self, paths: Sequence[str]) -> None:
-        """Set the device adapter search paths."""
+        """Set the device adapter search paths.
+
+        **Why Override?**  In cases where MM device adapters use dynamically loaded
+        libraries, the device adapter search paths must also be added to the `PATH`
+        environment variable (e.g.
+        <https://github.com/micro-manager/pymmcore/issues/28>). This method overrides
+        the default implementation to ensure that the `PATH` environment variable is
+        updated when the device adapter search paths are changed.
+        """
         # add to PATH as well for dynamic dlls
         if not paths:
             return
@@ -192,10 +249,19 @@ class CMMCorePlus(pymmcore.CMMCore):
         return super().unloadAllDevices()
 
     def getDeviceType(self, label: str) -> DeviceType:
-        """Returns device type."""
+        """Return device type for a given device.
+
+        **Why Override?** The returned [`pymmcore_plus.Device`][] enum is more
+        interpretable than the raw `int` returned by `pymmcore`
+        """
         return DeviceType(super().getDeviceType(label))
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
+        """Return the intrinsic property type for a given device and property.
+
+        **Why Override?** The returned [`pymmcore_plus.PropertyType`][] enum is more
+        interpretable than the raw `int` returned by `pymmcore`
+        """
         return PropertyType(super().getPropertyType(label, propName))
 
     def detectDevice(self, deviceLabel: str) -> DeviceDetectionStatus:
@@ -203,6 +269,9 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Used to automate discovery of correct serial port.
         Also configures the serial port correctly.
+
+        **Why Override?** The returned [`pymmcore_plus.DeviceDetectionStatus`][] enum
+        is more interpretable than the raw `int` returned by `pymmcore`
         """
         return DeviceDetectionStatus(super().detectDevice(deviceLabel))
 
@@ -223,7 +292,12 @@ class CMMCorePlus(pymmcore.CMMCore):
     def getConfigData(
         self, configGroup: str, configName: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        """Returns the configuration object for a given group and name."""
+        """Returns the configuration object for a given `configGroup` and `configName`.
+
+        **Why Override?** The [`pymmcore_plus.Configuration`][] object returned
+        when `native=False` (the default) provides a nicer `Mapping` interface. Pass
+        `native=True` to get the original `pymmcore.Configuration` object.
+        """
         cfg = super().getConfigData(configGroup, configName)
         return cfg if native else Configuration.from_configuration(cfg)
 
@@ -242,7 +316,12 @@ class CMMCorePlus(pymmcore.CMMCore):
     def getPixelSizeConfigData(
         self, configName: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        """Returns the configuration object for a given pixel size preset."""
+        """Returns the configuration object for a given pixel size preset `configName`.
+
+        **Why Override?** The [`pymmcore_plus.Configuration`][] object returned
+        when `native=False` (the default) provides a nicer `Mapping` interface. Pass
+        `native=True` to get the original `pymmcore.Configuration` object.
+        """
         cfg = super().getPixelSizeConfigData(configName)
         return cfg if native else Configuration.from_configuration(cfg)
 
@@ -261,9 +340,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def getConfigGroupState(
         self, group: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        """Returns the partial state of the system, for the devices included in the
+        """Returns the state of the devices included in the specified `group`.
 
-        specified group.
+        **Why Override?** The [`pymmcore_plus.Configuration`][] object returned
+        when `native=False` (the default) provides a nicer `Mapping` interface. Pass
+        `native=True` to get the original `pymmcore.Configuration` object.
         """
         cfg = super().getConfigGroupState(group)
         return cfg if native else Configuration.from_configuration(cfg)
@@ -271,9 +352,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def getConfigGroupStateFromCache(
         self, group: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        """Returns the partial state of the system cache, for the devices included
+        """Return the state of the system cache, for the devices in the specified group.
 
-        in the specified group.
+        **Why Override?** The [`pymmcore_plus.Configuration`][] object returned
+        when `native=False` (the default) provides a nicer `Mapping` interface. Pass
+        `native=True` to get the original `pymmcore.Configuration` object.
         """
         cfg = super().getConfigGroupStateFromCache(group)
         return cfg if native else Configuration.from_configuration(cfg)
@@ -281,9 +364,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def getConfigState(
         self, group: str, config: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        """Returns a partial state of the system, for devices included in the
+        """Return state of devices included in the specified configuration.
 
-        specified configuration.
+        **Why Override?** The [`pymmcore_plus.Configuration`][] object returned
+        when `native=False` (the default) provides a nicer `Mapping` interface. Pass
+        `native=True` to get the original `pymmcore.Configuration` object.
         """
         cfg = super().getConfigState(group, config)
         return cfg if native else Configuration.from_configuration(cfg)
@@ -291,14 +376,24 @@ class CMMCorePlus(pymmcore.CMMCore):
     def getSystemState(
         self, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        """Returns the entire system state."""
+        """Returns the entire system state.
+
+        **Why Override?** The [`pymmcore_plus.Configuration`][] object returned
+        when `native=False` (the default) provides a nicer `Mapping` interface. Pass
+        `native=True` to get the original `pymmcore.Configuration` object.
+        """
         cfg = super().getSystemState()
         return cfg if native else Configuration.from_configuration(cfg)
 
     def getSystemStateCache(
         self, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        """Returns the entire system state from cache"""
+        """Returns the entire system state from cache.
+
+        **Why Override?** The [`pymmcore_plus.Configuration`][] object returned
+        when `native=False` (the default) provides a nicer `Mapping` interface. Pass
+        `native=True` to get the original `pymmcore.Configuration` object.
+        """
         cfg = super().getSystemStateCache()
         return cfg if native else Configuration.from_configuration(cfg)
 
@@ -337,11 +432,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         return img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
-        """Applies a configuration to a group."""
+        """Applies a configuration to a group.
+
+        **Why Override?** The native `onConfigGroupChanged` callback is not always
+        called whenever `CMMCore.setConfig` has been called. We override here to emit
+        a `configSet` event whenever `setConfig` is called.
+        See <https://github.com/micro-manager/mmCoreAndDevices/issues/25> for details.
+        """
         super().setConfig(groupName, configName)
-        # The onConfigGroupChanged callback has some limitations as
-        # discussed in https://github.com/micro-manager/mmCoreAndDevices/issues/25
-        # use the pymmcore-plus configSet signal as a workaround
         self.events.configSet.emit(groupName, configName)
 
     # NEW methods
@@ -501,6 +599,12 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @property
     def objective_device_pattern(self):
+        """Pattern used to guess objective device labels.
+
+        By default:
+
+            re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
+        """
         return self._objective_regex
 
     @objective_device_pattern.setter
@@ -515,8 +619,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._objective_regex = value
 
     @property
-    def channelGroup_pattern(self):
-        return self._channelGroup_regex
+    def channelGroup_pattern(self) -> Pattern:
+        """The regex pattern used to identify channel groups.
+
+        By default:
+
+            re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
+        """
+        return self._channel_group_regex
 
     @channelGroup_pattern.setter
     def channelGroup_pattern(self, value: Union[Pattern, str]):
@@ -530,8 +640,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._channel_group_regex = value
 
     def guessObjectiveDevices(self) -> list[str]:
-        """
-        Find any loaded devices that are likely to be an Objective/Nosepiece.
+        """Find any loaded devices that are likely to be an Objective/Nosepiece.
 
         Likely matches are loaded StateDevices with names that match this object's
         ``objective_device_pattern`` property. This is a settable property
@@ -551,7 +660,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         If the group is not defined via ``.getChannelGroup`` then likely candidates
         will be found by searching for config groups with names that match this
         object's ``channelGroup_pattern`` property. This is a settable property
-        with a default value of::
+        with a default value of:
 
             reg = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
@@ -580,9 +689,19 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.waitForDevice(self.getFocusDevice())
 
     def getZPosition(self) -> float:
+        """Obtains the current position of the Z axis of the Z stage in microns.
+
+        :sparkles: *This method does not exist in `pymmcore.CMMCore`:
+        added to complement `getXPosition` and `getYPosition`*
+        """
         return self.getPosition(self.getFocusDevice())
 
     def setZPosition(self, val: float) -> None:
+        """Set the position of the current focus device in microns.
+
+        :sparkles: *This method does not exist in `pymmcore.CMMCore`:
+        added to complement `setXYPosition`*
+        """
         return self.setPosition(self.getFocusDevice(), val)
 
     @overload
@@ -595,15 +714,26 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @synchronized(_lock)
     def setPosition(self, *args, **kwargs) -> None:
-        """Set position of the stage in microns."""
+        """Set position of the stage in microns.
+
+        **Why Override?** To add a lock to prevent concurrent calls across threads.
+        """
         return super().setPosition(*args, **kwargs)
 
     @synchronized(_lock)
     def setXYPosition(self, x: float, y: float) -> None:
+        """Sets the position of the XY stage in microns.
+
+        **Why Override?** To add a lock to prevent concurrent calls across threads.
+        """
         return super().setXYPosition(x, y)
 
     @synchronized(_lock)
     def getCameraChannelNames(self) -> tuple[str, ...]:
+        """Convenience method to call `getCameraChannelName` for all camera channels.
+
+        :sparkles: *This method does not exist in `pymmcore.CMMCore`.*
+        """
         return tuple(
             self.getCameraChannelName(i)
             for i in range(self.getNumberOfCameraChannels())
@@ -687,11 +817,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         return img
 
     def snap(self, *args, fix=True) -> np.ndarray:
-        """
-        snap and return an image.
+        """Snap and return an image.
 
-        In contrast to ``snapImage`` this will directly return the image
-        without also calling ``getImage``.
+        This is a convenience method that calls `snapImage` and returns the output of
+        `getImage`.  This
 
         Parameters
         ----------
@@ -706,17 +835,21 @@ class CMMCorePlus(pymmcore.CMMCore):
         img : np.ndarray
         """
         self.snapImage()
-        img = self.getImage()
+        img = self.getImage(fix=fix)
         self.events.imageSnapped.emit(img)
         return img
 
-    def getImage(self, *args, fix=True) -> np.ndarray:
+    def getImage(self, numChannel: int | None = None, *, fix=True) -> np.ndarray:
         """Exposes the internal image buffer.
 
         The pymmcore-plus implementation will convert images with n_components > 1
         to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
         """
-        img = super().getImage(*args)
+        img = (
+            super().getImage(numChannel)
+            if numChannel is not None
+            else super().getImage()
+        )
         return self._fix_image(img) if fix else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
@@ -763,7 +896,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         cameraLabel = cameraLabel or super().getCameraDevice()
         self.events.stopSequenceAcquisition.emit(cameraLabel)
 
-    def setAutoShutter(self, state: bool):
+    def setAutoShutter(self, state: bool) -> None:
+        """Set shutter to automatically open and close when an image is acquired.
+
+        **Why Override?** To emit an `autoShutterSet` event.
+        """
         super().setAutoShutter(state)
         self.events.autoShutterSet.emit(state)
 
@@ -801,7 +938,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         deviceLabel: str | None = None,
         propName: str | None = None,
     ) -> None:
-        """Deletes a configuration from a group."""
+        """Delete `configName` from `groupName`.
+
+        **Why Override?** To emit a `configDeleted` event.
+        """
         args: tuple[str, ...] = (groupName, configName)
         if deviceLabel is not None and propName is not None:
             args = args + (deviceLabel, propName)
@@ -809,6 +949,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.configDeleted.emit(groupName, configName)
 
     def deleteConfigGroup(self, group: str) -> None:
+        """Deletes an entire configuration `group`.
+
+        **Why Override?** To emit a `configGroupDeleted` event.
+        """
         super().deleteConfigGroup(group)
         self.events.configGroupDeleted.emit(group)
 
@@ -855,10 +999,18 @@ class CMMCorePlus(pymmcore.CMMCore):
         )
 
     def setPixelSizeUm(self, resolutionID: str, pixSize: float) -> None:
+        """Set pixel size in microns for the specified `resolutionID`.
+
+        **Why Override?** To emit a `pixelSizeChanged` event.
+        """
         super().setPixelSizeUm(resolutionID, pixSize)
         self.events.pixelSizeChanged.emit(pixSize)
 
     def deletePixelSizeConfig(self, resolutionID: str):
+        """Delete the pixel size configuration for the given `resolutionID`.
+
+        **Why Override?** To emit a `pixelSizeChanged` event.
+        """
         super().deletePixelSizeConfig(resolutionID)
         self.events.pixelSizeChanged.emit(0.0)
 
@@ -873,6 +1025,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         ...
 
     def definePixelSizeConfig(self, *args: str, **kwargs: str) -> None:
+        """Defines an empty pixel size entry.
+
+        **Why Override?** To emit a `pixelSizeChanged` event.
+        """
         super().definePixelSizeConfig(*args, **kwargs)
         self.events.pixelSizeChanged.emit(0.0)
 
@@ -884,35 +1040,65 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None:
         ...  # pragma: no cover
 
-    def setROI(self, *args) -> None:  # type: ignore
-        super().setROI(*args)
+    def setROI(self, *args, **kwargs) -> None:
+        """Set the camera Region of Interest (ROI).
+
+        **Why Override?** To emit a `roiSet` event.
+        """
+        super().setROI(*args, **kwargs)
         if len(args) == 4:
             args = (super().getCameraDevice(),) + args
         self.events.roiSet.emit(*args)
 
-    def state(self, exclude=()) -> dict:
-        """A dict with commonly accessed state values.  Faster than getSystemState."""
+    def state(self, exclude: Iterable[str] = ()) -> StateDict:
+        """Return `StateDict` with commonly accessed state values.
+
+        :sparkles: *This method does not exist in `pymmcore.CMMCore`. It is a bit faster
+        than [`getSystemState`][pymmcore_plus.CMMCorePlus.getSystemState].*
+
+        Parameters
+        ----------
+        exclude : Iterable[str]
+            List of properties to exclude when gathering state (may speed things up).
+            See [`StateDict`][pymmcore_plus.core._mmcore_plus.StateDict] for a list of
+            keys that can be excluded.
+
+        Returns
+        -------
+        StateDict
+            A dictionary of commonly accessed state values.
+        """
         # approx retrieval cost in comment (for demoCam)
-        return {
-            "AutoFocusDevice": self.getAutoFocusDevice(),  # 150 ns
-            "BytesPerPixel": self.getBytesPerPixel(),  # 149 ns
-            "CameraChannelNames": self.getCameraChannelNames(),  # 1 µs
-            "CameraDevice": self.getCameraDevice(),  # 159 ns
-            "Datetime": str(datetime.now()),
-            "Exposure": self.getExposure(),  # 726 ns
-            "FocusDevice": self.getFocusDevice(),  # 112 ns
-            "GalvoDevice": self.getGalvoDevice(),  # 109 ns
-            "ImageBitDepth": self.getImageBitDepth(),  # 147 ns
-            "ImageHeight": self.getImageHeight(),  # 164 ns
-            "ImageProcessorDevice": self.getImageProcessorDevice(),  # 110 ns
-            "ImageWidth": self.getImageWidth(),  # 172 ns
-            "PixelSizeUm": self.getPixelSizeUm(True),  # 2.2 µs  (True==cached)
-            "ShutterDevice": self.getShutterDevice(),  # 152 ns
-            "SLMDevice": self.getSLMDevice(),  # 110 ns
-            "XYPosition": self.getXYPosition(),  # type: ignore  # 1.1 µs
-            "XYStageDevice": self.getXYStageDevice(),  # 156 ns
-            "ZPosition": self.getZPosition(),  # 1.03 µs
-        }
+        exclude = set(exclude)
+        state: dict = {}
+        for attr in (
+            "AutoFocusDevice",  # 150 ns
+            "BytesPerPixel",  # 149 ns
+            "CameraChannelNames",  # 1 µs
+            "CameraDevice",  # 159 ns
+            "Datetime",
+            "Exposure",  # 726 ns
+            "FocusDevice",  # 112 ns
+            "GalvoDevice",  # 109 ns
+            "ImageBitDepth",  # 147 ns
+            "ImageHeight",  # 164 ns
+            "ImageProcessorDevice",  # 110 ns
+            "ImageWidth",  # 172 ns
+            "PixelSizeUm",  # 2.2 µs
+            "ShutterDevice",  # 152 ns
+            "SLMDevice",  # 110 ns
+            "XYPosition",  # 1.1 µs
+            "XYStageDevice",  # 156 ns
+            "ZPosition",  # 1.03 µs
+        ):
+            if attr not in exclude:
+                if attr == "Datetime":
+                    state[attr] = str(datetime.now())
+                elif attr == "PixelSizeUm":
+                    state[attr] = self.getPixelSizeUm(True)  # True==cached
+                else:
+                    state[attr] = getattr(self, f"get{attr}")()
+        return cast("StateDict", state)
 
     @contextmanager
     def _property_change_emission_ensured(self, device: str, properties: Sequence[str]):
@@ -944,8 +1130,33 @@ class CMMCorePlus(pymmcore.CMMCore):
                 self.events.propertyChanged.emit(device, properties[i], val)
 
     @contextmanager
-    def setContext(self, **kwargs):
-        """Set core properties in a context restoring the initial values on exit."""
+    def setContext(self, **kwargs: Any):
+        """Set core properties in a context restoring the initial values on exit.
+
+        :sparkles: *This method does not exist in `pymmcore.CMMCore`.*
+
+        Parameters
+        ----------
+        **kwargs : Any
+            Keyword arguments may be any `Name` for which `get<Name>` and `set<Name>`
+            methods exist.  For example, `setContext(exposure=10)` will call
+            `setExposure(10)` when entering the context and `setExposure(<initial>)`
+            when exiting the context.
+
+        Examples
+        --------
+        ```python
+        core = CMMCorePlus.instance()
+
+        with core.setContext(autoShutter=False):
+            assert not core.getAutoShutter()
+            # do other stuff
+            ...
+
+        # autoShutter is restored to its original value when the context exits
+        assert core.getAutoShutter()
+        ```
+        """
         orig_values = {}
         try:
             for name, v in kwargs.items():
