@@ -1,9 +1,9 @@
 """Custom plugin to generate the API reference table for the CMMCorePlus."""
-
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from mkdocs.config.defaults import MkDocsConfig
-from mkdocs.plugins import BasePlugin
+if TYPE_CHECKING:
+    from mkdocs.config.defaults import MkDocsConfig
 
 HAS_RUN = False  # sentinel to prevent loop on mkdocs serve
 CORE_TABLE = "_cmmcore_table.md"
@@ -11,55 +11,46 @@ PLUS_MEMBERS = "_cmmcoreplus_members.md"
 CORE_MEMBERS = "_cmmcore_members.md"
 
 
-class PymmcoreDocs(BasePlugin):
-    def on_pre_build(self, *, config: MkDocsConfig) -> None:
-        if config.site_name != "pymmcore-plus":
-            # just in case were building something else...
-            # we don't need this
-            return
+def on_pre_build(config: "MkDocsConfig") -> None:
+    import pymmcore
+    import pymmcore_plus
 
-        import pymmcore
-        import pymmcore_plus
+    global HAS_RUN
+    if HAS_RUN:
+        return
 
-        global HAS_RUN
-        if HAS_RUN:
-            return
+    base_names = set(pymmcore.CMMCore.__dict__)
+    plus_names = set(pymmcore_plus.CMMCorePlus.__dict__)
+    plus_only_names = plus_names - base_names
+    base_only_names = base_names - plus_names
+    overridden_names = base_names & plus_names
 
-        base_names = set(pymmcore.CMMCore.__dict__)
-        plus_names = set(pymmcore_plus.CMMCorePlus.__dict__)
-        plus_only_names = plus_names - base_names
-        base_only_names = base_names - plus_names
-        overridden_names = base_names & plus_names
+    base_list = ",".join(sorted([x for x in base_only_names if not x.startswith("_")]))
+    lines = [
+        "::: pymmcore.CMMCore",
+        "    options:",
+        f"        members: [{base_list}]",
+    ]
+    dest = Path(config.docs_dir) / "_includes" / CORE_MEMBERS
+    dest.write_text("\n".join(lines))
 
-        base_list = ",".join(
-            sorted([x for x in base_only_names if not x.startswith("_")])
-        )
-        lines = [
-            "::: pymmcore.CMMCore",
-            "    options:",
-            f"        members: [{base_list}]",
-        ]
-        dest = Path(config.docs_dir) / "_includes" / CORE_MEMBERS
-        dest.write_text("\n".join(lines))
+    plus_list = ",".join(
+        sorted([x for x in plus_only_names | overridden_names if not x.startswith("_")])
+    )
+    lines = [
+        "::: pymmcore_plus.CMMCorePlus",
+        "    options:",
+        f"        members: [{plus_list}]",
+    ]
+    dest = Path(config.docs_dir) / "_includes" / PLUS_MEMBERS
+    dest.write_text("\n".join(lines))
 
-        plus_list = ",".join(
-            sorted(
-                [x for x in plus_only_names | overridden_names if not x.startswith("_")]
-            )
-        )
-        lines = [
-            "::: pymmcore_plus.CMMCorePlus",
-            "    options:",
-            f"        members: [{plus_list}]",
-        ]
-        dest = Path(config.docs_dir) / "_includes" / PLUS_MEMBERS
-        dest.write_text("\n".join(lines))
-
-        (Path(config.docs_dir) / "_includes" / CORE_TABLE).write_text(_build_table())
-        HAS_RUN = True
+    (Path(config.docs_dir) / "_includes" / CORE_TABLE).write_text(_build_table())
+    HAS_RUN = True
 
 
-def _build_table():
+def _build_table() -> str:
+    """This function builds the markdown table for the CMMCorePlus API page."""
     import griffe
     import pymmcore
     import pymmcore_plus

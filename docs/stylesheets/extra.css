@@ -4,16 +4,16 @@
   border-left-width: 4px;
 }
 
+.md-typeset .doc-children{
+  font-size: 0.7rem;
+}
+
 /* name of a method */
 code.highlight span.n:first-child {
   color: red;
 }
-code.highlight span:not(:first-child) {
-  font-size: 0.7rem;
-}
-
-.doc-children h2 {
-  font-size: 1.1rem;
+code.highlight span.n:not(:first-child) {
+  color: #666;
 }
 
 /* Indentation. */

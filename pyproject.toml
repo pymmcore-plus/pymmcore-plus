@@ -75,15 +75,6 @@ Source = "https://github.com/pymmcore-plus/pymmcore-plus"
 Tracker = "https://github.com/pymmcore-plus/pymmcore-plus/issues"
 Documentation = "https://pymmcore-plus.readthedocs.io/"
 
-# same as console_scripts entry point
-# [project.scripts]
-# spam-cli = "spam:main_cli"
-
-# Entry points
-# https://peps.python.org/pep-0621/#entry-points
-[project.entry-points."mkdocs.plugins"]
-pymmcore-docs = "pymmcore_plus._docs_plugin:PymmcoreDocs"
-
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
