@@ -397,39 +397,113 @@ class CMMCorePlus(pymmcore.CMMCore):
         cfg = super().getSystemStateCache()
         return cfg if native else Configuration.from_configuration(cfg)
 
-    # metadata overloads that don't require instantiating metadata first
+    # metadata methods that don't require instantiating metadata first
+
+    @overload
+    def getLastImageAndMD(
+        self, channel: int, slice: int, *, fix: bool = True
+    ) -> tuple[np.ndarray, Metadata]:
+        ...
+
+    @overload
+    def getLastImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]:
+        ...
 
     @synchronized(_lock)
-    def getLastImageMD(self, md: Metadata | None = None) -> tuple[np.ndarray, Metadata]:
-        if md is None:
-            md = Metadata()
-        img = super().getLastImageMD(md)
-        return img, md
+    def getLastImageAndMD(
+        self, channel: int | None = None, slice: int | None = None, *, fix: bool = True
+    ) -> tuple[np.ndarray, Metadata]:
+        """Return last image from the circular buffer along with metadata.
+
+        Parameters
+        ----------
+        channel : int, optional
+            Channel index, by default None
+        slice : int, optional
+            Slice index, by default None
+        fix : bool, default: True
+            If `True` (the default), then images with n_components > 1 (like RGB images)
+            will be reshaped to (w, h, n_components) using `fixImage`.
+
+        Returns
+        -------
+        tuple[np.ndarray, Metadata]
+            Image and metadata
+        """
+        md = Metadata()
+        if channel is not None and slice is not None:
+            img = super().getLastImageMD(channel, slice, md)
+        else:
+            img = super().getLastImageMD(md)
+        return (self.fixImage(img) if fix else img, md)
+
+    @overload
+    def popNextImageAndMD(self, channel: int, slice: int, *, fix: bool = True) -> Any:
+        ...
+
+    @overload
+    def popNextImageAndMD(self, *, fix: bool = True) -> Any:
+        ...
 
     @synchronized(_lock)
-    def popNextImageMD(self, md: Metadata | None = None) -> tuple[np.ndarray, Metadata]:
-        if md is None:
-            md = Metadata()
-        img = super().popNextImageMD(md)
-        return img, md
+    def popNextImageAndMD(
+        self, channel: int | None = None, slice: int | None = None, *, fix: bool = True
+    ) -> tuple[np.ndarray, Metadata]:
+        """Gets and removes the next image (and metadata) from the circular buffer.
+
+        Parameters
+        ----------
+        channel : int, optional
+            Channel index, by default None
+        slice : int, optional
+            Slice index, by default None
+        fix : bool, default: True
+            If `True` (the default), then images with n_components > 1 (like RGB images)
+            will be reshaped to (w, h, n_components) using `fixImage`.
+
+        Returns
+        -------
+        tuple[np.ndarray, Metadata]
+            Image and metadata
+        """
+        md = Metadata()
+        if channel is not None and slice is not None:
+            img = super().popNextImageMD(channel, slice, md)
+        else:
+            img = super().popNextImageMD(md)
+        return (self.fixImage(img) if fix else img, md)
 
     @synchronized(_lock)
-    def popNextImage(self) -> np.ndarray:
+    def popNextImage(self, *, fix: bool = True) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
 
-        The pymmcore-plus implementation will convert images with n_components > 1
-        to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
+        Parameters
+        ----------
+        fix : bool, default: True
+            If `True` (the default), then images with n_components > 1 (like RGB images)
+            will be reshaped to (w, h, n_components) using `fixImage`.
         """
-        return self._fix_image(super().popNextImage())
+        img = super().popNextImage()
+        return self.fixImage(img) if fix else img
 
     @synchronized(_lock)
-    def getNBeforeLastImageMD(
-        self, n: int, md: Metadata | None = None
+    def getNBeforeLastImageAndMD(
+        self, n: int, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
-        if md is None:
-            md = Metadata()
+        """Return image taken `n` images ago along with associated metadata.
+
+        Parameters
+        ----------
+        n : int
+            The number of images ago to retrieve. 0 is the last image, 1 is the
+            image before that, etc.
+        fix : bool, default: True
+            If `True` (the default), then images with n_components > 1 (like RGB images)
+            will be reshaped to (w, h, n_components) using `fixImage`.
+        """
+        md = Metadata()
         img = super().getNBeforeLastImageMD(n, md)
-        return img, md
+        return self.fixImage(img) if fix else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
         """Applies a configuration to a group.
@@ -794,7 +868,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         old_engine = self.mda.set_engine(engine)
         self.events.mdaEngineRegistered.emit(engine, old_engine)
 
-    def _fix_image(self, img: np.ndarray) -> np.ndarray:
+    def fixImage(self, img: np.ndarray, ncomponents: int | None = None) -> np.ndarray:
         """Fix img shape/dtype based on `self.getNumberOfComponents()`.
 
         convert images with n_components > 1
@@ -804,53 +878,72 @@ class CMMCorePlus(pymmcore.CMMCore):
         ----------
         img : np.ndarray
             input image
+        ncomponents : int, optional
+            number of components in the image, by default `self.getNumberOfComponents()`
 
         Returns
         -------
         np.ndarray
             output image (possibly new shape and dtype)
         """
-        if self.getNumberOfComponents() == 4:
+        if ncomponents is None:
+            ncomponents = self.getNumberOfComponents()
+        if ncomponents == 4:
             new_shape = img.shape + (4,)
             img = img.view(dtype=f"u{img.dtype.itemsize//4}")
             img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
 
-    def snap(self, *args, fix=True) -> np.ndarray:
+    def snap(self, numChannel: int | None = None, *, fix=True) -> np.ndarray:
         """Snap and return an image.
 
-        This is a convenience method that calls `snapImage` and returns the output of
-        `getImage`.  This
+        Convenience for calling ``self.snapImage()`` followed by returning the value
+        of ``self.getImage()``.
 
         Parameters
         ----------
-        *args :
-            Passed through to ``getImage``
+        numChannel : int, optional
+            The camera channel to get the image from.  If None, (the default), then
+            Multi-Channel cameras will return the content of the first channel.
         fix : bool, default: True
-            Whether to fix the shape of images with n_components >1
-            Pass on to ``getImage``
+            If `True` (the default), then images with n_components > 1 (like RGB images)
+            will be reshaped to (w, h, n_components) using `fixImage`.
 
         Returns
         -------
         img : np.ndarray
         """
         self.snapImage()
-        img = self.getImage(fix=fix)
+        img = self.getImage(numChannel, fix=fix)  # type: ignore
         self.events.imageSnapped.emit(img)
         return img
 
-    def getImage(self, numChannel: int | None = None, *, fix=True) -> np.ndarray:
-        """Exposes the internal image buffer.
+    @overload
+    def getImage(self, *, fix=True) -> np.ndarray:
+        """Return the internal image buffer."""
 
-        The pymmcore-plus implementation will convert images with n_components > 1
-        to a shape (w, h, num_components) and dtype `img.dtype.itemsize//ncomp`
+    @overload
+    def getImage(self, numChannel: int, *, fix=True) -> np.ndarray:
+        """Return the internal image buffer for a given Camera Channel"""
+
+    def getImage(self, numChannel: int | None = None, *, fix=True) -> np.ndarray:
+        """Return the internal image buffer.
+
+        Parameters
+        ----------
+        numChannel : int, optional
+            The camera channel to get the image from.  If None, (the default), then
+            Multi-Channel cameras will return the content of the first channel.
+        fix : bool, default: True
+            If `True` (the default), then images with n_components > 1 (like RGB images)
+            will be reshaped to (w, h, n_components) using `fixImage`.
         """
         img = (
             super().getImage(numChannel)
             if numChannel is not None
             else super().getImage()
         )
-        return self._fix_image(img) if fix else img
+        return self.fixImage(img) if fix else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition."""

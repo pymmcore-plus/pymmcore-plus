@@ -274,7 +274,7 @@ def test_detect_device(core: CMMCorePlus):
 def test_metadata(core: CMMCorePlus):
     core.startContinuousSequenceAcquisition(10)
     core.stopSequenceAcquisition()
-    image, md = core.getLastImageMD()
+    image, md = core.getLastImageAndMD()
     assert isinstance(md, Metadata)
     assert md["Height"] == "512"
     assert "ImageNumber" in md.keys()
@@ -306,15 +306,18 @@ def test_new_metadata():
     assert isinstance(md, pymmcore.Metadata)
 
 
-def test_md_overrides(core: CMMCorePlus):
+def test_md_(core: CMMCorePlus):
     core.startContinuousSequenceAcquisition(10)
     core.stopSequenceAcquisition()
 
-    image, md = core.getNBeforeLastImageMD(0)
-    assert isinstance(md, Metadata)
+    image, md = core.getNBeforeLastImageAndMD(0)
+    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
 
-    image, md = core.popNextImageMD()
-    assert isinstance(md, Metadata)
+    image, md = core.getLastImageAndMD()
+    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
+
+    image, md = core.popNextImageAndMD()
+    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
 
 
 def test_configuration(core: CMMCorePlus):
