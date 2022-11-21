@@ -1,6 +1,5 @@
-from useq import MDASequence
-
 from pymmcore_plus import CMMCorePlus
+from useq import MDASequence
 
 # see https://github.com/pymmcore-plus/useq-schema
 sequence = MDASequence(
