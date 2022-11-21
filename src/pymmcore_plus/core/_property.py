@@ -26,7 +26,10 @@ class InfoDict(TypedDict):
 
 
 class DeviceProperty:
-    """Convenience "View" onto a device property.
+    """Convenience view onto a device property.
+
+    This is the type of object that is returned by
+    [`pymmcore_plus.CMMCorePlus.getPropertyObject`][]
 
     Parameters
     ----------

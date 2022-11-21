@@ -18,6 +18,7 @@ nav:
     - api/cmmcoreplus.md
     - api/events.md
     - api/device.md
+    - api/device_property.md
     - api/metadata.md
     - api/configuration.md
     - api/constants.md
