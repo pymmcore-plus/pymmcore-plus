@@ -662,7 +662,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition."""
         super().startContinuousSequenceAcquisition(intervalMs)
-        self.events.startContinuousSequenceAcquisition.emit()
+        self.events.continuousSequenceAcquisitionStarted.emit()
 
     @overload
     def startSequenceAcquisition(
@@ -690,7 +690,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             cameraLabel = super().getCameraDevice()
         else:
             cameraLabel, numImages, intervalMs, stopOnOverflow = args
-        self.events.startSequenceAcquisition.emit(
+        self.events.sequenceAcquisitionStarted.emit(
             cameraLabel, numImages, intervalMs, stopOnOverflow
         )
 
@@ -701,7 +701,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         else:
             super().stopSequenceAcquisition(cameraLabel)
         cameraLabel = cameraLabel or super().getCameraDevice()
-        self.events.stopSequenceAcquisition.emit(cameraLabel)
+        self.events.sequenceAcquisitionStopped.emit(cameraLabel)
 
     def setAutoShutter(self, state: bool):
         super().setAutoShutter(state)

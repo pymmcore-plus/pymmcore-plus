@@ -126,7 +126,7 @@ def test_sequence_acquisition_events(core: CMMCorePlus):
     mock2 = Mock()
     mock3 = Mock()
 
-    core.events.startContinuousSequenceAcquisition.connect(mock1)
+    core.events.continuousSequenceAcquisitionStarted.connect(mock1)
     core.events.stopSequenceAcquisition.connect(mock2)
     core.events.startSequenceAcquisition.connect(mock3)
 
