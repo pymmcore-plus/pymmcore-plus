@@ -47,7 +47,7 @@ class Device:
 
     @property
     def core(self) -> CMMCorePlus:
-        """Return the core instance to which this Device is bound."""
+        """Return the `CMMCorePlus` instance to which this Device is bound."""
         return self._mmc
 
     def isBusy(self) -> bool:

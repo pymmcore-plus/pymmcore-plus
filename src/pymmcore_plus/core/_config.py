@@ -6,8 +6,6 @@ from typing import Any, DefaultDict, Dict, Iterator, Tuple, cast
 
 import pymmcore
 
-_NULL = object()
-
 
 # class PropertySetting(pymmcore.PropertySetting):
 #     """Encompasses a device label, property name, and property value"""
@@ -62,12 +60,11 @@ class Configuration(pymmcore.Configuration):
 
         All of the methods in `pymmcore_plus.CMMCorePlus` that would have returned a
         `pymmcore.Configuration` in `pymmcore` (e.g.
-        [`pymmcore_plus.CMMCorePlus.getConfigData`][],
-        [`pymmcore_plus.CMMCorePlus.getConfigState`][], etc...).
+        [`getConfigData`][pymmcore_plus.CMMCorePlus.getConfigData],
+        [`getConfigState`][pymmcore_plus.CMMCorePlus.getConfigState], etc...).
         have been reimplemented to return a `pymmcore_plus.Configuration` object. This
-        object has the same API as `pymmcore.Configuration`, but if you'd like to opt
-        out of the new API, you can request a "native" `pymmcore` object by passing
-        `native=True` to the method.
+        object has the same API as `pymmcore.Configuration`, but you can request a
+        "native" (unenhanced) `pymmcore` object by passing `native=True` to the method.
     """
 
     # pymmcore API:
@@ -145,7 +142,7 @@ class Configuration(pymmcore.Configuration):
         return dumps(self.dict())
 
     def yaml(self) -> str:
-        """Dump config to YAML string (requires PyYAML)."""
+        """Dump config to YAML string (requires that PyYAML is installed)."""
         try:
             from yaml import safe_dump
         except ImportError:  # pragma: no cover

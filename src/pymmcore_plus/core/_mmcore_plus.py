@@ -455,7 +455,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> tuple[np.ndarray, Metadata]:
         """Return last image from the circular buffer along with metadata.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         This is a convenience method that is very similar to `getLastImageMD`, except
         that it doesn't require instantiating a `MetaData` object first. It returns a
@@ -501,7 +501,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> tuple[np.ndarray, Metadata]:
         """Gets and removes the next image (and metadata) from the circular buffer.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         This is a convenience method that is very similar to `popNextImageMD`, except
         that it doesn't require instantiating a `MetaData` object first. It returns a
@@ -556,7 +556,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> tuple[np.ndarray, Metadata]:
         """Return image taken `n` images ago along with associated metadata.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         This is a convenience method that is very similar to `getNBeforeLastImageMD`,
         except that it doesn't require instantiating a `MetaData` object first. It
@@ -621,7 +621,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> Iterator[Device | str]:
         """Iterate over currently loaded devices.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         It offers a convenient way to iterate over loaded devices, optionally filtering
         by [`DeviceType`][pymmcore_plus.DeviceType] and/or device label. It can also
@@ -680,7 +680,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> Iterator[DeviceProperty | tuple[str, str]]:
         """Iterate over currently loaded (device_label, property_name) pairs.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         It offers a convenient way to iterate over loaded devices, optionally filtering
         by [`DeviceType`][pymmcore_plus.DeviceType] and/or device label. It can also
@@ -718,7 +718,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> DeviceProperty:
         """Return a DeviceProperty object bound to a device/property on this core.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         [`DeviceProperty`][pymmcore_plus.DeviceProperty] objects are a convenient object
         oriented way to interact with a specific device properties. They allow you to
@@ -760,7 +760,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def getDeviceObject(self, device_label: str) -> Device:
         """Return a `Device` object bound to device_label on this core.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         [`Device`][pymmcore_plus.Device] objects are a convenient object oriented way to
         interact with devices. They allow you to call any method on `CMMCore` that
@@ -806,7 +806,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Return JSON-schema describing device `device_label` and its properties.
 
         :sparkles: *This method is new in `CMMCorePlus`. It provides a convenient way to
-        get all of the information about a device in a single call.
+        get all of the information about a device in a single call.*
 
         Returns
         -------
@@ -920,7 +920,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def guessObjectiveDevices(self) -> list[str]:
         """Find any loaded devices that are likely to be an Objective/Nosepiece.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         Likely matches are loaded StateDevices with names that match this object's
         `objective_device_pattern` property. This is a settable property
@@ -937,7 +937,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def getOrGuessChannelGroup(self) -> list[str]:
         """Get the channelGroup or find a likely set of candidates.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         If the group is not defined via `.getChannelGroup` then likely candidates
         will be found by searching for config groups with names that match this
@@ -962,7 +962,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> None:
         """Sets the relative XYZ position in microns.
 
-        :sparkles: *This method is new in `CMMCorePlus`.
+        :sparkles: *This method is new in `CMMCorePlus`.*
 
         This is a convenience method that calls `setXYPosition` and `setZPosition`
         with the current position as the starting point.

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Sequence
 
 from pymmcore import g_Keyword_Label, g_Keyword_State
 from typing_extensions import TypedDict
@@ -14,15 +14,15 @@ if TYPE_CHECKING:
 
 class InfoDict(TypedDict):
     valid: bool
-    value: Optional[Any]
-    type: Optional[str]
-    device_type: Optional[str]
-    read_only: Optional[bool]
-    sequenceable: Optional[bool]
-    sequence_max_length: Optional[int]
-    pre_init: Optional[bool]
-    range: Optional[Tuple[float, float]]
-    allowed_values: Optional[Tuple[str, ...]]
+    value: Any | None
+    type: str | None
+    device_type: str | None
+    read_only: bool | None
+    sequenceable: bool | None
+    sequence_max_length: int | None
+    pre_init: bool | None
+    range: tuple[float, float] | None
+    allowed_values: tuple[str, ...] | None
 
 
 class DeviceProperty:
@@ -72,7 +72,7 @@ class DeviceProperty:
 
     @property
     def core(self) -> CMMCorePlus:
-        """Return the core instance to which this Property is bound."""
+        """Return the `CMMCorePlus` instance to which this Property is bound."""
         return self._mmc
 
     @property
@@ -126,7 +126,7 @@ class DeviceProperty:
         """Return upper limit if property has limits, or 0 otherwise."""
         return self._mmc.getPropertyUpperLimit(self.device, self.name)
 
-    def range(self) -> Tuple[float, float]:
+    def range(self) -> tuple[float, float]:
         """Return (lowerLimit, upperLimit) range tuple."""
         return (self.lowerLimit(), self.upperLimit())
 
@@ -138,7 +138,7 @@ class DeviceProperty:
         """Return `DeviceType` of the device owning this property."""
         return self._mmc.getDeviceType(self.device)
 
-    def allowedValues(self) -> Tuple[str, ...]:
+    def allowedValues(self) -> tuple[str, ...]:
         """Return allowed values for this property, if contstrained."""
         # https://github.com/micro-manager/mmCoreAndDevices/issues/172
         allowed = self._mmc.getAllowedPropertyValues(self.device, self.name)
@@ -180,8 +180,12 @@ class DeviceProperty:
     def dict(self) -> InfoDict:
         """Return dict of info about this Property.
 
-        Contains the following keys (See `InfoDict` type): "valid", "value", "type",
-        "device_type", "read_only", "pre_init", "range", "allowed".
+        Returns an [`InfoDict`][pymmcore_plus.core._property.InfoDict] with the
+        following keys: `"valid", "value", "type", "device_type", "read_only",
+        "pre_init", "range", "allowed"`.
+
+        If the device is invalid or not loaded, the `"valid"` key will be `False`
+        and the rest of the keys will be `None`.
         """
         if self.isValid():
             return {
