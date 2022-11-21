@@ -3,6 +3,12 @@ from typing import Any, Callable, Optional, Protocol, runtime_checkable
 
 @runtime_checkable
 class PSignalInstance(Protocol):
+    """The protocol that a signal instance must implement.
+
+    In practice this will either be a `pyqtSignal/pyqtBoundSignal` or a
+    `psygnal.SignalInstance`.
+    """
+
     def connect(self, slot: Callable) -> Any:
         ...
 
@@ -16,6 +22,14 @@ class PSignalInstance(Protocol):
 @runtime_checkable
 class PCoreSignaler(Protocol):
     """Declares the protocol for all signals that will be emitted from CMMCorePlus.
+
+    The main instance of this interface is available on the `CMMCorePlus` object at the
+    [`events`][pymmcore_plus.CMMCorePlus.events] attribute. Each signal on `events` is
+    an object has a `connect` and a `disconnect` method that you can use to
+    connect/disconnect your own callback functions.  `connect` and `disconnect` accept a
+    single argument, which is a callable that will be called when the signal is emitted.
+    The callable should accept no more positional arguments than the signal emits (noted
+    for each signal below), but may accept fewer.
 
     !!! note
 
@@ -33,14 +47,6 @@ class PCoreSignaler(Protocol):
         emission of these events is not guaranteed to be 1:1 with the C++ library;
         however, it should be easier to follow the state of the core when using
         `pymmcore_plus.CMMCorePlus`.
-
-    The main instance of this interface is available on the `CMMCorePlus` object as
-    [`events`][pymmcore_plus.CMMCorePlus.events].  Each signal on `events` is an object
-    has a `connect` and a `disconnect` method that you can use to connect/disconnect
-    your own callback functions.  `connect` and `disconnect` accept a single argument,
-    which is a callable that will be called when the signal is emitted.  The callable
-    should accept no more positional arguments than the signal emits (noted for each
-    signal below), but may accept fewer.
 
     Examples
     --------

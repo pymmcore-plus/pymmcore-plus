@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from useq import MDAEvent, MDASequence
@@ -35,14 +35,17 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    def exec_event(self, event: MDAEvent) -> Any:
+    def exec_event(self, event: MDAEvent) -> object:
         """Execute `event`.
 
         This method is called after `setup_event` and is responsible for
         executing the event.  The default assumption is to acquire an image,
         but more elaborate events will be possible.
-        Any products of the event (such as an image) should be returned by this
-        function.
+
+        The protocol for the returned object is still under development.  However, if
+        the returned object has an `image` attribute, then the
+        [`MDARunner`][pymmcore_plus.mda.MDARunner] will emit a
+        [`frameReady`][pymmcore_plus.mda.PMDASignaler.frameReady] signal
         """
         # TODO: nail down a spec for the return object.
 
