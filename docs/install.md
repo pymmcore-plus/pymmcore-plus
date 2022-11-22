@@ -14,7 +14,7 @@ pip install pymmcore-plus
 conda install -c conda-forge pymmcore-plus
 ```
 
-## Installing micro-manager
+## Installing Micro-Manager Device Adapters
 
 Just like underlying the [`pymmcore`](https://github.com/micro-manager/pymmcore)
 that this library, `pymmcore-plus` relies on the device adapters and C++ core
@@ -46,18 +46,40 @@ There are two ways to do this:
 
     Go to the [micro-manager
     downloads](https://micro-manager.org/Micro-Manager_Nightly_Builds) page and
-    download the latest release for your Operating System. `pymmcore-plus` will
-    look for a `Micro-Manager` folder in the default install location. On
-    Windows this is `C:\Program Files\`, on macOS it is `/Applications/` and on
-    Linux it is `/usr/local/lib/`.
+    download the latest release for your Operating System.
+
+!!! danger "Critical"
+
+    The *device interface version* MUST match between pymmcore and the
+    Micro-Manager device adapters.
+
+    The device interface version of a given pymmcore version is the
+    fourth part in the version number, and can also be with the following
+    command:
+
+    ```bash
+    python -c "print(__import__('pymmcore').CMMCore().getAPIVersionInfo())"
+    ```
+
+    The device interface version of a given Micro-Manager installation can be viewed
+    in **Help > About Micro-Manager**.  Or you can look at the `MMDevice.h` file for
+    the corresponding date, roughly
+    [here](https://github.com/micro-manager/mmCoreAndDevices/blob/main/MMDevice/MMDevice.h#L30)
 
 !!! tip
+
+    By default, `pymmcore-plus` will look for a `Micro-Manager` folder in the
+    default install location. On Windows this is `C:\Program Files\`, on macOS it is
+    `/Applications/` and on Linux it is `/usr/local/lib/`. To override these default
+    device adapter search path, set the `MICROMANAGER_PATH` environment variable.
+
     To see which micro-manager installation `pymmcore-plus` is using, you
     can run:
 
     ```shell
     python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
     ```
+
 
 ### On Linux
 
