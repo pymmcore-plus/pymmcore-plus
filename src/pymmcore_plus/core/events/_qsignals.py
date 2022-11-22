@@ -30,11 +30,11 @@ class QCoreSignaler(QObject):
     imageSnapped = Signal(object)  # after an image is snapped
     mdaEngineRegistered = Signal(object, object)  # new engine, old engine
     # when continuousSequenceAcquisition is started
-    startContinuousSequenceAcquisition = Signal()
+    continuousSequenceAcquisitionStarted = Signal()
     # when SequenceAcquisition is started
-    startSequenceAcquisition = Signal(str, int, float, bool)
+    sequenceAcquisitionStarted = Signal(str, int, float, bool)
     # when (Continuous)SequenceAcquisition is stopped
-    stopSequenceAcquisition = Signal(str)
+    sequenceAcquisitionStopped = Signal(str)
     autoShutterSet = Signal(bool)
     configGroupDeleted = Signal(str)
     configDeleted = Signal(str, str)
