@@ -32,6 +32,10 @@ environments**.
   perhaps asyncio/etc...).  The `CMMCorePlus` class also fixes a number of
   "missed" events that are not currently emitted by the CMMCore API.
 
+## Documentation
+
+https://pymmcore-plus.github.io/pymmcore-plus/
+
 ## Why not just use `pymmcore` directly?
 
 [pymmcore](https://github.com/micro-manager/pymmcore) is (and should probably
