@@ -1,5 +1,5 @@
 site_name: pymmcore-plus
-site_url: https://pymmcore-plus.readthedocs.io/
+site_url: https://pymmcore-plus.github.io/pymmcore-plus
 site_description: Pure python extensions of the C++ micro-manager core
 # strict: true
 
@@ -10,32 +10,40 @@ edit_uri: edit/main/docs/
 
 watch:
   - src/pymmcore_plus
+  - examples
 
 nav:
-  - index.md
-  - install.md
-  - API:
-    - api/cmmcoreplus.md
-    - api/mda.md
-    - api/events.md
-    - api/device.md
-    - api/configuration.md
-    - api/constants.md
-    - api/metadata.md
-    - api/utils.md
-  - Examples:
-    - examples/mda.md
-    - examples/integration-with-qt.md
-    - examples/context-set.md
-    - examples/napari-micromanager.md
-  - Contributing: contributing.md
+  - pymmcore-plus:
+    - index.md
+    - install.md
+    - Examples:
+      - examples/mda.md
+      - examples/integration-with-qt.md
+      - examples/context-set.md
+      - examples/napari-micromanager.md
+      - examples/following_changes_in_core.md
+    - API:
+      - api/cmmcoreplus.md
+      - api/mda.md
+      - api/events.md
+      - api/device.md
+      - api/configuration.md
+      - api/constants.md
+      - api/metadata.md
+      - api/utils.md
+    - contributing.md
+  - useq-schema: https://pymmcore-plus.github.io/useq-schema/
+
 
 theme:
   name: "material"
   features:
     - content.tabs.link
+    - navigation.tabs
+    - content.code.annotate
   icon:
     logo: fontawesome/solid/microscope
+    repo: fontawesome/brands/github
   palette:
     # Palette toggle for light mode
     - media: "(prefers-color-scheme: light)"
@@ -56,6 +64,7 @@ theme:
 
 markdown_extensions:
   - tables
+  - pymdownx.snippets  # lets you include code snippets from other files
   - toc:
       permalink: true
   - admonition
@@ -80,6 +89,7 @@ plugins:
           import:
             - https://docs.python.org/3/objects.inv
             - https://numpy.org/doc/stable/objects.inv
+            - https://pymmcore-plus.github.io/useq-schema/objects.inv
           options:
             ## Headings options:
             # heading_level: 2 # default is 2
@@ -113,5 +123,6 @@ plugins:
 
             show_bases: false # default is true
             show_source: false # default is true
+
 extra_css:
   - stylesheets/extra.css

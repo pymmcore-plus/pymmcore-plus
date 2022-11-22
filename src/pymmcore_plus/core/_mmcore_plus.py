@@ -140,7 +140,19 @@ class CMMCorePlus(pymmcore.CMMCore):
         in a given session.  This class method provides a convenient way to access
         that instance.
 
-        Widgets from `pymmcore-widgets` will use this global instance by default.
+        !!! tip
+
+            Creating/accessing a `CMMCorePlus` object using `CMMCorePlus.instance()` is
+            a convenient way to access the same core instance from multiple places in
+            your code. All widgets in
+            [`pymmcore-widgets`](https://github.com/pymmcore-plus/pymmcore-widgets) also
+            use `CMMCorePlus.instance()` by default, so any widgets you use will
+            automatically connect to the same core instance without any additional
+            configuration.
+
+            Attempts *are* made to make it thread-safe.  But please open an issue
+            if you find any problems.
+
 
         """
         global _instance

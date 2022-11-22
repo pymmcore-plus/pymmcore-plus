@@ -98,7 +98,8 @@ the additional features of `CMMCorePlus`.
 
 !!! tip "`CMMCorePlus.instance`"
 
-    Creating/accessing a `CMMCorePlus` object using `CMMCorePlus.instance()` is a
+    Creating/accessing a `CMMCorePlus` object using
+    [`CMMCorePlus.instance()`][pymmcore_plus.CMMCorePlus.instance] is a
     convenient way to access the same core instance from multiple places in your
     code. All widgets in
     [`pymmcore-widgets`](https://github.com/pymmcore-plus/pymmcore-widgets) also use

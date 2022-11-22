@@ -1,4 +1,4 @@
-# Using with napari-micromanager
+# Using with napari
 
 If you want a nice GUI to interact with in addition to being able to script you
 can use
@@ -11,21 +11,8 @@ backend.
 For complex scripting you likely will want to launch napari from a script or a
 jupyter notebook.
 
-```python
-from pymmcore_plus import CMMCorePlus
-
-import napari
-
-v = napari.Viewer()
-dw, main_window = v.window.add_plugin_dock_widget("napari-micromanager")
-
-mmc = CMMCorePlus.instance()
-
-# do any complicated scripting you want here
-...
-
-# start napari
-napari.run()
+```python linenums="1" title="napari.py"
+--8<-- "examples/napari.py"
 ```
 
 ## Using the integrated napari terminal
