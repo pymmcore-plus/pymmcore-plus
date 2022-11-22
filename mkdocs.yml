@@ -32,7 +32,7 @@ nav:
       - api/metadata.md
       - api/utils.md
     - contributing.md
-  - useq-schema: https://pymmcore-plus.github.io/useq-schema/
+  - useq-schema: /useq-schema/
 
 
 theme:
@@ -66,7 +66,7 @@ markdown_extensions:
   - tables
   - pymdownx.snippets  # lets you include code snippets from other files
   - toc:
-      permalink: true
+      permalink: "#"
   - admonition
   - pymdownx.highlight
   - pymdownx.extra
@@ -75,8 +75,7 @@ markdown_extensions:
       emoji_generator: !!python/name:materialx.emoji.to_svg
   - pymdownx.tabbed:
       alternate_style: true
-  - toc:
-      permalink: "#"
+
 
 hooks:
   - docs/_hooks.py
