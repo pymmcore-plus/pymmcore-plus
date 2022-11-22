@@ -13,10 +13,21 @@ if TYPE_CHECKING:
 
 
 class MDAEngine(PMDAEngine):
+    """The default MDAengine that ships with pymmcore-plus.
+
+    This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
+    uses a [`CMMCorePlus`][pymmcore_plus.CMMCorePlus] instance to control the hardware.
+    """
+
     def __init__(self, mmc: CMMCorePlus) -> None:
         self._mmc = mmc
 
     def setup_sequence(self, sequence: MDASequence) -> None:
+        """Setup the hardware for the entire sequence.
+
+        (currently, this does nothing but get the global `CMMCorePlus` singleton
+        if one is not already provided).
+        """
         from ..core import CMMCorePlus
 
         self._mmc = self._mmc or CMMCorePlus.instance()
@@ -43,6 +54,7 @@ class MDAEngine(PMDAEngine):
         self._mmc.waitForSystem()
 
     def exec_event(self, event: MDAEvent) -> Any:
+        """Execute an individual event and return the image data."""
         # TODO: add non-aquisition event-specific logic here later
         self._mmc.snapImage()
         return EventPayload(image=self._mmc.getImage())

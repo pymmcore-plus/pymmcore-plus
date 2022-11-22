@@ -89,7 +89,7 @@ class _PropertySignal:
 class _DevicePropertyEventMixin(PCoreSignaler):
     _prop_callbacks: PropKeyDict = {}
 
-    def devicePropertyChanged(
+    def devicePropertyChanged(  # type: ignore[override]
         self, device: str, property: Optional[str] = None
     ) -> _PropertySignal:
         """Return object to connect/disconnect to device/property-specific changes.

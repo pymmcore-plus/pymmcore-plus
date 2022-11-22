@@ -10,10 +10,10 @@ from pymmcore_plus.mda.events import MDASignaler, QMDASignaler
 def core(request):
     core = pymmcore_plus.CMMCorePlus()
     if request.param == "psygnal":
-        core.events = CMMCoreSignaler()
+        core._events = CMMCoreSignaler()
         core.mda._events = MDASignaler()
     else:
-        core.events = QCoreSignaler()
+        core._events = QCoreSignaler()
         core.mda._events = QMDASignaler()
     core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(core.events)
     core.registerCallback(core._callback_relay)

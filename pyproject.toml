@@ -46,14 +46,12 @@ dependencies = [
 # extras
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
-
 docs = [
-    "Sphinx>=1.5",
-    "furo",
-    "myst-nb",
-    "sphinx-copybutton",
-    "sphinx-panels",
-    "sphinx-togglebutton",
+    # bugfix until https://github.com/mkdocstrings/griffe/pull/115
+    "griffe @ git+https://github.com/tlambert03/griffe@recursion#egg=griffe",
+    "mkdocs >=1.4",
+    "mkdocs-material",
+    "mkdocstrings-python",
 ]
 remote = ["Pyro5>=5.10", "msgpack", "psutil"]
 testing = ["PySide2", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
@@ -76,18 +74,12 @@ Source = "https://github.com/pymmcore-plus/pymmcore-plus"
 Tracker = "https://github.com/pymmcore-plus/pymmcore-plus/issues"
 Documentation = "https://pymmcore-plus.readthedocs.io/"
 
-# same as console_scripts entry point
-# [project.scripts]
-# spam-cli = "spam:main_cli"
-
-# Entry points
-# https://peps.python.org/pep-0621/#entry-points
-# [project.entry-points."spam.magical"]
-# tomatoes = "spam:main_tomatoes"
-
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/pymmcore_plus/_version.py"

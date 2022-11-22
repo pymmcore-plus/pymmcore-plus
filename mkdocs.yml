@@ -1,0 +1,127 @@
+site_name: pymmcore-plus
+site_url: https://pymmcore-plus.github.io/pymmcore-plus
+site_description: Pure python extensions of the C++ micro-manager core
+# strict: true
+
+repo_name: pymmcore-plus/pymmcore-plus
+repo_url: https://github.com/pymmcore-plus/pymmcore-plus
+edit_uri: edit/main/docs/
+# use_directory_urls: false
+
+watch:
+  - src/pymmcore_plus
+  - examples
+
+nav:
+  - pymmcore-plus:
+    - index.md
+    - install.md
+    - Examples:
+      - examples/mda.md
+      - examples/integration-with-qt.md
+      - examples/context-set.md
+      - examples/napari-micromanager.md
+      - examples/following_changes_in_core.md
+    - API:
+      - api/cmmcoreplus.md
+      - api/mda.md
+      - api/events.md
+      - api/device.md
+      - api/configuration.md
+      - api/constants.md
+      - api/metadata.md
+      - api/utils.md
+    - contributing.md
+  - useq-schema: /useq-schema/
+
+
+theme:
+  name: "material"
+  features:
+    - content.tabs.link
+    - navigation.tabs
+    - content.code.annotate
+  icon:
+    logo: fontawesome/solid/microscope
+    repo: fontawesome/brands/github
+  palette:
+    # Palette toggle for light mode
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: dark blue
+      accent: dark blue
+      toggle:
+        icon: material/lightbulb-outline
+        name: "Switch to dark mode"
+    # Palette toggle for dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: light green
+      toggle:
+        icon: material/lightbulb
+        name: "Switch to light mode"
+
+markdown_extensions:
+  - tables
+  - pymdownx.snippets  # lets you include code snippets from other files
+  - toc:
+      permalink: "#"
+  - admonition
+  - pymdownx.highlight
+  - pymdownx.extra
+  - pymdownx.emoji:
+      emoji_index: !!python/name:materialx.emoji.twemoji
+      emoji_generator: !!python/name:materialx.emoji.to_svg
+  - pymdownx.tabbed:
+      alternate_style: true
+
+
+hooks:
+  - docs/_hooks.py
+
+plugins:
+  - search
+  - mkdocstrings:
+      handlers:
+        python:
+          import:
+            - https://docs.python.org/3/objects.inv
+            - https://numpy.org/doc/stable/objects.inv
+            - https://pymmcore-plus.github.io/useq-schema/objects.inv
+          options:
+            ## Headings options:
+            # heading_level: 2 # default is 2
+            show_root_heading: true # default is false
+            # show_root_toc_entry: false # default is true
+            # show_root_full_path: false # default is true
+            # show_root_members_full_path: true # default is false
+            # show_object_full_path: true # default is false
+            # show_category_heading: true # default is false
+
+            ## Members options:
+            # members: [] # default is None
+            # members_order: 'source' # default is 'alphabetical'
+            filters: ['^[^_]'] # list of filters to filter objects by name
+            # group_by_category: false # default is true
+            # show_submodules: true # default is false
+
+            ## Docstrings options:
+            docstring_style: 'numpy'
+            # docstring_options: {}  # griffe.docstrings options
+            # docstring_section_style: 'list'  # default is 'table' (or spacy)
+            line_length: 50  # default is 60
+            # merge_init_into_class: true  # default is false
+            show_if_no_docstring: true  # default is false
+
+            ## Signatures/annotations options:
+            # show_signature: false  # default is true
+            show_signature_annotations: true # default is false
+            annotations_path: 'source' # default is 'brief'
+            # separate_signature: true # default is false
+
+            show_bases: false # default is true
+            show_source: false # default is true
+
+extra_css:
+  - stylesheets/extra.css

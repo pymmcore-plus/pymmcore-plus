@@ -7,11 +7,14 @@ from .events._device_signal_view import _DevicePropValueSignal
 
 if TYPE_CHECKING:
     from ._constants import DeviceDetectionStatus, DeviceType
-    from ._mmcore_plus import CMMCorePlus
+    from ._mmcore_plus import CMMCorePlus, DeviceSchema
 
 
 class Device:
     """Convenience view onto a device.
+
+    This is the type of object that is returned by
+    [`pymmcore_plus.CMMCorePlus.getDeviceObject`][]
 
     Parameters
     ----------
@@ -44,7 +47,7 @@ class Device:
 
     @property
     def core(self) -> CMMCorePlus:
-        """Return the core instance to which this Device is bound."""
+        """Return the `CMMCorePlus` instance to which this Device is bound."""
         return self._mmc
 
     def isBusy(self) -> bool:
@@ -72,7 +75,7 @@ class Device:
         return self._mmc.getDeviceLibrary(self.label)
 
     def name(self) -> str:
-        """Returns device name (this is not the same as the device label)."""
+        """Return the device name (this is not the same as the device label)."""
         return self._mmc.getDeviceName(self.label)
 
     def propertyNames(self) -> Tuple[str, ...]:
@@ -85,6 +88,10 @@ class Device:
         return tuple(
             DeviceProperty(self.label, name, self._mmc) for name in self.propertyNames()
         )
+
+    def getPropertyObject(self, property_name: str) -> DeviceProperty:
+        """Return a `DeviceProperty` object bound to this device on this core."""
+        return DeviceProperty(self.label, property_name, self._mmc)
 
     def initialize(self) -> None:
         """Initialize device."""
@@ -163,7 +170,7 @@ class Device:
         """Return device type."""
         return self._mmc.getDeviceType(self.label)
 
-    def schema(self) -> dict:
+    def schema(self) -> DeviceSchema:
         """Return dict in JSON-schema format for properties of `device_label`."""
         return self._mmc.getDeviceSchema(self.label)
 

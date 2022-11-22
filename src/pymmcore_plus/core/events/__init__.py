@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Type
 
 from psygnal._signal import _normalize_slot
 
@@ -19,7 +19,7 @@ __all__ = [
 ]
 
 
-def _get_auto_core_callback_class(default=CMMCoreSignaler):
+def _get_auto_core_callback_class(default=CMMCoreSignaler) -> Type[PCoreSignaler]:
     if _qt_app_is_running():
         from ._qsignals import QCoreSignaler
 

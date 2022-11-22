@@ -91,19 +91,13 @@ class DeviceNotification(IntEnum):
 
 
 class DeviceDetectionStatus(IntEnum):
-    """DeviceDetectionStatus from device discovery.
-
-    Unimplemented
-        there is as yet no mechanism to programmatically detect the device
-    Misconfigured
-        some information needed to communicate with the device is invalid
-    CanNotCommunicate
-        communication attributes are valid, but the device does not respond
-    CanCommunicate
-        communication verified, parameters have been set to valid values.
-    """
+    """DeviceDetectionStatus from device discovery."""
 
     Unimplemented = -2
+    """There is as yet no mechanism to programmatically detect the device."""
     Misconfigured = -1
+    """Some information needed to communicate with the device is invalid."""
     CanNotCommunicate = 0
+    """Communication attributes are valid, but the device does not respond."""
     CanCommunicate = 1
+    """Communication verified, parameters have been set to valid values."""

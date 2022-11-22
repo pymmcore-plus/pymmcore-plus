@@ -6,8 +6,6 @@ from typing import Any, DefaultDict, Dict, Iterator, Tuple, cast
 
 import pymmcore
 
-_NULL = object()
-
 
 # class PropertySetting(pymmcore.PropertySetting):
 #     """Encompasses a device label, property name, and property value"""
@@ -42,18 +40,31 @@ _NULL = object()
 
 
 class Configuration(pymmcore.Configuration):
-    """Encapsulation of the configuration information, with convenience methods.
+    """Encapsulation of configuration information.
 
-    This pymmcore_plus variant provides additional conveniences:
-        __len__ - number of settings
-        __str__ - pretty printing of Config
-        __contains__ - check if (devLabel, propLabel) is in the config
-        __getitem__ - get property setting by index or (devLabel, propLabel) key
-        __iter__ - iterate over (devLabeL, propLabel, value) tuples
-        dict() - convert Configuration to nested dict
-        json() - convert to JSON string
-        yaml() - convert to YAML string (requires PyYAML)
-        html() - convert to HTML string
+    This class is a subclass of `pymmcore.Configuration` that implements an
+    [`collections.abc.Mapping`][] interface (i.e. it behaves like a Python `dict`),
+    and adds a few convenience methods:
+
+    - `__len__` - number of settings
+    - `__str__` - pretty printing of Config
+    - `__contains__` - check if (devLabel, propLabel) is in the config
+    - `__getitem__` - get property setting by index or (devLabel, propLabel) key
+    - `__iter__` - iterate over (devLabeL, propLabel, value) tuples
+    - `dict()` - convert Configuration to nested dict
+    - `json()` - convert to JSON string
+    - `yaml()` - convert to YAML string (requires PyYAML)
+    - `html()` - convert to HTML string
+
+    !!! tip
+
+        All of the methods in `pymmcore_plus.CMMCorePlus` that would have returned a
+        `pymmcore.Configuration` in `pymmcore` (e.g.
+        [`getConfigData`][pymmcore_plus.CMMCorePlus.getConfigData],
+        [`getConfigState`][pymmcore_plus.CMMCorePlus.getConfigState], etc...).
+        have been reimplemented to return a `pymmcore_plus.Configuration` object. This
+        object has the same API as `pymmcore.Configuration`, but you can request a
+        "native" (unenhanced) `pymmcore` object by passing `native=True` to the method.
     """
 
     # pymmcore API:
@@ -131,7 +142,7 @@ class Configuration(pymmcore.Configuration):
         return dumps(self.dict())
 
     def yaml(self) -> str:
-        """Dump config to YAML string (requires PyYAML)."""
+        """Dump config to YAML string (requires that PyYAML is installed)."""
         try:
             from yaml import safe_dump
         except ImportError:  # pragma: no cover

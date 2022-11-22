@@ -440,9 +440,9 @@ def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
 
     def cb(*args, **kwargs):
         nonlocal got_lock
-        got_lock = core.lock.acquire(timeout=0.1)
+        got_lock = core._lock.acquire(timeout=0.1)
         if got_lock:
-            core.lock.release()
+            core._lock.release()
 
     core.events.XYStagePositionChanged.connect(cb)
 
