@@ -117,17 +117,18 @@ class PCoreSignaler(Protocol):
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    startContinuousSequenceAcquisition: PSignalInstance
+
+    continuousSequenceAcquisitionStarted: PSignalInstance
     """Emits with no arguments when continuous sequence acquisition is started.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    startSequenceAcquisition: PSignalInstance
+    sequenceAcquisitionStarted: PSignalInstance
     """Emits `(str, int, float, bool)` when sequence acquisition is started.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    stopSequenceAcquisition: PSignalInstance
+    sequenceAcquisitionStopped: PSignalInstance
     """Emits `(str)` when sequence acquisition is stopped.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
