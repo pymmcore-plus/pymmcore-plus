@@ -47,8 +47,6 @@ dependencies = [
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
 docs = [
-    # bugfix until https://github.com/mkdocstrings/griffe/pull/115
-    "griffe @ git+https://github.com/tlambert03/griffe@recursion#egg=griffe",
     "mkdocs >=1.4",
     "mkdocs-material",
     "mkdocstrings-python",
