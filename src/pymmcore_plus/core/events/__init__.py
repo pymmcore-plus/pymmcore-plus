@@ -1,10 +1,10 @@
-from typing import TYPE_CHECKING, Type
+from typing import TYPE_CHECKING, Any, List, Type
 
 from psygnal._signal import _normalize_slot
 
+from ..._util import _qt_app_is_running
 from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
-from ..._util import _qt_app_is_running
 
 if TYPE_CHECKING:
     from ._qsignals import QCoreSignaler
@@ -19,7 +19,9 @@ __all__ = [
 ]
 
 
-def _get_auto_core_callback_class(default=CMMCoreSignaler) -> Type[PCoreSignaler]:
+def _get_auto_core_callback_class(
+    default: Type[PCoreSignaler] = CMMCoreSignaler,
+) -> Type[PCoreSignaler]:
     if _qt_app_is_running():
         from ._qsignals import QCoreSignaler
 
@@ -28,11 +30,11 @@ def _get_auto_core_callback_class(default=CMMCoreSignaler) -> Type[PCoreSignaler
     return default
 
 
-def __dir__():
+def __dir__() -> List[str]:
     return list(globals()) + ["QCoreSignaler"]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> Any:
     if name == "QCoreSignaler":
         try:
             from ._qsignals import QCoreSignaler

@@ -28,7 +28,7 @@ DEBUG = os.getenv("MM_DEBUG", "0") in ("1", "true", "True", "yes")
 DEFAULT_LOG_LEVEL = "DEBUG" if DEBUG else "INFO"
 
 
-def set_log_level(level: str = DEFAULT_LOG_LEVEL):
+def set_log_level(level: str = DEFAULT_LOG_LEVEL) -> None:
     logger.remove()
 
     # automatically log to stderr

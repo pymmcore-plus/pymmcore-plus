@@ -9,7 +9,7 @@ class PSignalInstance(Protocol):
     def disconnect(self, slot: Callable, **kwargs: Any) -> Any:
         ...
 
-    def emit(self, args: Any) -> Any:
+    def emit(self, *args: Any) -> Any:
         ...
 
 

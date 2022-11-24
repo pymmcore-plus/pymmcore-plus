@@ -12,12 +12,12 @@ from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Iterable,
     Iterator,
     Pattern,
     Sequence,
     TypeVar,
-    Union,
     cast,
     overload,
 )
@@ -26,17 +26,16 @@ import pymmcore
 from psygnal import SignalInstance
 from pymmcore_plus.core.events import PCoreSignaler
 from typing_extensions import Literal
-from wrapt import synchronized
 
+from .._logger import logger
+from .._util import find_micromanager
+from ..mda import MDAEngine, MDARunner, PMDAEngine
 from ._config import Configuration
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._device import Device
-from .._logger import logger
 from ._metadata import Metadata
 from ._property import DeviceProperty
-from .._util import find_micromanager
 from .events import CMMCoreSignaler, _get_auto_core_callback_class
-from ..mda import MDAEngine, MDARunner, PMDAEngine
 
 if TYPE_CHECKING:
     import numpy as np
@@ -44,7 +43,8 @@ if TYPE_CHECKING:
     from useq import MDASequence
 
     _T = TypeVar("_T")
-    ListOrTuple = Union[list[_T], tuple[_T, ...]]
+    _F = TypeVar("_F", bound=Callable[..., Any])
+    ListOrTuple = list[_T] | tuple[_T, ...]
 
     class StateDict(TypedDict, total=False):
         """Dictionary of state values for a device.
@@ -92,6 +92,11 @@ if TYPE_CHECKING:
         type: str
         properties: dict[str, PropertySchema]
 
+    def synchronized(lock: RLock) -> Callable[[_F], _F]:
+        ...
+
+else:
+    from wrapt import synchronized
 
 _OBJDEV_REGEX = re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
@@ -207,7 +212,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @synchronized(_lock)
     def setProperty(
-        self, label: str, propName: str, propValue: Union[bool, float, int, str]
+        self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
         """Set property named `propName` on device `label` to `propValue`.
 
@@ -559,7 +564,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             If `True` (the default), then images with n_components > 1 (like RGB images)
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
-        img = super().popNextImage()
+        img: np.ndarray = super().popNextImage()
         return self.fixImage(img) if fix else img
 
     @synchronized(_lock)
@@ -891,7 +896,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self._objective_regex
 
     @objective_device_pattern.setter
-    def objective_device_pattern(self, value: Union[Pattern, str]) -> None:
+    def objective_device_pattern(self, value: Pattern | str) -> None:
         if isinstance(value, str):
             value = re.compile(value, re.IGNORECASE)
         elif not isinstance(value, Pattern):
@@ -919,7 +924,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self._channel_group_regex
 
     @channelGroup_pattern.setter
-    def channelGroup_pattern(self, value: Union[Pattern, str]):
+    def channelGroup_pattern(self, value: Pattern | str) -> None:
         if isinstance(value, str):
             value = re.compile(value, re.IGNORECASE)
         elif not isinstance(value, Pattern):
@@ -959,6 +964,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             reg = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
         """
+        # sourcery skip: use-named-expression
         chan_group = self.getChannelGroup()
         if chan_group:
             return [chan_group]
@@ -1014,28 +1020,36 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self.setPosition(self.getFocusDevice(), val)
 
     @overload
-    def setPosition(self, position: float):
+    def setPosition(self, position: float) -> None:
         ...
 
     @overload
-    def setPosition(self, stageLabel: str, position: float):
+    def setPosition(self, stageLabel: str, position: float) -> None:
         ...
 
     @synchronized(_lock)
-    def setPosition(self, *args, **kwargs) -> None:
+    def setPosition(self, *args: Any, **kwargs: Any) -> None:
         """Set position of the stage in microns.
 
         **Why Override?** To add a lock to prevent concurrent calls across threads.
         """
         return super().setPosition(*args, **kwargs)
 
-    @synchronized(_lock)
+    @overload
     def setXYPosition(self, x: float, y: float) -> None:
+        ...
+
+    @overload
+    def setXYPosition(self, xyStageLabel: str, x: float, y: float) -> None:
+        ...
+
+    @synchronized(_lock)
+    def setXYPosition(self, *args: Any, **kwargs: Any) -> None:
         """Sets the position of the XY stage in microns.
 
         **Why Override?** To add a lock to prevent concurrent calls across threads.
         """
-        return super().setXYPosition(x, y)
+        return super().setXYPosition(*args, **kwargs)
 
     @synchronized(_lock)
     def getCameraChannelNames(self) -> tuple[str, ...]:
@@ -1143,7 +1157,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
 
-    def snap(self, numChannel: int | None = None, *, fix=True) -> np.ndarray:
+    def snap(self, numChannel: int | None = None, *, fix: bool = True) -> np.ndarray:
         """Snap and return an image.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -1170,14 +1184,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         return img
 
     @overload
-    def getImage(self, *, fix=True) -> np.ndarray:
+    def getImage(self, *, fix: bool = True) -> np.ndarray:
         """Return the internal image buffer."""
 
     @overload
-    def getImage(self, numChannel: int, *, fix=True) -> np.ndarray:
+    def getImage(self, numChannel: int, *, fix: bool = True) -> np.ndarray:
         """Return the internal image buffer for a given Camera Channel"""
 
-    def getImage(self, numChannel: int | None = None, *, fix=True) -> np.ndarray:
+    def getImage(
+        self, numChannel: int | None = None, *, fix: bool = True
+    ) -> np.ndarray:
         """Return the internal image buffer.
 
         **Why Override?** To fix the shape of images with n_components > 1 (like RGB
@@ -1214,7 +1230,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         intervalMs: float,
         stopOnOverflow: bool,
     ) -> None:
-        ...  # pragma: no cover
+        ...
 
     @overload
     def startSequenceAcquisition(
@@ -1224,9 +1240,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         intervalMs: float,
         stopOnOverflow: bool,
     ) -> None:
-        ...  # pragma: no cover
+        ...
 
-    def startSequenceAcquisition(self, *args, **kwargs) -> None:
+    def startSequenceAcquisition(self, *args: Any, **kwargs: Any) -> None:
         """Starts streaming camera sequence acquisition.
 
         This command does not block the calling thread for the duration of the
@@ -1268,21 +1284,22 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @overload
     def setShutterOpen(self, state: bool) -> None:
-        ...  # pragma: no cover
+        ...
 
     @overload
     def setShutterOpen(self, shutterLabel: str, state: bool) -> None:
-        ...  # pragma: no cover
+        ...
 
-    def setShutterOpen(self, *args):
+    def setShutterOpen(self, *args: Any, **kwargs: Any) -> None:
         """Open or close the currently selected or `shutterLabel` shutter.
 
         **Why Override?** To emit a `propertyChanged` event.
         """
-        super().setShutterOpen(*args)
+        super().setShutterOpen(*args, **kwargs)
+        shutterLabel, state = kwargs.get("shutterLabel"), kwargs.get("state")
         if len(args) > 1:
             shutterLabel, state = args
-        else:
+        elif args:
             shutterLabel = super().getShutterDevice()
             state = args
         self.events.propertyChanged.emit(shutterLabel, "State", state)
@@ -1324,7 +1341,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @overload
     def defineConfig(self, groupName: str, configName: str) -> None:
-        ...  # pragma: no cover
+        ...
 
     @overload
     def defineConfig(
@@ -1335,7 +1352,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         propName: str,
         value: str,
     ) -> None:
-        ...  # pragma: no cover
+        ...
 
     def defineConfig(
         self,
@@ -1376,7 +1393,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().setPixelSizeUm(resolutionID, pixSize)
         self.events.pixelSizeChanged.emit(pixSize)
 
-    def deletePixelSizeConfig(self, resolutionID: str):
+    def deletePixelSizeConfig(self, resolutionID: str) -> None:
         """Delete the pixel size configuration for the given `resolutionID`.
 
         **Why Override?** To emit a `pixelSizeChanged` event.
@@ -1404,13 +1421,13 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None:
-        ...  # pragma: no cover
+        ...
 
     @overload
     def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None:
-        ...  # pragma: no cover
+        ...
 
-    def setROI(self, *args, **kwargs) -> None:
+    def setROI(self, *args: Any, **kwargs: Any) -> None:
         """Set the camera Region of Interest (ROI).
 
         **Why Override?** To emit a `roiSet` event.
@@ -1471,7 +1488,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         return cast("StateDict", state)
 
     @contextmanager
-    def _property_change_emission_ensured(self, device: str, properties: Sequence[str]):
+    def _property_change_emission_ensured(
+        self, device: str, properties: Sequence[str]
+    ) -> Iterator[None]:
         """Context that emits events if any of `properties` change on device.
 
         NOTE: Depending on device adapter behavior the signal may be emitted twice.
@@ -1500,7 +1519,7 @@ class CMMCorePlus(pymmcore.CMMCore):
                 self.events.propertyChanged.emit(device, properties[i], val)
 
     @contextmanager
-    def setContext(self, **kwargs: Any):
+    def setContext(self, **kwargs: Any) -> Iterator[None]:
         """Set core properties in a context restoring the initial values on exit.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -1573,10 +1592,10 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         super().__init__()
 
     @staticmethod
-    def _make_reemitter(name):
+    def _make_reemitter(name: str) -> Callable[..., None]:
         sig_name = name[2].lower() + name[3:]
 
-        def reemit(self: _MMCallbackRelay, *args):
+        def reemit(self: _MMCallbackRelay, *args: Any) -> None:
             try:
                 getattr(self._emitter, sig_name).emit(*args)
             except Exception as e:

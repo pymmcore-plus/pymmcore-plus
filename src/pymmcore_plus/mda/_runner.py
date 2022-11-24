@@ -95,7 +95,7 @@ class MDARunner:
         """
         return self._paused
 
-    def cancel(self):
+    def cancel(self) -> None:
         """Cancel the currently running acquisition.
 
         This is a no-op if no acquisition is currently running.
@@ -106,7 +106,7 @@ class MDARunner:
         self._canceled = True
         self._paused_time = 0
 
-    def toggle_pause(self):
+    def toggle_pause(self) -> None:
         """Toggle the paused state of the current acquisition.
 
         To get whether the acquisition is currently paused use the
@@ -164,7 +164,7 @@ class MDARunner:
             raise e
         self._finish_run(sequence)
 
-    def _prepare_to_run(self, sequence: MDASequence):
+    def _prepare_to_run(self, sequence: MDASequence) -> None:
         """Set up for the MDA run.
 
         Parameters
@@ -186,10 +186,10 @@ class MDARunner:
         self._events.sequenceStarted.emit(sequence)
         self._reset_timer()
 
-    def _reset_timer(self):
+    def _reset_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
 
-    def _time_elapsed(self):
+    def _time_elapsed(self) -> float:
         return time.perf_counter() - self._t0
 
     def _check_canceled(self) -> bool:

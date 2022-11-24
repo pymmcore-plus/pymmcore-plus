@@ -15,14 +15,12 @@ class _DevicePropValueSignal:
         self._mmc = mmcore
 
     def connect(self, callback: _C) -> _C:
-        return self._mmc.events.devicePropertyChanged(self._dev, self._prop).connect(
-            callback
-        )
+        sig = self._mmc.events.devicePropertyChanged(self._dev, self._prop)
+        return sig.connect(callback)  # type: ignore
 
-    def disconnect(self, callback: _C):
-        return self._mmc.events.devicePropertyChanged(self._dev, self._prop).disconnect(
-            callback
-        )
+    def disconnect(self, callback: _C) -> None:
+        sig = self._mmc.events.devicePropertyChanged(self._dev, self._prop)
+        return sig.disconnect(callback)  # type: ignore
 
-    def __call__(self, property: str):
+    def __call__(self, property: str) -> "_DevicePropValueSignal":
         return _DevicePropValueSignal(self._dev, property, self._mmc)

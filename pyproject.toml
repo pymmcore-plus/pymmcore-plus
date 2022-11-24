@@ -116,6 +116,7 @@ extend-ignore = [
     "D400", # First line should end with a period
     "D413", # Missing blank line after last section
     "D416", # Section name should end with a colon
+    "C901", # Function is too complex
 ]
 
 [tool.ruff.per-file-ignores]
@@ -133,10 +134,9 @@ filterwarnings = ["error"]
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
 files = "src/**/*/*.py"
+strict = true
 disallow_any_generics = false
 disallow_subclassing_any = false
-disallow_untyped_calls = false
-disallow_untyped_defs = false
 show_error_codes = true
 pretty = true
 
