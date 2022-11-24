@@ -33,7 +33,7 @@ nav:
       - api/utils.md
     - contributing.md
   - useq-schema: /useq-schema/
-
+  - pymmcore-widgets: /pymmcore-widgets/
 
 theme:
   name: "material"
