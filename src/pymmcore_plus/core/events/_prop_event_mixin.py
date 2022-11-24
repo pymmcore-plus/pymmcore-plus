@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar
 
+# FIXME: private import
 from psygnal._signal import _normalize_slot
 
 if TYPE_CHECKING:
@@ -62,7 +63,7 @@ class _PropertySignal:
         slot = _normalize_slot(callback)
         key = (self._device, self._property, slot)
 
-        def _wrapper(dev, prop, new_value):
+        def _wrapper(dev: str, prop: str, new_value: Any) -> None:
             cb = _denormalize_slot(slot)
             if cb is None:
                 self._events._prop_callbacks.pop(key)

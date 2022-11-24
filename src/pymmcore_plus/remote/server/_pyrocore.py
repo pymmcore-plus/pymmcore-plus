@@ -6,9 +6,9 @@ from Pyro5 import errors
 from Pyro5.api import behavior, expose, oneway
 
 from ..._logger import logger
-from .._util import wrap_for_pyro
 from ...core._mmcore_plus import CMMCorePlus
 from ...core.events import CMMCoreSignaler
+from .._util import wrap_for_pyro
 
 if TYPE_CHECKING:
     from ..client._client import CallbackProtocol

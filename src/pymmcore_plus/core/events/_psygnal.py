@@ -1,8 +1,8 @@
 import numpy as np
-from psygnal import Signal
+from psygnal import Signal, SignalInstance
 
-from ._prop_event_mixin import _DevicePropertyEventMixin
 from ...mda import MDAEngine
+from ._prop_event_mixin import _DevicePropertyEventMixin
 
 
 class CMMCoreSignaler(_DevicePropertyEventMixin):
@@ -36,9 +36,9 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
 
     # aliases for lower casing
     @property
-    def xYStagePositionChanged(self):
+    def xYStagePositionChanged(self) -> SignalInstance:  # type: ignore
         return self.XYStagePositionChanged
 
     @property
-    def sLMExposureChanged(self):
+    def sLMExposureChanged(self) -> SignalInstance:  # type: ignore
         return self.SLMExposureChanged

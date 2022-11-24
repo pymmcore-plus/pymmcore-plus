@@ -140,7 +140,7 @@ class Device:
                         )
             raise RuntimeError(msg)  # sourcery skip
 
-    def unload(self):
+    def unload(self) -> None:
         """Unload device from the core and adjust all configuration data."""
         return self._mmc.unloadDevice(self.label)
 

@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import os
 import re
 import shutil
@@ -14,7 +16,9 @@ DEFAULT_DEST = Path(__file__).parent
 ssl._create_default_https_context = ssl._create_unverified_context
 
 
-def _progressBar(current, chunksize, total, barLength=40):
+def _progressBar(
+    current: float, chunksize: float, total: float, barLength: int = 40
+) -> None:
     percent = float(current * chunksize) * 100 / total
     arrow = "-" * int(percent / 100 * barLength - 1) + ">"
     spaces = " " * (barLength - len(arrow))
@@ -22,7 +26,7 @@ def _progressBar(current, chunksize, total, barLength=40):
         print("Progress: [%s%s] %d %%" % (arrow, spaces, percent), end="\r")
 
 
-def _download_url(url, output_path):
+def _download_url(url: str, output_path: str) -> None:
     print(f"downloading {url} ...")
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
@@ -30,7 +34,12 @@ def _download_url(url, output_path):
     urllib.request.urlretrieve(url, filename=output_path, reporthook=_progressBar)
 
 
-def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=False):
+def _mac_main(
+    dest_dir: Path = DEFAULT_DEST,
+    version: str = VERSION,
+    release: str | int = RELEASE,
+    noprompt: bool = False,
+) -> Path | None:
     if release == "latest":
         url = "https://download.micro-manager.org/latest/macos/"
         fname = "Micro-Manager-x86_64-latest.dmg"
@@ -44,14 +53,14 @@ def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=
         resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
         if resp.lower().startswith("n"):
             print("aborting")
-            return
+            return None
 
     _download_url(f"{url}{fname}", fname)
     run(["hdiutil", "attach", "-nobrowse", fname], check=True)
     try:
         src = next(Path("/Volumes/Micro-Manager").glob("Micro-Manager*"))
     except StopIteration:
-        src = f"/Volumes/Micro-Manager/{fname[:-4]}"
+        src = Path(f"/Volumes/Micro-Manager/{fname[:-4]}")
     shutil.copytree(src, dst, dirs_exist_ok=True)
     run(["hdiutil", "detach", "/Volumes/Micro-Manager"], check=True)
     os.unlink(fname)
@@ -73,7 +82,12 @@ def _mac_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=
     return dst
 
 
-def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=False):
+def _win_main(
+    dest_dir: Path = DEFAULT_DEST,
+    version: str = VERSION,
+    release: str | int = RELEASE,
+    noprompt: bool = False,
+) -> Path | None:
     if release == "latest":
         url = "https://download.micro-manager.org/latest/windows/"
         fname = "MMSetup_x64_latest.exe"
@@ -87,7 +101,7 @@ def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=
         resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
         if resp.lower().startswith("n"):
             print("aborting")
-            return
+            return None
 
     _download_url(f"{url}{fname}", fname)
     run(
@@ -98,7 +112,12 @@ def _win_main(dest_dir=DEFAULT_DEST, version=VERSION, release=RELEASE, noprompt=
     return dst
 
 
-def install(dest_dir=DEFAULT_DEST, version=VERSION, release="latest", noprompt=False):
+def install(
+    dest_dir: Path = DEFAULT_DEST,
+    version: str = VERSION,
+    release: str = "latest",
+    noprompt: bool = False,
+) -> None:
     """Install Micro-manager to a given directory."""
     prog = _win_main if os.name == "nt" else _mac_main
     out = prog(dest_dir, version, release, noprompt)
@@ -106,14 +125,14 @@ def install(dest_dir=DEFAULT_DEST, version=VERSION, release="latest", noprompt=F
         print("installed to", out)
 
 
-def _existing_dir(string):
+def _existing_dir(string: str) -> Path:
     path = Path(string)
     if not path.is_dir():
         raise NotADirectoryError(string)
     return path
 
 
-def _version(value: str):
+def _version(value: str) -> str:
     if not _version_regex.match(value):
         raise ValueError(
             f"Invalid version: {value}. Must be of form x.y.z with x y and z in 0-9"
@@ -121,7 +140,7 @@ def _version(value: str):
     return value
 
 
-def _release(value: str):
+def _release(value: str) -> int | str:
     if value.lower() == "latest":
         return "latest"
     if len(value) != 8:
@@ -129,7 +148,7 @@ def _release(value: str):
     return int(value)
 
 
-def main():
+def main() -> None:
     """Main entry point for the console_scripts."""
     import sys
 
