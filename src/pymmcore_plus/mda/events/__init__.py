@@ -1,4 +1,4 @@
-from typing import Type
+from __future__ import annotations
 
 from ..._util import _qt_app_is_running
 from ._protocol import PMDASignaler
@@ -13,8 +13,8 @@ __all__ = [
 
 
 def _get_auto_MDA_callback_class(
-    default: Type[PMDASignaler] = MDASignaler,  # type: ignore
-) -> Type[PMDASignaler]:
+    default: type[PMDASignaler] = MDASignaler,  # type: ignore
+) -> type[PMDASignaler]:
     if _qt_app_is_running():
         from ._qsignals import QMDASignaler
 
