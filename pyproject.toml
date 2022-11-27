@@ -53,7 +53,7 @@ docs = [
     "mkdocstrings-python",
 ]
 remote = ["Pyro5>=5.10", "msgpack", "psutil"]
-testing = ["PySide2", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
+testing = ["PyQt5", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
 dev = [
     "black",
     "ipython",
