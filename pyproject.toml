@@ -27,6 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Topic :: System :: Hardware",
     "Topic :: System :: Hardware :: Hardware Drivers",
     "Topic :: Utilities",
@@ -52,7 +53,7 @@ docs = [
     "mkdocstrings-python",
 ]
 remote = ["Pyro5>=5.10", "msgpack", "psutil"]
-testing = ["PySide2", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
+testing = ["PyQt5", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
 dev = [
     "black",
     "ipython",
