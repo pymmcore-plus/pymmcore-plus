@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Dict, Iterator, Tuple, cast
+from typing import Any, DefaultDict, Iterator, cast
 
 import pymmcore
 
@@ -95,7 +95,7 @@ class Configuration(pymmcore.Configuration):
             lines.append("")
         return "\n".join(lines)
 
-    def __iter__(self) -> Iterator[Tuple[str, str, str]]:
+    def __iter__(self) -> Iterator[tuple[str, str, str]]:
         for i in range(self.size()):
             ps = self.getSetting(i)
             yield ps.getDeviceLabel(), ps.getPropertyName(), ps.getPropertyValue()
@@ -128,9 +128,9 @@ class Configuration(pymmcore.Configuration):
         """Return config as HTML."""
         return self.getVerbose()
 
-    def dict(self) -> Dict[str, Dict[str, str]]:
+    def dict(self) -> dict[str, dict[str, str]]:
         """Return config as a nested dict."""
-        d: DefaultDict[str, Dict[str, str]] = defaultdict(dict)
+        d: DefaultDict[str, dict[str, str]] = defaultdict(dict)
         for label, prop, value in self:
             d[label][prop] = value
         return dict(d)
@@ -145,8 +145,10 @@ class Configuration(pymmcore.Configuration):
         """Dump config to YAML string (requires that PyYAML is installed)."""
         try:
             from yaml import safe_dump
-        except ImportError:  # pragma: no cover
-            raise ImportError("Could not import yaml.  Please `pip install PyYAML`.")
+        except ImportError as e:  # pragma: no cover
+            raise ImportError(
+                "Could not import yaml.  Please `pip install PyYAML`."
+            ) from e
 
         return cast(str, safe_dump(self.dict()))
 
