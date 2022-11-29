@@ -52,10 +52,10 @@ def find_micromanager() -> Optional[str]:
         pth = str(next(app_path.glob("[m,M]icro-[m,M]anager*")))
         logger.debug(f"using MM path found in applications: {pth}")
         return pth
-    except KeyError:
+    except KeyError as e:
         raise NotImplementedError(
             f"MM autodiscovery not implemented for platform: {sys.platform}"
-        )
+        ) from e
     except StopIteration:
         logger.error(f"could not find micromanager directory in {app_path}")
         return None
