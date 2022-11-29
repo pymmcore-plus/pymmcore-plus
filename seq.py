@@ -1,57 +1,69 @@
+from typing import Any, Sequence
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus._logger import logger
 from useq import MDAEvent, MDASequence
 
 
-def _is_sequenceable(
-    core: CMMCorePlus, e1: MDAEvent, e2: MDAEvent, cur_length: int
-) -> bool:
-    # maybe check if last event
+class SequencedEvent:
+    """Meta-event that contains a sequence of triggerable/sequenceable events."""
 
-    # channel
-    if e1.channel and e2.channel and (e1.channel != e2.channel):
-        cfg = core.getConfigData(e1.channel.group, e1.channel.config)
-        for devLabeL, propLabel, _ in cfg:
-            # note: we don't need _ here, so can perhaps speed up with native=True
-            if core.isPropertySequenceable(devLabeL, propLabel):
-                return False
-            if cur_length >= core.getPropertySequenceMaxLength(devLabeL, propLabel):
-                return False
+    def __init__(self, events: Sequence[MDAEvent]):
+        self._frozen: bool = False
+        self.events = events
+        z_positions: list[float] = []
+        x_positions: list[float] = []
+        y_positions: list[float] = []
+        exposures: list[float] = []
+        channels: list[str] = []
+        for event in events:
+            if event.z_pos is not None:
+                z_positions.append(event.z_pos)
+            if event.x_pos is not None:
+                x_positions.append(event.x_pos)
+            if event.y_pos is not None:
+                y_positions.append(event.y_pos)
+            if event.exposure is not None:
+                exposures.append(event.exposure)
+            if event.channel is not None:
+                channels.append(event.channel.config)
+        self.has_z_sequence = len(set(z_positions)) > 1
+        self.has_xy_sequence = len(set(x_positions)) > 1 and len(set(y_positions)) > 1
+        self.has_exposure_sequence = len(set(exposures)) > 1
+        self.has_channel_sequence = len(set(channels)) > 1
+        self.z_positions = tuple(z_positions)
+        self.x_positions = tuple(x_positions)
+        self.y_positions = tuple(y_positions)
+        self.exposures = tuple(exposures)
+        self.channels = tuple(channels)
+        self._frozen = True
 
-    # TODO: check e1.properties and e2.properties
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        """Set attribute."""
+        if self._frozen:
+            raise AttributeError("Cannot modify frozen object")
+        super().__setattr__(__name, __value)
 
-    # Z
-    if e1.z_pos and e2.z_pos and (e1.z_pos != e2.z_pos):
-        focus_dev = core.getFocusDevice()
-        if not core.isStageSequenceable(focus_dev):
-            return False
-        if cur_length >= core.getStageSequenceMaxLength(focus_dev):
-            return False
+    @property
+    def channel_info(self) -> tuple[str, str] | None:
+        """Return channel group & config, or None."""
+        e0 = self.events[0]
+        return (e0.channel.group, e0.channel.config) if e0.channel else None
 
-    # XY
-    if (e1.x_pos and e2.x_pos and (e1.x_pos != e2.x_pos)) or (
-        e1.y_pos and e2.y_pos and (e1.y_pos != e2.y_pos)
-    ):
-        stage = core.getXYStageDevice()
-        if not core.isXYStageSequenceable(stage):
-            return False
-        if cur_length >= core.getXYStageSequenceMaxLength(stage):
-            return False
 
-    # camera
-    cam_dev = core.getCameraDevice()
-    cam_can_seq = core.isExposureSequenceable(cam_dev)
-    if e1.exposure and e2.exposure and (e1.exposure != e2.exposure) and not cam_can_seq:
-        return False
-    if cam_can_seq and cur_length >= core.getExposureSequenceMaxLength(cam_dev):
-        return False
-
-    # time
-    # FIXME: use axis constants
-    if e1.index["T"] != e2.index["T"] and e1.min_start_time != e2.min_start_time:
-        return False
-
-    return True
+def _prep_sequence_hardware(core: CMMCorePlus, seqevent: SequencedEvent):
+    if seqevent.has_exposure_sequence:
+        core.loadExposureSequence(core.getCameraDevice(), seqevent.exposures)
+    if seqevent.has_xy_sequence:
+        core.loadXYStageSequence(
+            core.getXYStageDevice(), seqevent.x_positions, seqevent.y_positions
+        )
+    if seqevent.has_z_sequence:
+        core.loadStageSequence(core.getFocusDevice(), seqevent.z_positions)
+    if seqevent.has_channel_sequence and seqevent.channel_info:
+        # double check this
+        for dev, prop, value in core.getConfigData(*seqevent.channel_info):
+            core.loadPropertySequence(dev, prop, value)
 
 
 def _submit_event_iterator(core: CMMCorePlus, sequence: MDASequence):
@@ -62,8 +74,9 @@ def _submit_event_iterator(core: CMMCorePlus, sequence: MDASequence):
         # run hooks: on_event(event) -> bool
 
         # processAcquisitionEvent
-        if _burst:
-            if _is_sequenceable(core, _burst[-1], event):
-                ...
-        else:
+        if not _burst:
             _burst.append(event)
+        elif core.canSequenceEvents(_burst[-1], event, len(_burst)):
+            _burst.append(event)
+        else:
+            ...
