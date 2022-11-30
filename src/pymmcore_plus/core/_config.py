@@ -85,14 +85,13 @@ class Configuration(pymmcore.Configuration):
         return self.size()
 
     def __repr__(self) -> str:
-        return f"<MMCore Configuration with {self.size()} settings>"
+        return f"<MMCorePlus Configuration with {self.size()} settings>"
 
     def __str__(self) -> str:
         lines = []
         for device, prop in self.dict().items():
             lines.append(f"{device}:")
-            lines.extend(f"  {name}={value}" for name, value in prop.items())
-            lines.append("")
+            lines.extend(f"  - {name}: {value}" for name, value in prop.items())
         return "\n".join(lines)
 
     def __iter__(self) -> Iterator[tuple[str, str, str]]:
