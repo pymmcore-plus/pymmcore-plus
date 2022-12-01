@@ -658,7 +658,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Yields
         ------
-        Iterator[Device | str]
+        Device | str
             `Device` objects (if `as_object==True`) or device label strings.
         """
         for dev in (
@@ -719,7 +719,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Yields
         ------
-        Iterator[DeviceProperty | tuple[str, str]]
+        DeviceProperty | tuple[str, str]
             `DeviceProperty` objects (if `as_object==True`) or 2-tuples of (device_name,
             property_name)
         """
@@ -851,6 +851,19 @@ class CMMCorePlus(pymmcore.CMMCore):
                 "Use `allow_missing=True` to create create non-existent config groups."
             )
         return group
+
+    def iterConfigGroups(self) -> Iterator[ConfigGroup]:
+        """Iterate `ConfigGroup` objects for all configs.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        Yields
+        ------
+        ConfigGroup
+            `ConfigGroup` objects
+        """
+        for group in self.getAvailableConfigGroups():
+            yield ConfigGroup(group, mmcore=self)
 
     def getDeviceSchema(self, device_label: str) -> DeviceSchema:
         """Return JSON-schema describing device `device_label` and its properties.

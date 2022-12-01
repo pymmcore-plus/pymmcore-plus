@@ -1,5 +1,5 @@
 import pytest
-from pymmcore_plus import CMMCorePlus, Configuration
+from pymmcore_plus import CMMCorePlus, ConfigGroup, Configuration
 
 
 def test_config_group():
@@ -135,3 +135,10 @@ def test_group_consistency():
     assert group.is_consistent  # 2 groups with same property
     group["Config4"] = ("Excitation", "Label", "Chroma-HQ570")
     assert not group.is_consistent  # config4 is broken
+
+
+def test_iter_config_group():
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    for i in core.iterConfigGroups():
+        assert isinstance(i, ConfigGroup)
