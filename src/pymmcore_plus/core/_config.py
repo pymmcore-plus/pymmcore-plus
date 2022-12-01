@@ -158,7 +158,7 @@ class Configuration(pymmcore.Configuration):
 
     def __str__(self) -> str:
         lines = []
-        for device, prop in self.as_dict().items():
+        for device, prop in self.dict().items():
             lines.append(f"{device}:")
             lines.extend(f"  - {name}: {value}" for name, value in prop.items())
         return "\n".join(lines)
@@ -167,7 +167,7 @@ class Configuration(pymmcore.Configuration):
         """Return config representation as HTML."""
         return self.getVerbose()
 
-    def as_dict(self) -> dict[str, dict[str, str]]:
+    def dict(self) -> dict[str, dict[str, str]]:
         """Return config as a nested dict {Device: {Property: Value}}."""
         d: DefaultDict[str, dict[str, str]] = defaultdict(dict)
         for label, prop, value in self:
@@ -221,7 +221,7 @@ class Configuration(pymmcore.Configuration):
         return cfg
 
     def __eq__(self, o: Any) -> bool:
-        return o.as_dict() == self.as_dict() if isinstance(o, Configuration) else False
+        return o.dict() == self.dict() if isinstance(o, Configuration) else False
 
 
 # class PropertySetting(pymmcore.PropertySetting):
