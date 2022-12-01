@@ -46,11 +46,17 @@ object implements a basic mutable mapping interface, but with custom method
 names like `addSetting`, `getSetting`, and `deleteSetting` methods).
 
 `pymmcore-plus` provides a [`Configuration`][pymmcore_plus.Configuration]
-subclass that implements a standard python [collections.abc.MutableMapping][]
-interface, allowing dict-like access to the configuration.
+subclass that implements a [`MutableMapping`][collections.abc.MutableMapping] interface,
+allowing dict-like access to the configuration, where the keys are 2-tuples of
+`(deviceLabel, propertyLabel)` and the values are the property values. (Note,
+however, that iterating of a `Configuration` object behaves like iterating over
+a list of 3-tuples `(deviceLabel, propertyLabel, value)`, not a dict.)
 
-`pymmcore-plus` also organizes related Configuration objects into a
-[`ConfigGroup`][pymmcore_plus.ConfigGroup] object, which also
+`pymmcore-plus` also offers a [`ConfigGroup`][pymmcore_plus.ConfigGroup] object,
+which is a [`MutableMapping`][collections.abc.MutableMapping] where the keys are
+[Configuration
+Preset](https://micro-manager.org/Micro-Manager_Configuration_Guide#configuration-presets)
+names and the values are `Configuration` objects.
 
 ::: pymmcore_plus.Configuration
     options:

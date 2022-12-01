@@ -13,6 +13,22 @@ if TYPE_CHECKING:
 
 
 class ConfigGroup(MutableMapping[str, Configuration]):
+    """Convenience object for dealing with a set of related Configuration objects.
+
+    This object behaves as a [`collections.abc.MutableMapping`][] of `str`
+    (configuration group name) to [`Configuration`][pymmcore_plus.Configuration]
+    objects.
+
+    It is object type returned by [`pymmcore_plus.CMMCorePlus.getConfigGroupObject`][].
+
+    Parameters
+    ----------
+    group_name : str
+        The name of the configuration group to manage.  (It needn't exist yet)
+    mmcore : CMMCorePlus
+        The core object managing this config group.
+    """
+
     def __init__(self, group_name: str, mmcore: CMMCorePlus) -> None:
         self._mmc = mmcore
         self._name = group_name

@@ -828,9 +828,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         :sparkles: *This method is new in `CMMCorePlus`.*
 
         [`ConfigGroup`][pymmcore_plus.ConfigGroup] objects are a convenient object
-        oriented way to interact with configuration groups. They allow you to call any
-        method on `CMMCore` that normally requires a `groupName` as the first argument
-        as an argument-free method on the `ConfigGroup` object.
+        oriented way to interact with configuration groups (i.e. groups of
+        [Configuration
+        Presets](https://micro-manager.org/Micro-Manager_Configuration_Guide#configuration-presets)
+        in Micro-Manager). They allow you to call any method on `CMMCore` that normally
+        requires a `groupName` as the first argument as an argument-free method on the
+        `ConfigGroup` object.
 
         Parameters
         ----------

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Iterable, Iterator, Tuple, cast, overload
+from typing import Any, DefaultDict, Iterable, Iterator, Tuple, overload
 
 import pymmcore
 from typing_extensions import TypeAlias
@@ -14,10 +14,20 @@ DevPropTuple: TypeAlias = Tuple[str, str]
 class Configuration(pymmcore.Configuration):
     """Encapsulation of configuration information.
 
+    This is the type of object returned by default (provided `native==False`) by:
+    [`getConfigData][pymmcore_plus.CMMCorePlus.getConfigData],
+    [`getPixelSizeConfigData][pymmcore_plus.CMMCorePlus.getPixelSizeConfigData]
+    [`getSystemState][pymmcore_plus.CMMCorePlus.getSystemState]
+    [`getSystemStateCache][pymmcore_plus.CMMCorePlus.getSystemStateCache]
+    [`getConfigState][pymmcore_plus.CMMCorePlus.getConfigState]
+    [`getConfigGroupState][pymmcore_plus.CMMCorePlus.getConfigGroupState]
+    [`getConfigGroupStateFromCache][pymmcore_plus.CMMCorePlus.getConfigGroupStateFromCache]
+
+
     This class is a subclass of `pymmcore.Configuration` that implements an
-    [`collections.abc.MutableSequence`][] (i.e. it behaves like a Python list)... though
-    it also behaves much like a MutableMapping, where the keys are 2-tuples of
-    (deviceLabel, propertyLabel) and the values are the property values.
+    [`collections.abc.MutableSequence`][] (i.e. it behaves like a Python list).
+    It also behaves much like a [`collections.abc.MutableMapping`][], where the keys
+    are 2-tuples of (deviceLabel, propertyLabel) and the values are the property values.
 
     Note that the "order" of this collection is not well-defined, so while you *can*
     index with an integer, you should not rely on the order of the items in the
@@ -148,38 +158,21 @@ class Configuration(pymmcore.Configuration):
 
     def __str__(self) -> str:
         lines = []
-        for device, prop in self.dict().items():
+        for device, prop in self.as_dict().items():
             lines.append(f"{device}:")
             lines.extend(f"  - {name}: {value}" for name, value in prop.items())
         return "\n".join(lines)
 
     def html(self) -> str:
-        """Return config as HTML."""
+        """Return config representation as HTML."""
         return self.getVerbose()
 
-    def dict(self) -> dict[str, dict[str, str]]:
+    def as_dict(self) -> dict[str, dict[str, str]]:
         """Return config as a nested dict {Device: {Property: Value}}."""
         d: DefaultDict[str, dict[str, str]] = defaultdict(dict)
         for label, prop, value in self:
             d[label][prop] = value
         return dict(d)
-
-    def json(self) -> str:
-        """Dump config to JSON string."""
-        from json import dumps
-
-        return dumps(self.dict())
-
-    def yaml(self) -> str:
-        """Dump config to YAML string (requires that PyYAML is installed)."""
-        try:
-            from yaml import safe_dump
-        except ImportError as e:  # pragma: no cover
-            raise ImportError(
-                "Could not import yaml.  Please `pip install PyYAML`."
-            ) from e
-
-        return cast(str, safe_dump(self.dict()))
 
     @classmethod
     def from_configuration(cls, config: pymmcore.Configuration) -> Configuration:
@@ -228,7 +221,7 @@ class Configuration(pymmcore.Configuration):
         return cfg
 
     def __eq__(self, o: Any) -> bool:
-        return o.dict() == self.dict() if isinstance(o, Configuration) else False
+        return o.as_dict() == self.as_dict() if isinstance(o, Configuration) else False
 
 
 # class PropertySetting(pymmcore.PropertySetting):
