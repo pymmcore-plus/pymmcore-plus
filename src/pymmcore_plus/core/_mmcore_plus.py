@@ -31,6 +31,7 @@ from .._logger import logger
 from .._util import find_micromanager
 from ..mda import MDAEngine, MDARunner, PMDAEngine
 from ._config import Configuration
+from ._config_group import ConfigGroup
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._device import Device
 from ._metadata import Metadata
@@ -657,7 +658,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Yields
         ------
-        Iterator[Device | str]
+        Device | str
             `Device` objects (if `as_object==True`) or device label strings.
         """
         for dev in (
@@ -718,7 +719,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Yields
         ------
-        Iterator[DeviceProperty | tuple[str, str]]
+        DeviceProperty | tuple[str, str]
             `DeviceProperty` objects (if `as_object==True`) or 2-tuples of (device_name,
             property_name)
         """
@@ -818,6 +819,51 @@ class CMMCorePlus(pymmcore.CMMCore):
         }
         """
         return Device(device_label, mmcore=self)
+
+    def getConfigGroupObject(
+        self, group_name: str, allow_missing: bool = False
+    ) -> ConfigGroup:
+        """Return a `ConfigGroup` object bound to group_name on this core.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        [`ConfigGroup`][pymmcore_plus.ConfigGroup] objects are a convenient object
+        oriented way to interact with configuration groups (i.e. groups of
+        [Configuration
+        Presets](https://micro-manager.org/Micro-Manager_Configuration_Guide#configuration-presets)
+        in Micro-Manager). They allow you to call any method on `CMMCore` that normally
+        requires a `groupName` as the first argument as an argument-free method on the
+        `ConfigGroup` object.
+
+        Parameters
+        ----------
+        group_name : str
+            Configuration group name to get a config group object for.
+
+        Examples
+        --------
+
+        """
+        group = ConfigGroup(group_name, mmcore=self)
+        if not allow_missing and not group.exists():
+            raise KeyError(
+                f"Configuration group {group_name!r} does not exist. "
+                "Use `allow_missing=True` to create create non-existent config groups."
+            )
+        return group
+
+    def iterConfigGroups(self) -> Iterator[ConfigGroup]:
+        """Iterate `ConfigGroup` objects for all configs.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        Yields
+        ------
+        ConfigGroup
+            `ConfigGroup` objects
+        """
+        for group in self.getAvailableConfigGroups():
+            yield ConfigGroup(group, mmcore=self)
 
     def getDeviceSchema(self, device_label: str) -> DeviceSchema:
         """Return JSON-schema describing device `device_label` and its properties.

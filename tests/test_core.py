@@ -1,4 +1,3 @@
-import json
 import os
 import re
 from pathlib import Path
@@ -353,15 +352,7 @@ def test_config_create():
     assert list(cfg1) == list(cfg2) == list(cfg3) == aslist
     assert cfg1 == cfg2 == cfg3
 
-    assert cfg1.json() == json.dumps(_input)
     assert cfg1.html()
-
-
-def test_config_yaml():
-    _input = {"a": {"a0": "0", "a1": "1"}, "b": {"b0": "10", "b1": "11"}}
-    cfg1 = Configuration.create(_input)
-    yaml = pytest.importorskip("yaml")
-    assert cfg1.yaml() == yaml.safe_dump(_input)
 
 
 def test_property_schema(core: CMMCorePlus):
