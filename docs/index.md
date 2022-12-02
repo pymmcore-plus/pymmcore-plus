@@ -71,7 +71,7 @@ You will also need the micro-manager device adapters on your system.
 To get them quickly, you can run:
 
 ```bash
-python -m pymmcore_plus.install
+mmcore install
 ```
 
 > *See [install](install) for more details.*
