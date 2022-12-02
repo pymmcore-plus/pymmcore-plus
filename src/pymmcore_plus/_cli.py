@@ -135,13 +135,23 @@ def install(
             )
         url = available[release]
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        installer = Path(tmpdir) / ("mm.dmg" if PLATFORM == "Darwin" else "mm.exe")
+    with tempfile.TemporaryDirectory() as tmpdir: 
+        installer = Path(tmpdir) / url.split("/")[-1]
         _download_url(url=url, output_path=installer)
         if PLATFORM == "Darwin":
             _mac_install(installer, dest)
         elif PLATFORM == "Windows":
-            _win_install(installer, dest)
+            # for windows, we need to know the latest version
+            import cgi
+        
+            with urlopen(url) as tmp:
+                blah = tmp.info().get('Content-Disposition')
+                _, params = cgi.parse_header(blah)
+                filename = params["filename"]
+                filename = filename.replace("MMSetup_64bit", "Micro-Manager")
+                filename = filename.replace(".exe", "")
+
+            _win_install(installer, dest / filename)
 
     print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
 
