@@ -41,6 +41,7 @@ dependencies = [
     "psygnal>=0.4.2",
     "pymmcore>=10.1.1.70.4",
     "typer",
+    "rich",
     "typing-extensions",
     "useq-schema",
     "wrapt",
