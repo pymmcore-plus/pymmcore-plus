@@ -2,7 +2,7 @@ import os
 import re
 import shutil
 import tempfile
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from pathlib import Path
 from platform import system
 from typing import Iterator, Optional
@@ -10,11 +10,12 @@ from urllib.request import urlopen, urlretrieve
 
 import pymmcore_plus
 import typer
+from pymmcore_plus._logger import set_log_level
 from pymmcore_plus._util import USER_DATA_MM_PATH
 from rich import print, progress
 
-PLATFORM = system()
 
+PLATFORM = system()
 BASE_URL = "https://download.micro-manager.org"
 _list = list
 
@@ -74,6 +75,26 @@ def list() -> None:  # noqa: A001
             print(f"   • [cyan]{path.name}")
     else:
         print(":sparkles: [bold green]There are no pymmcore-plus Micro-Manager files.")
+
+
+@app.command()
+def find() -> None:
+    """Show the location of Micro-Manager in use by pymmcore-plus."""
+    set_log_level("CRITICAL")
+    found = None
+    with suppress(Exception):
+        found = pymmcore_plus.find_micromanager(return_first=False)
+    if found:
+        first, *rest = found
+        print(f":white_check_mark: [bold green]Using: {first}")
+        if rest:
+            print("\n[bold cyan](Also found):")
+            for p in rest:
+                print(f"   • [cyan]{p}")
+        raise typer.Exit(0)
+    print(":x: [bold red]No Micro-Manager installation found")
+    print("[magenta]run `mmcore install` to install a version of Micro-Manager")
+    raise typer.Exit(1)
 
 
 @app.command()
