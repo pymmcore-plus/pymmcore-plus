@@ -160,7 +160,7 @@ def _spinner(
 
 def _win_install(exe: Path, dest: Path) -> None:
     subprocess.run(
-        [exe, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"],
+        [str(exe), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"],
         check=True,
     )
 
