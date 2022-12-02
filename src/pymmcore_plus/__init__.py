@@ -45,6 +45,7 @@ __all__ = [
     "PropertyType",
     "RemoteMMCore",
     "server",
+    "__version__",
 ]
 
 

@@ -4,9 +4,14 @@ import sys
 from pathlib import Path
 from typing import Optional
 
+import appdirs
+
 from ._logger import logger
 
 __all__ = ["find_micromanager", "_qt_app_is_running"]
+
+USER_DATA_DIR = Path(appdirs.user_data_dir(appname="pymmcore-plus"))
+USER_DATA_MM_PATH = USER_DATA_DIR / "mm"
 
 
 def find_micromanager() -> Optional[str]:

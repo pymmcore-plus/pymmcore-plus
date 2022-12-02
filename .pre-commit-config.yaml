@@ -43,4 +43,5 @@ repos:
           - pymmcore
           - useq-schema
           - psygnal
+          - typer
         files: "^src/"
