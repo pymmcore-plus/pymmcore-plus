@@ -33,20 +33,20 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     In order, this will look for:
 
     1. An environment variable named `MICROMANAGER_PATH`
-    2. In the pymmcore-plus user data directory (this is the default install location
-        when running `mmcore install`)
+    2. A `Micro-Manager*` folder in the `pymmcore-plus` user data directory
+       (this is the default install location when running `mmcore install`)
 
-        - ~/Library/Application Support/pymmcore-plus (macOS)
-        - ~/.local/share/pymmcore-plus (Linux)
-        - C:\\Users\\\<user\>\\AppData\\Local\\pymmcore-plus\\pymmcore-plus (Windows)
+        - **Windows**: C:\\Users\\\<user\>\\AppData\\Local\\pymmcore-plus\\pymmcore-plus
+        - **macOS**: ~/Library/Application Support/pymmcore-plus
+        - **Linux**: ~/.local/share/pymmcore-plus
 
     3. A `Micro-Manager*` folder in the `pymmcore_plus` package directory (this is the
        default install location when running `python -m pymmcore_plus.install`)
     4. The default micro-manager install location:
 
-        - `C:/Program Files/` on windows
-        - `/Applications` on mac
-        - `/usr/local/lib` on linux
+        - **Windows**: `C:/Program Files/`
+        - **macOS**: `/Applications`
+        - **Linux**: `/usr/local/lib`
 
     !!! note
 
@@ -55,6 +55,12 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         is passed to
         [`setDeviceAdapterSearchPaths`][pymmcore_plus.CMMCorePlus.setDeviceAdapterSearchPaths]
         when creating a new `CMMCorePlus` instance.
+
+    Parameters
+    ----------
+    return_first : bool, optional
+        If True (default), return the first found path.  If False, return a list of
+        all found paths.
     """
     # environment variable takes precedence
     full_list: list[str] = []

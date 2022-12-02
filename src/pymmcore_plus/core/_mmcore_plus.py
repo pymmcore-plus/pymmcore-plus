@@ -129,7 +129,8 @@ class CMMCorePlus(pymmcore.CMMCore):
     Parameters
     ----------
     mm_path : str | None, optional
-        Path to the Micro-Manager installation, by default None
+        Path to the Micro-Manager installation. If `None` (default), will use the
+        return value of [`pymmcore_plus.find_micromanager`][].
     adapter_paths : Sequence[str], optional
         Paths to search for device adapters, by default ()
     """
