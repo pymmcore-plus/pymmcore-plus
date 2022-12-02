@@ -1,6 +1,7 @@
 import os
 import re
 import shutil
+import subprocess
 import tempfile
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -114,6 +115,10 @@ def install(
     ),
 ) -> None:
     """Install Micro-Manager Device adapters."""
+    if PLATFORM not in ("Darwin", "Windows"):
+        print(f":x: [bold red]Unsupported platform: {PLATFORM!r}")
+        raise typer.Exit(1)
+
     if release == "latest":
         plat = {
             "Darwin": "macos/Micro-Manager-x86_64-latest.dmg",
@@ -133,7 +138,10 @@ def install(
     with tempfile.TemporaryDirectory() as tmpdir:
         _tmp_dest = Path(tmpdir) / "mm"
         _download_url(url=url, output_path=_tmp_dest)
-        _mac_install(_tmp_dest, dest)
+        if PLATFORM == "Darwin":
+            _mac_install(_tmp_dest, dest)
+        elif PLATFORM == "Windows":
+            _win_install(_tmp_dest, dest)
 
     print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
 
@@ -151,13 +159,18 @@ def _spinner(
         yield pbar
 
 
+def _win_install(exe: Path, dest: Path) -> None:
+    subprocess.run(
+        [exe, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"],
+        check=True,
+    )
+
+
 def _mac_install(dmg: Path, dest: Path) -> None:
     """Install Micro-Manager `dmg` to `dest`."""
-    from subprocess import run
-
     # with progress bar, mount dmg
     with _spinner("Mounting ..."):
-        proc = run(
+        proc = subprocess.run(
             ["hdiutil", "attach", "-nobrowse", str(dmg)],
             capture_output=True,
         )
@@ -186,7 +199,9 @@ def _mac_install(dmg: Path, dest: Path) -> None:
             install_path = dest / src.name
             shutil.copytree(src, install_path, dirs_exist_ok=True)
         finally:
-            run(["hdiutil", "detach", mount], check=True, capture_output=True)
+            subprocess.run(
+                ["hdiutil", "detach", mount], check=True, capture_output=True
+            )
 
     # fix gatekeeper ... requires password
     typer.secho(
@@ -194,7 +209,7 @@ def _mac_install(dmg: Path, dest: Path) -> None:
         fg=typer.colors.GREEN,
     )
     cmd = ["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(install_path)]
-    run(cmd, check=True)
+    subprocess.run(cmd, check=True)
 
     # # fix path randomization by temporarily copying elsewhere and back
     with tempfile.TemporaryDirectory() as tmpdir:
