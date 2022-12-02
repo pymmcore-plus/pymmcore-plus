@@ -5,7 +5,7 @@ import tempfile
 from contextlib import contextmanager, suppress
 from pathlib import Path
 from platform import system
-from typing import Iterator, Optional
+from typing import Dict, Iterator, Optional
 from urllib.request import urlopen, urlretrieve
 
 import pymmcore_plus
@@ -203,7 +203,7 @@ def _mac_install(dmg: Path, dest: Path) -> None:
         os.rename(_tmp / "ImageJ.app", install_path / "ImageJ.app")
 
 
-def _available_versions() -> dict[str, str]:
+def _available_versions() -> Dict[str, str]:
     """Return a map of version -> url available for download."""
     plat = {"Darwin": "Mac", "Windows": "Windows"}[PLATFORM]
     with urlopen(f"{BASE_URL}/nightly/2.0/{plat}/") as resp:
