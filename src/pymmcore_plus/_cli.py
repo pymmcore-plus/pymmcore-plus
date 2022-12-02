@@ -160,10 +160,11 @@ def _spinner(
 
 
 def _win_install(exe: Path, dest: Path) -> None:
-    subprocess.run(
-        [exe, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"],
-        check=True,
-    )
+    with _spinner("Installing ..."):
+        subprocess.run(
+            [str(exe), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"],
+            check=True,
+        )
 
 
 def _mac_install(dmg: Path, dest: Path) -> None:
