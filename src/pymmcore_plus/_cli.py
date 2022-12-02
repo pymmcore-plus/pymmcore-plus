@@ -135,7 +135,7 @@ def install(
             )
         url = available[release]
 
-    with tempfile.TemporaryDirectory() as tmpdir: 
+    with tempfile.TemporaryDirectory() as tmpdir:
         installer = Path(tmpdir) / url.split("/")[-1]
         _download_url(url=url, output_path=installer)
         if PLATFORM == "Darwin":
@@ -143,9 +143,9 @@ def install(
         elif PLATFORM == "Windows":
             # for windows, we need to know the latest version
             import cgi
-        
+
             with urlopen(url) as tmp:
-                blah = tmp.info().get('Content-Disposition')
+                blah = tmp.info().get("Content-Disposition")
                 _, params = cgi.parse_header(blah)
                 filename = params["filename"]
                 filename = filename.replace("MMSetup_64bit", "Micro-Manager")
