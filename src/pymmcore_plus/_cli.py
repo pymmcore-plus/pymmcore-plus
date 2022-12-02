@@ -136,12 +136,12 @@ def install(
         url = available[release]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        _tmp_dest = Path(tmpdir) / "mm"
-        _download_url(url=url, output_path=_tmp_dest)
+        installer = Path(tmpdir) / ("mm.dmg" if PLATFORM == "Darwin" else "mm.exe")
+        _download_url(url=url, output_path=installer)
         if PLATFORM == "Darwin":
-            _mac_install(_tmp_dest, dest)
+            _mac_install(installer, dest)
         elif PLATFORM == "Windows":
-            _win_install(_tmp_dest, dest)
+            _win_install(installer, dest)
 
     print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
 
@@ -160,11 +160,9 @@ def _spinner(
 
 
 def _win_install(exe: Path, dest: Path) -> None:
+    cmd = [str(exe), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"]
     with _spinner("Installing ..."):
-        subprocess.run(
-            [str(exe), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"],
-            check=True,
-        )
+        subprocess.run(cmd, check=True)
 
 
 def _mac_install(dmg: Path, dest: Path) -> None:
@@ -232,7 +230,7 @@ def _available_versions() -> Dict[str, str]:
     }
 
 
-def _download_url(url: str, output_path: Path = Path("thing")) -> None:
+def _download_url(url: str, output_path: Path) -> None:
     """Download `url` to `output_path` with a nice progress bar."""
     import ssl
 
