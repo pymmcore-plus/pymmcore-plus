@@ -114,6 +114,10 @@ def install(
     ),
 ) -> None:
     """Install Micro-Manager Device adapters."""
+    if PLATFORM not in ("Darwin", "Windows"):
+        print(f":x: [bold red]Unsupported platform: {PLATFORM!r}")
+        raise typer.Exit(1)
+
     if release == "latest":
         plat = {
             "Darwin": "macos/Micro-Manager-x86_64-latest.dmg",
@@ -133,7 +137,10 @@ def install(
     with tempfile.TemporaryDirectory() as tmpdir:
         _tmp_dest = Path(tmpdir) / "mm"
         _download_url(url=url, output_path=_tmp_dest)
-        _mac_install(_tmp_dest, dest)
+        if PLATFORM == "Darwin":
+            _mac_install(_tmp_dest, dest)
+        elif PLATFORM == "Windows":
+            _win_install(_tmp_dest, dest)
 
     print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
 
@@ -149,6 +156,13 @@ def _spinner(
     ) as pbar:
         pbar.add_task(description=text, total=None)
         yield pbar
+
+
+def _win_install(exe: Path, dest: Path) -> None:
+    subprocess.run(
+        [exe, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"],
+        check=True,
+    )
 
 
 def _mac_install(dmg: Path, dest: Path) -> None:
@@ -193,10 +207,8 @@ def _mac_install(dmg: Path, dest: Path) -> None:
         "(Your password may be required to install Micro-manager.)",
         fg=typer.colors.GREEN,
     )
-    subprocess.run(
-        ["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(install_path)],
-        check=True,
-    )
+    cmd = ["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(install_path)]
+    subprocess.run(cmd, check=True)
 
     # # fix path randomization by temporarily copying elsewhere and back
     with tempfile.TemporaryDirectory() as tmpdir:
