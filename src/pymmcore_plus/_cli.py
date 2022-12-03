@@ -8,8 +8,8 @@ import pymmcore_plus
 import typer
 from pymmcore_plus._logger import set_log_level
 from pymmcore_plus._util import USER_DATA_MM_PATH
+from pymmcore_plus.install import PLATFORM
 from rich import print
-
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 
@@ -92,6 +92,21 @@ def find() -> None:
         print(":x: [bold red]No Micro-Manager installation found")
         print("[magenta]run `mmcore install` to install a version of Micro-Manager")
         raise typer.Exit(1)
+
+
+@app.command()
+def mmgui() -> None:
+    """Run the Java Micro-Manager GUI for the MM install returned by `mmcore find`."""
+    import subprocess
+
+    found = pymmcore_plus.find_micromanager()
+    app = next(Path(found).glob("ImageJ*"), None) if found else None
+    if not app:  # pragma: no cover
+        print(":x: [bold red]No Micro-Manager installation found")
+        print("[magenta]run `mmcore install` to install a version of Micro-Manager")
+        raise typer.Exit(1)
+    cmd = ["open", "-a", str(app)] if PLATFORM == "Darwin" else [str(app)]
+    raise typer.Exit(subprocess.run(cmd).returncode)
 
 
 @app.command()
