@@ -167,8 +167,7 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 [tool.coverage.run]
-omit = ["*_tests*", "*/install.py"]
-
+source = ['src/pymmcore_plus']
 
 # https://github.com/mgedmin/check-manifest#configuration
 [tool.check-manifest]

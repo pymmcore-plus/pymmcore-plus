@@ -192,7 +192,7 @@ def _release(value: str) -> str:
     return str(value)
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     """Main entry point for the console_scripts."""
     import argparse
 
