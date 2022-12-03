@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -46,6 +47,10 @@ def _main(
 
     For additional help on a specific command: type 'mmcore [command] --help'
     """
+    # fix for windows CI encoding and emoji printing
+    if getattr(sys.stdout, "encoding", None) != "utf-8":
+        with suppress(AttributeError):
+            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore [attr-defined]
 
 
 _main.__doc__ = typer.style(
@@ -135,12 +140,22 @@ def install(
         url = available[release]
 
     with tempfile.TemporaryDirectory() as tmpdir:
-        _tmp_dest = Path(tmpdir) / "mm"
-        _download_url(url=url, output_path=_tmp_dest)
+        installer = Path(tmpdir) / url.split("/")[-1]
+        _download_url(url=url, output_path=installer)
         if PLATFORM == "Darwin":
-            _mac_install(_tmp_dest, dest)
+            _mac_install(installer, dest)
         elif PLATFORM == "Windows":
-            _win_install(_tmp_dest, dest)
+            # for windows, we need to know the latest version
+            import cgi
+
+            with urlopen(url) as tmp:
+                blah = tmp.info().get("Content-Disposition")
+                _, params = cgi.parse_header(blah)
+                filename = params["filename"]
+                filename = filename.replace("MMSetup_64bit", "Micro-Manager")
+                filename = filename.replace(".exe", "")
+
+            _win_install(installer, dest / filename)
 
     print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
 
@@ -159,10 +174,9 @@ def _spinner(
 
 
 def _win_install(exe: Path, dest: Path) -> None:
-    subprocess.run(
-        [str(exe), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"],
-        check=True,
-    )
+    cmd = [str(exe), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"]
+    with _spinner("Installing ..."):
+        subprocess.run(cmd, check=True)
 
 
 def _mac_install(dmg: Path, dest: Path) -> None:
@@ -230,7 +244,7 @@ def _available_versions() -> Dict[str, str]:
     }
 
 
-def _download_url(url: str, output_path: Path = Path("thing")) -> None:
+def _download_url(url: str, output_path: Path) -> None:
     """Download `url` to `output_path` with a nice progress bar."""
     import ssl
 
