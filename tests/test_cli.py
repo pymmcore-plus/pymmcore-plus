@@ -21,26 +21,28 @@ def _mock_urlretrieve(url, filename, reporthook=None):
 
 def _mock_run(dest: Path) -> Callable:
     """fake subprocess that handles special cases to test `mmcore install`."""
-    _tmp = dest / "vol" / "Micro-Manager-2.0.0"
-    mmdir = dest / "Micro-Manager-2.0.0"
+    mnt = dest / "vol"
+    mmdir = mnt / "Micro-Manager-2.0.0"
 
     def runner(*args, **kwargs) -> subprocess.CompletedProcess:
         if not args and args[0]:
             return subrun(*args, **kwargs)
         if args[0][0] == "hdiutil":
             if args[0][1] == "attach":
-                _tmp.mkdir(parents=True)
-                (_tmp / "ImageJ.app").touch()
-                return subprocess.CompletedProcess(args[0], 0, str(dest).encode(), "")
+                mmdir.mkdir(parents=True)
+                (mmdir / "ImageJ.app").touch()
+                # the output of hdiutil attach is a list of lines
+                # the last line is the name of the mount (which install uses)
+                return subprocess.CompletedProcess(args[0], 0, str(mnt).encode(), "")
             if args[0][1] == "detach":
-                shutil.rmtree(_tmp)
+                # hdiutil detach just cleans up the mount
+                shutil.rmtree(mnt)
                 return subprocess.CompletedProcess(args[0], 0, b"", "")
         if args[0][0] == "sudo":
             return subprocess.CompletedProcess(args[0], 0, b"", "")
         if args[0][0].endswith(".exe"):
-            # mock the windows install
-            mmdir.mkdir(parents=True)
-            (mmdir / "ImageJ.app").touch()
+            (dest / "Micro-Manager-2.0.0").mkdir(parents=True)
+            (dest / "Micro-Manager-2.0.0" / "ImageJ.app").touch()
             return subprocess.CompletedProcess(args[0], 0, b"", "")
         return subrun(*args, **kwargs)
 
