@@ -4,7 +4,7 @@ from pathlib import Path
 from typing import Any, Callable
 from unittest.mock import patch
 
-from pymmcore_plus import __version__, _cli
+from pymmcore_plus import __version__, _cli, install
 from pymmcore_plus._cli import app
 from typer.testing import CliRunner
 
@@ -50,7 +50,7 @@ def _mock_run(dest: Path) -> Callable:
 
 
 def test_app(tmp_path: Path) -> None:
-    patch_download = patch.object(_cli, "urlretrieve", _mock_urlretrieve)
+    patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
 
     with patch_download as mock, patch_run as mock2:
@@ -110,4 +110,7 @@ def test_find(tmp_path: Path) -> None:
     # this should pass if any of the tests work :)
     # since we probably need to find mmore for anything to work!
     result = runner.invoke(app, ["find"])
-    assert result.exit_code == 0
+    if result.exit_code != 0:
+        raise AssertionError(
+            "mmcore find failed... is Micro-Manager installed?  (run mmcore install)"
+        )
