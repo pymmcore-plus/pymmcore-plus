@@ -97,9 +97,10 @@ def find() -> None:
             for p in rest:
                 print(f"   • [cyan]{p}")
         raise typer.Exit(0)
-    print(":x: [bold red]No Micro-Manager installation found")
-    print("[magenta]run `mmcore install` to install a version of Micro-Manager")
-    raise typer.Exit(1)
+    else:  # pragma: no cover
+        print(":x: [bold red]No Micro-Manager installation found")
+        print("[magenta]run `mmcore install` to install a version of Micro-Manager")
+        raise typer.Exit(1)
 
 
 @app.command()
@@ -119,7 +120,7 @@ def install(
     ),
 ) -> None:
     """Install Micro-Manager Device adapters."""
-    if PLATFORM not in ("Darwin", "Windows"):
+    if PLATFORM not in ("Darwin", "Windows"):  # pragma: no cover
         print(f":x: [bold red]Unsupported platform: {PLATFORM!r}")
         raise typer.Exit(1)
 
@@ -146,18 +147,22 @@ def install(
             _mac_install(installer, dest)
         elif PLATFORM == "Windows":
             # for windows, we need to know the latest version
-            import cgi
-
-            with urlopen(url) as tmp:
-                blah = tmp.info().get("Content-Disposition")
-                _, params = cgi.parse_header(blah)
-                filename = params["filename"]
-                filename = filename.replace("MMSetup_64bit", "Micro-Manager")
-                filename = filename.replace(".exe", "")
-
+            filename = _get_download_name(url)
+            filename = filename.replace("MMSetup_64bit", "Micro-Manager")
+            filename = filename.replace(".exe", "")
             _win_install(installer, dest / filename)
 
     print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
+
+
+def _get_download_name(url: str) -> str:
+    """Return the name of the file to be downloaded from `url`."""
+    with urlopen(url) as tmp:
+        content: str = tmp.headers.get("Content-Disposition")
+        for part in content.split(";"):
+            if "filename=" in part:
+                return part.split("=")[1].strip('"')
+    return ""
 
 
 @contextmanager
@@ -187,7 +192,7 @@ def _mac_install(dmg: Path, dest: Path) -> None:
             ["hdiutil", "attach", "-nobrowse", str(dmg)],
             capture_output=True,
         )
-        if proc.returncode != 0:
+        if proc.returncode != 0:  # pragma: no cover
             typer.secho(
                 f"\nError mounting {dmg.name}:\n{proc.stderr.decode()}",
                 fg="bright_red",
@@ -201,7 +206,7 @@ def _mac_install(dmg: Path, dest: Path) -> None:
         try:
             try:
                 src = next(Path(mount).glob("Micro-Manager*"))
-            except StopIteration:
+            except StopIteration:  # pragma: no cover
                 typer.secho(
                     "\nError: Could not find Micro-Manager in dmg.\n"
                     "Please report this at https://github.com/pymmcore-plus/"
