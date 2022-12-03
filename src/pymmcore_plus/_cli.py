@@ -2,6 +2,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 from contextlib import contextmanager, suppress
 from pathlib import Path
@@ -14,7 +15,6 @@ import typer
 from pymmcore_plus._logger import set_log_level
 from pymmcore_plus._util import USER_DATA_MM_PATH
 from rich import print, progress
-
 
 PLATFORM = system()
 BASE_URL = "https://download.micro-manager.org"
@@ -47,6 +47,10 @@ def _main(
 
     For additional help on a specific command: type 'mmcore [command] --help'
     """
+    # fix for windows CI encoding and emoji printing
+    if getattr(sys.stdout, "encoding", None) != "utf-8":
+        with suppress(AttributeError):
+            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore [attr-defined]
 
 
 _main.__doc__ = typer.style(
@@ -118,7 +122,8 @@ def install(
     if PLATFORM not in ("Darwin", "Windows"):
         print(f":x: [bold red]Unsupported platform: {PLATFORM!r}")
         raise typer.Exit(1)
-
+    print("hi")
+    return
     if release == "latest":
         plat = {
             "Darwin": "macos/Micro-Manager-x86_64-latest.dmg",

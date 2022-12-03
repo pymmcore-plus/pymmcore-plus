@@ -43,8 +43,6 @@ jobs:
 
       - name: Install Micro-Manager
         run: mmcore install
-        env:
-          PYTHONIOENCODING: utf-8
 
       - name: Test
         run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
