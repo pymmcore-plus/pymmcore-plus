@@ -122,8 +122,7 @@ def install(
     if PLATFORM not in ("Darwin", "Windows"):
         print(f":x: [bold red]Unsupported platform: {PLATFORM!r}")
         raise typer.Exit(1)
-    print("hi")
-    return
+
     if release == "latest":
         plat = {
             "Darwin": "macos/Micro-Manager-x86_64-latest.dmg",
