@@ -99,8 +99,12 @@ def mmgui() -> None:
     """Run the Java Micro-Manager GUI for the MM install returned by `mmcore find`."""
     import subprocess
 
-    found = pymmcore_plus.find_micromanager()
-    app = next(Path(found).glob("ImageJ*"), None) if found else None
+    mm = pymmcore_plus.find_micromanager()
+    app = (
+        next((x for x in Path(mm).glob("ImageJ*") if not str(x).endswith("cfg")), None)
+        if mm
+        else None
+    )
     if not app:  # pragma: no cover
         print(":x: [bold red]No Micro-Manager installation found")
         print("[magenta]run `mmcore install` to install a version of Micro-Manager")
