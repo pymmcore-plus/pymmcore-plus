@@ -1,7 +1,7 @@
 import shutil
 import subprocess
 from pathlib import Path
-from typing import Callable
+from typing import Any, Callable
 from unittest.mock import patch
 
 from pymmcore_plus import __version__, _cli
@@ -12,7 +12,7 @@ runner = CliRunner()
 subrun = subprocess.run
 
 
-def _mock_urlretrieve(url, filename, reporthook=None):
+def _mock_urlretrieve(url: str, filename: str, reporthook=None) -> None:
     """fake urlretrieve that writes a fake file."""
     with open(filename, "w") as f:
         f.write("test")
@@ -24,7 +24,7 @@ def _mock_run(dest: Path) -> Callable:
     mnt = dest / "vol"
     mmdir = mnt / "Micro-Manager-2.0.0"
 
-    def runner(*args, **kwargs) -> subprocess.CompletedProcess:
+    def runner(*args: Any, **kwargs: Any) -> subprocess.CompletedProcess:
         if not args and args[0]:
             return subrun(*args, **kwargs)
         if args[0][0] == "hdiutil":
@@ -76,7 +76,7 @@ def test_show_version() -> None:
     assert "MMCore" in result.stdout
 
 
-def test_clean(tmp_path: Path):
+def test_clean(tmp_path: Path) -> None:
     """Just cleans up the user data folder."""
     test_file = tmp_path / "test.txt"
     test_file.touch()
@@ -91,7 +91,7 @@ def test_clean(tmp_path: Path):
     assert result.exit_code == 0
 
 
-def test_list(tmp_path: Path):
+def test_list(tmp_path: Path) -> None:
     """Just shows what's in the user data folder."""
     empty_dir = tmp_path / "empty"
     _cli.USER_DATA_MM_PATH = empty_dir  # type: ignore
@@ -106,7 +106,7 @@ def test_list(tmp_path: Path):
     assert "test.txt" in result.stdout
 
 
-def test_find(tmp_path: Path):
+def test_find(tmp_path: Path) -> None:
     # this should pass if any of the tests work :)
     # since we probably need to find mmore for anything to work!
     result = runner.invoke(app, ["find"])

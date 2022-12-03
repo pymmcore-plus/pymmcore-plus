@@ -147,18 +147,22 @@ def install(
             _mac_install(installer, dest)
         elif PLATFORM == "Windows":
             # for windows, we need to know the latest version
-            import cgi
-
-            with urlopen(url) as tmp:
-                blah = tmp.info().get("Content-Disposition")
-                _, params = cgi.parse_header(blah)
-                filename = params["filename"]
-                filename = filename.replace("MMSetup_64bit", "Micro-Manager")
-                filename = filename.replace(".exe", "")
-
+            filename = _get_download_name(url)
+            filename = filename.replace("MMSetup_64bit", "Micro-Manager")
+            filename = filename.replace(".exe", "")
             _win_install(installer, dest / filename)
 
     print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
+
+
+def _get_download_name(url: str) -> str:
+    """Return the name of the file to be downloaded from `url`."""
+    with urlopen(url) as tmp:
+        content: str = tmp.headers.get("Content-Disposition")
+        for part in content.split(";"):
+            if "filename=" in part:
+                return part.split("=")[1].strip('"')
+    return ""
 
 
 @contextmanager
