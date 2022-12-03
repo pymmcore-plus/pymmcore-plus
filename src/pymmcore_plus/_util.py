@@ -28,7 +28,7 @@ def find_micromanager(return_first: Literal[False]) -> list[str]:
 
 
 def find_micromanager(return_first: bool = True) -> str | None | list[str]:
-    """Locate a Micro-Manager folder (for device adapters).
+    r"""Locate a Micro-Manager folder (for device adapters).
 
     In order, this will look for:
 
@@ -36,7 +36,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     2. A `Micro-Manager*` folder in the `pymmcore-plus` user data directory
        (this is the default install location when running `mmcore install`)
 
-        - **Windows**: C:\\Users\\\<user\>\\AppData\\Local\\pymmcore-plus\\pymmcore-plus
+        - **Windows**: C:\Users\\[user]\AppData\Local\pymmcore-plus\pymmcore-plus
         - **macOS**: ~/Library/Application Support/pymmcore-plus
         - **Linux**: ~/.local/share/pymmcore-plus
 
