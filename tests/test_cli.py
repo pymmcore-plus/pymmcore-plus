@@ -21,18 +21,26 @@ def _mock_urlretrieve(url, filename, reporthook=None):
 
 def _mock_run(dest: Path) -> Callable:
     """fake subprocess that handles special cases to test `mmcore install`."""
+    _tmp = dest / "vol" / "Micro-Manager-2.0.0"
     mmdir = dest / "Micro-Manager-2.0.0"
 
     def runner(*args, **kwargs) -> subprocess.CompletedProcess:
-        if args and args[0] and args[0][0] == "hdiutil":
+        if not args and args[0]:
+            return subrun(*args, **kwargs)
+        if args[0][0] == "hdiutil":
             if args[0][1] == "attach":
-                mmdir.mkdir(parents=True)
-                (mmdir / "ImageJ.app").touch()
+                _tmp.mkdir(parents=True)
+                (_tmp / "ImageJ.app").touch()
                 return subprocess.CompletedProcess(args[0], 0, str(dest).encode(), "")
             if args[0][1] == "detach":
-                shutil.rmtree(mmdir)
+                shutil.rmtree(_tmp)
                 return subprocess.CompletedProcess(args[0], 0, b"", "")
-        if args and args[0] and args[0][0] == "sudo":
+        if args[0][0] == "sudo":
+            return subprocess.CompletedProcess(args[0], 0, b"", "")
+        if args[0][0].endswith(".exe"):
+            # mock the windows install
+            mmdir.mkdir(parents=True)
+            (mmdir / "ImageJ.app").touch()
             return subprocess.CompletedProcess(args[0], 0, b"", "")
         return subrun(*args, **kwargs)
 
@@ -41,7 +49,7 @@ def _mock_run(dest: Path) -> Callable:
 
 def test_app(tmp_path: Path) -> None:
     patch_download = patch.object(_cli, "urlretrieve", _mock_urlretrieve)
-    patch_run = patch.object(subprocess, "run", _mock_run(tmp_path / "vol"))
+    patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
 
     with patch_download as mock, patch_run as mock2:
         result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
