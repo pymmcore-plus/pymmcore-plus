@@ -28,6 +28,7 @@ if TYPE_CHECKING:
     from .remote import RemoteMMCore, server
 
 __all__ = [
+    "__version__",
     "ActionType",
     "CMMCorePlus",
     "CMMCoreSignaler",
@@ -36,17 +37,17 @@ __all__ = [
     "Device",
     "DeviceDetectionStatus",
     "DeviceNotification",
+    "DeviceProperty",
     "DeviceType",
     "find_micromanager",
     "FocusDirection",
     "Metadata",
-    "DeviceProperty",
+    "mock_sample",
     "PCoreSignaler",
     "PortType",
     "PropertyType",
     "RemoteMMCore",
     "server",
-    "mock_sample",
 ]
 
 

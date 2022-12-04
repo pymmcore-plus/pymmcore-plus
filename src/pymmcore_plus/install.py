@@ -4,125 +4,169 @@ import os
 import re
 import shutil
 import ssl
-import urllib.request
+import subprocess
+import sys
+import tempfile
+from contextlib import contextmanager
 from pathlib import Path
-from subprocess import run
+from platform import system
+from typing import Iterator
+from urllib.request import urlopen, urlretrieve
 
+import typer
+from pymmcore_plus._util import USER_DATA_MM_PATH
+from rich import print, progress
+
+PLATFORM = system()
+BASE_URL = "https://download.micro-manager.org"
 _version_regex = re.compile(r"(\d+\.){2}\d+")
-VERSION = "2.0.1"
-RELEASE = 20211007
-DEFAULT_DEST = Path(__file__).parent
-
-ssl._create_default_https_context = ssl._create_unverified_context
 
 
-def _progressBar(
-    current: float, chunksize: float, total: float, barLength: int = 40
-) -> None:
-    percent = float(current * chunksize) * 100 / total
-    arrow = "-" * int(percent / 100 * barLength - 1) + ">"
-    spaces = " " * (barLength - len(arrow))
-    if not os.getenv("CI"):
-        print("Progress: [%s%s] %d %%" % (arrow, spaces, percent), end="\r")
+def _get_download_name(url: str) -> str:
+    """Return the name of the file to be downloaded from `url`."""
+    with urlopen(url) as tmp:
+        content: str = tmp.headers.get("Content-Disposition")
+        for part in content.split(";"):
+            if "filename=" in part:
+                return part.split("=")[1].strip('"')
+    return ""
 
 
-def _download_url(url: str, output_path: str) -> None:
-    print(f"downloading {url} ...")
+@contextmanager
+def _spinner(
+    text: str = "Processing...", color: str = "bold blue"
+) -> Iterator[progress.Progress]:
+    with progress.Progress(
+        progress.SpinnerColumn(),
+        progress.TextColumn(f"[{color}]{text}"),
+        transient=True,
+    ) as pbar:
+        pbar.add_task(description=text, total=None)
+        yield pbar
+
+
+def _win_install(exe: Path, dest: Path) -> None:
+    cmd = [str(exe), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"]
+    with _spinner("Installing ..."):
+        subprocess.run(cmd, check=True)
+
+
+def _mac_install(dmg: Path, dest: Path) -> None:
+    """Install Micro-Manager `dmg` to `dest`."""
+    # with progress bar, mount dmg
+    with _spinner(f"Mounting {dmg.name} ..."):
+        proc = subprocess.run(
+            ["hdiutil", "attach", "-nobrowse", str(dmg)],
+            capture_output=True,
+        )
+        if proc.returncode != 0:  # pragma: no cover
+            print(f"\n[bold red]Error mounting {dmg.name}:\n{proc.stderr.decode()}")
+            sys.exit(1)
+
+    # with progress bar, mount dmg
+    with _spinner(f"Installing to {dest} ..."):
+        # get mount point
+        mount = proc.stdout.splitlines()[-1].split()[-1].decode()
+        try:
+            try:
+                src = next(Path(mount).glob("Micro-Manager*"))
+            except StopIteration:  # pragma: no cover
+                print(
+                    "[bold red]\nError: Could not find Micro-Manager in dmg.\n"
+                    "Please report this at https://github.com/pymmcore-plus/"
+                    "pymmcore-plus/issues/new",
+                )
+                sys.exit(1)
+            install_path = dest / src.name
+            shutil.copytree(src, install_path, dirs_exist_ok=True)
+        finally:
+            subprocess.run(
+                ["hdiutil", "detach", mount], check=True, capture_output=True
+            )
+
+    # fix gatekeeper ... requires password
+    print("[green](Your password may be required to install Micro-manager.)")
+    cmd = ["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(install_path)]
+    subprocess.run(cmd, check=True)
+
+    # # fix path randomization by temporarily copying elsewhere and back
+    with tempfile.TemporaryDirectory() as tmpdir:
+        _tmp = Path(tmpdir)
+        os.rename(install_path / "ImageJ.app", _tmp / "ImageJ.app")
+        os.rename(_tmp / "ImageJ.app", install_path / "ImageJ.app")
+
+
+def _available_versions() -> dict[str, str]:
+    """Return a map of version -> url available for download."""
+    plat = {"Darwin": "Mac", "Windows": "Windows"}[PLATFORM]
+    with urlopen(f"{BASE_URL}/nightly/2.0/{plat}/") as resp:
+        html = resp.read().decode("utf-8")
+
+    return {
+        ref.rsplit("-", 1)[-1].split(".")[0]: BASE_URL + ref
+        for ref in re.findall(r"href=\"([^\"]+)\"", html)
+        if ref != "/"
+    }
+
+
+def _download_url(url: str, output_path: Path) -> None:
+    """Download `url` to `output_path` with a nice progress bar."""
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
-    urllib.request.urlretrieve(url, filename=output_path, reporthook=_progressBar)
 
-
-def _mac_main(
-    dest_dir: Path = DEFAULT_DEST,
-    version: str = VERSION,
-    release: str | int = RELEASE,
-    noprompt: bool = False,
-) -> Path | None:
-    if release == "latest":
-        url = "https://download.micro-manager.org/latest/macos/"
-        fname = "Micro-Manager-x86_64-latest.dmg"
-        dst = dest_dir / "Micro-Manager-latest_mac"
-    else:
-        url = "https://download.micro-manager.org/nightly/2.0/Mac/"
-        fname = f"Micro-Manager-{version}-{release}.dmg"
-        dst = dest_dir / f"{fname[:-4]}_mac"
-
-    if dst.exists() and not noprompt:
-        resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
-        if resp.lower().startswith("n"):
-            print("aborting")
-            return None
-
-    _download_url(f"{url}{fname}", fname)
-    run(["hdiutil", "attach", "-nobrowse", fname], check=True)
-    try:
-        src = next(Path("/Volumes/Micro-Manager").glob("Micro-Manager*"))
-    except StopIteration:
-        src = Path(f"/Volumes/Micro-Manager/{fname[:-4]}")
-    shutil.copytree(src, dst, dirs_exist_ok=True)
-    run(["hdiutil", "detach", "/Volumes/Micro-Manager"], check=True)
-    os.unlink(fname)
-    # fix gatekeeper ... requires password
-    print(
-        "\nYour password may be required to enable Micro-manager "
-        "in your security settings."
-        "\nNote: you can also quit now (cmd-C) and do this "
-        "manually in the Security & Privacy preference pane."
+    pbar = progress.Progress(
+        progress.BarColumn(bar_width=None),
+        "[progress.percentage]{task.percentage:>3.1f}%",
+        "•",
+        progress.DownloadColumn(),
     )
-    cmd = ["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(dst)]
-    if noprompt:
-        cmd = cmd[1:]
+    task_id = pbar.add_task("Download..", filename=output_path.name, start=False)
 
-    run(cmd, check=True)
-    # # fix path randomization
-    os.rename(dst / "ImageJ.app", "ImageJ.app")
-    os.rename("ImageJ.app", dst / "ImageJ.app")
-    return dst
+    def hook(count: float, block_size: float, total_size: float) -> None:
+        pbar.update(task_id, total=int(total_size))
+        pbar.start_task(task_id)
+        pbar.update(task_id, advance=block_size)
+
+    print(f"[bold blue]Downloading {url} ...")
+    with pbar:
+        urlretrieve(url=url, filename=output_path, reporthook=hook)
 
 
-def _win_main(
-    dest_dir: Path = DEFAULT_DEST,
-    version: str = VERSION,
-    release: str | int = RELEASE,
-    noprompt: bool = False,
-) -> Path | None:
+def _install(dest: Path, release: str) -> None:
+    if PLATFORM not in ("Darwin", "Windows"):  # pragma: no cover
+        print(f":x: [bold red]Unsupported platform: {PLATFORM!r}")
+        raise sys.exit(1)
+
     if release == "latest":
-        url = "https://download.micro-manager.org/latest/windows/"
-        fname = "MMSetup_x64_latest.exe"
-        dst = dest_dir / "Micro-Manager-latest_win"
+        plat = {
+            "Darwin": "macos/Micro-Manager-x86_64-latest.dmg",
+            "Windows": "windows/MMSetup_x64_latest.exe",
+        }[PLATFORM]
+        url = f"{BASE_URL}/latest/{plat}"
     else:
-        url = "https://download.micro-manager.org/nightly/2.0/Windows/"
-        dst = dest_dir / f"Micro-Manager-{version}-{release}_win"
-        fname = f"MMSetup_64bit_{version}_{release}.exe"
+        available = _available_versions()
+        if release not in available:
+            n = 15
+            avail = ", ".join(list(available)[:n]) + " ..."
+            raise typer.BadParameter(
+                f"Release {release!r} not found. Last {n} releases:\n{avail}"
+            )
+        url = available[release]
 
-    if dst.exists() and not noprompt:
-        resp = input(f"Micro-manager already exists at\n{dst}\nOverwrite [Y/n]?")
-        if resp.lower().startswith("n"):
-            print("aborting")
-            return None
+    with tempfile.TemporaryDirectory() as tmpdir:
+        installer = Path(tmpdir) / url.split("/")[-1]
+        _download_url(url=url, output_path=installer)
+        if PLATFORM == "Darwin":
+            _mac_install(installer, dest)
+        elif PLATFORM == "Windows":
+            # for windows, we need to know the latest version
+            filename = _get_download_name(url)
+            filename = filename.replace("MMSetup_64bit", "Micro-Manager")
+            filename = filename.replace(".exe", "")
+            _win_install(installer, dest / filename)
 
-    _download_url(f"{url}{fname}", fname)
-    run(
-        [fname, "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dst}"],
-        check=True,
-    )
-    os.unlink(fname)
-    return dst
-
-
-def install(
-    dest_dir: Path = DEFAULT_DEST,
-    version: str = VERSION,
-    release: str = "latest",
-    noprompt: bool = False,
-) -> None:
-    """Install Micro-manager to a given directory."""
-    prog = _win_main if os.name == "nt" else _mac_main
-    out = prog(dest_dir, version, release, noprompt)
-    if out:
-        print("installed to", out)
+    print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
 
 
 def _existing_dir(string: str) -> Path:
@@ -140,38 +184,44 @@ def _version(value: str) -> str:
     return value
 
 
-def _release(value: str) -> int | str:
+def _release(value: str) -> str:
     if value.lower() == "latest":
         return "latest"
     if len(value) != 8:
         raise ValueError(f"Invalid date: {value}. Must be eight digits.")
-    return int(value)
+    return str(value)
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     """Main entry point for the console_scripts."""
-    import sys
-
-    print(sys.argv)
     import argparse
+
+    from rich.panel import Panel
+
+    print(
+        Panel(
+            ':exclamation: [bold red]"python -m pymmcore_plus.install" is deprecated. '
+            'Use "mmcore install" instead :eyes:',
+            border_style="red",
+        )
+    )
 
     parser = argparse.ArgumentParser(description="MM Device adapter installer.")
     parser.add_argument(
         "-d",
         "--dest",
-        default=DEFAULT_DEST,
+        default=USER_DATA_MM_PATH,
         type=_existing_dir,
-        help=f"Directory in which to install (default: {DEFAULT_DEST})",
+        help=f"Directory in which to install (default: {USER_DATA_MM_PATH})",
     )
 
-    parser.add_argument(
+    parser.add_argument(  # unused
         "-v",
         "--version",
         metavar="VERSION",
         type=_version,
-        default=VERSION,
-        help="Version number. e.g. 2.0.1 - ignored if release=latest "
-        f"(default: {VERSION})",
+        default="2.0.1",
+        help="Version number. e.g. 2.0.1 - ignored if release=latest (default: 2.0.1)",
     )
     parser.add_argument(
         "-r",
@@ -191,7 +241,7 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    install(args.dest, args.version, args.release, args.yes)
+    _install(Path(args.dest), args.release)
 
 
 if __name__ == "__main__":

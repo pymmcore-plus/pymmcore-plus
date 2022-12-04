@@ -28,18 +28,18 @@ There are two ways to do this:
     micro-manager:
 
     ```bash
-    python -m pymmcore_plus.install
+    mmcore install
     ```
 
     This will download the latest release of micro-manager and place it in the
     pymmcore-plus folder.  If you would like to modify the location of the
-    installation, or the version of micro-manager to install, you can use the
-    `--dest` and `--version` flags respectively.
+    installation, or the release of micro-manager to install, you can use the
+    `--dest` and `--release` flags respectively.
 
     For more information, run:
 
     ```bash
-    python -m pymmcore_plus.install --help
+    mmcore install --help
     ```
 
 2. **Download manually from micro-manager.org**
