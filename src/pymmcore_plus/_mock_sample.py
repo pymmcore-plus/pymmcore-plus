@@ -21,7 +21,7 @@ class _MockSampleContextManager(AbstractContextManager, ContextDecorator):
         image_generator: Callable[_P, Iterator[np.ndarray]],
         args: tuple[Any, ...],
         kwds: dict[str, Any],
-        loop: bool = False,
+        loop: bool = True,
         mmcore: CMMCore | None = None,
     ) -> None:
         from pymmcore_plus import CMMCorePlus
@@ -95,7 +95,7 @@ def mock_sample(
 def mock_sample(
     func: Callable[_P, Iterator[np.ndarray]] | None = None,
     *,
-    loop: bool = False,
+    loop: bool = True,
     mmcore: CMMCore | None = None,
 ) -> Callable[_P, _MockSampleContextManager] | Callable[
     [Callable[_P, Iterator[np.ndarray]]], Callable[_P, _MockSampleContextManager]
