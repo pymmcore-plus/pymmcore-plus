@@ -5,6 +5,7 @@ except ImportError:
 
 from typing import TYPE_CHECKING, Any, List
 
+from ._mock_sample import mock_sample
 from ._util import find_micromanager
 from .core import (
     ActionType,
@@ -45,6 +46,7 @@ __all__ = [
     "PropertyType",
     "RemoteMMCore",
     "server",
+    "mock_sample",
 ]
 
 
