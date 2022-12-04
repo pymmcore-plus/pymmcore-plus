@@ -12,8 +12,12 @@ def noisy_sample(shape: Tuple[int, int] = (10, 10)) -> Iterator[np.ndarray]:
     yield np.random.random(shape)
 
 
+print(core.snap().shape)
+
 # use it as a context manager.
 # each time `core.getImage()` is called, a new image is yielded from the generator
 with noisy_sample():
-    for _ in range(6):
+    for _ in range(3):
         print(core.snap().shape)
+
+print(core.snap().shape)
