@@ -2,13 +2,13 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Iterable, Iterator, overload
+from typing import Any, DefaultDict, Iterable, Iterator, Tuple, overload
 
 import pymmcore
 from typing_extensions import TypeAlias
 
-DevPropValueTuple: TypeAlias = tuple[str, str, str]
-DevPropTuple: TypeAlias = tuple[str, str]
+DevPropValueTuple: TypeAlias = Tuple[str, str, str]
+DevPropTuple: TypeAlias = Tuple[str, str]
 
 
 class Configuration(pymmcore.Configuration):
