@@ -95,7 +95,7 @@ Usually, you'll then want to install the device adapters (though
 you can also download these manually from [micro-manager.org](https://micro-manager.org/Micro-Manager_Nightly_Builds)):
 
 ```sh
-python -m pymmcore_plus.install
+mmcore install
 ```
 
 *See [installation documentation ](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details.*

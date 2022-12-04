@@ -42,7 +42,7 @@ jobs:
           pip install -e .[remote,testing]
 
       - name: Install Micro-Manager
-        run: python -m pymmcore_plus.install
+        run: mmcore install
 
       - name: Test
         run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
