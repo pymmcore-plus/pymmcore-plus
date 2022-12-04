@@ -32,13 +32,18 @@ class _MockSampleContextManager(AbstractContextManager, ContextDecorator):
 
         self.gen = image_generator(*args, **kwds)
         self.func, self.args, self.kwds = image_generator, args, kwds
-        self._patcher = patch.object(self._mmcore, "getImage", self._getImage)
+        self._get_patcher = patch.object(self._mmcore, "getImage", self._getImage)
+        self._snap_patcher = patch.object(self._mmcore, "snapImage", self._snapImage)
 
         # ensure context manager instances have good docstrings
         doc = getattr(image_generator, "__doc__", None)
         if doc is None:
             doc = type(self).__doc__
         self.__doc__ = doc
+
+    def _snapImage(self, *args: Any, **kwargs: Any) -> None:
+        # not currently used, but could be.
+        ...
 
     def _getImage(self, numChannel: int | None = None, **kwargs: Any) -> np.ndarray:
         try:
@@ -60,7 +65,8 @@ class _MockSampleContextManager(AbstractContextManager, ContextDecorator):
         # do not keep args and kwds alive unnecessarily
         # they are only needed for recreation, which is not possible anymore
         del self.args, self.kwds, self.func
-        self._patcher.start()
+        self._get_patcher.start()
+        self._snap_patcher.start()
         return None
 
     def __exit__(
@@ -69,7 +75,8 @@ class _MockSampleContextManager(AbstractContextManager, ContextDecorator):
         __exc_value: BaseException | None,
         __traceback: TracebackType | None,
     ) -> bool | None:
-        self._patcher.stop()
+        self._get_patcher.stop()
+        self._snap_patcher.stop()
         return None
 
 
@@ -100,6 +107,52 @@ def mock_sample(
 ) -> Callable[_P, _MockSampleContextManager] | Callable[
     [Callable[_P, Iterator[np.ndarray]]], Callable[_P, _MockSampleContextManager]
 ]:
+    """Decorator to create a context manager that mocks the core's getImage method.
+
+    When the context is entered, [`core.getImage()`][pymmcore_plus.CMMCorePlus.getImage]
+    is patched to return a new image from the decorated generator function each time
+    it is called.
+
+    !!! Note
+
+        The patched `mmcore` object needn't be a `CMMCorePlus` instance. It can be
+        a plain `pymmcore.CMMCore` object, (or *any* object with a `getImage`
+        method).
+
+    Parameters
+    ----------
+    func : Callable[..., Iterator[np.ndarray]]
+        A function that yields numpy arrays.
+    loop : bool, optional
+        If `True` (the default), the decorated function will be called again when the
+        generator is exhausted.
+    mmcore : CMMCore, optional
+        The [pymmcore.CMMCore][] instance to patch.  If `None` (default), the global
+        [`CMMCorePlus.instance()`][pymmcore_plus.CMMCorePlus.instance] will be used.
+
+    Returns
+    -------
+    Callable[..., _MockSampleContextManager]
+        A context manager that patches `core.getImage()` to return a new image from the
+        decorated generator function each time it is called.
+
+    Examples
+    --------
+    ```python
+    from pymmcore_plus import CMMCorePlus, mock_sample
+
+    core = CMMCorePlus()
+
+    @mock_sample(mmcore=core)
+    def noisy_sample(shape):
+        yield np.random.random(shape)
+
+    with noisy_sample(shape=(10, 10)):
+        core.snapImage()  # unnecessary, but harmless
+        print(core.getImage().shape)  # (10, 10)
+    ```
+    """
+
     def _decorator(
         func: Callable[_P, Iterator[np.ndarray]]
     ) -> Callable[_P, _MockSampleContextManager]:

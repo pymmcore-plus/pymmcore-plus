@@ -22,6 +22,7 @@ nav:
       - examples/context-set.md
       - examples/napari-micromanager.md
       - examples/following_changes_in_core.md
+      - examples/mock-sample.md
     - API:
       - api/cmmcoreplus.md
       - api/mda.md
