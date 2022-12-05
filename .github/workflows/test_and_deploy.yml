@@ -55,10 +55,14 @@ jobs:
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
       - uses: actions/checkout@v3
         with:
           repository: pymmcore-plus/pymmcore-widgets
           path: pymmcore-widgets
+          fetch-depth: 0
 
       - uses: actions/setup-python@v4
         with:
