@@ -51,7 +51,7 @@ class _PropertySignal:
         def _wrapper(dev: str, prop: str, new_value: Any) -> None:
             cb = denormalize_slot(slot)
             if cb is None:
-                self._events._prop_callbacks.pop(key)
+                self._events._prop_callbacks.pop(key, None)
                 return
             if dev == self._device:
                 if self._property:
@@ -67,9 +67,10 @@ class _PropertySignal:
     def disconnect(self, callback: Callable) -> None:
         """Disconnect `callback` from this device and/or property."""
         key = (self._device, self._property, normalize_slot(callback))
-        if key not in self._events._prop_callbacks:
+        cb = self._events._prop_callbacks.pop(key, None)
+        if cb is None:
             raise ValueError("callback not connected")
-        self._events.propertyChanged.disconnect(self._events._prop_callbacks.pop(key))
+        self._events.propertyChanged.disconnect(cb)
 
     def emit(self, *args: Any) -> Any:
         raise NotImplementedError("emit not implemented for _PropertySignal")
