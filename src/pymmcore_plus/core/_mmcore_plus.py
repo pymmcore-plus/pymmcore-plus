@@ -612,20 +612,20 @@ class CMMCorePlus(pymmcore.CMMCore):
     # NEW methods
 
     @overload
-    def iterDevices(  # type: ignore
+    def iterDevices(
         self,
-        device_type: DeviceType | None = ...,
-        device_label: str | None = ...,
+        device_type: int | Iterable[int] | None = ...,
+        device_label: str | re.Pattern | None = ...,
         *,
-        as_object: Literal[False] = False,
+        as_object: Literal[False],
     ) -> Iterator[str]:
         ...
 
     @overload
     def iterDevices(
         self,
-        device_type: DeviceType | None = ...,
-        device_label: str | None = ...,
+        device_type: int | Iterable[int] | None = ...,
+        device_label: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
     ) -> Iterator[Device]:
@@ -633,10 +633,10 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def iterDevices(
         self,
-        device_type: DeviceType | None = None,
-        device_label: str | None = None,
+        device_type: int | Iterable[int] | None = None,
+        device_label: str | re.Pattern | None = None,
         *,
-        as_object: bool = False,
+        as_object: bool = True,
     ) -> Iterator[Device | str]:
         """Iterate over currently loaded devices.
 
@@ -644,7 +644,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         It offers a convenient way to iterate over loaded devices, optionally filtering
         by [`DeviceType`][pymmcore_plus.DeviceType] and/or device label. It can also
-        yields [`Device`][pymmcore_plus.Device] objects if `as_object` is
+        yield [`Device`][pymmcore_plus.Device] objects if `as_object` is
         `True`.
 
         Parameters
@@ -662,40 +662,67 @@ class CMMCorePlus(pymmcore.CMMCore):
         Device | str
             `Device` objects (if `as_object==True`) or device label strings.
         """
-        for dev in (
-            self.getLoadedDevicesOfType(device_type)
-            if device_type is not None
-            else self.getLoadedDevices()
-        ):
-            if not device_label or dev == device_label:
-                yield Device(dev, mmcore=self) if as_object else dev
+        if device_type is None:
+            devices: Sequence[str] = self.getLoadedDevices()
+        elif isinstance(device_type, int):
+            devices = self.getLoadedDevicesOfType(device_type)
+        else:
+            _devices: set[str] = set()
+            for dtype in device_type:
+                _devices.update(self.getLoadedDevicesOfType(dtype))
+            devices = list(_devices)
+
+        if device_label:
+            if isinstance(device_label, str):
+                ptrn = re.compile(device_label, re.IGNORECASE)
+            else:
+                ptrn = device_label
+            devices = [d for d in devices if ptrn.search(d)]
+
+        for dev in devices:
+            yield Device(dev, mmcore=self) if as_object else dev
 
     @overload
-    def iterProperties(  # type: ignore
+    def iterProperties(
         self,
-        device_type: DeviceType | None = ...,
-        device_label: str | None = ...,
-        property_type: PropertyType | None = ...,
-        as_object: Literal[False] = False,
+        property_type: int | Iterable[int] | None = ...,
+        property_name_pattern: str | re.Pattern | None = ...,
+        *,
+        device_type: int | Iterable[int] | None = ...,
+        device_label: str | re.Pattern | None = ...,
+        has_limits: bool | None = None,
+        is_read_only: bool | None = None,
+        is_sequenceable: bool | None = None,
+        as_object: Literal[False],
     ) -> Iterator[tuple[str, str]]:
         ...
 
     @overload
     def iterProperties(
         self,
-        device_type: DeviceType | None = ...,
-        device_label: str | None = ...,
-        property_type: PropertyType | None = ...,
+        property_type: int | Iterable[int] | None = ...,
+        property_name_pattern: str | re.Pattern | None = ...,
+        *,
+        device_type: int | Iterable[int] | None = ...,
+        device_label: str | re.Pattern | None = ...,
+        has_limits: bool | None = None,
+        is_read_only: bool | None = None,
+        is_sequenceable: bool | None = None,
         as_object: Literal[True] = ...,
     ) -> Iterator[DeviceProperty]:
         ...
 
     def iterProperties(
         self,
-        device_type: DeviceType | None = None,
-        device_label: str | None = None,
-        property_type: PropertyType | None = None,
-        as_object: bool = False,
+        property_type: int | Iterable[int] | None = None,
+        property_name_pattern: str | re.Pattern | None = None,
+        *,
+        device_type: int | Iterable[int] | None = None,
+        device_label: str | re.Pattern | None = None,
+        has_limits: bool | None = None,
+        is_read_only: bool | None = None,
+        is_sequenceable: bool | None = None,
+        as_object: bool = True,
     ) -> Iterator[DeviceProperty | tuple[str, str]]:
         """Iterate over currently loaded (device_label, property_name) pairs.
 
@@ -708,12 +735,26 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Parameters
         ----------
+        property_type : int | Sequence[int] | None
+            PropertyType (or types) to filter by, by default all property types will
+            be yielded.
+        property_name_pattern : str | re.Pattern | None
+            Property name to filter by, by default all property names will be yielded.
+            May be a compiled regular expression or a string, in which case it will be
+            compiled with `re.IGNORECASE`.
         device_type : DeviceType | None
             DeviceType to filter by, by default all device types will be yielded.
         device_label : str | None
             Device label to filter by, by default all device labels will be yielded.
-        property_type : PropertyType | None
-            PropertyType to filter by, by default all property types will be yielded.
+        has_limits : bool | None
+            If provided, only properties with `hasPropertyLimits` matching this value
+            will be yielded.
+        is_read_only : bool | None
+            If provided, only properties with `isPropertyReadOnly` matching this value
+            will be yielded.
+        is_sequenceable : bool | None
+            If provided only properties with `isPropertySequenceable` matching this
+            value will be yielded.
         as_object : bool, optional
             If `True`, `DeviceProperty` objects will be yielded instead of
             `(device_label, property_name)` tuples. By default False
@@ -724,13 +765,47 @@ class CMMCorePlus(pymmcore.CMMCore):
             `DeviceProperty` objects (if `as_object==True`) or 2-tuples of (device_name,
             property_name)
         """
-        for dev in self.iterDevices(device_type=device_type, device_label=device_label):
+        if property_name_pattern:
+            if isinstance(property_name_pattern, str):
+                ptrn = re.compile(property_name_pattern, re.IGNORECASE)
+            else:
+                ptrn = property_name_pattern
+        else:
+            ptrn = None
+
+        if property_type is None:
+            property_types = set()
+        elif isinstance(property_type, int):
+            property_types = {property_type}
+        else:
+            property_types = set(property_type)
+
+        for dev in self.iterDevices(device_type, device_label, as_object=False):
             for prop in self.getDevicePropertyNames(dev):
+                if ptrn and not ptrn.search(prop):
+                    continue
                 if (
-                    property_type is None
-                    or self.getPropertyType(dev, prop) == property_type
+                    property_type is not None
+                    and super().getPropertyType(dev, prop) not in property_types
                 ):
-                    yield DeviceProperty(dev, prop, self) if as_object else (dev, prop)
+                    continue
+                if (
+                    has_limits is not None
+                    and self.hasPropertyLimits(dev, prop) != has_limits
+                ):
+                    continue
+                if (
+                    is_read_only is not None
+                    and self.isPropertyReadOnly(dev, prop) != is_read_only
+                ):
+                    continue
+                if (
+                    is_sequenceable is not None
+                    and self.isPropertySequenceable(dev, prop) != is_sequenceable
+                ):
+                    continue
+
+                yield DeviceProperty(dev, prop, self) if as_object else (dev, prop)
 
     def getPropertyObject(
         self, device_label: str, property_name: str
