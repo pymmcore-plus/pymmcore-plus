@@ -4,8 +4,8 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, cast
 
-from loguru import logger
 from psygnal import EmitLoopError
+from pymmcore_plus._logger import logger
 
 from ._protocol import PMDAEngine
 from .events import PMDASignaler, _get_auto_MDA_callback_class
