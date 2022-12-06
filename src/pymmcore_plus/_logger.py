@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 else:
     from loguru._logger import Core, Logger
 
-    # avoid using the global loguru logger
+    # avoid using the global loguru logger in case other packages are using it.
     logger = Logger(
         core=Core(),
         exception=None,
