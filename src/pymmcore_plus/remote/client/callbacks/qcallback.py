@@ -1,6 +1,7 @@
 from Pyro5.api import expose
 from qtpy.QtCore import QObject, Signal
 
+
 # For some reason, subclassing from core.events._qsignals seems to sometimes affect
 # the event emission order in the tests.  Not sure why, so keeping this as it's own
 # class for now
