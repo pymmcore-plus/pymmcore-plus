@@ -153,63 +153,35 @@ def run(
         resolve_path=True,
         help="Path to Micro-Manager system configuration file.",
     ),
-    z_go_up: Optional[bool] = typer.Option(
-        None,
-        help="Acquire from bottom to top.",
-    ),
-    z_top: Optional[float] = typer.Option(
-        None,
-        help="Top of z-stack.",
-    ),
-    z_bottom: Optional[float] = typer.Option(
-        None,
-        help="Bottom of z-stack.",
-    ),
+    z_go_up: Optional[bool] = typer.Option(None, help="Acquire from bottom to top."),
+    z_top: Optional[float] = typer.Option(None, help="Top of z-stack."),
+    z_bottom: Optional[float] = typer.Option(None, help="Bottom of z-stack."),
     z_range: Optional[float] = typer.Option(
-        None,
-        help="Symmetric range of z-stack around position.",
+        None, help="Symmetric range of z-stack around position."
     ),
     z_above: Optional[float] = typer.Option(
-        None,
-        help="Asymmetric range of z-stack above position.",
+        None, help="Asymmetric range of z-stack above position."
     ),
     z_below: Optional[float] = typer.Option(
-        None,
-        help="Asymmetric range of z-stack below position.",
+        None, help="Asymmetric range of z-stack below position."
     ),
-    z_step: Optional[float] = typer.Option(
-        None,
-        help="Step size of z-stack.",
-    ),
+    z_step: Optional[float] = typer.Option(None, help="Step size of z-stack."),
     z_relative: Optional[List[float]] = typer.Option(
-        None,
-        "-zr",
-        help="Relative z-positions to acquire (may use multiple times).",
+        None, "-zr", help="Relative z-positions to acquire (may use multiple times)."
     ),
     z_absolute: Optional[List[float]] = typer.Option(
-        None,
-        "-za",
-        help="Absolute z-positions to acquire (may use multiple times).",
+        None, "-za", help="Absolute z-positions to acquire (may use multiple times)."
     ),
     t_interval: Optional[float] = typer.Option(
-        None,
-        help="Interval between timepoints.",
+        None, help="Interval between timepoints."
     ),
-    t_duration: Optional[float] = typer.Option(
-        None,
-        help="Duration of time lapse.",
-    ),
+    t_duration: Optional[float] = typer.Option(None, help="Duration of time lapse."),
     t_loops: Optional[float] = typer.Option(
-        None,
-        help="Number of time points to acquire.",
+        None, help="Number of time points to acquire."
     ),
-    dry_run: bool = typer.Option(
-        False,
-        help="Do not run the acquisition.",
-    ),
+    dry_run: bool = typer.Option(False, help="Do not run the acquisition."),
     axis_order: Optional[str] = typer.Option(
-        None,
-        help="Order of axes to acquire (e.g. 'TPCZ').",
+        None, help="Order of axes to acquire (e.g. 'TPCZ')."
     ),
     channel: Optional[List[str]] = typer.Option(
         None,
@@ -219,8 +191,7 @@ def run(
         '\b - useq-schema JSON: \'{"config": "DAPI", "exposure": 0.5, "z_offset": 0.5}\'',  # noqa: E501
     ),
     channel_group: str = typer.Option(
-        "Channel",
-        help="Name of Micro-Manager configuration group for channels.",
+        "Channel", help="Name of Micro-Manager configuration group for channels."
     ),
 ) -> None:
     import json
@@ -233,49 +204,49 @@ def run(
     # Any command line arguments take precedence over useq file
     # note that useq-schema itself will handle any conflicts between z plans
     # (the first correct Union of keyword arguments will win.)
-    if z_go_up is not None:
-        mda.setdefault("z_plan", {})["go_up"] = z_go_up
-    if z_top is not None:
-        mda.setdefault("z_plan", {})["top"] = z_top
-    if z_bottom is not None:
-        mda.setdefault("z_plan", {})["bottom"] = z_bottom
-    if z_range is not None:
-        mda.setdefault("z_plan", {})["range"] = z_range
-    if z_above is not None:
-        mda.setdefault("z_plan", {})["above"] = z_above
-    if z_below is not None:
-        mda.setdefault("z_plan", {})["below"] = z_below
-    if z_step is not None:
-        mda.setdefault("z_plan", {})["step"] = z_step
-    if z_relative is not None:
-        mda.setdefault("z_plan", {})["relative"] = z_relative
-    if z_absolute is not None:
-        mda.setdefault("z_plan", {})["absolute"] = z_absolute
+    _zmap = (
+        ("go_up", z_go_up),
+        ("top", z_top),
+        ("bottom", z_bottom),
+        ("range", z_range),
+        ("above", z_above),
+        ("below", z_below),
+        ("step", z_step),
+        ("relative", z_relative),
+        ("absolute", z_absolute),
+    )
+    if z_plan := {k: v for k, v in _zmap if v not in (None, [])}:
+        field = MDASequence.__fields__["z_plan"]
+        if field.validate(z_plan, {}, loc="")[0]:
+            # the field is valid on its own. overwrite:
+            mda["z_plan"] = z_plan
+        else:
+            # the field is not valid on its own. update existing:
+            mda.setdefault("z_plan", {}).update(z_plan)
 
-    if t_interval is not None:
-        mda.setdefault("time_plan", {})["interval"] = t_interval
-    if t_duration is not None:
-        mda.setdefault("time_plan", {})["duration"] = t_duration
-    if t_loops is not None:
-        mda.setdefault("time_plan", {})["loops"] = t_loops
+    _tmap = (("interval", t_interval), ("duration", t_duration), ("loops", t_loops))
+    if time_plan := {k: v for k, v in _tmap if v is not None}:
+        mda.setdefault("time_plan", {}).update(time_plan)
 
     if axis_order is not None:
         mda["axis_order"] = axis_order
 
-    if channel is not None:
-        for c in channel:
-            try:
-                _c = json.loads(c)
-            except json.JSONDecodeError:
-                name, *exposure = c.split(";")
-                _c = {"config": name}
-                if exposure:
-                    _c["exposure"] = float(exposure[0])
-            mda.setdefault("channels", []).append(_c)
+    for c in channel or []:
+        try:
+            # try to parse as JSON
+            _c = json.loads(c)
+        except json.JSONDecodeError:
+            # try to parse as name;exposure
+            name, *exposure = c.split(";")
+            _c = {"config": name}
+            if exposure:
+                _c["exposure"] = float(exposure[0])
+        mda.setdefault("channels", []).append(_c)
     if channel_group is not None:
         for c in mda.get("channels", []):
             cast(dict, c)["group"] = channel_group
 
+    # this will raise if anything has gone wrong.
     _mda = MDASequence(**mda)
 
     if dry_run:
