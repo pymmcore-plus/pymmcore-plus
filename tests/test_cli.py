@@ -1,3 +1,4 @@
+import json
 import shutil
 import subprocess
 from pathlib import Path
@@ -169,6 +170,42 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
 
     with patch("pymmcore_plus.core._mmcore_plus._instance") as mock:
         result = runner.invoke(app, cmd)
+
+    assert result.exit_code == 0
+    mock.run_mda.assert_called_with(expected)
+
+
+def test_run_mda_dry():
+    with patch("pymmcore_plus.core._mmcore_plus._instance") as mock:
+        result = runner.invoke(app, ["run", "--dry-run"])
+
+    assert result.exit_code == 0
+    mock.run_mda.assert_not_called()
+
+
+def test_run_mda_channels():
+    FITC = {"config": "FITC", "exposure": 0.1, "do_stack": False, "group": "test"}
+    cmd: list[str] = [
+        "run",
+        "--channel-group",
+        "test",
+        "--channel",
+        "DAPI",
+        "--channel",
+        json.dumps(FITC),
+        "--channel",
+        "Other;70",
+    ]
+    with patch("pymmcore_plus.core._mmcore_plus._instance") as mock:
+        result = runner.invoke(app, cmd)
+
+    expected = MDASequence(
+        channels=[
+            {"group": "test", "config": "DAPI"},
+            FITC,
+            {"config": "Other", "exposure": 70, "group": "test"},
+        ]
+    )
 
     assert result.exit_code == 0
     mock.run_mda.assert_called_with(expected)
