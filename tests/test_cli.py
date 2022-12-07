@@ -125,6 +125,7 @@ ARGS: list[dict[str, dict | str]] = [
     {"z_plan": {"step": 0.24, "above": 1, "below": 2}},
     {"z_plan": {"step": 0.24}},
     {"z_plan": {"step": 0.24, "range": 4}, "time_plan": {"interval": 0.2, "loops": 20}},
+    {"time_plan": {"interval": 0.2}},
     {"axis_order": "TPCZ", "time_plan": {"interval": 0.2, "loops": 20}},
 ]
 
@@ -158,7 +159,7 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
             field = MDASequence.__fields__[field_name]
             # when the args are a complete field on their own
             # it will replace the whole field
-            if field.validate(val, {}, loc="")[0]:
+            if isinstance(val, str) or field.validate(val, {}, loc="")[0]:
                 seq = seq.replace(**{field_name: val})
             # otherwise it updates the existing
             else:
@@ -177,7 +178,7 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
     mock.run_mda.assert_called_with(expected)
 
 
-def test_run_mda_dry():
+def test_run_mda_dry() -> None:
     with patch("pymmcore_plus.core._mmcore_plus._instance") as mock:
         result = runner.invoke(app, ["run", "--dry-run"])
 
@@ -185,7 +186,7 @@ def test_run_mda_dry():
     mock.run_mda.assert_not_called()
 
 
-def test_run_mda_channels():
+def test_run_mda_channels() -> None:
     FITC = {"config": "FITC", "exposure": 0.1, "do_stack": False, "group": "test"}
     cmd: list[str] = [
         "run",

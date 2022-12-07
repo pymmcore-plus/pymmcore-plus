@@ -226,7 +226,13 @@ def run(
 
     _tmap = (("interval", t_interval), ("duration", t_duration), ("loops", t_loops))
     if time_plan := {k: v for k, v in _tmap if v is not None}:
-        mda.setdefault("time_plan", {}).update(time_plan)
+        field = MDASequence.__fields__["time_plan"]
+        if field.validate(time_plan, {}, loc="")[0]:
+            # the field is valid on its own. overwrite:
+            mda["time_plan"] = time_plan
+        else:
+            # the field is not valid on its own. update existing:
+            mda.setdefault("time_plan", {}).update(time_plan)
 
     if axis_order is not None:
         mda["axis_order"] = axis_order
