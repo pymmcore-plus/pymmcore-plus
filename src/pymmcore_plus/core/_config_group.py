@@ -7,7 +7,6 @@ import pymmcore
 from ._config import Configuration
 from ._property import DeviceProperty
 
-
 if TYPE_CHECKING:
     from ..core._mmcore_plus import CMMCorePlus
 

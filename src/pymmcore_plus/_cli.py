@@ -2,7 +2,7 @@ import shutil
 import sys
 from contextlib import suppress
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional, cast
 
 import pymmcore_plus
 import typer
@@ -133,6 +133,136 @@ def install(
     import pymmcore_plus.install
 
     pymmcore_plus.install._install(dest, release)
+
+
+@app.command()
+def run(
+    useq: Optional[Path] = typer.Argument(
+        None,
+        dir_okay=False,
+        exists=True,
+        resolve_path=True,
+        help="Path to useq-schema file.",
+    ),
+    config: Optional[Path] = typer.Option(
+        None,
+        "-c",
+        "--config",
+        dir_okay=False,
+        exists=True,
+        resolve_path=True,
+        help="Path to Micro-Manager system configuration file.",
+    ),
+    z_go_up: Optional[bool] = typer.Option(None, help="Acquire from bottom to top."),
+    z_top: Optional[float] = typer.Option(None, help="Top of z-stack."),
+    z_bottom: Optional[float] = typer.Option(None, help="Bottom of z-stack."),
+    z_range: Optional[float] = typer.Option(
+        None, help="Symmetric range of z-stack around position."
+    ),
+    z_above: Optional[float] = typer.Option(
+        None, help="Asymmetric range of z-stack above position."
+    ),
+    z_below: Optional[float] = typer.Option(
+        None, help="Asymmetric range of z-stack below position."
+    ),
+    z_step: Optional[float] = typer.Option(None, help="Step size of z-stack."),
+    z_relative: Optional[List[float]] = typer.Option(
+        None, "-zr", help="Relative z-positions to acquire (may use multiple times)."
+    ),
+    z_absolute: Optional[List[float]] = typer.Option(
+        None, "-za", help="Absolute z-positions to acquire (may use multiple times)."
+    ),
+    t_interval: Optional[float] = typer.Option(
+        None, help="Interval between timepoints."
+    ),
+    t_duration: Optional[float] = typer.Option(None, help="Duration of time lapse."),
+    t_loops: Optional[float] = typer.Option(
+        None, help="Number of time points to acquire."
+    ),
+    dry_run: bool = typer.Option(False, help="Do not run the acquisition."),
+    axis_order: Optional[str] = typer.Option(
+        None, help="Order of axes to acquire (e.g. 'TPCZ')."
+    ),
+    channel: Optional[List[str]] = typer.Option(
+        None,
+        help="\bChannel to acquire. Argument is a string of the following form:\n"
+        '\b - name: "DAPI"\n'
+        '\b - name;exposure: "DAPI;0.5"\n'
+        '\b - useq-schema JSON: \'{"config": "DAPI", "exposure": 0.5, "z_offset": 0.5}\'',  # noqa: E501
+    ),
+    channel_group: str = typer.Option(
+        "Channel", help="Name of Micro-Manager configuration group for channels."
+    ),
+) -> None:
+    import json
+
+    from useq import MDASequence
+
+    # load from file if provided...
+    mda = {} if useq is None else MDASequence.parse_file(useq).dict()
+
+    # Any command line arguments take precedence over useq file
+    # note that useq-schema itself will handle any conflicts between z plans
+    # (the first correct Union of keyword arguments will win.)
+    _zmap = (
+        ("go_up", z_go_up),
+        ("top", z_top),
+        ("bottom", z_bottom),
+        ("range", z_range),
+        ("above", z_above),
+        ("below", z_below),
+        ("step", z_step),
+        ("relative", z_relative),
+        ("absolute", z_absolute),
+    )
+    if z_plan := {k: v for k, v in _zmap if v not in (None, [])}:
+        field = MDASequence.__fields__["z_plan"]
+        if field.validate(z_plan, {}, loc="")[0]:
+            # the field is valid on its own. overwrite:
+            mda["z_plan"] = z_plan
+        else:
+            # the field is not valid on its own. update existing:
+            mda.setdefault("z_plan", {}).update(z_plan)
+
+    _tmap = (("interval", t_interval), ("duration", t_duration), ("loops", t_loops))
+    if time_plan := {k: v for k, v in _tmap if v is not None}:
+        field = MDASequence.__fields__["time_plan"]
+        if field.validate(time_plan, {}, loc="")[0]:
+            # the field is valid on its own. overwrite:
+            mda["time_plan"] = time_plan
+        else:
+            # the field is not valid on its own. update existing:
+            mda.setdefault("time_plan", {}).update(time_plan)
+
+    if axis_order is not None:
+        mda["axis_order"] = axis_order
+
+    for c in channel or []:
+        try:
+            # try to parse as JSON
+            _c = json.loads(c)
+        except json.JSONDecodeError:
+            # try to parse as name;exposure
+            name, *exposure = c.split(";")
+            _c = {"config": name}
+            if exposure:
+                _c["exposure"] = float(exposure[0])
+        mda.setdefault("channels", []).append(_c)
+    if channel_group is not None:
+        for c in mda.get("channels", []):
+            cast(dict, c)["group"] = channel_group
+
+    # this will raise if anything has gone wrong.
+    _mda = MDASequence(**mda)
+
+    if dry_run:
+        print(":eyes: [bold green]Would run\n")
+        print(_mda.dict())
+        raise typer.Exit(0)
+
+    core = pymmcore_plus.CMMCorePlus.instance()
+    core.loadSystemConfiguration(config or "MMConfig_demo.cfg")
+    core.run_mda(_mda)
 
 
 def main() -> None:
