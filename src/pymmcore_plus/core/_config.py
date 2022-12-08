@@ -2,58 +2,49 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Dict, Iterator, Tuple, cast
+from typing import Any, DefaultDict, Iterable, Iterator, Tuple, overload
 
 import pymmcore
+from typing_extensions import TypeAlias
 
-_NULL = object()
-
-
-# class PropertySetting(pymmcore.PropertySetting):
-#     """Encompasses a device label, property name, and property value"""
-
-#     # pymmcore API:
-#     # def getDeviceLabel(self) -> str:  # i.e. 'Camera'
-#     # def getKey(self) -> str:  # ie. 'Camera-Binning'
-#     # def getPropertyName(self) -> str:  # ie. 'Binning'
-#     # def getPropertyValue(self) -> str:  # ie. '1'
-#     # def getReadOnly(self) -> bool:
-#     # def getVerbose(self) -> str:  # ie. 'Camera:Binning=1'
-#     # def isEqualTo(self, ps: PropertySetting) -> bool:# devLabel, propName & value eq
-
-#     @classmethod
-#     def from_property_setting(cls, ps: pymmcore.PropertySetting) -> PropertySetting:
-#         label = ps.getDeviceLabel()
-#         prop = ps.getPropertyName()
-#         value = ps.getPropertyValue()
-#         readOnly = ps.getReadOnly()
-#         return cls(label, prop, value, readOnly)
-
-#     def __repr__(self) -> str:
-#         return f"<PropertySetting '{self}'>"
-
-#     def __str__(self) -> str:
-#         return self.getVerbose().replace(":=", "")
-
-#     def __iter__(self) -> Iterable[str]:
-#         yield self.getDeviceLabel()
-#         yield self.getPropertyName()
-#         yield self.getPropertyValue()
+DevPropValueTuple: TypeAlias = Tuple[str, str, str]
+DevPropTuple: TypeAlias = Tuple[str, str]
 
 
 class Configuration(pymmcore.Configuration):
-    """Encapsulation of the configuration information, with convenience methods.
+    """Encapsulation of configuration information.
 
-    This pymmcore_plus variant provides additional conveniences:
-        __len__ - number of settings
-        __str__ - pretty printing of Config
-        __contains__ - check if (devLabel, propLabel) is in the config
-        __getitem__ - get property setting by index or (devLabel, propLabel) key
-        __iter__ - iterate over (devLabeL, propLabel, value) tuples
-        dict() - convert Configuration to nested dict
-        json() - convert to JSON string
-        yaml() - convert to YAML string (requires PyYAML)
-        html() - convert to HTML string
+    This is the type of object returned by default (provided `native==False`) by:
+    [`getConfigData][pymmcore_plus.CMMCorePlus.getConfigData],
+    [`getPixelSizeConfigData][pymmcore_plus.CMMCorePlus.getPixelSizeConfigData]
+    [`getSystemState][pymmcore_plus.CMMCorePlus.getSystemState]
+    [`getSystemStateCache][pymmcore_plus.CMMCorePlus.getSystemStateCache]
+    [`getConfigState][pymmcore_plus.CMMCorePlus.getConfigState]
+    [`getConfigGroupState][pymmcore_plus.CMMCorePlus.getConfigGroupState]
+    [`getConfigGroupStateFromCache][pymmcore_plus.CMMCorePlus.getConfigGroupStateFromCache]
+
+
+    This class is a subclass of `pymmcore.Configuration` that implements an
+    [`collections.abc.MutableSequence`][] (i.e. it behaves like a Python list).
+    It also behaves much like a [`collections.abc.MutableMapping`][], where the keys
+    are 2-tuples of (deviceLabel, propertyLabel) and the values are the property values.
+
+    Note that the "order" of this collection is not well-defined, so while you *can*
+    index with an integer, you should not rely on the order of the items in the
+    collection.  `__getitem__/__setitem__/__delitem__` all accept a 2-tuple of
+    `(deviceLabel, propertyLabel)`.
+
+    It adds a few convenience methods:
+
+    !!! tip
+
+        All of the methods in `pymmcore_plus.CMMCorePlus` that would have returned a
+        `pymmcore.Configuration` in `pymmcore` (e.g.
+        [`getConfigData`][pymmcore_plus.CMMCorePlus.getConfigData],
+        [`getConfigState`][pymmcore_plus.CMMCorePlus.getConfigState], etc...).
+        have been reimplemented to return a `pymmcore_plus.Configuration` object. This
+        object has the same API as `pymmcore.Configuration`, but you can request a
+        "native" (unenhanced) `pymmcore` object by passing `native=True` to the method.
     """
 
     # pymmcore API:
@@ -73,71 +64,115 @@ class Configuration(pymmcore.Configuration):
     def __len__(self) -> int:
         return self.size()
 
+    @overload
+    def __getitem__(self, key: int) -> pymmcore.PropertySetting:
+        ...
+
+    @overload
+    def __getitem__(self, key: DevPropTuple) -> str:
+        ...
+
+    def __getitem__(self, key: int | DevPropTuple) -> str | pymmcore.PropertySetting:
+        """Get property setting by index or (devLabel, propLabel) key.
+
+        If `key` is an integer, returns the `pymmcore.PropertySetting` at that index.
+        If `key` is a 2-tuple of strings, returns the value of the property setting
+        with that (devLabel, propLabel) key.
+        """
+        if isinstance(key, int):
+            return self.getSetting(key)
+        if isinstance(key, tuple) and len(key) == 2:
+            return self.getSetting(*key).getPropertyValue()
+        raise TypeError("key must be either an int or 2-tuple of strings.")
+
+    def __setitem__(self, key: DevPropTuple, value: str) -> None:
+        """Set property setting by `(devLabel, propLabel)` key."""
+        if not isinstance(key, tuple) or len(key) != 2:
+            raise TypeError("key must be a 2-tuple of strings.")
+        # note: pymmcore will automatically overwrite property settings with the same
+        # (devLabel, propLabel) key
+        self.addSetting(pymmcore.PropertySetting(*key, value))
+
+    def __delitem__(self, key: DevPropTuple) -> None:
+        """Delete setting for `(devLabel, propLabel)` from the configuration."""
+        if not isinstance(key, tuple) or len(key) != 2:
+            raise TypeError("key must be a 2-tuple of strings.")
+        self.deleteSetting(*key)  # type: ignore  # error in stub.
+
+    def remove(self, key: DevPropTuple) -> None:
+        """Remove setting for `(devLabel, propLabel)` from the configuration."""
+        if not self.isPropertyIncluded(*key):
+            raise ValueError(f"No setting for key {key!r}")
+        del self[key]
+
+    def append(self, setting: pymmcore.PropertySetting | DevPropValueTuple) -> None:
+        """Add a setting to the configuration."""
+        if isinstance(setting, tuple):
+            if len(setting) != 3:
+                raise ValueError("value must be a 3-tuple of (device, property, value)")
+            setting = pymmcore.PropertySetting(*setting)
+        self.addSetting(setting)
+
+    def extend(
+        self,
+        other: pymmcore.Configuration
+        | Iterable[pymmcore.PropertySetting | DevPropValueTuple],
+    ) -> None:
+        """Add all settings from another Configuration."""
+        if isinstance(other, pymmcore.Configuration):
+            for i in range(other.size()):
+                self.addSetting(other.getSetting(i))
+        else:
+            for setting in other:
+                self.append(setting)
+
+    def __iter__(self) -> Iterator[DevPropValueTuple]:
+        for i in range(self.size()):
+            ps = self.getSetting(i)
+            yield ps.getDeviceLabel(), ps.getPropertyName(), ps.getPropertyValue()
+
+    def __contains__(
+        self,
+        query: pymmcore.Configuration
+        | pymmcore.PropertySetting
+        | DevPropTuple
+        | DevPropValueTuple,
+    ) -> bool:
+        if isinstance(query, pymmcore.Configuration):
+            return self.isConfigurationIncluded(query)
+        if isinstance(query, pymmcore.PropertySetting):
+            return self.isSettingIncluded(query)
+        if isinstance(query, tuple):
+            if len(query) == 2:
+                return self.isPropertyIncluded(*query)
+            if len(query) == 3:
+                return self.isSettingIncluded(pymmcore.PropertySetting(*query))
+        raise TypeError(
+            "Configuration.__contains__ expects a Configuration, a PropertySetting,"
+            " a 2-tuple (deviceLabel, propertyLabel) or a 3-tuple ",
+            "(deviceLabel, propertyLabel, value).",
+        )
+
     def __repr__(self) -> str:
-        return f"<MMCore Configuration with {self.size()} settings>"
+        return f"<MMCorePlus Configuration with {self.size()} settings>"
 
     def __str__(self) -> str:
         lines = []
         for device, prop in self.dict().items():
             lines.append(f"{device}:")
-            lines.extend(f"  {name}={value}" for name, value in prop.items())
-            lines.append("")
+            lines.extend(f"  - {name}: {value}" for name, value in prop.items())
         return "\n".join(lines)
 
-    def __iter__(self) -> Iterator[Tuple[str, str, str]]:
-        for i in range(self.size()):
-            ps = self.getSetting(i)
-            yield ps.getDeviceLabel(), ps.getPropertyName(), ps.getPropertyValue()
-
-    def __getitem__(self, key: int | tuple[str, str]) -> str:
-        """Get property setting by index or (devLabel, propLabel) key."""
-        if isinstance(key, int):
-            return self.getSetting(key).getPropertyValue()
-        if isinstance(key, tuple):
-            return self.getSetting(*key).getPropertyValue()
-        raise TypeError("key must be either an int or 2-tuple of strings.")
-
-    def __contains__(self, query: object) -> bool:
-        if isinstance(query, pymmcore.Configuration):
-            return self.isConfigurationIncluded(query)
-        if isinstance(query, pymmcore.PropertySetting):
-            return self.isSettingIncluded(query)
-        if (
-            not isinstance(query, (list, tuple))
-            or len(query) != 2
-            or not all(isinstance(i, str) for i in query)
-        ):
-            raise TypeError(
-                "Configuration.__contains__ expects a Configuration, a PropertySetting,"
-                " or a 2-tuple of (deviceLabel, propertyLabel)"
-            )
-        return self.isPropertyIncluded(*query)
-
     def html(self) -> str:
-        """Return config as HTML."""
+        """Return config representation as HTML."""
         return self.getVerbose()
 
-    def dict(self) -> Dict[str, Dict[str, str]]:
-        """Return config as a nested dict."""
-        d: DefaultDict[str, Dict[str, str]] = defaultdict(dict)
+    def dict(self) -> dict[str, dict[str, str]]:
+        """Return config as a nested dict {Device: {Property: Value}}."""
+        d: DefaultDict[str, dict[str, str]] = defaultdict(dict)
         for label, prop, value in self:
             d[label][prop] = value
         return dict(d)
-
-    def json(self) -> str:
-        """Dump config to JSON string."""
-        from json import dumps
-
-        return dumps(self.dict())
-
-    def yaml(self) -> str:
-        """Dump config to YAML string (requires PyYAML)."""
-        try:
-            from yaml import safe_dump
-        except ImportError:  # pragma: no cover
-            raise ImportError("Could not import yaml.  Please `pip install PyYAML`.")
-
-        return cast(str, safe_dump(self.dict()))
 
     @classmethod
     def from_configuration(cls, config: pymmcore.Configuration) -> Configuration:
@@ -187,3 +222,35 @@ class Configuration(pymmcore.Configuration):
 
     def __eq__(self, o: Any) -> bool:
         return o.dict() == self.dict() if isinstance(o, Configuration) else False
+
+
+# class PropertySetting(pymmcore.PropertySetting):
+#     """Encompasses a device label, property name, and property value"""
+
+#     # pymmcore API:
+#     # def getDeviceLabel(self) -> str:  # i.e. 'Camera'
+#     # def getKey(self) -> str:  # ie. 'Camera-Binning'
+#     # def getPropertyName(self) -> str:  # ie. 'Binning'
+#     # def getPropertyValue(self) -> str:  # ie. '1'
+#     # def getReadOnly(self) -> bool:
+#     # def getVerbose(self) -> str:  # ie. 'Camera:Binning=1'
+#     # def isEqualTo(self, ps: PropertySetting) -> bool:# devLabel, propName & value eq
+
+#     @classmethod
+#     def from_property_setting(cls, ps: pymmcore.PropertySetting) -> PropertySetting:
+#         label = ps.getDeviceLabel()
+#         prop = ps.getPropertyName()
+#         value = ps.getPropertyValue()
+#         readOnly = ps.getReadOnly()
+#         return cls(label, prop, value, readOnly)
+
+#     def __repr__(self) -> str:
+#         return f"<PropertySetting '{self}'>"
+
+#     def __str__(self) -> str:
+#         return self.getVerbose().replace(":=", "")
+
+#     def __iter__(self) -> Iterable[str]:
+#         yield self.getDeviceLabel()
+#         yield self.getPropertyName()
+#         yield self.getPropertyValue()

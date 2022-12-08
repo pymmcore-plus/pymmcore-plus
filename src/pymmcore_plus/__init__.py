@@ -9,6 +9,7 @@ from ._util import find_micromanager
 from .core import (
     ActionType,
     CMMCorePlus,
+    ConfigGroup,
     Configuration,
     Device,
     DeviceDetectionStatus,
@@ -29,6 +30,7 @@ __all__ = [
     "ActionType",
     "CMMCorePlus",
     "CMMCoreSignaler",
+    "ConfigGroup",
     "Configuration",
     "Device",
     "DeviceDetectionStatus",
@@ -43,6 +45,7 @@ __all__ = [
     "PropertyType",
     "RemoteMMCore",
     "server",
+    "__version__",
 ]
 
 

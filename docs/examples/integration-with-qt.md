@@ -4,37 +4,31 @@ For a complex Qt application based on `pymmcore-plus` check out [napari-microman
 
 `pymmcore-plus` is designed seamlessly integrate with Qt GUIs. It accomplishes this in two ways:
 
-1. {func}`~pymmcore_plus.CMMCorePlus.run_mda` runs in a thread in order to not block the event loop.
+1. [`pymmcore_plus.CMMCorePlus.run_mda`][] runs in a thread in order to not block the event loop.
 2. The `events` object will preferentially to use QSignals instead of of signals from the [psygnal](https://github.com/tlambert03/psygnal#psygnal) library. This helps keep things from crashing when working with callbacks in multiple threads.
 
-
-
-
 This example requires qtpy and an Qt backend installed in the env:
+
 ```bash
 pip install qtpy superqt Pyside2 # or pyqt5
 ```
-
 
 ## Avoiding blocking the Qt event loop
 
 If you make a blocking call on the thread running the Qt event loop then your GUI will become
 unresponsive. `pymmcore-plus` has two options to avoid this. The recommended way is to
-use threads to call {func}`~pymmcore_plus.CMMCorePlus.snapImage`, and let pymmcore-plus handle the threading when you use
-{func}`~pymmcore_plus.CMMCorePlus.run_mda`. If instead you want the interaction with the hardware to run in separate Python process
-then you can instad use {class}`~pymmcore_plus.RemoteMMCore`.
+use threads to call [`pymmcore_plus.CMMCorePlus.snapImage`][], and let pymmcore-plus handle the threading when you use
+[`pymmcore_plus.CMMCorePlus.run_mda`][]. If instead you want the interaction with the hardware to run in separate Python process
+then you can instad use `pymmcore_plus.RemoteMMCore`.
 
 This example will use the recommended process-local(threads) approach.
 
 The simple application will consist of a counter that increments so long as the event loop is not blocked, and two buttons to call the `snapImage` method. One button will call from a thread and the counter should continue, the other will blcok and will stop the counter.
 
-
 **Key takeaways:**
+
 1. Use `CMMCorePlus.instance()` to create the core object. This allows another script in the same process to use the same object.
 2. Use a thread for blocking operations like `snapImage`.
-
-
-
 
 ```python
 import sys

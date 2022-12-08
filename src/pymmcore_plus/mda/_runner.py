@@ -4,8 +4,8 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, cast
 
-from loguru import logger
 from psygnal import EmitLoopError
+from pymmcore_plus._logger import logger
 
 from ._protocol import PMDAEngine
 from .events import PMDASignaler, _get_auto_MDA_callback_class
@@ -15,7 +15,17 @@ if TYPE_CHECKING:
 
 
 class MDARunner:
-    """Object that Executes an MDA Sequence using an MDAEngine."""
+    """Object that executes a multi-dimensional experiment using an MDAEngine.
+
+    This object is available at [`CMMCorePlus.mda`][pymmcore_plus.CMMCorePlus.mda].
+
+    This is the main object that runs a multi-dimensional experiment; it does so by
+    driving an acquisition engine that implements the
+    [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol.  It emits signals at specific
+    times during the experiment (see
+    [`PMDASignaler`][pymmcore_plus.mda.events.PMDASignaler] for details on the signals
+    that are available to connect to and when they are emitted).
+    """
 
     def __init__(self) -> None:
         self._engine: PMDAEngine | None = None
@@ -30,7 +40,7 @@ class MDARunner:
         self._reset_timer()
 
     def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
-        """Set the MDAEngine to use for the MDA run."""
+        """Set the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] to use for the MDA run."""  # noqa: E501
         if not isinstance(engine, PMDAEngine):
             raise TypeError("Engine does not conform to the Engine protocol.")
 
@@ -46,19 +56,25 @@ class MDARunner:
 
     @property
     def engine(self) -> PMDAEngine | None:
-        """The MDAEngine that is currently being used."""
+        """The [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] that is currently being used."""  # noqa: E501
         return self._engine
 
     @property
     def events(self) -> PMDASignaler:
+        """Signals that are emitted during the MDA run.
+
+        See [`PMDASignaler`][pymmcore_plus.mda.PMDASignaler] for details on the
+        signals that are available to connect to.
+        """
         return self._events
 
     def is_running(self) -> bool:
         """Return True if an acquistion is currently underway.
 
         This will return True at any point between the emission of the
-        ``sequenceStarted`` and ``sequenceFinished`` signals, including when
-        the acquisition is currently paused.
+        [`sequenceStarted`][pymmcore_plus.mda.PMDASignaler.sequenceStarted] and
+        [`sequenceFinished`][pymmcore_plus.mda.PMDASignaler.sequenceFinished] signals,
+        including when the acquisition is currently paused.
 
         Returns
         -------
@@ -70,7 +86,7 @@ class MDARunner:
     def is_paused(self) -> bool:
         """Return True if the acquistion is currently paused.
 
-        Use ``toggle_pause`` to change the paused state.
+        Use `toggle_pause` to change the paused state.
 
         Returns
         -------
@@ -79,7 +95,7 @@ class MDARunner:
         """
         return self._paused
 
-    def cancel(self):
+    def cancel(self) -> None:
         """Cancel the currently running acquisition.
 
         This is a no-op if no acquisition is currently running.
@@ -90,29 +106,30 @@ class MDARunner:
         self._canceled = True
         self._paused_time = 0
 
-    def toggle_pause(self):
+    def toggle_pause(self) -> None:
         """Toggle the paused state of the current acquisition.
 
         To get whether the acquisition is currently paused use the
-        ``is_paused`` method. This method is a no-op if no acquistion is
-        currently underway.
+        [`is_paused`][pymmcore_plus.mda.MDARunner.is_paused] method. This method is a
+        no-op if no acquistion is currently underway.
         """
         if self.is_running():
             self._paused = not self._paused
             self._events.sequencePauseToggled.emit(self._paused)
 
     def run(self, sequence: MDASequence) -> None:
-        """
-        Run the multi-dimensional acquistion defined by `sequence`.
+        """Run the multi-dimensional acquistion defined by `sequence`.
 
         Most users should not use this directly as it will block further
-        execution. Instead use ``run_mda`` on CMMCorePlus which will run on
-        a thread.
+        execution. Instead, use the
+        [`CMMCorePlus.run_mda`][pymmcore_plus.CMMCorePlus.run_mda] method which will
+        run on a thread.
 
         Parameters
         ----------
         sequence : MDASequence
-            The sequence of events to run.
+            An instance of a `useq.MDASequence` object defining the sequence of events
+            to run.
         """
         try:
             self._prepare_to_run(sequence)
@@ -147,7 +164,7 @@ class MDARunner:
             raise e
         self._finish_run(sequence)
 
-    def _prepare_to_run(self, sequence: MDASequence):
+    def _prepare_to_run(self, sequence: MDASequence) -> None:
         """Set up for the MDA run.
 
         Parameters
@@ -169,18 +186,17 @@ class MDARunner:
         self._events.sequenceStarted.emit(sequence)
         self._reset_timer()
 
-    def _reset_timer(self):
+    def _reset_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
 
-    def _time_elapsed(self):
+    def _time_elapsed(self) -> float:
         return time.perf_counter() - self._t0
 
     def _check_canceled(self) -> bool:
-        """
-        Check if the cancel() method has been called and emit relevant signals.
+        """Return True if the cancel method has been called and emit relevant signals.
 
-        If cancelled this relies on the self._sequence being the current sequence
-        in order to emit a sequenceCanceled signal.
+        If cancelled, this relies on the `self._sequence` being the current sequence
+        in order to emit a `sequenceCanceled` signal.
 
         Returns
         -------

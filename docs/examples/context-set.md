@@ -1,16 +1,14 @@
 # Set as a Context
 
-You may want to temporarily set something on core such as  `core.setAutoShutter(False)` when writing an MDA Engine. For this case
-you can use the convenience method {func}`~pymmcore_plus.CMMCorePlus.setContext`.
+You may want to temporarily set something on core such as
+`core.setAutoShutter(False)` when writing an MDA Engine. For this case you can
+use the convenience method
+[`CMMCorePlus.setContext`][pymmcore_plus.CMMCorePlus.setContext].
 
-```python
-from pymmcore_plus import CMMCorePlus
-core = CMMCorePlus.instance()
-with core.setContext(autoShutter = False):
-    assert not core.getAutoShutter()
-    # do other stuff
-
-assert core.getAutoShutter()
+```python linenums="1" title="set_as_context.py"
+--8<-- "examples/set_as_context.py"
 ```
 
-This will work for the `set` methods on the core such as `setAutoShutter`, `setShutterOpen`, ...
+This will work for the `set` methods on the core such as
+[`setAutoShutter`][pymmcore_plus.CMMCorePlus.setAutoShutter],
+[`setShutterOpen`][pymmcore_plus.CMMCorePlus.setShutterOpen], ...

@@ -1,32 +1,18 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, Optional, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, TypeVar
 
-from psygnal._signal import _normalize_slot
+from ._norm_slot import denormalize_slot, normalize_slot
+from ._protocol import PCoreSignaler
 
 if TYPE_CHECKING:
     from psygnal._signal import NormedCallback
 
-    PropKey = Tuple[str, Optional[str], NormedCallback]
+    PropKey = Tuple[str, str | None, NormedCallback]
     PropKeyDict = Dict[PropKey, Callable]
 
-from ._protocol import PCoreSignaler
 
 _C = TypeVar("_C", bound=Callable[..., Any])
-
-
-def _denormalize_slot(slot: NormedCallback) -> Optional[Callable]:
-    if not isinstance(slot, tuple):
-        return slot
-
-    _ref, name, method = slot
-    obj = _ref()
-    if obj is None:
-        return None
-    if method is not None:
-        return method
-    _cb = getattr(obj, name, None)
-    return None if _cb is None else _cb
 
 
 class _PropertySignal:
@@ -34,7 +20,7 @@ class _PropertySignal:
         self,
         core_events: _DevicePropertyEventMixin,
         device: str,
-        property: Optional[str] = None,
+        property: str | None = None,
     ) -> None:
         self._events = core_events
         self._device = device
@@ -59,13 +45,13 @@ class _PropertySignal:
         callback
             the callback is returned for use as a decorator.
         """
-        slot = _normalize_slot(callback)
+        slot = normalize_slot(callback)
         key = (self._device, self._property, slot)
 
-        def _wrapper(dev, prop, new_value):
-            cb = _denormalize_slot(slot)
+        def _wrapper(dev: str, prop: str, new_value: Any) -> None:
+            cb = denormalize_slot(slot)
             if cb is None:
-                self._events._prop_callbacks.pop(key)
+                self._events._prop_callbacks.pop(key, None)
                 return
             if dev == self._device:
                 if self._property:
@@ -80,17 +66,21 @@ class _PropertySignal:
 
     def disconnect(self, callback: Callable) -> None:
         """Disconnect `callback` from this device and/or property."""
-        key = (self._device, self._property, _normalize_slot(callback))
-        if key not in self._events._prop_callbacks:
+        key = (self._device, self._property, normalize_slot(callback))
+        cb = self._events._prop_callbacks.pop(key, None)
+        if cb is None:
             raise ValueError("callback not connected")
-        self._events.propertyChanged.disconnect(self._events._prop_callbacks.pop(key))
+        self._events.propertyChanged.disconnect(cb)
+
+    def emit(self, *args: Any) -> Any:
+        raise NotImplementedError("emit not implemented for _PropertySignal")
 
 
 class _DevicePropertyEventMixin(PCoreSignaler):
     _prop_callbacks: PropKeyDict = {}
 
     def devicePropertyChanged(
-        self, device: str, property: Optional[str] = None
+        self, device: str, property: str | None = None
     ) -> _PropertySignal:
         """Return object to connect/disconnect to device/property-specific changes.
 

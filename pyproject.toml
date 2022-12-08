@@ -27,6 +27,7 @@ classifiers = [
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
     "Topic :: System :: Hardware",
     "Topic :: System :: Hardware :: Hardware Drivers",
     "Topic :: Utilities",
@@ -34,10 +35,13 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
+    "appdirs",
     "loguru",
     "numpy",
     "psygnal>=0.4.2",
     "pymmcore>=10.1.1.70.4",
+    "typer",
+    "rich",
     "typing-extensions",
     "useq-schema",
     "wrapt",
@@ -46,17 +50,13 @@ dependencies = [
 # extras
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
-
 docs = [
-    "Sphinx>=1.5",
-    "furo",
-    "myst-nb",
-    "sphinx-copybutton",
-    "sphinx-panels",
-    "sphinx-togglebutton",
+    "mkdocs >=1.4",
+    "mkdocs-material",
+    "mkdocstrings-python",
 ]
 remote = ["Pyro5>=5.10", "msgpack", "psutil"]
-testing = ["PySide2", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
+testing = ["PyQt5", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
 dev = [
     "black",
     "ipython",
@@ -68,26 +68,22 @@ dev = [
     "rich",
     "ruff",
     "types-psutil",
-    "types-PyYAML",
 ]
 
 [project.urls]
 Source = "https://github.com/pymmcore-plus/pymmcore-plus"
 Tracker = "https://github.com/pymmcore-plus/pymmcore-plus/issues"
-Documentation = "https://pymmcore-plus.readthedocs.io/"
+Documentation = "https://pymmcore-plus.github.io/pymmcore-plus"
 
-# same as console_scripts entry point
-# [project.scripts]
-# spam-cli = "spam:main_cli"
-
-# Entry points
-# https://peps.python.org/pep-0621/#entry-points
-# [project.entry-points."spam.magical"]
-# tomatoes = "spam:main_tomatoes"
+[project.scripts]
+mmcore = "pymmcore_plus._cli:main"
 
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
 source = "vcs"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.hooks.vcs]
 version-file = "src/pymmcore_plus/_version.py"
@@ -113,7 +109,6 @@ extend-select = [
     "B",    # flake8-bugbear
     "A001", # flake8-builtins
     "RUF",  # ruff-specific rules
-    "M001", # Unused noqa directive
 ]
 extend-ignore = [
     "D100", # Missing docstring in public module
@@ -124,11 +119,13 @@ extend-ignore = [
     "D400", # First line should end with a period
     "D413", # Missing blank line after last section
     "D416", # Section name should end with a colon
+    "C901", # Function is too complex
 ]
 
 [tool.ruff.per-file-ignores]
 "tests/*.py" = ["D"]
 "examples/*.py" = ["D"]
+"_cli.py" = ["B008"]
 "_mmcore_plus*.py" = ["D4"]
 "docs/*.py" = ["A", "D"]
 
@@ -141,10 +138,9 @@ filterwarnings = ["error"]
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
 files = "src/**/*/*.py"
+strict = true
 disallow_any_generics = false
 disallow_subclassing_any = false
-disallow_untyped_calls = false
-disallow_untyped_defs = false
 show_error_codes = true
 pretty = true
 
@@ -170,8 +166,7 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 [tool.coverage.run]
-omit = ["*_tests*", "*/install.py"]
-
+source = ['src/pymmcore_plus']
 
 # https://github.com/mgedmin/check-manifest#configuration
 [tool.check-manifest]

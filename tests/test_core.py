@@ -1,4 +1,3 @@
-import json
 import os
 import re
 from pathlib import Path
@@ -274,7 +273,7 @@ def test_detect_device(core: CMMCorePlus):
 def test_metadata(core: CMMCorePlus):
     core.startContinuousSequenceAcquisition(10)
     core.stopSequenceAcquisition()
-    image, md = core.getLastImageMD()
+    image, md = core.getLastImageAndMD()
     assert isinstance(md, Metadata)
     assert md["Height"] == "512"
     assert "ImageNumber" in md.keys()
@@ -306,15 +305,18 @@ def test_new_metadata():
     assert isinstance(md, pymmcore.Metadata)
 
 
-def test_md_overrides(core: CMMCorePlus):
+def test_md_(core: CMMCorePlus):
     core.startContinuousSequenceAcquisition(10)
     core.stopSequenceAcquisition()
 
-    image, md = core.getNBeforeLastImageMD(0)
-    assert isinstance(md, Metadata)
+    image, md = core.getNBeforeLastImageAndMD(0)
+    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
 
-    image, md = core.popNextImageMD()
-    assert isinstance(md, Metadata)
+    image, md = core.getLastImageAndMD()
+    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
+
+    image, md = core.popNextImageAndMD()
+    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
 
 
 def test_configuration(core: CMMCorePlus):
@@ -350,15 +352,7 @@ def test_config_create():
     assert list(cfg1) == list(cfg2) == list(cfg3) == aslist
     assert cfg1 == cfg2 == cfg3
 
-    assert cfg1.json() == json.dumps(_input)
     assert cfg1.html()
-
-
-def test_config_yaml():
-    _input = {"a": {"a0": "0", "a1": "1"}, "b": {"b0": "10", "b1": "11"}}
-    cfg1 = Configuration.create(_input)
-    yaml = pytest.importorskip("yaml")
-    assert cfg1.yaml() == yaml.safe_dump(_input)
 
 
 def test_property_schema(core: CMMCorePlus):
@@ -437,9 +431,9 @@ def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
 
     def cb(*args, **kwargs):
         nonlocal got_lock
-        got_lock = core.lock.acquire(timeout=0.1)
+        got_lock = core._lock.acquire(timeout=0.1)
         if got_lock:
-            core.lock.release()
+            core._lock.release()
 
     core.events.XYStagePositionChanged.connect(cb)
 

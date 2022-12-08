@@ -1,6 +1,14 @@
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+from ..._util import _qt_app_is_running
 from ._protocol import PMDASignaler
 from ._psygnal import MDASignaler
-from ..._util import _qt_app_is_running
+
+if TYPE_CHECKING:
+    from ._qsignals import QMDASignaler
+
 
 __all__ = [
     "PMDASignaler",
@@ -10,7 +18,9 @@ __all__ = [
 ]
 
 
-def _get_auto_MDA_callback_class(default=MDASignaler):
+def _get_auto_MDA_callback_class(
+    default: type[PMDASignaler] = MDASignaler,  # type: ignore
+) -> type[PMDASignaler]:
     if _qt_app_is_running():
         from ._qsignals import QMDASignaler
 
@@ -19,11 +29,11 @@ def _get_auto_MDA_callback_class(default=MDASignaler):
     return default
 
 
-def __dir__():
+def __dir__() -> list[str]:
     return list(globals()) + ["QMDASignaler"]
 
 
-def __getattr__(name: str):
+def __getattr__(name: str) -> object:
     if name == "QMDASignaler":
         try:
             from ._qsignals import QMDASignaler

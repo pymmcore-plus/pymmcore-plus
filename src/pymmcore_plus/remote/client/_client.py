@@ -9,8 +9,8 @@ from typing import Optional
 from Pyro5 import api, core, errors
 from typing_extensions import Protocol
 
-from .. import server
 from ..._logger import logger
+from .. import server
 from .._serialize import register_serializers
 
 
