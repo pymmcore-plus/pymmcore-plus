@@ -1561,7 +1561,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def setChannelGroup(self, channelGroup: str) -> None:
         """Specifies the group determining the channel selection.
-        
+
         ...and send a propertyChanged signal.
         """
         super().setChannelGroup(channelGroup)
