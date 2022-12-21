@@ -1562,10 +1562,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setChannelGroup(self, channelGroup: str) -> None:
         """Specifies the group determining the channel selection.
         
-        ...and send a propertyChanged signal.
+        ...and send a channelGroupChanged signal.
         """
-        super().setChannelGroup(channelGroup)
-        self.events.propertyChanged.emit("Core", "ChannelGroup", channelGroup)
+        if self.getChannelGroup() != channelGroup:
+            super().setChannelGroup(channelGroup)
+            self.events.channelGroupChanged.emit(channelGroup)
 
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.

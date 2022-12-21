@@ -285,7 +285,8 @@ def test_pixel_changed_event(core: CMMCorePlus):
 
 def test_set_channelgroup(core: CMMCorePlus):
     mock = Mock()
-    core.events.propertyChanged.connect(mock)
+    core.events.channelGroupChanged.connect(mock)
 
     core.setChannelGroup("Camera")
-    mock.assert_has_calls([call("Core", "ChannelGroup", "Camera")])
+    assert core.getChannelGroup() == "Camera"
+    mock.assert_has_calls([call("Camera")])
