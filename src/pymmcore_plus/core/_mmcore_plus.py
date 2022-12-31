@@ -1559,6 +1559,15 @@ class CMMCorePlus(pymmcore.CMMCore):
             args = (super().getCameraDevice(),) + args
         self.events.roiSet.emit(*args)
 
+    def setChannelGroup(self, channelGroup: str) -> None:
+        """Specifies the group determining the channel selection.
+
+        ...and send a channelGroupChanged signal.
+        """
+        if self.getChannelGroup() != channelGroup:
+            super().setChannelGroup(channelGroup)
+            self.events.channelGroupChanged.emit(channelGroup)
+
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.
 
