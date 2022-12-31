@@ -282,3 +282,12 @@ def test_pixel_changed_event(core: CMMCorePlus):
     core.setPixelSizeUm("test", 6.5)
     mock.assert_has_calls([call(6.5)])
     assert core.getPixelSizeUmByID("test") == 6.5
+
+
+def test_set_channelgroup(core: CMMCorePlus):
+    mock = Mock()
+    core.events.channelGroupChanged.connect(mock)
+
+    core.setChannelGroup("Camera")
+    assert core.getChannelGroup() == "Camera"
+    mock.assert_has_calls([call("Camera")])
