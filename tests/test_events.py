@@ -291,3 +291,18 @@ def test_set_channelgroup(core: CMMCorePlus):
     core.setChannelGroup("Camera")
     assert core.getChannelGroup() == "Camera"
     mock.assert_has_calls([call("Camera")])
+
+
+def test_set_focus_device(core: CMMCorePlus):
+    mock = Mock()
+    core.events.propertyChanged.connect(mock)
+
+    core.setFocusDevice("")
+    assert not core.getFocusDevice()
+    mock.assert_has_calls([call("Core", "Focus", "")])
+
+    core.setFocusDevice("Z")
+    assert core.getFocusDevice() == "Z"
+    mock.assert_has_calls([call("Core", "Focus", "Z")])
+
+
