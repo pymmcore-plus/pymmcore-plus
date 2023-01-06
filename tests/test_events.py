@@ -304,5 +304,3 @@ def test_set_focus_device(core: CMMCorePlus):
     core.setFocusDevice("Z")
     assert core.getFocusDevice() == "Z"
     mock.assert_has_calls([call("Core", "Focus", "Z")])
-
-
