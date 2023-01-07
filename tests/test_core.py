@@ -73,7 +73,6 @@ def test_load_system_config(core: CMMCorePlus):
         "Z",
         "Path",
         "XY",
-
         "Shutter",
         "Autofocus",
         "Core",
