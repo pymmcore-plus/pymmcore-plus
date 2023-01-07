@@ -1570,8 +1570,9 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def setFocusDevice(self, focusLabel: str) -> None:
         """Set the current Focus Device and emit a `propertyChanged` signal."""
-        super().setFocusDevice(focusLabel)
-        self.events.propertyChanged.emit("Core", "Focus", focusLabel)
+        if self.getFocusDevice() != focusLabel:
+            super().setFocusDevice(focusLabel)
+            self.events.propertyChanged.emit("Core", "Focus", focusLabel)
 
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.
