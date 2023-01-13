@@ -1,4 +1,4 @@
-from typing import Any, Callable, Optional, Protocol, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, Union, runtime_checkable
 
 
 @runtime_checkable
@@ -17,6 +17,17 @@ class PSignalInstance(Protocol):
 
     def emit(self, *args: Any) -> Any:
         ...
+
+
+@runtime_checkable
+class PSignalDescriptor(Protocol):
+    """Descriptor that returns a signal instance."""
+
+    def __get__(self, instance: Optional[Any], owner: Any) -> PSignalInstance:
+        ...
+
+
+PSignal = Union[PSignalDescriptor, PSignalInstance]
 
 
 @runtime_checkable
@@ -76,83 +87,83 @@ class PCoreSignaler(Protocol):
     """
 
     # native MMCore callback events
-    propertiesChanged: PSignalInstance
+    propertiesChanged: PSignal
     """Emits with no arguments when properties have changed."""
-    propertyChanged: PSignalInstance
+    propertyChanged: PSignal
     """Emits `(name: str, : propName: str, propValue: str)` when a specific property has changed."""  # noqa: E501
-    channelGroupChanged: PSignalInstance
+    channelGroupChanged: PSignal
     """Emits `(newChannelGroupName: str)` when a channel group has changed."""
-    configGroupChanged: PSignalInstance
+    configGroupChanged: PSignal
     """Emits `(groupName: str, newConfigName: str)` when a config group has changed."""
-    systemConfigurationLoaded: PSignalInstance
+    systemConfigurationLoaded: PSignal
     """Emits with no arguments when the system configuration has been loaded."""
-    pixelSizeChanged: PSignalInstance
+    pixelSizeChanged: PSignal
     """Emits `(newPixelSizeUm: float)` when the pixel size has changed."""
-    pixelSizeAffineChanged: PSignalInstance
+    pixelSizeAffineChanged: PSignal
     """Emits `(float, float, float, float, float, float)` when the pixel size affine has changed."""  # noqa: E501
-    stagePositionChanged: PSignalInstance
+    stagePositionChanged: PSignal
     """Emits `(name: str, pos: float)` when a stage position has changed."""
-    XYStagePositionChanged: PSignalInstance
+    XYStagePositionChanged: PSignal
     """Emits `(name: str, xpos: float, ypos: float)` when an XY stage position has changed."""  # noqa: E501
-    xYStagePositionChanged: PSignalInstance  # alias
-    exposureChanged: PSignalInstance
+    xYStagePositionChanged: PSignal  # alias
+    exposureChanged: PSignal
     """Emits `(name: str, newExposure: float)` when an exposure has changed."""
-    SLMExposureChanged: PSignalInstance
+    SLMExposureChanged: PSignal
     """Emits `(name: str, newExposure: float)` when the exposure of the SLM device changes."""  # noqa: E501
-    sLMExposureChanged: PSignalInstance  # alias
+    sLMExposureChanged: PSignal  # alias
 
     # added for CMMCorePlus
-    configSet: PSignalInstance
+    configSet: PSignal
     """Emits `(str, str)` when a config has been set.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    imageSnapped: PSignalInstance
+    imageSnapped: PSignal
     """Emits `(np.ndarray)` whenever snap is called.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    mdaEngineRegistered: PSignalInstance
+    mdaEngineRegistered: PSignal
     """Emits `(MDAEngine, MDAEngine)` when an MDAEngine is registered.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
 
-    continuousSequenceAcquisitionStarted: PSignalInstance
+    continuousSequenceAcquisitionStarted: PSignal
     """Emits with no arguments when continuous sequence acquisition is started.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    sequenceAcquisitionStarted: PSignalInstance
+    sequenceAcquisitionStarted: PSignal
     """Emits `(str, int, float, bool)` when sequence acquisition is started.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    sequenceAcquisitionStopped: PSignalInstance
+    sequenceAcquisitionStopped: PSignal
     """Emits `(str)` when sequence acquisition is stopped.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    autoShutterSet: PSignalInstance
+    autoShutterSet: PSignal
     """Emits `(bool)` when the auto shutter setting is changed.
 
     """
-    configGroupDeleted: PSignalInstance
+    configGroupDeleted: PSignal
     """Emits `(str)` when a config group is deleted.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    configDeleted: PSignalInstance
+    configDeleted: PSignal
     """Emits `(str, str)` when a config is deleted.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    configDefined: PSignalInstance
+    configDefined: PSignal
     """Emits `(str, str, str, str, str)` when a config is defined.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    roiSet: PSignalInstance
+    roiSet: PSignal
     """Emits `(str, int, int, int, int)` when an ROI is set.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.

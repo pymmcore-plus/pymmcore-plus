@@ -101,8 +101,8 @@ extend-select = [
     "E",    # style errors
     "F",    # flakes
     "D",    # pydocstyle
-    "I001", # isort
-    "U",    # pyupgrade
+    "I",    # isort
+    "UP",   # pyupgrade
     # "N",  # pep8-naming
     # "S",  # bandit
     "C",    # flake8-comprehensions
@@ -112,6 +112,7 @@ extend-select = [
 ]
 extend-ignore = [
     "D100", # Missing docstring in public module
+    "D104", # Missing docstring in public package
     "D107", # Missing docstring in __init__
     "D203", # 1 blank line required before class docstring
     "D212", # Multi-line docstring summary should start at the first line
