@@ -1569,6 +1569,12 @@ class CMMCorePlus(pymmcore.CMMCore):
             super().setChannelGroup(channelGroup)
             self.events.channelGroupChanged.emit(channelGroup)
 
+    def setFocusDevice(self, focusLabel: str) -> None:
+        """Set the current Focus Device and emit a `propertyChanged` signal."""
+        if self.getFocusDevice() != focusLabel:
+            super().setFocusDevice(focusLabel)
+            self.events.propertyChanged.emit("Core", "Focus", focusLabel)
+
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.
 
