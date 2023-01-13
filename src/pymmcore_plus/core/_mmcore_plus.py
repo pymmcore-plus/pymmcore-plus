@@ -24,8 +24,9 @@ from typing import (
 
 import pymmcore
 from psygnal import SignalInstance
-from pymmcore_plus.core.events import PCoreSignaler
 from typing_extensions import Literal
+
+from pymmcore_plus.core.events import PCoreSignaler
 
 from .._logger import logger
 from .._util import find_micromanager
