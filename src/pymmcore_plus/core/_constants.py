@@ -41,7 +41,7 @@ class DeviceType(IntEnum):
     Galvo = GalvoDevice
 
     def __str__(self) -> str:
-        return self.name.replace("Type", "").replace("Device", "")
+        return str(self.name).replace("Type", "").replace("Device", "")
 
 
 class PropertyType(IntEnum):

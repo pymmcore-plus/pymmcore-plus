@@ -1,3 +1,4 @@
+from typing import get_args
 from unittest.mock import Mock, call
 
 import pytest
@@ -19,7 +20,7 @@ def test_events_protocols(cls):
         )
     for attr, value in PCoreSignaler.__annotations__.items():
         m = getattr(obj, attr)
-        if not isinstance(m, value):
+        if not isinstance(m, get_args(value) or value):
             raise AssertionError(
                 f"'{name}.{attr}' expected type {value.__name__!r}, got {type(m)}"
             )
