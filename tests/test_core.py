@@ -43,7 +43,7 @@ def test_core(core: CMMCorePlus):
     assert not core.mda._paused
 
     # because the fixture loadsSystemConfig 'demo'
-    assert len(core.getLoadedDevices()) == 12
+    assert len(core.getLoadedDevices()) == 14
 
     assert "CMMCorePlus" in repr(core)
 
@@ -389,7 +389,7 @@ def test_guess_channel_group(core: CMMCorePlus):
     assert core.getOrGuessChannelGroup() == ["Channel"]
 
     with patch.object(core, "getChannelGroup", return_value=""):
-        assert core.getOrGuessChannelGroup() == ["Channel"]
+        assert core.getOrGuessChannelGroup() == ["Channel", "Channel-Multiband"]
 
         with pytest.raises(TypeError):
             core.channelGroup_pattern = 4
@@ -408,7 +408,7 @@ def test_guess_channel_group(core: CMMCorePlus):
         # assign new using a pre-compile pattern
         core.channelGroup_pattern = re.compile("Channel")
         chan_group = core.getOrGuessChannelGroup()
-        assert chan_group == ["Channel"]
+        assert chan_group == ["Channel", "Channel-Multiband"]
 
 
 @pytest.mark.skipif(
