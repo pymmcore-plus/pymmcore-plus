@@ -4,12 +4,13 @@ from contextlib import suppress
 from pathlib import Path
 from typing import List, Optional, cast
 
-import pymmcore_plus
 import typer
+from rich import print
+
+import pymmcore_plus
 from pymmcore_plus._logger import set_log_level
 from pymmcore_plus._util import USER_DATA_MM_PATH
 from pymmcore_plus.install import PLATFORM
-from rich import print
 
 app = typer.Typer(no_args_is_help=True, add_completion=False)
 

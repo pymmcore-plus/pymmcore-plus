@@ -6,7 +6,7 @@ from ._norm_slot import denormalize_slot, normalize_slot
 from ._protocol import PCoreSignaler
 
 if TYPE_CHECKING:
-    from psygnal._signal import NormedCallback
+    from ._norm_slot import NormedCallback
 
     PropKey = Tuple[str, str | None, NormedCallback]
     PropKeyDict = Dict[PropKey, Callable]

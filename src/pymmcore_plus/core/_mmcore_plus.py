@@ -24,8 +24,9 @@ from typing import (
 
 import pymmcore
 from psygnal import SignalInstance
-from pymmcore_plus.core.events import PCoreSignaler
 from typing_extensions import Literal
+
+from pymmcore_plus.core.events import PCoreSignaler
 
 from .._logger import logger
 from .._util import find_micromanager
@@ -1567,6 +1568,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         if self.getChannelGroup() != channelGroup:
             super().setChannelGroup(channelGroup)
             self.events.channelGroupChanged.emit(channelGroup)
+
+    def setFocusDevice(self, focusLabel: str) -> None:
+        """Set the current Focus Device and emit a `propertyChanged` signal."""
+        if self.getFocusDevice() != focusLabel:
+            super().setFocusDevice(focusLabel)
+            self.events.propertyChanged.emit("Core", "Focus", focusLabel)
 
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.
