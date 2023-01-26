@@ -1622,7 +1622,10 @@ class CMMCorePlus(pymmcore.CMMCore):
                 elif attr == "PixelSizeUm":
                     state[attr] = self.getPixelSizeUm(True)  # True==cached
                 else:
-                    state[attr] = getattr(self, f"get{attr}")()
+                    try:
+                        state[attr] = getattr(self, f"get{attr}")()
+                    except RuntimeError:
+                        continue
         return cast("StateDict", state)
 
     @contextmanager
