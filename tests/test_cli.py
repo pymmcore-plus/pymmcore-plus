@@ -130,6 +130,7 @@ ARGS: list[dict[str, dict | str]] = [
 ]
 
 
+@pytest.mark.filterwarnings("ignore:.*got unknown keyword arguments:UserWarning:useq")
 @pytest.mark.parametrize("args", ARGS)
 @pytest.mark.parametrize("with_file", (True, False))
 def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -> None:
