@@ -57,7 +57,6 @@ class DeviceProperty:
     def __init__(
         self, device_label: str, property_name: str, mmcore: CMMCorePlus
     ) -> None:
-
         self.device = device_label
         self.name = property_name
         self._mmc = mmcore

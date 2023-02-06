@@ -4,10 +4,9 @@ import subprocess
 import sys
 import threading
 import time
-from typing import Optional
+from typing import Optional, Protocol
 
 from Pyro5 import api, core, errors
-from typing_extensions import Protocol
 
 from ..._logger import logger
 from .. import server
