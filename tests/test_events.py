@@ -121,7 +121,6 @@ def test_device_property_events(core: CMMCorePlus):
 
 
 def test_sequence_acquisition_events(core: CMMCorePlus):
-
     mock1 = Mock()
     mock2 = Mock()
     mock3 = Mock()

@@ -135,7 +135,7 @@ class ConfigGroup(MutableMapping[str, Configuration]):
         if not presets:
             return  # pragma: no cover
 
-        for (dev, prop, _) in self._mmc.getConfigData(self._name, presets[0]):
+        for dev, prop, _ in self._mmc.getConfigData(self._name, presets[0]):
             yield DeviceProperty(dev, prop, self._mmc)
 
     @property

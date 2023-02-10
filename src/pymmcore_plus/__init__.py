@@ -50,7 +50,7 @@ __all__ = [
 
 
 def __dir__() -> List[str]:
-    return list(globals()) + ["RemoteMMCore", "server"]
+    return [*list(globals()), "RemoteMMCore", "server"]
 
 
 def __getattr__(name: str) -> Any:
