@@ -100,7 +100,9 @@ class DeviceProperty:
         if self.isReadOnly():
             import warnings
 
-            warnings.warn(f"'{self.device}::{self.name}' is a read-only property.")
+            warnings.warn(
+                f"'{self.device}::{self.name}' is a read-only property.", stacklevel=2
+            )
         try:
             self._mmc.setProperty(self.device, self.name, val)
         except RuntimeError as e:
