@@ -83,7 +83,6 @@ def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot: "QtBot"):
     if not isinstance(core.events, QObject):
         pytest.skip(reason="Skip cb exceptions on psygnal.")
 
-
     @core.events.propertyChanged.connect
     def _raze():
         raise ValueError("Boom")
