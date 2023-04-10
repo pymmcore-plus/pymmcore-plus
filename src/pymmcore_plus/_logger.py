@@ -9,13 +9,13 @@ __all__ = ["logger"]
 if TYPE_CHECKING:
     from loguru import logger
 else:
-    from loguru._logger import Core, Logger
     from loguru import __version__
+    from loguru._logger import Core, Logger
 
-    PATCHERS = {'patchers': []}
+    PATCHERS = {"patchers": []}
     with contextlib.suppress(Exception):
         if tuple(int(x) for x in __version__.split("."))[:2] < (0, 7):
-            PATCHERS = {'patcher': None}
+            PATCHERS = {"patcher": None}
 
     # avoid using the global loguru logger in case other packages are using it.
     logger = Logger(
