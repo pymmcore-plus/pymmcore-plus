@@ -12,7 +12,7 @@ else:
     from loguru._logger import Core, Logger
     from loguru import __version__
 
-    PATCHERS = {'patchers': None}
+    PATCHERS = {'patchers': []}
     with contextlib.suppress(Exception):
         if tuple(int(x) for x in __version__.split("."))[:2] < (0, 7):
             PATCHERS = {'patcher': None}
