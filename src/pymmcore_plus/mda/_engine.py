@@ -47,6 +47,7 @@ class MDAEngine(PMDAEngine):
         if event.z_pos is not None:
             z_device = event.z_device
             if event.z_is_autofocus:
+                self._mmc.setPosition(z_device or self._mmc.getFocusDevice(), event.z_pos)
                 self._mmc.fullFocus()
                 z_pos = self._mmc.getPosition(event.z_device if event.z_device else self._mmc.getFocusDevice())
                 self._mmc.setPosition(z_device or self._mmc.getFocusDevice(), z_pos)
