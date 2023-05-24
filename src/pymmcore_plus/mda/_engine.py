@@ -41,7 +41,8 @@ class MDAEngine(PMDAEngine):
             The event to use for the Hardware config
         """
         
-        #TODO: differentiate between relative and absolute zplan 
+        #TODO: differentiate between relative and absolute zplan\
+        # autofocus has to go in the mid slice?
 
         print('______________')
         if event.x_pos is not None or event.y_pos is not None:
@@ -50,15 +51,19 @@ class MDAEngine(PMDAEngine):
             self._mmc.setXYPosition(x, y)
         if event.z_pos is not None:
             z_device = event.z_device or self._mmc.getFocusDevice()
-            if event.use_autofocus_device:
+
+            if event.sequence.z_plan:
                 self._mmc.setPosition(z_device, event.z_pos)
-                print('pos', event.z_pos)
-                self._mmc.fullFocus()
-                z_pos = self._mmc.getPosition(z_device)
-                print('pos after autofocus', z_pos)
-                self._mmc.setPosition(z_device, z_pos)
             else:
-                self._mmc.setPosition(z_device, event.z_pos)
+                if event.use_autofocus_device:
+                    self._mmc.setPosition(z_device, event.z_pos)
+                    print('pos', event.z_pos)
+                    self._mmc.fullFocus()
+                    z_pos = self._mmc.getPosition(z_device)
+                    print('pos after autofocus', z_pos)
+                    self._mmc.setPosition(z_device, z_pos)
+                else:
+                    self._mmc.setPosition(z_device, event.z_pos)
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
         if event.exposure is not None:
