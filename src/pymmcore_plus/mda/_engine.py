@@ -40,6 +40,9 @@ class MDAEngine(PMDAEngine):
         event : MDAEvent
             The event to use for the Hardware config
         """
+        
+        #TODO: differentiate between relative and absolute zplan 
+
         print('______________')
         if event.x_pos is not None or event.y_pos is not None:
             x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
@@ -75,11 +78,6 @@ class MDAEngine(PMDAEngine):
         #     self._mmc.setExposure(event.exposure)
 
         # self._mmc.waitForSystem()
-        MDASequence(
-            channels=[{'config':'GFP', 'group':'Channel', 'exposure':100.01}],
-            stage_positions=[{'x':-72816.1, 'y':36313.64, 'z':4388.90}],
-            # stage_positions=[{'x':-72816.1, 'y':36313.64, 'z':173.35, 'z_device':'TIPFSOffset', 'z_is_autofocus':True, 'name':'Pos000', 'sequence':None}],
-            )
 
     def exec_event(self, event: MDAEvent) -> Any:
         """Execute an individual event and return the image data."""
