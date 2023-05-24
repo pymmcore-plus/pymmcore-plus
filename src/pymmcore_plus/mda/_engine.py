@@ -40,19 +40,22 @@ class MDAEngine(PMDAEngine):
         event : MDAEvent
             The event to use for the Hardware config
         """
+        print('______________')
         if event.x_pos is not None or event.y_pos is not None:
             x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
             y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
             self._mmc.setXYPosition(x, y)
         if event.z_pos is not None:
-            z_device = event.z_device
-            if event.z_is_autofocus:
-                self._mmc.setPosition(z_device or self._mmc.getFocusDevice(), event.z_pos)
+            z_device = event.z_device or self._mmc.getFocusDevice()
+            if event.use_autofocus_device:
+                self._mmc.setPosition(z_device, event.z_pos)
+                print('pos', event.z_pos)
                 self._mmc.fullFocus()
-                z_pos = self._mmc.getPosition(event.z_device if event.z_device else self._mmc.getFocusDevice())
-                self._mmc.setPosition(z_device or self._mmc.getFocusDevice(), z_pos)
+                z_pos = self._mmc.getPosition(z_device)
+                print('pos after autofocus', z_pos)
+                self._mmc.setPosition(z_device, z_pos)
             else:
-                self._mmc.setPosition(z_device or self._mmc.getFocusDevice(), event.z_pos)
+                self._mmc.setPosition(z_device, event.z_pos)
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
         if event.exposure is not None:
