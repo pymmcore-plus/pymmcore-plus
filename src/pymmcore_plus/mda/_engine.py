@@ -40,28 +40,18 @@ class MDAEngine(PMDAEngine):
         event : MDAEvent
             The event to use for the Hardware config
         """
-        # TODO:
-        # - if len(event.sequence.positions) == 1, sequence.z_plan is relative and autofocus is engaged:
-        #     - calculate z start from current position
-
-        # if only 1 position, and z_plan is relative, and autofocus is engaged,
-        # calculate z from current position
-        if (
-            len(event.sequence.stage_positions) == 1
-            and not event.z_is_autofocus
-            and not isinstance(event.sequence.z_plan, NoZ())
-            and self._mmc.isContinuousFocusLocked()
-        ):
-            z_pos = self._mmc.getPosition(event.z_device or self._mmc.getFocusDevice())
-        else:
-            z_pos = event.z_pos
-
         if event.x_pos is not None or event.y_pos is not None:
             x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
             y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
             self._mmc.setXYPosition(x, y)
-        if z_pos is not None:
-            self._mmc.setZPosition(z_pos)
+        if event.z_pos is not None:
+            z_device = event.z_device
+            if event.z_is_autofocus:
+                self._mmc.fullFocus()
+                z_pos = self._mmc.getPosition(event.z_device if event.z_device else self._mmc.getFocusDevice())
+                self._mmc.setPosition(z_device or self._mmc.getFocusDevice())
+            else:
+                self._mmc.setPosition(z_device or self._mmc.getFocusDevice())
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
         if event.exposure is not None:
@@ -81,6 +71,11 @@ class MDAEngine(PMDAEngine):
         #     self._mmc.setExposure(event.exposure)
 
         # self._mmc.waitForSystem()
+        MDASequence(
+            channels=[{'config':'GFP', 'group':'Channel', 'exposure':100.01}],
+            stage_positions=[{'x':-72816.1, 'y':36313.64, 'z':4388.90}],
+            # stage_positions=[{'x':-72816.1, 'y':36313.64, 'z':173.35, 'z_device':'TIPFSOffset', 'z_is_autofocus':True, 'name':'Pos000', 'sequence':None}],
+            )
 
     def exec_event(self, event: MDAEvent) -> Any:
         """Execute an individual event and return the image data."""
