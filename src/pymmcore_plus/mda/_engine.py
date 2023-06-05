@@ -49,8 +49,6 @@ class MDAEngine(PMDAEngine):
             self._mmc.setPosition(z_device, event.z_pos)
             if event.is_autofocus_device:
                 self._mmc.fullFocus()
-                # TO BE TESTED, maybe better to use:
-                # self._mmc.enableContinuousFocus(True) or similar
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
         if event.exposure is not None:
