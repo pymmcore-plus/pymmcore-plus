@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import Any, DefaultDict, Iterable, Iterator, Tuple, overload
+from typing import Any, Iterable, Iterator, Tuple, overload
 
 import pymmcore
 from typing_extensions import TypeAlias
@@ -169,7 +169,7 @@ class Configuration(pymmcore.Configuration):
 
     def dict(self) -> dict[str, dict[str, str]]:
         """Return config as a nested dict {Device: {Property: Value}}."""
-        d: DefaultDict[str, dict[str, str]] = defaultdict(dict)
+        d: defaultdict[str, dict[str, str]] = defaultdict(dict)
         for label, prop, value in self:
             d[label][prop] = value
         return dict(d)
