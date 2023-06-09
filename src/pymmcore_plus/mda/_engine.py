@@ -22,6 +22,8 @@ class MDAEngine(PMDAEngine):
     def __init__(self, mmc: CMMCorePlus) -> None:
         self._mmc = mmc
 
+        self.z_start = 0  # used for one_shot autofocus
+
     def setup_sequence(self, sequence: MDASequence) -> None:
         """Setup the hardware for the entire sequence.
 
@@ -44,11 +46,35 @@ class MDAEngine(PMDAEngine):
             x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
             y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
             self._mmc.setXYPosition(x, y)
+
         if event.z_pos is not None:
             z_device = event.z_device or self._mmc.getFocusDevice()
-            self._mmc.setPosition(z_device, event.z_pos)
-            if event.use_one_shot_focus:
-                self._mmc.fullFocus()
+            # is one_shot focus (autofocus)
+            if event.z_autofocus_device and event.z_autofocus:
+                z = event.z_pos
+
+                if 'z' not in event.index or event.index["z"] == 0:
+                # use autofocus only on the first frame
+                # if event.index["z"] == 0:
+                    z_af = event.z_autofocus
+                    z_af_device = event.z_autofocus_device
+                    #set autofocus position
+                    self._mmc.setPosition(z_af_device, z_af)
+                    self._mmc.fullFocus()
+                    self._mmc.setPosition(z_device, 250)
+                    # get current resulting z position using z focus device
+                    self.z_start = self._mmc.getPosition(z_device)
+                    # add event.z_pos (offset) to current z position
+                    self._mmc.setPosition(z_device, self.z_start + z)
+                else:
+                    # if not first frame, just add event.z_pos (offset)
+                    # to current z position. if offset is 0, use z_start
+                    z_pos = self.z_start if z == 0 else self._mmc.getPosition(z_device) + z
+                    self._mmc.setPosition(z_device,z_pos)
+
+            else:
+                self._mmc.setPosition(z_device, event.z_pos)
+
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
         if event.exposure is not None:
