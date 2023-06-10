@@ -55,7 +55,8 @@ class MDAEngine(PMDAEngine):
                 z_device, z_af_device, z_af, use_af = self._get_properties_values(
                     event.properties
                 )
-                channel_offset = event.channel.z_offset or 0.0
+                channel_offset = event.channel.z_offset
+                channel_do_stack = event.channel.do_stack
 
                 # if z_plan
                 if len(event.sequence.z_plan) > 1:
@@ -79,9 +80,16 @@ class MDAEngine(PMDAEngine):
                             else self._mmc.getPosition(z_device)
                         )
 
-                        # add z_plan offset to current z position
-                        self._current_pos = self._z_start + self._z_plan[0]
+                        # add z_plan offset to current z position or use z_start
+                        # if not channel_do_stack
+                        self._current_pos = (
+                            self._z_start + self._z_plan[0]
+                            if channel_do_stack
+                            else self._z_start
+                        )
+    
                         self._mmc.setPosition(z_device, self._current_pos)
+
                     else:
                         # if not first frame, just add zplan offset.
                         # if offset is 0, use z_start
@@ -102,7 +110,7 @@ class MDAEngine(PMDAEngine):
                         self._mmc.setPosition(z_af_device, z_af)
                         self._mmc.fullFocus()
 
-                        # self._mmc.setPosition(z_device, 250)  # to test with demo cfg
+                        self._mmc.setPosition(z_device, 250)  # to test with demo cfg
 
                         # add any channel offset
                         if channel_offset:
@@ -116,7 +124,7 @@ class MDAEngine(PMDAEngine):
             else:
                 self._mmc.setZPosition(event.z_pos)
 
-        # print("curr:", self._mmc.getPosition())
+        print("curr:", self._mmc.getPosition())
 
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
