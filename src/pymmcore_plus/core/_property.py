@@ -57,7 +57,6 @@ class DeviceProperty:
     def __init__(
         self, device_label: str, property_name: str, mmcore: CMMCorePlus
     ) -> None:
-
         self.device = device_label
         self.name = property_name
         self._mmc = mmcore
@@ -101,7 +100,9 @@ class DeviceProperty:
         if self.isReadOnly():
             import warnings
 
-            warnings.warn(f"'{self.device}::{self.name}' is a read-only property.")
+            warnings.warn(
+                f"'{self.device}::{self.name}' is a read-only property.", stacklevel=2
+            )
         try:
             self._mmc.setProperty(self.device, self.name, val)
         except RuntimeError as e:

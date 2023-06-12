@@ -49,7 +49,6 @@ class pyroCMMCore(CMMCorePlus):
 
     @oneway
     def emit_signal(self, signal_name: str, *args):
-
         logger.debug("{}: {}", signal_name, args)
         for handler in list(self._callback_handlers):
             try:
