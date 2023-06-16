@@ -1193,13 +1193,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         autoshutter = self.getAutoShutter()
         if autoshutter:
-            shutter_dev = self.getShutterDevice()
-            self.events.propertyChanged.emit(shutter_dev, "State", True)
+            self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
         try:
             super().snapImage()
         finally:
             if autoshutter:
-                self.events.propertyChanged.emit(shutter_dev, "State", False)
+                self.events.propertyChanged.emit(
+                    self.getShutterDevice(), "State", False
+                )
 
     @property
     def mda(self) -> MDARunner:
