@@ -32,6 +32,12 @@ class MDAEngine(PMDAEngine):
 
         self._mmc = self._mmc or CMMCorePlus.instance()
 
+        if hasattr(sequence, "set_fov_size"):
+            # set the FOV size for grid acquisitions
+            if px := self._mmc.getPixelSizeUm():
+                _, _, width, height = self._mmc.getROI()
+                sequence.set_fov_size((width * px, height * px))
+
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
