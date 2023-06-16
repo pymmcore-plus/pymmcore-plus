@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import pytest
 from useq import MDAEvent, MDASequence
@@ -16,6 +18,7 @@ def proxy():
         yield mmcore
 
 
+@pytest.mark.skipif(os.name == "nt", reason="Pyro5 not working on windows")
 def test_client(proxy):
     assert str(proxy._pyroUri) == DEFAULT_URI
     proxy.getConfigGroupState("Channel")
@@ -70,6 +73,7 @@ def test_mda_cancel(qtbot, proxy: RemoteMMCore):
 @pytest.mark.xfail(
     reason="synchronous callbacks not working yet", raises=AssertionError, strict=True
 )
+@pytest.mark.skipif(os.name == "nt", reason="Pyro5 not working on windows")
 def test_cb_without_qt(proxy):
     """This tests that we can call a core method within a callback
 
