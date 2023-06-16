@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 def normalize_slot(slot: Callable | NormedCallback) -> NormedCallback:
     if isinstance(slot, MethodType):
-        return _get_method_name(slot) + (None,)
+        return (*_get_method_name(slot), None)
     if _is_partial_method(slot):
         return _partial_weakref(slot)
     if isinstance(slot, tuple) and not isinstance(slot[0], weakref.ref):

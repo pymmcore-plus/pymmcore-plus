@@ -119,7 +119,7 @@ class Device:
                     msg += f". Device {self.label!r} appears to be loaded already."
                     import warnings
 
-                    warnings.warn(msg)
+                    warnings.warn(msg, stacklevel=2)
                     return
                 lib = self._mmc.getDeviceLibrary(self.label)
                 name = self._mmc.getDeviceName(self.label)

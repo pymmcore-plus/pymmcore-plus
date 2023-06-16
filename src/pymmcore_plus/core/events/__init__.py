@@ -28,7 +28,7 @@ def _get_auto_core_callback_class(
 
 
 def __dir__() -> List[str]:
-    return list(globals()) + ["QCoreSignaler"]
+    return [*list(globals()), "QCoreSignaler"]
 
 
 def __getattr__(name: str) -> Any:

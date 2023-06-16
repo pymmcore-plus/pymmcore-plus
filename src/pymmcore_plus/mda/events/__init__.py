@@ -30,7 +30,7 @@ def _get_auto_MDA_callback_class(
 
 
 def __dir__() -> list[str]:
-    return list(globals()) + ["QMDASignaler"]
+    return [*list(globals()), "QMDASignaler"]
 
 
 def __getattr__(name: str) -> object:

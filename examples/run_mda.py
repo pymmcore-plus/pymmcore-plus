@@ -13,6 +13,7 @@ sequence = MDASequence(
 mmc = CMMCorePlus.instance()  # (2)!
 mmc.loadSystemConfiguration()  #  load demo configuration (3)
 
+
 # connect callback using a decorator (4)
 @mmc.mda.events.frameReady.connect
 def new_frame(img: np.ndarray, event: MDAEvent):

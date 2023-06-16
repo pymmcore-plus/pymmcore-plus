@@ -115,11 +115,11 @@ core = CMMCorePlus()
 ### Examples
 
 See a number of [usage examples in the
-documentation](http://127.0.0.1:8000/pymmcore-plus/examples/mda/).
+documentation](http://pymmcore-plus.github.io/pymmcore-plus/examples/mda/).
 
 You can find some basic python scripts in the [examples](examples) directory of
 this repository
 
 ## Contributing
 
-Contributions are welcome!  See [contributing guide](http://127.0.0.1:8000/pymmcore-plus/contributing/).
+Contributions are welcome!  See [contributing guide](http://pymmcore-plus.github.io/pymmcore-plus/contributing/).
