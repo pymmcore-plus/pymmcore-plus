@@ -94,3 +94,24 @@ def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
         assert not core.mda.is_running()
         assert not core.mda.is_paused()
         assert not core.mda._canceled
+
+
+def test_set_mda_fov(core: CMMCorePlus, qtbot: "QtBot"):
+    """Test that the fov size is updated."""
+    mda = MDASequence(
+        channels=[
+            {"config": "FITC", "exposure": 50},
+        ],
+        stage_positions=(
+            {"sequence": {"grid_plan": {"rows": 2, "columns": 2}}},
+            {"sequence": {"grid_plan": {"rows": 3, "columns": 2}}},
+        ),
+    )
+
+    assert mda._fov_size == (1, 1)
+    assert mda.stage_positions[0].sequence._fov_size == (1, 1)
+    assert mda.stage_positions[1].sequence._fov_size == (1, 1)
+    core.mda.engine.setup_sequence(mda)
+    assert mda._fov_size == (512, 512)
+    assert mda.stage_positions[0].sequence._fov_size == (512, 512)
+    assert mda.stage_positions[1].sequence._fov_size == (512, 512)
