@@ -114,13 +114,8 @@ def test_set_mda_fov(core: CMMCorePlus, qtbot: "QtBot"):
     assert mda.stage_positions[0].sequence._fov_size == (1, 1)
     assert mda.stage_positions[1].sequence._fov_size == (1, 1)
 
-    def started(seq: MDASequence):
-        assert seq._fov_size == (256, 256)
-        assert seq.stage_positions[0].sequence._fov_size == (256, 256)
-        assert seq.stage_positions[1].sequence._fov_size == (256, 256)
+    core.mda.engine.setup_sequence(mda)
 
-    core.mda.events.sequenceStarted.connect(started)
-
-    if isinstance(core.mda.events, MDASignaler):
-        with qtbot.waitSignal(core.mda.events.sequenceStarted):
-            core.run_mda(mda)
+    assert mda._fov_size == (256, 256)
+    assert mda.stage_positions[0].sequence._fov_size == (256, 256)
+    assert mda.stage_positions[1].sequence._fov_size == (256, 256)
