@@ -45,7 +45,7 @@ class MDAEngine(PMDAEngine):
                     for p in sequence.stage_positions:
                         if p.sequence is not None:
                             p.sequence.set_fov_size((width * px, height * px))
-    
+
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
