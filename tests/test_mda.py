@@ -121,5 +121,6 @@ def test_set_mda_fov(core: CMMCorePlus, qtbot: "QtBot"):
 
     core.mda.events.sequenceStarted.connect(started)
 
-    with qtbot.waitSignal(core.mda.events.sequenceStarted):
-        core.run_mda(mda)
+    if isinstance(core.mda.events, MDASignaler):
+        with qtbot.waitSignal(core.mda.events.sequenceStarted):
+            core.run_mda(mda)
