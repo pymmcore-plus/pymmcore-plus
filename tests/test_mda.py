@@ -100,18 +100,27 @@ def test_set_mda_fov(core: CMMCorePlus, qtbot: "QtBot"):
     """Test that the fov size is updated."""
     mda = MDASequence(
         channels=[
-            {"config": "FITC", "exposure": 50},
+            {"config": "FITC", "exposure": 3},
         ],
         stage_positions=(
-            {"sequence": {"grid_plan": {"rows": 2, "columns": 2}}},
-            {"sequence": {"grid_plan": {"rows": 3, "columns": 2}}},
+            {"sequence": {"grid_plan": {"rows": 2, "columns": 1}}},
+            {"sequence": {"grid_plan": {"rows": 1, "columns": 1}}},
         ),
     )
+
+    core.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
 
     assert mda._fov_size == (1, 1)
     assert mda.stage_positions[0].sequence._fov_size == (1, 1)
     assert mda.stage_positions[1].sequence._fov_size == (1, 1)
-    core.mda.engine.setup_sequence(mda)
-    assert mda._fov_size == (512, 512)
-    assert mda.stage_positions[0].sequence._fov_size == (512, 512)
-    assert mda.stage_positions[1].sequence._fov_size == (512, 512)
+
+    def started(seq: MDASequence):
+        assert seq._fov_size == (256, 256)
+        assert seq.stage_positions[0].sequence._fov_size == (256, 256)
+        assert seq.stage_positions[1].sequence._fov_size == (256, 256)
+
+    core.mda.events.sequenceStarted.connect(started)
+
+    with qtbot.waitSignal(core.mda.events.sequenceStarted):
+        core.run_mda(mda)
+
