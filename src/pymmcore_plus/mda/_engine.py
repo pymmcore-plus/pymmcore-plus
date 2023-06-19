@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, NamedTuple
 
-from useq import MDAEvent, MDASequence, NoZ, PropertyTuple
+from useq import MDAEvent, MDASequence
 
 from ._protocol import PMDAEngine
 
