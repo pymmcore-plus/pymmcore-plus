@@ -1,6 +1,9 @@
-import pymmcore_plus
+from unittest.mock import patch
+
 import pytest
 from _pytest.logging import LogCaptureFixture
+
+import pymmcore_plus
 from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler, QMDASignaler
@@ -20,6 +23,7 @@ def core(request):
     if not core.getDeviceAdapterSearchPaths():
         pytest.fail("To run tests, please install MM with `mmcore install`")
     core.loadSystemConfiguration()
+
     return core
 
 
@@ -30,3 +34,11 @@ def caplog(caplog: LogCaptureFixture):
         yield caplog
     finally:
         logger.remove(handler_id)
+
+
+@pytest.fixture
+def mock_autofocus(core: pymmcore_plus.CMMCorePlus):
+    def _fullfocus():
+        core.setZPosition(100)
+    with patch.object(core, "fullFocus", _fullfocus):
+        yield
