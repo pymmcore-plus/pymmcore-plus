@@ -87,6 +87,9 @@ class MDAEngine(PMDAEngine):
     
     def _execute_autofocus(self, z_af_device_name, z_af_pos) -> float:
         """Perform the autofocus."""
+        # TODO: maybe add a try/except where if the autofocus set position fails,
+        # we can set first the last z stage known position and then run the 
+        # fullfocus method again. 
         self._mmc.setPosition(z_af_device_name, z_af_pos)
         self._mmc.fullFocus()
         return self._mmc.getZPosition()
