@@ -48,17 +48,16 @@ class MDAEngine(PMDAEngine):
             self._mmc.setXYPosition(x, y)
 
         if event.z_pos is not None:
-            
-            # TODO: exclude when absolute z_plan
-            if event.autofocus is not None:
+
+            if event.autofocus is not None and event.sequence.z_plan.is_relative:
                 z_af_device, z_af_pos = event.autofocus
 
                 if len(event.sequence.z_plan) > 1:
                     # if first frame of z stack, calculate the correction
                     if event.index["z"] == 0:
                         z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
-                        # the first z event is the top/bottom of the stack, to know that
-                        # is the starting z position we need to subtract the first
+                        # the first z event is the top or bottom of the stack,
+                        # to know the starting z position we need to subtract the first
                         # z offset from the relative z plan (self._z_plan[0])
                         first_pos = event.z_pos - list(event.sequence.z_plan)[0]
                         # calculate the correction to apply to each z position
