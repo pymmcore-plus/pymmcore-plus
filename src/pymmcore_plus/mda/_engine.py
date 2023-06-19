@@ -42,6 +42,8 @@ class MDAEngine(PMDAEngine):
         event : MDAEvent
             The event to use for the Hardware config
         """
+        update_event = {}  # to update the event in case of any autofocus correction
+
         if event.x_pos is not None or event.y_pos is not None:
             x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
             y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
@@ -49,25 +51,33 @@ class MDAEngine(PMDAEngine):
 
         if event.z_pos is not None:
 
-            if event.autofocus is not None and event.sequence.z_plan.is_relative:
+            if event.autofocus is not None:
                 z_af_device, z_af_pos = event.autofocus
 
-                if len(event.sequence.z_plan) > 1:
+                z_plan = event.sequence.z_plan
+
+                if len(z_plan) > 1 and not z_plan.is_relative:
+                    self._mmc.setZPosition(event.z_pos)
+
+                elif len(z_plan) > 1:
                     # if first frame of z stack, calculate the correction
                     if event.index["z"] == 0:
                         z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
                         # the first z event is the top or bottom of the stack,
                         # to know the starting z position we need to subtract the first
                         # z offset from the relative z plan (self._z_plan[0])
-                        first_pos = event.z_pos - list(event.sequence.z_plan)[0]
+                        first_pos = event.z_pos - list(z_plan)[0]
                         # calculate the correction to apply to each z position
                         self._correction = z_after_af - first_pos
 
                     self._mmc.setZPosition(event.z_pos + self._correction)
 
+                    update_event = {"z_pos": event.z_pos + self._correction}
+
                 else:  # no z or len(z_plan) == 1
                     z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
                     self._mmc.setZPosition(z_after_af)
+                    update_event = {"z_pos": z_after_af}
             else:
                 self._mmc.setZPosition(event.z_pos)
 
@@ -77,6 +87,8 @@ class MDAEngine(PMDAEngine):
             self._mmc.setExposure(event.exposure)
 
         self._mmc.waitForSystem()
+
+        return event.copy(update=update_event) if update_event else event
 
     def exec_event(self, event: MDAEvent) -> Any:
         """Execute an individual event and return the image data."""
