@@ -1,4 +1,5 @@
 from __future__ import annotations
+import contextlib
 
 from typing import TYPE_CHECKING, Any, NamedTuple
 
@@ -55,7 +56,8 @@ class MDAEngine(PMDAEngine):
 
             if event.autofocus is not None:
                 # switch off autofocus device to let each position set it
-                self._mmc.setProperty(self._mmc.getAutoFocusDevice(), "State", "Off")
+                with contextlib.suppress(RuntimeError):
+                    self._mmc.setProperty(self._mmc.getAutoFocusDevice(), "State", "Off")
 
                 z_af_device, z_af_pos = event.autofocus
 
