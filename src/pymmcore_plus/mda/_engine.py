@@ -36,7 +36,7 @@ class MDAEngine(PMDAEngine):
 
         self._mmc = self._mmc or CMMCorePlus.instance()
 
-    def setup_event(self, event: MDAEvent) -> MDAEvent:
+    def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
         Parameters
@@ -95,7 +95,7 @@ class MDAEngine(PMDAEngine):
             self._mmc.setExposure(event.exposure)
 
         if update_event:
-            logger.info(f"Update event: {event.copy(update=update_event)}")
+            logger.info(f"Updated event: {event.copy(update=update_event)}")
 
         self._mmc.waitForSystem()
 

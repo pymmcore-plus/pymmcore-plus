@@ -149,20 +149,18 @@ class MDARunner:
                 
                 logger.info(event)
 
-                # setup_event will return the input event or an updated event in case
-                # any parameter is changed (e.g. in case of autofocus correction)
-                updated_event = self._engine.setup_event(event)
+                self._engine.setup_event(event)
 
                 if not self._running:
                     break
 
-                output = self._engine.exec_event(updated_event)
+                output = self._engine.exec_event(event)
 
                 if (img := getattr(output, "image", None)) is not None:
                     with contextlib.suppress(EmitLoopError):
-                        self._events.frameReady.emit(img, updated_event)
+                        self._events.frameReady.emit(img, event)
 
-                teardown_event(updated_event)
+                teardown_event(event)
 
         except Exception as e:
             # clean up so future MDAs can be run
