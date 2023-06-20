@@ -34,7 +34,7 @@ class MDAEngine(PMDAEngine):
 
         self._mmc = self._mmc or CMMCorePlus.instance()
 
-    def setup_event(self, event: MDAEvent) -> None:
+    def setup_event(self, event: MDAEvent) -> MDAEvent:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
         Parameters

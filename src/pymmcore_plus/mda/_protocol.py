@@ -23,7 +23,6 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    # def setup_event(self, event: MDAEvent) -> None:
     def setup_event(self, event: MDAEvent) -> MDAEvent:
         """Prepare state of system (hardware, etc.) for `event`.
 
