@@ -52,6 +52,9 @@ class MDAEngine(PMDAEngine):
         if event.z_pos is not None:
 
             if event.autofocus is not None:
+                # switch off autofocus device to let each position set it
+                self._mmc.setProperty(self._mmc.getAutoFocusDevice(), "State", "Off")
+
                 z_af_device, z_af_pos = event.autofocus
 
                 z_plan = event.sequence.z_plan
