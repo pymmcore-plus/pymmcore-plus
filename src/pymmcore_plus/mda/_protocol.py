@@ -23,7 +23,7 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    def setup_event(self, event: MDAEvent) -> MDAEvent:
+    def setup_event(self, event: MDAEvent) -> None:
         """Prepare state of system (hardware, etc.) for `event`.
 
         This method is called before each event in the sequence.  It is
@@ -32,15 +32,6 @@ class PMDAEngine(Protocol):
         without any additional preparation.  (This means that the engine
         should perform any waits or blocks required for system state
         changes to complete.)
-
-        If any parameters are changed (e.g. because of an autofocus correction),
-        an updated event should be returned.
-
-        Returns
-        -------
-        event : MDAEvent
-            The event that will be executed. This may be the same as the input event
-            or an updated version.
         """
 
     @abstractmethod

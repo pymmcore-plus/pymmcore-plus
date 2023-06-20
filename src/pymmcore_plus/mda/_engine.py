@@ -4,6 +4,8 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 from useq import MDAEvent, MDASequence
 
+from pymmcore_plus._logger import logger
+
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
@@ -65,16 +67,18 @@ class MDAEngine(PMDAEngine):
                 elif len(z_plan) > 1:
                     # if first frame of z stack, calculate the correction
                     if event.index["z"] == 0:
+                        reference_position = event.z_pos - list(z_plan)[0]
+                        # go to the reference position including any known correction
+                        self._mmc.setZPosition(reference_position + self._correction) 
+                        # run autofocus
                         z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
                         # the first z event is the top or bottom of the stack,
                         # to know the starting z position we need to subtract the first
                         # z offset from the relative z plan (self._z_plan[0])
-                        first_pos = event.z_pos - list(z_plan)[0]
                         # calculate the correction to apply to each z position
-                        self._correction = z_after_af - first_pos
+                        self._correction = z_after_af - reference_position
 
                     self._mmc.setZPosition(event.z_pos + self._correction)
-
                     update_event = {"z_pos": event.z_pos + self._correction}
 
                 else:  # no z or len(z_plan) == 1
@@ -90,9 +94,11 @@ class MDAEngine(PMDAEngine):
         if event.exposure is not None:
             self._mmc.setExposure(event.exposure)
 
+        if update_event:
+            logger.info(f"Update event: {event.copy(update=update_event)}")
+
         self._mmc.waitForSystem()
 
-        return event.copy(update=update_event) if update_event else event
 
     def exec_event(self, event: MDAEvent) -> Any:
         """Execute an individual event and return the image data."""
