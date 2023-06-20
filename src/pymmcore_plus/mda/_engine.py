@@ -67,14 +67,14 @@ class MDAEngine(PMDAEngine):
                 elif len(z_plan) > 1:
                     # if first frame of z stack, calculate the correction
                     if event.index["z"] == 0:
+                        # the first z event is the top or bottom of the stack,
+                        # to know the starting z position we need to subtract the first
+                        # z offset from the relative z plan (self._z_plan[0])
                         reference_position = event.z_pos - list(z_plan)[0]
                         # go to the reference position including any known _z_correction
                         self._mmc.setZPosition(reference_position + self._z_correction)
                         # run autofocus
                         z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
-                        # the first z event is the top or bottom of the stack,
-                        # to know the starting z position we need to subtract the first
-                        # z offset from the relative z plan (self._z_plan[0])
                         # calculate the correction to apply to each z position
                         self._z_correction = z_after_af - reference_position
 
