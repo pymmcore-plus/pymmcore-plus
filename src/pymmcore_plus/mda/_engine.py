@@ -78,6 +78,7 @@ class MDAEngine(PMDAEngine):
                     z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
                     self._mmc.setZPosition(z_after_af)
                     update_event = {"z_pos": z_after_af}
+
             else:
                 self._mmc.setZPosition(event.z_pos)
 
