@@ -144,13 +144,17 @@ class MDARunner:
                 if cancelled:
                     break
 
-                logger.info(event)
                 if not self._running:
                     break
                 
+                logger.info(event)
+
                 # setup_event will return the input event or an updated event in case
                 # any parameter is changed (e.g. in case of autofocus correction)
                 updated_event = self._engine.setup_event(event)
+
+                if not self._running:
+                    break
 
                 output = self._engine.exec_event(updated_event)
 
