@@ -148,8 +148,8 @@ class MDARunner:
                 if not self._running:
                     break
                 
-                # setup_event will return an updated event in case any parameter
-                # was changed (e.g. in case of autofocus correction)
+                # setup_event will return the input event or an updated event in case
+                # any parameter is changed (e.g. in case of autofocus correction)
                 updated_event = self._engine.setup_event(event)
 
                 output = self._engine.exec_event(updated_event)
