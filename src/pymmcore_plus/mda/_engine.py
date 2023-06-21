@@ -76,11 +76,9 @@ class MDAEngine(PMDAEngine):
                         # z offset from the relative z plan (self._z_plan[0])
                         reference_position = event.z_pos - list(z_plan)[0]
                         # go to the reference position
-                        with contextlib.suppress(KeyError):
-                            self._mmc.setZPosition(
+                        self._mmc.setZPosition(
                                 reference_position + self._z_correction[p_idx]
                             )
-
                         # run autofocus
                         z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
                         # calculate the correction to apply to each z position
