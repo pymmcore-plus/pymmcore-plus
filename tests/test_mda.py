@@ -96,7 +96,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
         assert not core.mda._canceled
 
 
-def test_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_autofocus):
+def test_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
     # mock_autofocus sets z=100
     mda = MDASequence(
         stage_positions=[
@@ -114,7 +114,7 @@ def test_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_autofocus):
     assert core.getPosition() == 100
 
 
-def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_autofocus):
+def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
     # mock_autofocus sets z=100
     mda = MDASequence(
         stage_positions=[
@@ -142,7 +142,7 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_autof
     assert z_pos == [99.0, 100.0, 101.0]
 
 
-def test_autofocus_absolute_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_autofocus):
+def test_autofocus_absolute_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
     # autofocus won't work with absolute z_plan
     mda = MDASequence(
         stage_positions=[
