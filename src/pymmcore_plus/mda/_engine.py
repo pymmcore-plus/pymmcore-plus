@@ -26,7 +26,7 @@ class MDAEngine(PMDAEngine):
         self._mmc = mmc
 
         # used for one_shot autofocus to store the z correction for each position index.
-        self._z_correction: dict[int, float] = {}
+        self._z_correction: dict[str, float] = {}
 
     def setup_sequence(self, sequence: MDASequence) -> None:
         """Setup the hardware for the entire sequence.
@@ -69,7 +69,7 @@ class MDAEngine(PMDAEngine):
                     self._mmc.setZPosition(event.z_pos)
 
                 elif len(z_plan) > 1:
-                    p_idx = event.index.get("p", 0)
+                    p_idx = f"p{event.index.get('p', 0)}"
                     # if first frame of z stack, calculate the correction
                     if event.index["z"] == 0:
                         # the first z event is the top or bottom of the stack,
