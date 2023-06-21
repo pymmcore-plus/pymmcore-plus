@@ -38,6 +38,10 @@ class MDAEngine(PMDAEngine):
 
         self._mmc = self._mmc or CMMCorePlus.instance()
 
+        # switch off autofocus device if it is on to let each position set it in setup_event
+        with contextlib.suppress(RuntimeError):
+            self._mmc.setProperty(self._mmc.getAutoFocusDevice(), "State", "Off")
+
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
@@ -56,9 +60,6 @@ class MDAEngine(PMDAEngine):
         if event.z_pos is not None:
 
             if event.autofocus is not None:
-                # switch off autofocus device to let each position set it
-                with contextlib.suppress(RuntimeError):
-                    self._mmc.setProperty(self._mmc.getAutoFocusDevice(), "State", "Off")
 
                 z_af_device, z_af_pos = event.autofocus
 
@@ -76,9 +77,10 @@ class MDAEngine(PMDAEngine):
                         # z offset from the relative z plan (self._z_plan[0])
                         reference_position = event.z_pos - list(z_plan)[0]
                         # go to the reference position
-                        self._mmc.setZPosition(
-                            reference_position + self._z_correction[p_idx]
-                        )
+                        try:
+                            self._mmc.setZPosition(reference_position + self._z_correction[p_idx])
+                        except KeyError:
+                            self._mmc.setZPosition(reference_position)
                         # run autofocus
                         z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
                         # calculate the correction to apply to each z position
