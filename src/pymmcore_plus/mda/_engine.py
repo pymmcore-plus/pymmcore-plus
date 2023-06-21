@@ -1,6 +1,6 @@
 from __future__ import annotations
-import contextlib
 
+import contextlib
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from useq import MDAEvent, MDASequence
