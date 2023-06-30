@@ -146,7 +146,7 @@ class MDARunner:
 
                 if not self._running:
                     break
-                
+
                 logger.info(event)
 
                 self._engine.setup_event(event)

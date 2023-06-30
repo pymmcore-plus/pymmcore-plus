@@ -58,9 +58,7 @@ class MDAEngine(PMDAEngine):
             self._mmc.setXYPosition(x, y)
 
         if event.z_pos is not None:
-
             if event.autofocus is not None:
-
                 z_af_device, z_af_pos = event.autofocus
 
                 z_plan = event.sequence.z_plan
@@ -78,7 +76,9 @@ class MDAEngine(PMDAEngine):
                         reference_position = event.z_pos - list(z_plan)[0]
                         # go to the reference position
                         try:
-                            self._mmc.setZPosition(reference_position + self._z_correction[p_idx])
+                            self._mmc.setZPosition(
+                                reference_position + self._z_correction[p_idx]
+                            )
                         except KeyError:
                             self._mmc.setZPosition(reference_position)
                         # run autofocus
@@ -107,13 +107,12 @@ class MDAEngine(PMDAEngine):
 
         self._mmc.waitForSystem()
 
-
     def exec_event(self, event: MDAEvent) -> Any:
         """Execute an individual event and return the image data."""
         # TODO: add non-aquisition event-specific logic here later
         self._mmc.snapImage()
         return EventPayload(image=self._mmc.getImage())
-    
+
     def _execute_autofocus(self, z_af_device_name, z_af_pos) -> float:
         """Perform the autofocus."""
         self._mmc.setPosition(z_af_device_name, z_af_pos)

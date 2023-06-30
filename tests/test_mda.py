@@ -121,14 +121,14 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
             {"z": 50, "autofocus": ("Z", 110)},
             {"z": 60, "autofocus": ("Z", 110)},
         ],
-        z_plan={"above": 1, "below": 1, "step": 1}
+        z_plan={"above": 1, "below": 1, "step": 1},
     )
 
     z_pos = []
 
     def _on_image(img, event: MDAEvent):
         z_pos.append(core.getZPosition())
-        
+
     core.mda.events.frameReady.connect(_on_image)
 
     with qtbot.waitSignals(
@@ -136,10 +136,10 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
             core.mda.events.frameReady,
             core.mda.events.sequenceFinished,
         ]
-    ):  
+    ):
         core.setExposure(500)  # makes the test stable. If less, sometimes it fails
         core.run_mda(mda)
-    
+
     assert z_pos == [99.0, 100.0, 101.0, 99.0, 100.0, 101.0]
 
 
@@ -149,7 +149,7 @@ def test_autofocus_absolute_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
         stage_positions=[
             {"z": 50, "autofocus": ("Z", 110)},
         ],
-        z_plan={"top": 1, "bottom": -1, "step": 1}
+        z_plan={"top": 1, "bottom": -1, "step": 1},
     )
 
     z_pos = []
@@ -164,8 +164,8 @@ def test_autofocus_absolute_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
             core.mda.events.frameReady,
             core.mda.events.sequenceFinished,
         ]
-    ):  
+    ):
         core.setExposure(500)  # makes the test stable. If less, sometimes it fails
         core.run_mda(mda)
-    
+
     assert z_pos == [-1.0, 0.0, 1.0]
