@@ -143,8 +143,9 @@ class MDAEngine(PMDAEngine):
         Returns the correction to be applied to the focus motor position.
         """
         self._mmc.setPosition(
-            autofocus_event.autofocus_z_device_name, autofocus_event.z_autofocus_position
-        )  
+            autofocus_event.autofocus_z_device_name,
+            autofocus_event.z_autofocus_position,
+        )
         self._mmc.fullFocus()
         return self._mmc.getZPosition() - autofocus_event.z_focus_position
 
