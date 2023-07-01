@@ -99,9 +99,13 @@ def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
 def test_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
     # mock_autofocus sets z=100
     mda = MDASequence(
-        stage_positions=[
-            {"z": 50, "autofocus": ("Z", 110)},
-        ]
+        stage_positions=[{"z": 50, "z_autofocus": 110}],
+        autofocus_plan={
+            "autofocus_z_device_name": "Z",
+            "z_autofocus_position": None,
+            "z_focus_position": None,
+            "axes": ("p",),
+        },
     )
     with qtbot.waitSignals(
         [
@@ -114,14 +118,11 @@ def test_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
     assert core.getPosition() == 100
 
 
-def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
+def test_autofocus_relative_z_plan_no_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
     # mock_autofocus sets z=100
     mda = MDASequence(
-        stage_positions=[
-            {"z": 50, "autofocus": ("Z", 110)},
-            {"z": 60, "autofocus": ("Z", 110)},
-        ],
-        z_plan={"above": 1, "below": 1, "step": 1},
+        stage_positions=[{"z": 50}, {"z": 60}],
+        z_plan={"above": 1, "below": 1, "step": 1}
     )
 
     z_pos = []
@@ -139,17 +140,52 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
     ):
         core.setExposure(500)  # makes the test stable. If less, sometimes it fails
         core.run_mda(mda)
+    
+    assert z_pos == [49.0, 50.0, 51.0, 59.0, 60.0, 61.0]
 
+
+def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
+    # mock_autofocus sets z=100
+    mda = MDASequence(
+        stage_positions=[{"z": 50, "z_autofocus": 100}, {"z": 60, "z_autofocus": 100}],
+        z_plan={"above": 1, "below": 1, "step": 1},
+        autofocus_plan={
+            "autofocus_z_device_name": "Z",
+            "z_autofocus_position": None,
+            "z_focus_position": None,
+            "axes": ("p",),
+        },
+    )
+
+    z_pos = []
+
+    def _on_image(img, event: MDAEvent):
+        z_pos.append(core.getZPosition())
+
+    core.mda.events.frameReady.connect(_on_image)
+
+    with qtbot.waitSignals(
+        [
+            core.mda.events.frameReady,
+            core.mda.events.sequenceFinished,
+        ]
+    ):
+        core.setExposure(500)  # makes the test stable. If less, sometimes it fails
+        core.run_mda(mda)
+    
     assert z_pos == [99.0, 100.0, 101.0, 99.0, 100.0, 101.0]
 
 
 def test_autofocus_absolute_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
-    # autofocus won't work with absolute z_plan
     mda = MDASequence(
-        stage_positions=[
-            {"z": 50, "autofocus": ("Z", 110)},
-        ],
+        stage_positions=[{"z": 50}],
         z_plan={"top": 1, "bottom": -1, "step": 1},
+        autofocus_plan={
+            "autofocus_z_device_name": "Z",
+            "z_autofocus_position": None,
+            "z_focus_position": None,
+            "axes": ("p",),
+        },
     )
 
     z_pos = []
