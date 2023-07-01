@@ -67,7 +67,7 @@ class MDAEngine(PMDAEngine):
                 # + any correction that was applied to the previous event
                 if isinstance(event.autofocus, NoAF):
                     # apply the correction to the z position
-                    p_idx = "p0" if p_idx is None else p_idx    
+                    p_idx = "p0" if p_idx is None else p_idx
                     if p_idx not in self._z_correction:
                         self._z_correction[p_idx] = 0.0
                     self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
