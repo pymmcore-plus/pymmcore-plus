@@ -62,3 +62,23 @@ mkdocs serve
 
 The docs should be live at <http://127.0.0.1:8000> and will update automatically
 as you edit and save them.
+
+## Developing on Apple Silicon
+
+To build a native version of the DemoCamera for local testing on apple silicon, you
+can use [this gist](https://gist.github.com/tlambert03/7607f6fd53d574a96401067a31a9d8fe)
+
+Run the following command (you must have [homebrew](https://brew.sh) installed)
+
+```shell
+curl https://gist.githubusercontent.com/tlambert03/7607f6fd53d574a96401067a31a9d8fe/raw/45e6881f9e5d48869512f427e270e33b1fbe2e56/build_mm.sh | sh
+```
+
+This will download the micro-manager repo, build it, and drop the compiled DemoCamera
+library in a folder called micro-manager in the current directory.
+Pass that folder to the `mm_path` argument to CMMCorePlus and you should be good to go:
+
+```py
+# for example
+core = CMMCorePlus(mm_path='~/Desktop/micro-manager/')
+```
