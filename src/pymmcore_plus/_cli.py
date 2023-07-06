@@ -266,5 +266,25 @@ def run(
     core.run_mda(_mda)
 
 
+@app.command()
+def build_dev(
+    dest: Path = typer.Option(
+        USER_DATA_MM_PATH,
+        "-d",
+        "--dest",
+        file_okay=False,
+        dir_okay=True,
+        writable=True,
+        resolve_path=True,
+        help="Installation directory.",
+    ),
+    overwrite: bool = typer.Option(False, "-y", help="Overwrite existing install."),
+) -> None:
+    """Build DemoCamera and Utility adapters from source for apple silicon."""
+    import pymmcore_plus._build
+
+    pymmcore_plus._build.build(dest, overwrite=overwrite)
+
+
 def main() -> None:
     app()
