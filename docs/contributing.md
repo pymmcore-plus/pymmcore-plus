@@ -71,7 +71,7 @@ can use [this gist](https://gist.github.com/tlambert03/7607f6fd53d574a96401067a3
 Run the following command (you must have [homebrew](https://brew.sh) installed)
 
 ```shell
-curl https://gist.githubusercontent.com/tlambert03/7607f6fd53d574a96401067a31a9d8fe/raw/45e6881f9e5d48869512f427e270e33b1fbe2e56/build_mm.sh | sh
+curl https://gist.githubusercontent.com/tlambert03/7607f6fd53d574a96401067a31a9d8fe/raw/a9478e03d3f2eaba3bc8d2a1761f597f13e00666/build_mm.sh | sh
 ```
 
 This will download the micro-manager repo, build it, and drop the compiled DemoCamera
