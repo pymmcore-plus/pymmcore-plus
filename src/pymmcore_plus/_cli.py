@@ -284,7 +284,8 @@ def build_dev(
     overwrite: Optional[bool] = typer.Option(
         None,
         "-y",
-        help="Overwrite existing if git sha is already built. If not specified, will prompt.",
+        help="Overwrite existing if git sha is already built. "
+        "If not specified, will prompt.",
     ),
 ) -> None:
     """Build DemoCamera and Utility adapters from source for apple silicon."""
