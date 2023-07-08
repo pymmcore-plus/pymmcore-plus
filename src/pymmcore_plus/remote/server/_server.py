@@ -41,6 +41,7 @@ def serve():
     import argparse
 
     import Pyro5
+
     from pymmcore_plus.remote._serialize import register_serializers
     from pymmcore_plus.remote.server import pyroCMMCore
 

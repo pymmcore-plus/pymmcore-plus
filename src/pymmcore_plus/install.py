@@ -14,8 +14,9 @@ from typing import Iterator
 from urllib.request import urlopen, urlretrieve
 
 import typer
-from pymmcore_plus._util import USER_DATA_MM_PATH
 from rich import print, progress
+
+from pymmcore_plus._util import USER_DATA_MM_PATH
 
 PLATFORM = system()
 BASE_URL = "https://download.micro-manager.org"

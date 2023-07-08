@@ -9,7 +9,6 @@ if TYPE_CHECKING:
 
 
 class QCoreSignaler(QObject):
-
     # native MMCore callback events
     propertiesChanged = Signal()
     propertyChanged = Signal(str, str, object)

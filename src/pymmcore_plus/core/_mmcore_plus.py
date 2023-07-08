@@ -15,6 +15,7 @@ from typing import (
     Callable,
     Iterable,
     Iterator,
+    Literal,
     Pattern,
     Sequence,
     TypeVar,
@@ -24,8 +25,8 @@ from typing import (
 
 import pymmcore
 from psygnal import SignalInstance
+
 from pymmcore_plus.core.events import PCoreSignaler
-from typing_extensions import Literal
 
 from .._logger import logger
 from .._util import find_micromanager
@@ -1190,7 +1191,16 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To add a lock to prevent concurrent calls across threads.
         """
-        return super().snapImage()
+        autoshutter = self.getAutoShutter()
+        if autoshutter:
+            self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
+        try:
+            super().snapImage()
+        finally:
+            if autoshutter:
+                self.events.propertyChanged.emit(
+                    self.getShutterDevice(), "State", False
+                )
 
     @property
     def mda(self) -> MDARunner:
@@ -1274,7 +1284,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if ncomponents is None:
             ncomponents = self.getNumberOfComponents()
         if ncomponents == 4:
-            new_shape = img.shape + (4,)
+            new_shape = (*img.shape, 4)
             img = img.view(dtype=f"u{img.dtype.itemsize//4}")
             img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
@@ -1449,7 +1459,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         args: tuple[str, ...] = (groupName, configName)
         if deviceLabel is not None and propName is not None:
-            args = args + (deviceLabel, propName)
+            args = (*args, deviceLabel, propName)
         super().deleteConfig(*args)
         self.events.configDeleted.emit(groupName, configName)
 
@@ -1556,8 +1566,23 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         super().setROI(*args, **kwargs)
         if len(args) == 4:
-            args = (super().getCameraDevice(),) + args
+            args = (super().getCameraDevice(), *args)
         self.events.roiSet.emit(*args)
+
+    def setChannelGroup(self, channelGroup: str) -> None:
+        """Specifies the group determining the channel selection.
+
+        ...and send a channelGroupChanged signal.
+        """
+        if self.getChannelGroup() != channelGroup:
+            super().setChannelGroup(channelGroup)
+            self.events.channelGroupChanged.emit(channelGroup)
+
+    def setFocusDevice(self, focusLabel: str) -> None:
+        """Set the current Focus Device and emit a `propertyChanged` signal."""
+        if self.getFocusDevice() != focusLabel:
+            super().setFocusDevice(focusLabel)
+            self.events.propertyChanged.emit("Core", "Focus", focusLabel)
 
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.
@@ -1606,7 +1631,10 @@ class CMMCorePlus(pymmcore.CMMCore):
                 elif attr == "PixelSizeUm":
                     state[attr] = self.getPixelSizeUm(True)  # True==cached
                 else:
-                    state[attr] = getattr(self, f"get{attr}")()
+                    try:
+                        state[attr] = getattr(self, f"get{attr}")()
+                    except RuntimeError:
+                        continue
         return cast("StateDict", state)
 
     @contextmanager

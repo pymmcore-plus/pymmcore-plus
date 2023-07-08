@@ -1,3 +1,4 @@
+from typing import get_args
 from unittest.mock import Mock, call
 
 import pytest
@@ -19,7 +20,7 @@ def test_events_protocols(cls):
         )
     for attr, value in PCoreSignaler.__annotations__.items():
         m = getattr(obj, attr)
-        if not isinstance(m, value):
+        if not isinstance(m, get_args(value) or value):
             raise AssertionError(
                 f"'{name}.{attr}' expected type {value.__name__!r}, got {type(m)}"
             )
@@ -120,7 +121,6 @@ def test_device_property_events(core: CMMCorePlus):
 
 
 def test_sequence_acquisition_events(core: CMMCorePlus):
-
     mock1 = Mock()
     mock2 = Mock()
     mock3 = Mock()
@@ -176,14 +176,14 @@ def test_sequence_acquisition_events(core: CMMCorePlus):
 def test_shutter_device_events(core: CMMCorePlus):
     mock = Mock()
     core.events.propertyChanged.connect(mock)
-    core.setShutterOpen("Shutter", True)
+    core.setShutterOpen("White Light Shutter", True)
     mock.assert_has_calls(
         [
-            call("Shutter", STATE, True),
+            call("White Light Shutter", STATE, True),
         ]
     )
-    assert core.getShutterOpen("Shutter")
-    assert core.getProperty("Shutter", STATE) == "1"
+    assert core.getShutterOpen("White Light Shutter")
+    assert core.getProperty("White Light Shutter", STATE) == "1"
 
 
 def test_autoshutter_device_events(core: CMMCorePlus):
@@ -282,3 +282,25 @@ def test_pixel_changed_event(core: CMMCorePlus):
     core.setPixelSizeUm("test", 6.5)
     mock.assert_has_calls([call(6.5)])
     assert core.getPixelSizeUmByID("test") == 6.5
+
+
+def test_set_channelgroup(core: CMMCorePlus):
+    mock = Mock()
+    core.events.channelGroupChanged.connect(mock)
+
+    core.setChannelGroup("Camera")
+    assert core.getChannelGroup() == "Camera"
+    mock.assert_has_calls([call("Camera")])
+
+
+def test_set_focus_device(core: CMMCorePlus):
+    mock = Mock()
+    core.events.propertyChanged.connect(mock)
+
+    core.setFocusDevice("")
+    assert not core.getFocusDevice()
+    mock.assert_has_calls([call("Core", "Focus", "")])
+
+    core.setFocusDevice("Z")
+    assert core.getFocusDevice() == "Z"
+    mock.assert_has_calls([call("Core", "Focus", "Z")])
