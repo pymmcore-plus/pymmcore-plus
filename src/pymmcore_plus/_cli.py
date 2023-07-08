@@ -12,7 +12,7 @@ from pymmcore_plus._logger import set_log_level
 from pymmcore_plus._util import USER_DATA_MM_PATH
 from pymmcore_plus.install import PLATFORM
 
-app = typer.Typer(no_args_is_help=True, add_completion=False)
+app = typer.Typer(no_args_is_help=True)
 
 
 def _show_version_and_exit(value: bool) -> None:
@@ -52,10 +52,12 @@ _main.__doc__ = typer.style(
 
 
 @app.command()
-def clean() -> None:
+def clean(
+    glob: str = typer.Argument(default="*", help="glob pattern to clean")
+) -> None:
     """Remove all Micro-Manager installs downloaded by pymmcore-plus."""
     if USER_DATA_MM_PATH.exists():
-        for p in USER_DATA_MM_PATH.iterdir():
+        for p in USER_DATA_MM_PATH.glob(glob):
             shutil.rmtree(p, ignore_errors=True)
             print(f":wastebasket: [bold red] {p.name}")
         shutil.rmtree(USER_DATA_MM_PATH, ignore_errors=True)
@@ -69,7 +71,8 @@ def _list() -> None:
     if USER_DATA_MM_PATH.exists():
         print(f":file_folder:[bold green] {USER_DATA_MM_PATH}")
         for path in USER_DATA_MM_PATH.iterdir():
-            print(f"   • [cyan]{path.name}")
+            if not path.name.startswith("."):
+                print(f"   • [cyan]{path.name}")
     else:
         print(":sparkles: [bold green]There are no pymmcore-plus Micro-Manager files.")
 
@@ -278,7 +281,11 @@ def build_dev(
         resolve_path=True,
         help="Installation directory.",
     ),
-    overwrite: bool = typer.Option(False, "-y", help="Overwrite existing install."),
+    overwrite: Optional[bool] = typer.Option(
+        None,
+        "-y",
+        help="Overwrite existing if git sha is already built. If not specified, will prompt.",
+    ),
 ) -> None:
     """Build DemoCamera and Utility adapters from source for apple silicon."""
     import pymmcore_plus._build

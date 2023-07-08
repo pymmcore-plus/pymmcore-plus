@@ -6,6 +6,9 @@ import subprocess
 import tempfile
 from pathlib import Path
 
+from rich import print
+from rich.prompt import Prompt
+
 # DemoCamera and Utilities are currently hard coded in here, but could
 # be made configurable in the future.
 _MINIMAL_MAKE = r"""
@@ -32,6 +35,8 @@ MMDEVAPI_CXXFLAGS="-I${micromanager_cpp_path}/MMDevice ${BOOST_CPPFLAGS}"
 AC_SUBST(MMDEVAPI_CXXFLAGS)
 MMDEVAPI_LIBADD="${micromanager_cpp_path}/MMDevice/libMMDevice.la"
 AC_SUBST(MMDEVAPI_LIBADD)
+MMDEVAPI_LDFLAGS="-module -avoid-version -shrext \"\$(MMSUFFIX)\""
+AC_SUBST(MMDEVAPI_LDFLAGS)
 
 MM_INSTALL_DIRS
 
@@ -112,9 +117,14 @@ def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> Non
             elif overwrite:
                 shutil.rmtree(dest)
             else:
-                delete = input("Destination already exists. Delete? [y/N] ")
+                delete = Prompt.ask(
+                    f"{dest!r} already exists. Delete?", choices=["y", "n"], default="n"
+                )
                 if delete.lower() in ("y", "yes"):
                     shutil.rmtree(dest)
+                else:
+                    print("[red]Aborting.")
+                    return
 
         # update the configure.ac and Makefile.am files
         (devAdapters / "configure.ac").write_text(_MINIMAL_CONFIG)
@@ -138,4 +148,4 @@ def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> Non
         demo_cfg = repo_path / "bindist" / "any-platform" / "MMConfig_demo.cfg"
         shutil.copy(demo_cfg, dest)
 
-    print(f":sparkles: [bold green]Installed to {dest}![/bold green] :sparkles:")
+    print(f":sparkles: [bold green]Installed to {dest}[/bold green] :sparkles:")
