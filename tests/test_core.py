@@ -2,7 +2,7 @@ import os
 import re
 from pathlib import Path
 from threading import Thread
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -496,3 +496,20 @@ def test_setContext(core: CMMCorePlus):
         with core.setContext(autoShutter=False):
             raise ValueError
     assert core.getAutoShutter()
+
+
+def test_snap_signals(core: CMMCorePlus, qtbot: "QtBot") -> None:
+    assert core.getAutoShutter()
+
+    def shutter_is(state: bool) -> Callable:
+        def _check(*args: Any) -> bool:
+            return args == (core.getShutterDevice(), "State", state)
+
+        return _check
+
+    with qtbot.waitSignals(
+        [core.events.propertyChanged, core.events.propertyChanged],
+        check_params_cbs=[shutter_is(True), shutter_is(False)],
+        order="strict",
+    ):
+        core.snapImage()
