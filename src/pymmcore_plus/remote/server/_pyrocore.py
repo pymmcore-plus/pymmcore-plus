@@ -1,6 +1,6 @@
 from functools import partial
 from threading import Thread
-from typing import TYPE_CHECKING, Set
+from typing import TYPE_CHECKING, ClassVar, Set
 
 from Pyro5 import errors
 from Pyro5.api import behavior, expose, oneway
@@ -27,7 +27,7 @@ class pyroCMMCore(CMMCorePlus):
     that are only necessary for asynchronous/remote usage (like callbacks)
     """
 
-    _callback_handlers: Set["CallbackProtocol"] = set()
+    _callback_handlers: ClassVar[Set["CallbackProtocol"]] = set()
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)

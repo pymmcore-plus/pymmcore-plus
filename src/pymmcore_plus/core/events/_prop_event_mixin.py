@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, Dict, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, Tuple, TypeVar
 
 from ._norm_slot import denormalize_slot, normalize_slot
 from ._protocol import PCoreSignaler
@@ -77,7 +77,7 @@ class _PropertySignal:
 
 
 class _DevicePropertyEventMixin(PCoreSignaler):
-    _prop_callbacks: PropKeyDict = {}
+    _prop_callbacks: ClassVar[PropKeyDict] = {}
 
     def devicePropertyChanged(
         self, device: str, property: str | None = None
