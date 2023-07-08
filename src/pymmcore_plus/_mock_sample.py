@@ -6,7 +6,6 @@ from types import TracebackType
 from typing import TYPE_CHECKING, Any, Callable, Iterator, overload
 from unittest.mock import patch
 
-
 if TYPE_CHECKING:
     import numpy as np
     from pymmcore import CMMCore
@@ -89,7 +88,7 @@ def mock_sample(
 
 @overload
 def mock_sample(
-    func: Literal[None] = None,
+    func: Literal[None] | None = None,
     *,
     loop: bool = ...,
     mmcore: CMMCore | None = ...,
@@ -104,9 +103,12 @@ def mock_sample(
     *,
     loop: bool = True,
     mmcore: CMMCore | None = None,
-) -> Callable[_P, _MockSampleContextManager] | Callable[
-    [Callable[_P, Iterator[np.ndarray]]], Callable[_P, _MockSampleContextManager]
-]:
+) -> (
+    Callable[_P, _MockSampleContextManager]
+    | Callable[
+        [Callable[_P, Iterator[np.ndarray]]], Callable[_P, _MockSampleContextManager]
+    ]
+):
     """Decorator to create a context manager that mocks the core's getImage method.
 
     When the context is entered, [`core.getImage()`][pymmcore_plus.CMMCorePlus.getImage]
