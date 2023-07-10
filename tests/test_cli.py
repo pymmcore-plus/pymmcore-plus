@@ -8,10 +8,11 @@ from typing import Any, Callable, cast
 from unittest.mock import patch
 
 import pytest
-from pymmcore_plus import __version__, _cli, install
-from pymmcore_plus._cli import app
 from typer.testing import CliRunner
 from useq import MDASequence
+
+from pymmcore_plus import __version__, _cli, install
+from pymmcore_plus._cli import app
 
 runner = CliRunner()
 subrun = subprocess.run

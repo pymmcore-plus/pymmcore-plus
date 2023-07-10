@@ -1,9 +1,9 @@
 from __future__ import annotations
 
 import contextlib
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
-from useq import AutoFocusPlan, MDAEvent, MDASequence, NoAF
+from useq import MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 
@@ -13,6 +13,26 @@ if TYPE_CHECKING:
     import numpy as np
 
     from ..core import CMMCorePlus
+
+    class AutoFocusParams(NamedTuple):
+        """Parameters for performing hardware autofocus.
+
+        Attributes
+        ----------
+        autofocus_z_device_name : str
+            Name of the hardware autofocus z device.
+        af_motor_offset : float | None
+            Before autofocus is performed, the autofocus motor should be moved to this
+            offset.
+        z_stage_position : float | None
+            Before autofocus is performed, the z stage should be moved to this position.
+            (Note: the Z-stage is the "main" z-axis, and is not the same as the
+            autofocus device.)
+        """
+
+        autofocus_z_device_name: str
+        af_motor_offset: float | None
+        z_stage_position: float | None
 
 
 class MDAEngine(PMDAEngine):
@@ -38,7 +58,7 @@ class MDAEngine(PMDAEngine):
 
         self._mmc = self._mmc or CMMCorePlus.instance()
 
-        # switch off autofocus device if it is on to let each position set it in setup_event
+        # switch off autofocus device if it is on
         with contextlib.suppress(RuntimeError):
             self._mmc.setProperty(self._mmc.getAutoFocusDevice(), "State", "Off")
 
@@ -58,67 +78,27 @@ class MDAEngine(PMDAEngine):
             self._mmc.setXYPosition(x, y)
 
         if event.z_pos is not None:
-            if len(event.sequence.z_plan) > 1 and not event.sequence.z_plan.is_relative:
-                self._mmc.setZPosition(event.z_pos)
+            # get position index if it exists else use 0
+            p_idx = f"p{event.index.get('p', None)}"
+            # run autofocus if specified in the event
+            if event.autofocus is not None:  # type: ignore
+                # get the correction to apply to each z position
+                self._z_correction[p_idx] = self._execute_autofocus(event.autofocus)  # type: ignore  # noqa: E501
+                # set updated z position
+                self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
+                # update event to reflect the new z position
+                update_event = {"z_pos": event.z_pos + self._z_correction[p_idx]}
             else:
-                # get position index if it exists else use 0
-                p_idx = f"p{event.index.get('p', None)}"
                 # if autofocus is not used in this event, just set the z position
                 # + any correction that was applied to the previous event
-                if isinstance(event.autofocus, NoAF):
-                    # apply the correction to the z position
-                    p_idx = "p0" if p_idx is None else p_idx
-                    if p_idx not in self._z_correction:
-                        self._z_correction[p_idx] = 0.0
-                    self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
-                    # update event to reflect the new z position
-                    if self._z_correction[p_idx]:
-                        update_event = {
-                            "z_pos": event.z_pos + self._z_correction[p_idx]
-                        }
-                else:
-                    # run autofocus and get the correction to apply to each z position
-                    self._z_correction[p_idx] = self._execute_autofocus(event.autofocus)
-                    # set updated z position
-                    self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
-                    # update event to reflect the new z position
+                # apply the correction to the z position
+                p_idx = "p0" if p_idx is None else p_idx
+                if p_idx not in self._z_correction:
+                    self._z_correction[p_idx] = 0.0
+                self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
+                # update event to reflect the new z position
+                if self._z_correction[p_idx]:
                     update_event = {"z_pos": event.z_pos + self._z_correction[p_idx]}
-
-                # z_af_device, z_af_pos = event.autofocus
-
-                # z_plan = event.sequence.z_plan
-
-                # if len(z_plan) > 1 and not z_plan.is_relative:
-                #     self._mmc.setZPosition(event.z_pos)
-
-                # elif len(z_plan) > 1:
-                #     p_idx = f"p{event.index.get('p', 0)}"
-                #     # if first frame of z stack, calculate the correction
-                #     if event.index["z"] == 0:
-                #         # the first z event is the top or bottom of the stack,
-                #         # to know the reference z position we need to subtract the first
-                #         # z offset from the relative z plan (self._z_plan[0])
-                #         reference_position = event.z_pos - list(z_plan)[0]
-                #         # go to the reference position
-                #         try:
-                #             self._mmc.setZPosition(reference_position + self._z_correction[p_idx])
-                #         except KeyError:
-                #             self._mmc.setZPosition(reference_position)
-                #         # run autofocus
-                #         z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
-                #         # calculate the correction to apply to each z position
-                #         self._z_correction[p_idx] = z_after_af - reference_position
-
-                #     self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
-                #     update_event = {"z_pos": event.z_pos + self._z_correction[p_idx]}
-
-                # else:  # no z or len(z_plan) == 1
-                #     z_after_af = self._execute_autofocus(z_af_device, z_af_pos)
-                #     self._mmc.setZPosition(z_after_af)
-                #     update_event = {"z_pos": z_after_af}
-
-            # else:
-            #     self._mmc.setZPosition(event.z_pos)
 
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
@@ -136,17 +116,17 @@ class MDAEngine(PMDAEngine):
         self._mmc.snapImage()
         return EventPayload(image=self._mmc.getImage())
 
-    def _execute_autofocus(self, autofocus_event: AutoFocusPlan) -> float:
+    def _execute_autofocus(self, autofocus_event: AutoFocusParams) -> float:
         """Perform the autofocus.
 
         Returns the correction to be applied to the focus motor position.
         """
         self._mmc.setPosition(
             autofocus_event.autofocus_z_device_name,
-            autofocus_event.z_autofocus_position,
+            cast(float, autofocus_event.af_motor_offset),
         )
         self._mmc.fullFocus()
-        return self._mmc.getZPosition() - autofocus_event.z_focus_position
+        return self._mmc.getZPosition() - cast(float, autofocus_event.z_stage_position)
 
 
 class EventPayload(NamedTuple):
