@@ -84,14 +84,13 @@ class MDAEngine(PMDAEngine):
             if event.autofocus is not None:  # type: ignore
                 # get the correction to apply to each z position
                 self._z_correction[p_idx] = self._execute_autofocus(event.autofocus)  # type: ignore  # noqa: E501
-                # set updated z position
+                # set updated z position with the correction
                 self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
                 # update event to reflect the new z position
                 update_event = {"z_pos": event.z_pos + self._z_correction[p_idx]}
             else:
                 # if autofocus is not used in this event, just set the z position
-                # + any correction that was applied to the previous event
-                # apply the correction to the z position
+                # + correction if any.
                 p_idx = "p0" if p_idx is None else p_idx
                 if p_idx not in self._z_correction:
                     self._z_correction[p_idx] = 0.0
