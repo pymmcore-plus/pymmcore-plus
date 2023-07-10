@@ -5,7 +5,6 @@ from typing import Callable
 from unittest.mock import Mock
 
 import pytest
-
 from pymmcore_plus import CMMCorePlus, DeviceProperty, DeviceType, PropertyType
 
 

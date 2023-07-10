@@ -1,5 +1,4 @@
 import pytest
-
 from pymmcore_plus import CMMCorePlus, ConfigGroup, Configuration
 
 
