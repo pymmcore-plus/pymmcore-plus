@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from useq import MDAEvent, MDASequence
@@ -59,8 +58,7 @@ class MDAEngine(PMDAEngine):
         self._mmc = self._mmc or CMMCorePlus.instance()
 
         # switch off autofocus device if it is on
-        with contextlib.suppress(RuntimeError):
-            self._mmc.setProperty(self._mmc.getAutoFocusDevice(), "State", "Off")
+        self._mmc.enableContinuousFocus(False)
 
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
@@ -124,7 +122,20 @@ class MDAEngine(PMDAEngine):
             autofocus_event.autofocus_z_device_name,
             cast(float, autofocus_event.af_motor_offset),
         )
-        self._mmc.fullFocus()
+        self._mmc.waitForSystem()
+
+        # perform fullFocus 3 times in case of failure
+        try:
+            self._mmc.fullFocus()
+            self._mmc.waitForSystem()
+        except RuntimeError:
+            try:
+                self._mmc.fullFocus()
+                self._mmc.waitForSystem()
+            except RuntimeError:
+                self._mmc.fullFocus()
+                self._mmc.waitForSystem()
+
         return self._mmc.getZPosition() - cast(float, autofocus_event.z_stage_position)
 
 
