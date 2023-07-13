@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from typing import TYPE_CHECKING, Any, NamedTuple, cast
 
 from useq import MDAEvent, MDASequence
@@ -133,8 +134,12 @@ class MDAEngine(PMDAEngine):
                 self._mmc.fullFocus()
                 self._mmc.waitForSystem()
             except RuntimeError:
-                self._mmc.fullFocus()
-                self._mmc.waitForSystem()
+                try:
+                    self._mmc.fullFocus()
+                    self._mmc.waitForSystem()
+                except RuntimeError:
+                    warnings.warn("Hardware autofocus failed 3 times.", stacklevel=2)
+                    return 0.0
 
         return self._mmc.getZPosition() - cast(float, autofocus_event.z_stage_position)
 
