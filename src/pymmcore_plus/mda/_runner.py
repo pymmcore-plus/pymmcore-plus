@@ -144,15 +144,11 @@ class MDARunner:
                 if cancelled:
                     break
 
+                logger.info(event)
                 if not self._running:
                     break
-
-                logger.info(event)
 
                 self._engine.setup_event(event)
-
-                if not self._running:
-                    break
 
                 output = self._engine.exec_event(event)
 
