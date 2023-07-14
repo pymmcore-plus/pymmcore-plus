@@ -5,8 +5,6 @@ from typing import TYPE_CHECKING, Any, NamedTuple
 
 from useq import HardwareAutofocus, MDAEvent, MDASequence, Snap  # type: ignore
 
-from pymmcore_plus._logger import logger
-
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
@@ -103,12 +101,6 @@ class MDAEngine(PMDAEngine):
             new_z = self._execute_autofocus(action)
             # get the correction to apply to each z position
             self._z_correction[p_idx] = event.z_pos - new_z
-
-            logger.info(
-                f"Autofocus event: z_correction: {self._z_correction[p_idx]}, "
-                f"new_z_pos: {new_z})"
-            )
-
         return None
 
     def _execute_autofocus(self, autofocus_event: HardwareAutofocus) -> float:
