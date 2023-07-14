@@ -4,8 +4,6 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, cast
 
-from psygnal import EmitLoopError
-
 from pymmcore_plus._logger import logger
 
 from ._protocol import PMDAEngine
@@ -144,17 +142,14 @@ class MDARunner:
                 if cancelled:
                     break
 
-                logger.info(event)
                 if not self._running:
                     break
 
+                logger.info(event)
+
                 self._engine.setup_event(event)
 
-                output = self._engine.exec_event(event)
-
-                if (img := getattr(output, "image", None)) is not None:
-                    with contextlib.suppress(EmitLoopError):
-                        self._events.frameReady.emit(img, event)
+                self._engine.exec_event(event)
 
                 teardown_event(event)
 

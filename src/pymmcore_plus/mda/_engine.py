@@ -1,17 +1,15 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any, NamedTuple, cast
+from typing import TYPE_CHECKING, Any, NamedTuple
 
-from useq import MDAEvent, MDASequence
+from useq import HardwareAutofocus, MDAEvent, MDASequence, Snap  # type: ignore
 
 from pymmcore_plus._logger import logger
 
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
-    import numpy as np
-
     from ..core import CMMCorePlus
 
     class AutoFocusParams(NamedTuple):
@@ -46,7 +44,8 @@ class MDAEngine(PMDAEngine):
         self._mmc = mmc
 
         # used for one_shot autofocus to store the z correction for each position index.
-        self._z_correction: dict[str, float] = {}
+        # map of {position_index: z_correction}
+        self._z_correction: dict[int | None, float] = {}
 
     def setup_sequence(self, sequence: MDASequence) -> None:
         """Setup the hardware for the entire sequence.
@@ -69,59 +68,57 @@ class MDAEngine(PMDAEngine):
         event : MDAEvent
             The event to use for the Hardware config
         """
-        update_event = {}  # to update the event in case of any autofocus correction
-
         if event.x_pos is not None or event.y_pos is not None:
             x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
             y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
             self._mmc.setXYPosition(x, y)
 
         if event.z_pos is not None:
-            # get position index if it exists else use 0
-            p_idx = f"p{event.index.get('p', None)}"
-            # run autofocus if specified in the event
-            if event.autofocus is not None:  # type: ignore
-                # get the correction to apply to each z position
-                self._z_correction[p_idx] = self._execute_autofocus(event.autofocus)  # type: ignore  # noqa: E501
-                # set updated z position with the correction
-                self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
-                # update event to reflect the new z position
-                update_event = {"z_pos": event.z_pos + self._z_correction[p_idx]}
-            else:
-                # if autofocus is not used in this event, just set the z position
-                # + correction if any.
-                p_idx = "p0" if p_idx is None else p_idx
-                if p_idx not in self._z_correction:
-                    self._z_correction[p_idx] = 0.0
-                self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
-                # update event to reflect the new z position
-                if self._z_correction[p_idx]:
-                    update_event = {"z_pos": event.z_pos + self._z_correction[p_idx]}
+            p_idx = event.index.get("p", None)
+            if p_idx not in self._z_correction:
+                self._z_correction[p_idx] = 0.0
+            self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
 
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
         if event.exposure is not None:
             self._mmc.setExposure(event.exposure)
 
-        if update_event:
-            logger.info(f"Updated event: {event.copy(update=update_event)}")
-
         self._mmc.waitForSystem()
 
     def exec_event(self, event: MDAEvent) -> Any:
         """Execute an individual event and return the image data."""
-        # TODO: add non-aquisition event-specific logic here later
-        self._mmc.snapImage()
-        return EventPayload(image=self._mmc.getImage())
+        action = event.action if hasattr(event, "action") else Snap()
 
-    def _execute_autofocus(self, autofocus_event: AutoFocusParams) -> float:
-        """Perform the autofocus.
+        # snap an image
+        if action.type == "snap":
+            self._mmc.snapImage()
+            self._mmc.mda.events.frameReady.emit(self._mmc.getImage(), event)
 
-        Returns the correction to be applied to the focus motor position.
+        # execute hardware autofocus
+        elif action.type == "hardware_autofocus" and event.z_pos is not None:
+            # get position index
+            p_idx = event.index.get("p", None)
+            # run autofocus and get the new z position
+            new_z = self._execute_autofocus(action)
+            # get the correction to apply to each z position
+            self._z_correction[p_idx] = event.z_pos - new_z
+
+            logger.info(
+                f"Autofocus event: z_correction: {self._z_correction[p_idx]}, "
+                f"new_z_pos: {new_z})"
+            )
+
+        return None
+
+    def _execute_autofocus(self, autofocus_event: HardwareAutofocus) -> float:
+        """Perform the hardware autofocus.
+
+        Returns the new z focus position.
         """
         self._mmc.setPosition(
             autofocus_event.autofocus_z_device_name,
-            cast(float, autofocus_event.af_motor_offset),
+            autofocus_event.autofocus_motor_offset,
         )
         self._mmc.waitForSystem()
 
@@ -139,10 +136,5 @@ class MDAEngine(PMDAEngine):
                     self._mmc.waitForSystem()
                 except RuntimeError:
                     warnings.warn("Hardware autofocus failed 3 times.", stacklevel=2)
-                    return 0.0
 
-        return self._mmc.getZPosition() - cast(float, autofocus_event.z_stage_position)
-
-
-class EventPayload(NamedTuple):
-    image: np.ndarray
+        return self._mmc.getZPosition()
