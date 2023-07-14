@@ -87,10 +87,10 @@ class MDAEngine(PMDAEngine):
         self._mmc.waitForSystem()
 
     def exec_event(self, event: MDAEvent) -> Any:
-        """Execute an individual event and return the image data."""
+        """Execute an individual event."""
         action = event.action if hasattr(event, "action") else Snap()
 
-        # snap an image
+        # snap an image and emit the image data
         if action.type == "snap":
             self._mmc.snapImage()
             self._mmc.mda.events.frameReady.emit(self._mmc.getImage(), event)
