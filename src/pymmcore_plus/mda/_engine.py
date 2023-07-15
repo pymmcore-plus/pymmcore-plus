@@ -80,7 +80,8 @@ class MDAEngine(PMDAEngine):
             # run autofocus and get the new z position
             new_z = self._execute_autofocus(action)
             # get the correction to apply to each z position
-            self._z_correction[p_idx] = event.z_pos - new_z
+            self._z_correction[p_idx] = new_z - event.z_pos
+
         return None
 
     def _execute_autofocus(self, action: HardwareAutofocus) -> float:
