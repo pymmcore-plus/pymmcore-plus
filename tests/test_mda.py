@@ -121,7 +121,8 @@ def test_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
 def _assert_event_z_pos(core: CMMCorePlus, events: list[MDAEvent], expected: list):
     """Helper function to setup_event and assert expected z position"""
     for event, z in zip(events, expected):
-        core.mda._engine.setup_event(event)
+        core.mda.engine.setup_event(event)
+        core.mda.engine.exec_event(event)
         assert core.getPosition() == z
 
 
@@ -152,11 +153,11 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
     mda = MDASequence(
         stage_positions=[
             {
-                "z": 50,
+                "z": 25,
                 "sequence": {
                     "autofocus_plan": {
                         "autofocus_device_name": "Z",
-                        "aotofocus_motor_offset": 50,
+                        "autofocus_motor_offset": 50,
                         "axes": ("p",),
                     }
                 },
@@ -166,10 +167,13 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
     )
 
     events = list(mda.iter_events())
-    assert len(events) == 3
 
-    assert events[0].z_pos == 49
-    assert events[1].z_pos == 50
-    assert events[2].z_pos == 51
+    assert len(events) == 4  # first event is the autofocus...
 
-    _assert_event_z_pos(core, events, [99, 100, 101])
+    assert events[0].z_pos == 25  # ...and should have the mid z stack position
+    assert events[1].z_pos == 24
+    assert events[2].z_pos == 25
+    assert events[3].z_pos == 26
+
+    _assert_event_z_pos(core, events, [100, 99, 100, 101])
+    assert core.mda.engine._z_correction == {0: 75.0}
