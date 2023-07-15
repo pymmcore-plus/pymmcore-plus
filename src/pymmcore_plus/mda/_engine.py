@@ -1,34 +1,14 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any
 
-from useq import HardwareAutofocus, MDAEvent, MDASequence, Snap  # type: ignore
+from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence  # type: ignore
 
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
     from ..core import CMMCorePlus
-
-    class AutoFocusParams(NamedTuple):
-        """Parameters for performing hardware autofocus.
-
-        Attributes
-        ----------
-        autofocus_z_device_name : str
-            Name of the hardware autofocus z device.
-        af_motor_offset : float | None
-            Before autofocus is performed, the autofocus motor should be moved to this
-            offset.
-        z_stage_position : float | None
-            Before autofocus is performed, the z stage should be moved to this position.
-            (Note: the Z-stage is the "main" z-axis, and is not the same as the
-            autofocus device.)
-        """
-
-        autofocus_z_device_name: str
-        af_motor_offset: float | None
-        z_stage_position: float | None
 
 
 class MDAEngine(PMDAEngine):
@@ -86,15 +66,15 @@ class MDAEngine(PMDAEngine):
 
     def exec_event(self, event: MDAEvent) -> Any:
         """Execute an individual event."""
-        action = event.action if hasattr(event, "action") else Snap()
+        action = event.action if hasattr(event, "action") else AcquireImage()
 
-        # snap an image and emit the image data
-        if action.type == "snap":
+        # acquire an image and emit the image data
+        if isinstance(action, AcquireImage):
             self._mmc.snapImage()
             self._mmc.mda.events.frameReady.emit(self._mmc.getImage(), event)
 
         # execute hardware autofocus
-        elif action.type == "hardware_autofocus" and event.z_pos is not None:
+        elif isinstance(action, HardwareAutofocus) and event.z_pos is not None:
             # get position index
             p_idx = event.index.get("p", None)
             # run autofocus and get the new z position
@@ -103,14 +83,14 @@ class MDAEngine(PMDAEngine):
             self._z_correction[p_idx] = event.z_pos - new_z
         return None
 
-    def _execute_autofocus(self, autofocus_event: HardwareAutofocus) -> float:
+    def _execute_autofocus(self, action: HardwareAutofocus) -> float:
         """Perform the hardware autofocus.
 
         Returns the new z focus position.
         """
         self._mmc.setPosition(
-            autofocus_event.autofocus_z_device_name,
-            autofocus_event.autofocus_motor_offset,
+            action.autofocus_device_name,
+            action.autofocus_motor_offset,
         )
         self._mmc.waitForSystem()
 

@@ -3,9 +3,10 @@ from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pytest
+from useq import MDAEvent, MDASequence
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
-from useq import MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -101,9 +102,8 @@ def test_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
     mda = MDASequence(
         stage_positions=[{"z": 50}],
         autofocus_plan={
-            "autofocus_z_device_name": "Z",
-            "af_motor_offset": 50,
-            "z_stage_position": None,
+            "autofocus_device_name": "Z",
+            "autofocus_motor_offset": 50,
             "axes": ("p",),
         },
     )
@@ -155,9 +155,8 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
                 "z": 50,
                 "sequence": {
                     "autofocus_plan": {
-                        "autofocus_z_device_name": "Z",
-                        "af_motor_offset": 50,
-                        "z_stage_position": 50,
+                        "autofocus_device_name": "Z",
+                        "aotofocus_motor_offset": 50,
                         "axes": ("p",),
                     }
                 },
