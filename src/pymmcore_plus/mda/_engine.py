@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
+from numpy import ndarray
 from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence  # type: ignore
 
 from ._protocol import PMDAEngine
@@ -64,14 +65,14 @@ class MDAEngine(PMDAEngine):
 
         self._mmc.waitForSystem()
 
-    def exec_event(self, event: MDAEvent) -> Any:
+    def exec_event(self, event: MDAEvent) -> tuple[ndarray, MDAEvent] | None:
         """Execute an individual event."""
         action = event.action if hasattr(event, "action") else AcquireImage()
 
         # acquire an image and emit the image data
         if isinstance(action, AcquireImage):
             self._mmc.snapImage()
-            self._mmc.mda.events.frameReady.emit(self._mmc.getImage(), event)
+            return self._mmc.getImage(), event
 
         # execute hardware autofocus
         elif isinstance(action, HardwareAutofocus) and event.z_pos is not None:
@@ -81,6 +82,7 @@ class MDAEngine(PMDAEngine):
             new_z = self._execute_autofocus(action)
             # get the correction to apply to each z position
             self._z_correction[p_idx] = new_z - event.z_pos
+            return None
 
         return None
 

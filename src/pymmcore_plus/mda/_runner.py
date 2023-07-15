@@ -4,13 +4,17 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, cast
 
+from numpy import ndarray
+from psygnal import EmitLoopError
+from useq import MDAEvent
+
 from pymmcore_plus._logger import logger
 
 from ._protocol import PMDAEngine
 from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
-    from useq import MDAEvent, MDASequence
+    from useq import MDASequence
 
 
 class MDARunner:
@@ -149,7 +153,14 @@ class MDARunner:
 
                 self._engine.setup_event(event)
 
-                self._engine.exec_event(event)
+                output = self._engine.exec_event(event)
+
+                # emit frameReady signal
+                if output is not None:
+                    img, ev = output
+                    if isinstance(img, ndarray) and isinstance(ev, MDAEvent):
+                        with contextlib.suppress(EmitLoopError):
+                            self.events.frameReady.emit(img, ev)
 
                 teardown_event(event)
 
