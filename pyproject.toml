@@ -145,6 +145,7 @@ disallow_any_generics = false
 disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
+plugins = "pydantic.mypy"
 
 [[tool.mypy.overrides]]
 module = ["pymmcore_plus.remote.*"]

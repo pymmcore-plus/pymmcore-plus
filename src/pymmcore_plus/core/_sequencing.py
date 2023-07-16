@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Iterable
 
 from useq import MDAEvent
@@ -11,7 +11,7 @@ if TYPE_CHECKING:
 
 @dataclass(frozen=True)
 class SequencedEvent:
-    events: tuple[MDAEvent, ...]
+    events: tuple[MDAEvent, ...] = field(repr=False)
     exposure_sequence: tuple[float, ...]
     x_sequence: tuple[float, ...]
     y_sequence: tuple[float, ...]

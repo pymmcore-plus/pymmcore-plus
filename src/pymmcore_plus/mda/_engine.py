@@ -95,7 +95,7 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
         for event in events:
             # if the sequence is empty or the current event can be sequenced with the
             # previous event, add it to the sequence
-            if not seq or self._mmc.canSequenceEvents(seq[-1], event, len(seq)):
+            if not seq or self._mmc.canSequenceEvents(seq[-1], event, len(seq))[0]:
                 seq.append(event)
             else:
                 # otherwise, yield a SequencedEvent if the sequence has accumulated
