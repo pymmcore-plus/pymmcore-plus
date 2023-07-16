@@ -197,7 +197,11 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus_fai
         z_plan={"above": 1, "below": 1, "step": 1},
     )
 
+    core.setZPosition(200)
     af_event = list(mda.iter_events())[0]
     core.mda.engine.setup_event(af_event)
-    with pytest.raises(UserWarning, match="Hardware autofocus failed"):
-        core.mda.engine.exec_event(af_event)
+    core.mda.engine.exec_event(af_event)
+
+    # if fullfocus fails, the returned z position should be the home position of the
+    # z plan (50). If fullfocus is working, it should 100.
+    assert core.getZPosition() == 50
