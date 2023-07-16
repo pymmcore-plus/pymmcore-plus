@@ -25,6 +25,7 @@ from typing import (
 
 import pymmcore
 from psygnal import SignalInstance
+from useq import MDAEvent
 
 from pymmcore_plus.core.events import PCoreSignaler
 
@@ -42,7 +43,6 @@ from .events import CMMCoreSignaler, _get_auto_core_callback_class
 if TYPE_CHECKING:
     import numpy as np
     from typing_extensions import TypedDict
-    from useq import MDASequence
 
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
@@ -1210,7 +1210,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self._mda_runner
 
-    def run_mda(self, sequence: MDASequence, block: bool = False) -> Thread:
+    def run_mda(self, sequence: Iterable[MDAEvent], block: bool = False) -> Thread:
         """Run MDA defined by *sequence* on a new thread.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
