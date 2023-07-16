@@ -1,9 +1,8 @@
 from unittest.mock import patch
 
+import pymmcore_plus
 import pytest
 from _pytest.logging import LogCaptureFixture
-
-import pymmcore_plus
 from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler, QMDASignaler
