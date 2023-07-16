@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, NamedTuple
 
-from numpy import ndarray
-from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence  # type: ignore
+from useq import HardwareAutofocus, MDAEvent, MDASequence  # type: ignore
 
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
+    import numpy as np
+
     from ..core import CMMCorePlus
 
 
@@ -65,17 +66,12 @@ class MDAEngine(PMDAEngine):
 
         self._mmc.waitForSystem()
 
-    def exec_event(self, event: MDAEvent) -> tuple[ndarray, MDAEvent] | None:
+    def exec_event(self, event: MDAEvent) -> Any:
         """Execute an individual event."""
-        action = event.action if hasattr(event, "action") else AcquireImage()
-
-        # acquire an image and emit the image data
-        if isinstance(action, AcquireImage):
-            self._mmc.snapImage()
-            return self._mmc.getImage(), event
+        action = getattr(event, "action", None)
 
         # execute hardware autofocus
-        elif isinstance(action, HardwareAutofocus) and event.z_pos is not None:
+        if isinstance(action, HardwareAutofocus) and event.z_pos is not None:
             # get position index
             p_idx = event.index.get("p", None)
             # run autofocus and get the new z position
@@ -84,7 +80,9 @@ class MDAEngine(PMDAEngine):
             self._z_correction[p_idx] = new_z - event.z_pos
             return None
 
-        return None
+        # acquire an image and emit the image data
+        self._mmc.snapImage()
+        return EventPayload(image=self._mmc.getImage())
 
     def _execute_autofocus(self, action: HardwareAutofocus) -> float:
         """Perform the hardware autofocus.
@@ -113,3 +111,7 @@ class MDAEngine(PMDAEngine):
                     warnings.warn("Hardware autofocus failed 3 times.", stacklevel=2)
 
         return self._mmc.getZPosition()
+
+
+class EventPayload(NamedTuple):
+    image: np.ndarray

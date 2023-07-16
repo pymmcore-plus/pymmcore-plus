@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from useq import MDAEvent, MDASequence
@@ -35,7 +35,7 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    def exec_event(self, event: MDAEvent) -> Any:
+    def exec_event(self, event: MDAEvent) -> object:
         """Execute `event`.
 
         This method is called after `setup_event` and is responsible for

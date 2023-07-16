@@ -4,7 +4,6 @@ import contextlib
 import time
 from typing import TYPE_CHECKING, cast
 
-from numpy import ndarray
 from psygnal import EmitLoopError
 from useq import MDAEvent
 
@@ -155,12 +154,9 @@ class MDARunner:
 
                 output = self._engine.exec_event(event)
 
-                # emit frameReady signal
-                if output is not None:
-                    img, ev = output
-                    if isinstance(img, ndarray) and isinstance(ev, MDAEvent):
-                        with contextlib.suppress(EmitLoopError):
-                            self.events.frameReady.emit(img, ev)
+                if (img := getattr(output, "image", None)) is not None:
+                    with contextlib.suppress(EmitLoopError):
+                        self.events.frameReady.emit(img, event)
 
                 teardown_event(event)
 
