@@ -1,20 +1,22 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Iterable, Iterator, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
 
 if TYPE_CHECKING:
+    from typing import TYPE_CHECKING, Iterable, Iterator
+
     from useq import MDAEvent, MDASequence
 
-    from ..core._sequencing import SequencedEvent
 
+CustomEvent = TypeVar("CustomEvent")
 
 # NOTE: This whole thing could potentially go in useq-schema
 # as it makes no assumptions about pymmcore-plus
 
 
 @runtime_checkable
-class PMDAEngine(Protocol):
+class PMDAEngine(Protocol[CustomEvent]):
     """Protocol that all MDA engines must implement."""
 
     @abstractmethod
@@ -25,7 +27,7 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    def setup_event(self, event: MDAEvent | SequencedEvent) -> None:
+    def setup_event(self, event: MDAEvent | CustomEvent) -> None:
         """Prepare state of system (hardware, etc.) for `event`.
 
         This method is called before each event in the sequence.  It is
@@ -37,7 +39,7 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    def exec_event(self, event: MDAEvent | SequencedEvent) -> object:
+    def exec_event(self, event: MDAEvent | CustomEvent) -> object:
         """Execute `event`.
 
         This method is called after `setup_event` and is responsible for
@@ -51,11 +53,25 @@ class PMDAEngine(Protocol):
         """
         # TODO: nail down a spec for the return object.
 
+    def event_iterator(
+        self, events: Iterable[MDAEvent]
+    ) -> Iterator[MDAEvent | CustomEvent]:
+        """Optional wrapper on the event iterator.
 
-class FullPMDAEngine(PMDAEngine, Protocol):
+        This can be used to wrap the event iterator to perform any event merging
+        (e.g. if the engine supports HardwareSequencing) or event modification.
+        The default implementation is just `iter(events)`.
+
+        Be careful when using this method.  It is powerful and can result in unexpected
+        event iteration if used incorrectly.
+        """
+        yield from events
+
+
+class FullPMDAEngine(PMDAEngine[CustomEvent], Protocol):
     """Optional methods that a PMDAEngine MAY implement."""
 
-    def teardown_event(self, event: MDAEvent | SequencedEvent) -> None:
+    def teardown_event(self, event: MDAEvent | CustomEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`.
 
         If the engine provides this function, it will be called after
@@ -68,17 +84,4 @@ class FullPMDAEngine(PMDAEngine, Protocol):
 
         If the engine provides this function, it will be called after the
         last event in the sequence has been executed.
-        """
-
-    def event_iterator(
-        self, events: Iterable[MDAEvent]
-    ) -> Iterator[MDAEvent | SequencedEvent]:
-        """Optional wrapper on the event iterator.
-
-        This can be used to wrap the event iterator to perform any event merging
-        (e.g. if the engine supports HardwareSequencing) or event modification.
-        The default implementation is just `iter(events)`.
-
-        Be careful when using this method.  It is powerful and can result in unexpected
-        event iteration if used incorrectly.
         """

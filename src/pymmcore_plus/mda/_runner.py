@@ -239,6 +239,10 @@ class MDARunner:
             if self._check_canceled():
                 return True
 
+        # FIXME: this is actually the only place where the runner assumes our event is
+        # an MDAevent.  For everything else, the engine is technically the only thing
+        # that cares about the event time.
+        # So this whole method could potentially be moved to the engine.
         if event.min_start_time:
             go_at = event.min_start_time + self._paused_time
             # We need to enter a loop here checking paused and canceled.

@@ -13,7 +13,7 @@ if TYPE_CHECKING:
     from ..core import CMMCorePlus
 
 
-class MDAEngine(PMDAEngine):
+class MDAEngine(PMDAEngine[SequencedEvent]):
     """The default MDAengine that ships with pymmcore-plus.
 
     This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
