@@ -95,21 +95,22 @@ class MDAEngine(PMDAEngine):
         )
         self._mmc.waitForSystem()
 
-        # perform fullFocus 3 times in case of failure
-        try:
-            self._mmc.fullFocus()
-            self._mmc.waitForSystem()
-        except RuntimeError:
+        # perform fullFocus 'action.max_retries' times in case of failure
+        for i in range(action.max_retries):
             try:
                 self._mmc.fullFocus()
                 self._mmc.waitForSystem()
-            except RuntimeError:
-                try:
-                    self._mmc.fullFocus()
-                    self._mmc.waitForSystem()
-                except RuntimeError:
-                    warnings.warn("Hardware autofocus failed 3 times.", stacklevel=2)
+                return self._mmc.getZPosition()
 
+            except RuntimeError:
+                warnings.warn(
+                    f"Hardware autofocus failed {i + 1} time(s), "
+                    f"({action.max_retries - (i + 1)} retries remaining).",
+                    stacklevel=2,
+                )
+        warnings.warn(
+            "Hardware autofocus failed. Maximum retries exceeded.", stacklevel=2
+        )
         return self._mmc.getZPosition()
 
 
