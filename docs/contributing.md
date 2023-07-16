@@ -62,3 +62,25 @@ mkdocs serve
 
 The docs should be live at <http://127.0.0.1:8000> and will update automatically
 as you edit and save them.
+
+## Developing on Apple Silicon
+
+To build a native version of the DemoCamera for local testing on apple silicon, you
+can run the following command (you must have [homebrew](https://brew.sh) installed)
+
+```shell
+mmcore build-dev
+```
+
+This will download the micro-manager repo, build it, and drop the DemoCamera and
+Utilities devices into a folder in your pymmcore-plus install folder (by default
+`~/Library/Application Support/pymmcore-plus/mm`).  This path is on the default
+search path so you should be good to go.  You can confirm by running:
+
+```py
+from pymmcore_plus import CMMCorePlus
+
+core = CMMCorePlus()
+core.loadSystemConfiguration()
+core.snap()
+```

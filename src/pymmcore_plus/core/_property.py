@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from typing import TYPE_CHECKING, Any, Sequence
 
 from pymmcore import g_Keyword_Label, g_Keyword_State
@@ -56,11 +57,13 @@ class DeviceProperty:
     def __init__(
         self, device_label: str, property_name: str, mmcore: CMMCorePlus
     ) -> None:
-
         self.device = device_label
         self.name = property_name
         self._mmc = mmcore
-        self.valueChanged = _DevicePropValueSignal(device_label, property_name, mmcore)
+
+    @cached_property
+    def valueChanged(self) -> _DevicePropValueSignal:
+        return _DevicePropValueSignal(self.device, self.name, self._mmc)
 
     def isValid(self) -> bool:
         """Return `True` if device is loaded and has a property by this name."""
@@ -97,7 +100,9 @@ class DeviceProperty:
         if self.isReadOnly():
             import warnings
 
-            warnings.warn(f"'{self.device}::{self.name}' is a read-only property.")
+            warnings.warn(
+                f"'{self.device}::{self.name}' is a read-only property.", stacklevel=2
+            )
         try:
             self._mmc.setProperty(self.device, self.name, val)
         except RuntimeError as e:

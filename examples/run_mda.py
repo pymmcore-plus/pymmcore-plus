@@ -2,7 +2,6 @@ import numpy as np
 from pymmcore_plus import CMMCorePlus
 from useq import MDAEvent, MDASequence
 
-
 # see https://pymmcore-plus.github.io/useq-schema/api/ (1)
 sequence = MDASequence(
     channels=["DAPI", {"config": "FITC", "exposure": 50}],
@@ -13,6 +12,7 @@ sequence = MDASequence(
 
 mmc = CMMCorePlus.instance()  # (2)!
 mmc.loadSystemConfiguration()  #  load demo configuration (3)
+
 
 # connect callback using a decorator (4)
 @mmc.mda.events.frameReady.connect

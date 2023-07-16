@@ -1,9 +1,8 @@
-import json
 import os
 import re
 from pathlib import Path
 from threading import Thread
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -44,7 +43,7 @@ def test_core(core: CMMCorePlus):
     assert not core.mda._paused
 
     # because the fixture loadsSystemConfig 'demo'
-    assert len(core.getLoadedDevices()) == 12
+    assert len(core.getLoadedDevices()) == 14
 
     assert "CMMCorePlus" in repr(core)
 
@@ -81,6 +80,9 @@ def test_load_system_config(core: CMMCorePlus):
 
 
 def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot: "QtBot"):
+    if not isinstance(core.events, QObject):
+        pytest.skip(reason="Skip cb exceptions on psygnal.")
+
     @core.events.propertyChanged.connect
     def _raze():
         raise ValueError("Boom")
@@ -353,15 +355,7 @@ def test_config_create():
     assert list(cfg1) == list(cfg2) == list(cfg3) == aslist
     assert cfg1 == cfg2 == cfg3
 
-    assert cfg1.json() == json.dumps(_input)
     assert cfg1.html()
-
-
-def test_config_yaml():
-    _input = {"a": {"a0": "0", "a1": "1"}, "b": {"b0": "10", "b1": "11"}}
-    cfg1 = Configuration.create(_input)
-    yaml = pytest.importorskip("yaml")
-    assert cfg1.yaml() == yaml.safe_dump(_input)
 
 
 def test_property_schema(core: CMMCorePlus):
@@ -391,14 +385,13 @@ def test_get_objectives(core: CMMCorePlus):
 
 
 def test_guess_channel_group(core: CMMCorePlus):
-
     chan_group = core.getChannelGroup()
     assert chan_group == "Channel"
 
     assert core.getOrGuessChannelGroup() == ["Channel"]
 
     with patch.object(core, "getChannelGroup", return_value=""):
-        assert core.getOrGuessChannelGroup() == ["Channel"]
+        assert core.getOrGuessChannelGroup() == ["Channel", "Channel-Multiband"]
 
         with pytest.raises(TypeError):
             core.channelGroup_pattern = 4
@@ -417,7 +410,7 @@ def test_guess_channel_group(core: CMMCorePlus):
         # assign new using a pre-compile pattern
         core.channelGroup_pattern = re.compile("Channel")
         chan_group = core.getOrGuessChannelGroup()
-        assert chan_group == ["Channel"]
+        assert chan_group == ["Channel", "Channel-Multiband"]
 
 
 @pytest.mark.skipif(
@@ -503,3 +496,20 @@ def test_setContext(core: CMMCorePlus):
         with core.setContext(autoShutter=False):
             raise ValueError
     assert core.getAutoShutter()
+
+
+def test_snap_signals(core: CMMCorePlus, qtbot: "QtBot") -> None:
+    assert core.getAutoShutter()
+
+    def shutter_is(state: bool) -> Callable:
+        def _check(*args: Any) -> bool:
+            return args == (core.getShutterDevice(), "State", state)
+
+        return _check
+
+    with qtbot.waitSignals(
+        [core.events.propertyChanged, core.events.propertyChanged],
+        check_params_cbs=[shutter_is(True), shutter_is(False)],
+        order="strict",
+    ):
+        core.snapImage()

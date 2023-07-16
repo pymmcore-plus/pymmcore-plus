@@ -18,9 +18,7 @@ def core(request):
     core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(core.events)
     core.registerCallback(core._callback_relay)
     if not core.getDeviceAdapterSearchPaths():
-        pytest.fail(
-            "To run tests, please install MM with `python -m pymmcore_plus.install`"
-        )
+        pytest.fail("To run tests, please install MM with `mmcore install`")
     core.loadSystemConfiguration()
     return core
 

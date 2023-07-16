@@ -35,10 +35,13 @@ classifiers = [
 ]
 dynamic = ["version"]
 dependencies = [
+    "appdirs",
     "loguru",
     "numpy",
     "psygnal>=0.4.2",
     "pymmcore>=10.1.1.70.4",
+    "typer",
+    "rich",
     "typing-extensions",
     "useq-schema",
     "wrapt",
@@ -53,7 +56,7 @@ docs = [
     "mkdocstrings-python",
 ]
 remote = ["Pyro5>=5.10", "msgpack", "psutil"]
-testing = ["PyQt5", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
+testing = ["PyQt6", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
 dev = [
     "black",
     "ipython",
@@ -65,13 +68,15 @@ dev = [
     "rich",
     "ruff",
     "types-psutil",
-    "types-PyYAML",
 ]
 
 [project.urls]
 Source = "https://github.com/pymmcore-plus/pymmcore-plus"
 Tracker = "https://github.com/pymmcore-plus/pymmcore-plus/issues"
 Documentation = "https://pymmcore-plus.github.io/pymmcore-plus"
+
+[project.scripts]
+mmcore = "pymmcore_plus._cli:main"
 
 # https://hatch.pypa.io/latest/config/metadata/
 [tool.hatch.version]
@@ -96,23 +101,24 @@ extend-select = [
     "E",    # style errors
     "F",    # flakes
     "D",    # pydocstyle
-    "I001", # isort
-    "U",    # pyupgrade
+    "I",    # isort
+    "UP",   # pyupgrade
     # "N",  # pep8-naming
     # "S",  # bandit
     "C",    # flake8-comprehensions
     "B",    # flake8-bugbear
     "A001", # flake8-builtins
     "RUF",  # ruff-specific rules
-    "M001", # Unused noqa directive
 ]
 extend-ignore = [
     "D100", # Missing docstring in public module
+    "D104", # Missing docstring in public package
     "D107", # Missing docstring in __init__
     "D203", # 1 blank line required before class docstring
     "D212", # Multi-line docstring summary should start at the first line
     "D213", # Multi-line docstring summary should start at the second line
     "D400", # First line should end with a period
+    "D401", # First line should be in imperative mood
     "D413", # Missing blank line after last section
     "D416", # Section name should end with a colon
     "C901", # Function is too complex
@@ -121,6 +127,7 @@ extend-ignore = [
 [tool.ruff.per-file-ignores]
 "tests/*.py" = ["D"]
 "examples/*.py" = ["D"]
+"_cli.py" = ["B008"]
 "_mmcore_plus*.py" = ["D4"]
 "docs/*.py" = ["A", "D"]
 
@@ -161,8 +168,7 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 [tool.coverage.run]
-omit = ["*_tests*", "*/install.py"]
-
+source = ['src/pymmcore_plus']
 
 # https://github.com/mgedmin/check-manifest#configuration
 [tool.check-manifest]

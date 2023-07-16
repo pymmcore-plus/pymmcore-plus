@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Tuple
+from typing import TYPE_CHECKING
 
 from ._property import DeviceProperty
 from .events._device_signal_view import _DevicePropValueSignal
@@ -78,12 +78,12 @@ class Device:
         """Return the device name (this is not the same as the device label)."""
         return self._mmc.getDeviceName(self.label)
 
-    def propertyNames(self) -> Tuple[str, ...]:
+    def propertyNames(self) -> tuple[str, ...]:
         """Return all property names supported by this device."""
         return self._mmc.getDevicePropertyNames(self.label)
 
     @property
-    def properties(self) -> Tuple[DeviceProperty, ...]:
+    def properties(self) -> tuple[DeviceProperty, ...]:
         """Get all properties supported by device as DeviceProperty objects."""
         return tuple(
             DeviceProperty(self.label, name, self._mmc) for name in self.propertyNames()
@@ -119,7 +119,7 @@ class Device:
                     msg += f". Device {self.label!r} appears to be loaded already."
                     import warnings
 
-                    warnings.warn(msg)
+                    warnings.warn(msg, stacklevel=2)
                     return
                 lib = self._mmc.getDeviceLibrary(self.label)
                 name = self._mmc.getDeviceName(self.label)
@@ -138,7 +138,7 @@ class Device:
                             f". Device name {device_name!r} not in devices provided by "
                             f"adapter {adapter_name!r}: {devices}"
                         )
-            raise RuntimeError(msg)  # sourcery skip
+            raise RuntimeError(msg) from e
 
     def unload(self) -> None:
         """Unload device from the core and adjust all configuration data."""

@@ -27,8 +27,8 @@ class Metadata(pymmcore.Metadata):
     def __getitem__(self, name: str) -> Any:
         try:
             return self.GetSingleTag(name).GetValue()
-        except ValueError:
-            raise KeyError(str(name))
+        except ValueError as e:
+            raise KeyError(str(name)) from e
 
     def __setitem__(self, name: str, value: Any) -> None:
         tag = pymmcore.MetadataSingleTag(name, "_", False)

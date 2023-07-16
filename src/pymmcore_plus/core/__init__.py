@@ -1,6 +1,7 @@
 __all__ = [
     "ActionType",
     "CMMCorePlus",
+    "ConfigGroup",
     "Configuration",
     "DeviceDetectionStatus",
     "DeviceNotification",
@@ -14,6 +15,7 @@ __all__ = [
 ]
 
 from ._config import Configuration
+from ._config_group import ConfigGroup
 from ._constants import (
     ActionType,
     DeviceDetectionStatus,
