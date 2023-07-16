@@ -25,8 +25,6 @@ from typing import (
 import pymmcore
 from psygnal import SignalInstance
 
-from pymmcore_plus.core.events import PCoreSignaler
-
 from .._logger import logger
 from .._util import find_micromanager
 from ..mda import MDAEngine, MDARunner, PMDAEngine
@@ -36,7 +34,8 @@ from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
-from .events import CMMCoreSignaler, _get_auto_core_callback_class
+from ._sequencing import can_sequence_events
+from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
     import numpy as np
@@ -1766,67 +1765,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         (False, "'Dichroic-Label' is not sequenceable")
         ```
         """
-        # sourcery skip: low-code-quality
-
-        # channel
-        if e1.channel and e2.channel and (e1.channel != e2.channel):
-            cfg = self.getConfigData(e1.channel.group, e1.channel.config)
-            for dev, prop, _ in cfg:
-                # note: we don't need _ here, so can perhaps speed up with native=True
-                if not self.isPropertySequenceable(dev, prop):
-                    return False, f"'{dev}-{prop}' is not sequenceable"
-                max_len = self.getPropertySequenceMaxLength(dev, prop)
-                if cur_length >= max_len:
-                    return False, f"'{dev}-{prop}' {max_len=} < {cur_length=}"
-
-        # Z
-        if e1.z_pos and e2.z_pos and (e1.z_pos != e2.z_pos):
-            focus_dev = self.getFocusDevice()
-            if not self.isStageSequenceable(focus_dev):
-                return False, f"Focus device {focus_dev!r} is not sequenceable"
-            max_len = self.getStageSequenceMaxLength(focus_dev)
-            if cur_length >= max_len:
-                return False, f"Focus device {focus_dev!r} {max_len=} < {cur_length=}"
-
-        # XY
-        if (e1.x_pos and e2.x_pos and (e1.x_pos != e2.x_pos)) or (
-            e1.y_pos and e2.y_pos and (e1.y_pos != e2.y_pos)
-        ):
-            stage = self.getXYStageDevice()
-            if not self.isXYStageSequenceable(stage):
-                return False, f"Stage {stage!r} is not sequenceable"
-            max_len = self.getXYStageSequenceMaxLength(stage)
-            if cur_length >= max_len:
-                return False, f"Stage {stage!r} {max_len=} < {cur_length=}"
-
-        # camera
-        cam_dev = self.getCameraDevice()
-        cam_can_seq = self.isExposureSequenceable(cam_dev)
-        if e1.exposure != e2.exposure and not cam_can_seq:
-            return False, f"Camera {cam_dev!r} is not sequenceable"
-        if cam_can_seq and cur_length >= self.getExposureSequenceMaxLength(cam_dev):
-            return False, f"Camera {cam_dev!r} {max_len=} < {cur_length=}"
-
-        # time
-        # TODO: use better axis keys when they are available
-        if (
-            e1.index.get("t") != e2.index.get("t")
-            and e1.min_start_time != e2.min_start_time
-        ):
-            pause = (e2.min_start_time or 0) - (e1.min_start_time or 0)
-            return False, f"Must pause at least {pause} s between events."
-
-        # misc additional properties
-        if e1.properties and e2.properties:
-            for dev, prop, value1 in e1.properties:
-                for dev2, prop2, value2 in e2.properties:
-                    if dev == dev2 and prop == prop2 and value1 != value2:
-                        if not self.isPropertySequenceable(dev, prop):
-                            return False, f"'{dev}-{prop}' is not sequenceable"
-                        if cur_length >= self.getPropertySequenceMaxLength(dev, prop):
-                            return False, f"'{dev}-{prop}' {max_len=} < {cur_length=}"
-
-        return True, ""
+        return can_sequence_events(self, e1, e2, cur_length)
 
 
 for name in (

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import contextlib
 import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Iterator, cast
 
 from psygnal import EmitLoopError
 
@@ -13,6 +13,8 @@ from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
     from useq import MDAEvent, MDASequence
+
+    from ..core._sequencing import SequencedEvent
 
 
 class MDARunner:
@@ -136,8 +138,10 @@ class MDARunner:
             self._prepare_to_run(sequence)
             self._engine = cast("PMDAEngine", self._engine)
             teardown_event = getattr(self._engine, "teardown_event", lambda e: None)
+            event_iterator = getattr(self._engine, "event_iterator", iter)
 
-            for event in sequence:
+            events: Iterator[MDAEvent | SequencedEvent] = event_iterator(sequence)
+            for event in events:
                 cancelled = self._wait_until_event(event)
 
                 # If cancelled break out of the loop
@@ -211,7 +215,7 @@ class MDARunner:
             return True
         return False
 
-    def _wait_until_event(self, event: MDAEvent) -> bool:
+    def _wait_until_event(self, event: MDAEvent | SequencedEvent) -> bool:
         """Wait until the event's min start time, checking for pauses cancelations.
 
         Parameters
