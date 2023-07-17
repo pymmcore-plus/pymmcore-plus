@@ -46,14 +46,11 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             zstage = core.getFocusDevice()
             core.loadStageSequence(zstage, seq_event.z_sequence)
 
-        loaded_configs = []
+        prop_seqs = None
         if seq_event.is_channel_sequenced and seq_event.channel_info:
-            # double check this
-            # do we need to recheck if property is sequencable?
-            group, config = seq_event.channel_info
-            for dev, prop, value in core.getConfigData(group, config):
-                core.loadPropertySequence(dev, prop, value)
-                loaded_configs.append((dev, prop))
+            prop_seqs = seq_event.property_sequences(core)
+            for (dev, prop), value_sequence in prop_seqs.items():
+                core.loadPropertySequence(dev, prop, value_sequence)
 
         # TODO: SLM
         core.prepareSequenceAcquisition(cam_device)
@@ -62,8 +59,9 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             core.startStageSequence(zstage)
         if seq_event.is_xy_sequenced:
             core.startXYStageSequence(stage)
-        for dev, prop in loaded_configs:
-            core.startPropertySequence(dev, prop)
+        if prop_seqs:
+            for dev, prop in prop_seqs:
+                core.startPropertySequence(dev, prop)
         if seq_event.is_exposure_sequenced:
             core.startExposureSequence(cam_device)
 
@@ -100,17 +98,22 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             0,  # intervalMS
             True,  # stopOnOverflow
         )
-        while True:
-            if self._mmc.isSequenceRunning():
-                time.sleep(0.001)
+        # TODO: make a waitForSequence method?
+        while self._mmc.isSequenceRunning():
+            time.sleep(0.001)
+
+        # # TODO: collect images
+        # tagged_img = None
+        # while tagged_img is None:
+        #     if self._mmc.isBufferOverflowed():
+        #         raise MemoryError("Buffer overflowed")
+        #     tagged_img = self._mmc.popNextImage()
 
     def exec_event(self, event: MDAEvent | SequencedEvent) -> Any:
         """Execute an individual event and return the image data."""
-        # TODO: add non-aquisition event-specific logic here later
         if isinstance(event, SequencedEvent):
-            self._exec_sequenced_event(event)
-        else:
-            self._mmc.snapImage()
+            return self._exec_sequenced_event(event)
+        self._mmc.snapImage()
         return EventPayload(image=self._mmc.getImage())
 
     def event_iterator(

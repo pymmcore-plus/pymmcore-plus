@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Iterable
+from typing import TYPE_CHECKING, Sequence
 
 from useq import MDAEvent
+
+from pymmcore_plus.core._constants import DeviceType
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
@@ -23,9 +25,23 @@ class SequencedEvent:
         """Return the minimum start time of all events, or None."""
         return self.events[0].min_start_time
 
+    def property_sequences(self, core: CMMCorePlus) -> dict[tuple[str, str], list[str]]:
+        prop_seqs: dict[tuple[str, str], list[str]] = {}
+        if not self.events[0].channel:
+            return prop_seqs
+        for e in self.events:
+            e_cfg = core.getConfigData(e.channel.group, e.channel.config)  # type: ignore # noqa
+            for dev, prop, val in e_cfg:
+                if core.isPropertySequenceable(dev, prop):
+                    prop_seqs.setdefault((dev, prop), []).append(val)
+        return prop_seqs
+
     @classmethod
-    def create(cls, events: Iterable[MDAEvent]) -> SequencedEvent:
+    def create(cls, events: Sequence[MDAEvent]) -> SequencedEvent:
         """Create a new SequencedEvent from a sequence of events."""
+        if len(events) <= 1:
+            raise ValueError("Sequences must have at least two events.")
+
         z_positions: list[float] = []
         x_positions: list[float] = []
         y_positions: list[float] = []
@@ -43,6 +59,9 @@ class SequencedEvent:
                 exposures.append(event.exposure)
             if event.channel is not None:
                 channels.append(event.channel.config)
+
+        e0_channel = events[0].channel
+        core.getConfigData(e0_channel.group, e0_channel.config)
 
         return cls(
             events=_events,
@@ -74,6 +93,43 @@ class SequencedEvent:
         """Return channel group & config, or None."""
         e0 = self.events[0]
         return (e0.channel.group, e0.channel.config) if e0.channel else None
+
+
+def get_sequencable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str], int]:
+    """Return all sequenceable devices in `core`.
+
+    Returns
+    -------
+    dict[tuple[str | DeviceType, str], int]
+        mapping of (device_name, prop_name) or (DeviceType, device_label) -> int
+        where int is the max sequence length for that device.
+        If the first item in the tupl is a DeviceType rather than a string, it implies
+        one should use the corresponding sequencing method:
+            DeviceType.Stage -> startStageSequence(device_label)
+            DeviceType.XYStage -> startXYStageSequence(device_label)
+            DeviceType.Camera -> startExposureSequence(device_label)
+        otherwise use
+            startPropertySequence(device_name, prop_name)
+    """
+    d: dict[tuple[str | DeviceType, str], int] = {}
+    for device in core.iterDevices():
+        for prop in device.properties:
+            if prop.isSequenceable():
+                d[(prop.device, prop.name)] = prop.sequenceMaxLength()
+        if device.type() == DeviceType.Stage:
+            # isStageLinearSequenceable?
+            if core.isStageSequenceable(device.label):
+                max_len = core.getStageSequenceMaxLength(device.label)
+                d[(DeviceType.Stage, device.label)] = max_len
+        elif device.type() == DeviceType.XYStage:
+            if core.isXYStageSequenceable(device.label):
+                max_len = core.getXYStageSequenceMaxLength(device.label)
+                d[(DeviceType.XYStage, device.label)] = max_len
+        elif device.type() == DeviceType.Camera:
+            if core.isExposureSequenceable(device.label):
+                max_len = core.getExposureSequenceMaxLength(device.label)
+                d[(DeviceType.Camera, device.label)] = max_len
+    return d
 
 
 def can_sequence_events(
