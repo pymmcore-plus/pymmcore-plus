@@ -14,7 +14,7 @@ def test_retry() -> None:
             raise ValueError("nope")
         return x
 
-    with pytest.raises(ValueError):
+    with pytest.raises(ValueError, match="nope"):
         retry(tries=3, exceptions=RuntimeError, delay=0.5)(works_on_third_try)(1)
 
     i = 0
