@@ -15,7 +15,7 @@ def test_retry() -> None:
         return x
 
     with pytest.raises(ValueError):
-        retry(tries=3, exceptions=RuntimeError)(works_on_third_try)(1)
+        retry(tries=3, exceptions=RuntimeError, delay=0.5)(works_on_third_try)(1)
 
     i = 0
     mock = Mock()
