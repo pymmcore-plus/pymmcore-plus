@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, NamedTuple
 
 from useq import MDAEvent, MDASequence
@@ -34,23 +35,37 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
         self._mmc = self._mmc or CMMCorePlus.instance()
 
     def _setup_sequence(self, seq_event: SequencedEvent) -> None:
+        core = self._mmc
+        cam_device = self._mmc.getCameraDevice()
         if seq_event.is_exposure_sequenced:
-            self._mmc.loadExposureSequence(
-                self._mmc.getCameraDevice(), seq_event.exposure_sequence
-            )
+            core.loadExposureSequence(cam_device, seq_event.exposure_sequence)
         if seq_event.is_xy_sequenced:
-            self._mmc.loadXYStageSequence(
-                self._mmc.getXYStageDevice(), seq_event.x_sequence, seq_event.y_sequence
-            )
+            stage = core.getXYStageDevice()
+            core.loadXYStageSequence(stage, seq_event.x_sequence, seq_event.y_sequence)
         if seq_event.is_z_sequenced:
-            self._mmc.loadStageSequence(
-                self._mmc.getFocusDevice(), seq_event.z_sequence
-            )
+            zstage = core.getFocusDevice()
+            core.loadStageSequence(zstage, seq_event.z_sequence)
 
+        loaded_configs = []
         if seq_event.is_channel_sequenced and seq_event.channel_info:
             # double check this
-            for dev, prop, value in self._mmc.getConfigData(*seq_event.channel_info):
-                self._mmc.loadPropertySequence(dev, prop, value)
+            # do we need to recheck if property is sequencable?
+            group, config = seq_event.channel_info
+            for dev, prop, value in core.getConfigData(group, config):
+                core.loadPropertySequence(dev, prop, value)
+                loaded_configs.append((dev, prop))
+
+        # TODO: SLM
+        core.prepareSequenceAcquisition(cam_device)
+
+        if seq_event.is_z_sequenced:
+            core.startStageSequence(zstage)
+        if seq_event.is_xy_sequenced:
+            core.startXYStageSequence(stage)
+        for dev, prop in loaded_configs:
+            core.startPropertySequence(dev, prop)
+        if seq_event.is_exposure_sequenced:
+            core.startExposureSequence(cam_device)
 
     def _setup_single_event(self, event: MDAEvent) -> None:
         if event.x_pos is not None or event.y_pos is not None:
@@ -78,10 +93,24 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             self._setup_single_event(event)
         self._mmc.waitForSystem()
 
+    def _exec_sequenced_event(self, event: SequencedEvent) -> None:
+        # TODO: add support for multiple camera devices
+        self._mmc.startSequenceAcquisition(
+            len(event.events),
+            0,  # intervalMS
+            True,  # stopOnOverflow
+        )
+        while True:
+            if self._mmc.isSequenceRunning():
+                time.sleep(0.001)
+
     def exec_event(self, event: MDAEvent | SequencedEvent) -> Any:
         """Execute an individual event and return the image data."""
         # TODO: add non-aquisition event-specific logic here later
-        self._mmc.snapImage()
+        if isinstance(event, SequencedEvent):
+            self._exec_sequenced_event(event)
+        else:
+            self._mmc.snapImage()
         return EventPayload(image=self._mmc.getImage())
 
     def event_iterator(
