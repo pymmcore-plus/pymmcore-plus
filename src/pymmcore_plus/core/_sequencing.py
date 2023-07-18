@@ -60,9 +60,6 @@ class SequencedEvent:
             if event.channel is not None:
                 channels.append(event.channel.config)
 
-        e0_channel = events[0].channel
-        core.getConfigData(e0_channel.group, e0_channel.config)
-
         return cls(
             events=_events,
             exposure_sequence=tuple(exposures),

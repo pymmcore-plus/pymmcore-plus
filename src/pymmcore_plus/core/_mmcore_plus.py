@@ -40,7 +40,7 @@ from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_clas
 if TYPE_CHECKING:
     import numpy as np
     from typing_extensions import Literal, TypedDict
-    from useq import MDAEvent, MDASequence
+    from useq import MDAEvent
 
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
@@ -1208,8 +1208,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self._mda_runner
 
-    def run_mda(self, sequence: MDASequence, block: bool = False) -> Thread:
-        """Run MDA defined by *sequence* on a new thread.
+    def run_mda(self, events: Iterable[MDAEvent], block: bool = False) -> Thread:
+        """Run a sequence of [useq.MDAEvent][] on a new thread.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
 
@@ -1221,22 +1221,23 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Parameters
         ----------
-        sequence : useq.MDASequence
-            The useq.MDASequence to run.
+        events : Iterable[useq.MDAEvent]
+            An iterable of [useq.MDAEvent][] to execute.  This may be an instance
+            of [useq.MDASequence][], or any other iterable of [useq.MDAEvent][].
         block : bool, optional
             If True, block until the sequence is complete, by default False.
 
         Returns
         -------
         Thread
-            The thread the MDA is running on.  Use `thread.join()` to block until
+            The thread the sequence is running on.  Use `thread.join()` to block until
             done, or `thread.is_alive()` to check if the sequence is complete.
         """
         if self.mda.is_running():
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self.mda.run, args=(sequence,))
+        th = Thread(target=self.mda.run, args=(events,))
         th.start()
         if block:
             th.join()
