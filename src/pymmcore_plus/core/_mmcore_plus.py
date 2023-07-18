@@ -1712,7 +1712,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def canSequenceEvents(
         self, e1: MDAEvent, e2: MDAEvent, cur_length: int = -1
-    ) -> tuple[bool, str]:
+    ) -> bool:
         """Check whether two [`useq.MDAEvent`][] are sequenceable.
 
         Micro-manager calls hardware triggering "sequencing".  Two events can be
@@ -1741,9 +1741,8 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Returns
         -------
-        tuple[bool, str]
-            A tuple of a boolean indicating whether the events can be sequenced and a
-            string describing the reason for failure if the events cannot be sequenced.
+        bool
+            True if the events can be sequenced, False otherwise.
 
         Examples
         --------
@@ -1756,14 +1755,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         >>> core = CMMCorePlus.instance()
         >>> core.loadSystemConfiguration()
         >>> core.canSequenceEvents(MDAEvent(), MDAEvent())
-        (True, "")
+        True
         >>> core.canSequenceEvents(MDAEvent(x_pos=1), MDAEvent(x_pos=2))
-        (False, "Stage 'XY' is not sequenceable")
+        False
         >>> core.canSequenceEvents(
         ...     MDAEvent(channel={'config': 'DAPI'}),
         ...     MDAEvent(channel={'config': 'FITC'})
         ... )
-        (False, "'Dichroic-Label' is not sequenceable")
+        False
         ```
         """
         return can_sequence_events(self, e1, e2, cur_length)
