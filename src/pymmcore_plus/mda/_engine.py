@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, NamedTuple
+from typing import TYPE_CHECKING, Iterable, Iterator, NamedTuple, Sequence
 
 from useq import MDAEvent, MDASequence
 
@@ -91,10 +91,11 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             self._setup_single_event(event)
         self._mmc.waitForSystem()
 
-    def _exec_sequenced_event(self, event: SequencedEvent) -> None:
+    def _exec_sequenced_event(self, event: SequencedEvent) -> EventPayload:
         # TODO: add support for multiple camera devices
+        n_events = len(event.events)
         self._mmc.startSequenceAcquisition(
-            len(event.events),
+            n_events,
             0,  # intervalMS
             True,  # stopOnOverflow
         )
@@ -102,14 +103,15 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
         while self._mmc.isSequenceRunning():
             time.sleep(0.001)
 
-        # # TODO: collect images
-        # tagged_img = None
-        # while tagged_img is None:
-        #     if self._mmc.isBufferOverflowed():
-        #         raise MemoryError("Buffer overflowed")
-        #     tagged_img = self._mmc.popNextImage()
+        # TODO: collect images
+        tagged_imgs = []
+        for _ in range(n_events):  # or getRemainingImageCount()
+            if self._mmc.isBufferOverflowed():
+                raise MemoryError("Buffer overflowed")
+            tagged_imgs.append(self._mmc.popNextImage())
+        return EventPayload(None, tagged_imgs)
 
-    def exec_event(self, event: MDAEvent | SequencedEvent) -> Any:
+    def exec_event(self, event: MDAEvent | SequencedEvent) -> EventPayload:
         """Execute an individual event and return the image data."""
         if isinstance(event, SequencedEvent):
             return self._exec_sequenced_event(event)
@@ -133,11 +135,13 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
                 # otherwise, yield a SequencedEvent if the sequence has accumulated
                 # more than one event, otherwise yield the single event
                 yield seq[0] if len(seq) == 1 else SequencedEvent.create(seq)
-                seq.clear()
+                # add this current event and start a new sequence
+                seq = [event]
         # yield any remaining events
         if seq:
             yield seq[0] if len(seq) == 1 else SequencedEvent.create(seq)
 
 
 class EventPayload(NamedTuple):
-    image: np.ndarray
+    image: np.ndarray | None = None
+    image_sequence: Sequence[np.ndarray] | None = None

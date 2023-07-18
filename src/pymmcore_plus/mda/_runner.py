@@ -192,6 +192,12 @@ class MDARunner:
             if (img := getattr(output, "image", None)) is not None:
                 with contextlib.suppress(EmitLoopError):
                     self._events.frameReady.emit(img, event)
+            if (imgs := getattr(output, "image_sequence", None)) is not None:
+                with contextlib.suppress(EmitLoopError):
+                    for img in imgs:
+                        # FIXME: this is here to make tests pass for now,
+                        # but we probably don't want to do this for performance reasonss
+                        self._events.frameReady.emit(img, event)
 
             teardown_event(event)
 
