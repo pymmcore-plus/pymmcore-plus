@@ -145,12 +145,6 @@ disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
 
-
-[[tool.mypy.overrides]]
-module = ["Pyro5.*", "wrapt"]
-ignore_missing_imports = true
-
-
 # https://coverage.readthedocs.io/en/6.4/config.html
 [tool.coverage.report]
 exclude_lines = [
