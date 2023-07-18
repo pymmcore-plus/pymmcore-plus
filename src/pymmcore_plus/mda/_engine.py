@@ -109,7 +109,7 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             if self._mmc.isBufferOverflowed():
                 raise MemoryError("Buffer overflowed")
             tagged_imgs.append(self._mmc.popNextImage())
-        return EventPayload(None, tagged_imgs)
+        return EventPayload(image_sequence=tagged_imgs)
 
     def exec_event(self, event: MDAEvent | SequencedEvent) -> EventPayload:
         """Execute an individual event and return the image data."""
