@@ -22,11 +22,13 @@ from .core import (
     PropertyType,
 )
 from .core.events import CMMCoreSignaler, PCoreSignaler
+from .mda._runner import GeneratorMDASequence
 
 if TYPE_CHECKING:
     from .remote import RemoteMMCore, server
 
 __all__ = [
+    "__version__",
     "ActionType",
     "CMMCorePlus",
     "CMMCoreSignaler",
@@ -35,17 +37,17 @@ __all__ = [
     "Device",
     "DeviceDetectionStatus",
     "DeviceNotification",
+    "DeviceProperty",
     "DeviceType",
     "find_micromanager",
     "FocusDirection",
+    "GeneratorMDASequence",
     "Metadata",
-    "DeviceProperty",
     "PCoreSignaler",
     "PortType",
     "PropertyType",
     "RemoteMMCore",
     "server",
-    "__version__",
 ]
 
 
