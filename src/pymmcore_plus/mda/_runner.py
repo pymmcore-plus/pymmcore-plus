@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import time
-from typing import TYPE_CHECKING, cast
+import warnings
+from typing import TYPE_CHECKING, Iterable, Iterator, cast
 
 from psygnal import EmitLoopError
-from useq import MDAEvent
+from useq import MDASequence
 
 from pymmcore_plus._logger import logger
 
@@ -13,7 +14,28 @@ from ._protocol import PMDAEngine
 from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
-    from useq import MDASequence
+    from useq import MDAEvent
+
+
+class GeneratorMDASequence(MDASequence):
+    MSG = (
+        "This sequence is a placeholder for a generator of events with unknown "
+        "length & shape. Iterating over it has no effect."
+    )
+
+    axis_order: str = ""
+
+    @property
+    def sizes(self) -> dict[str, int]:
+        warnings.warn(self.MSG, stacklevel=2)
+        return {}
+
+    def iter_axis(self, axis: str) -> Iterator:
+        warnings.warn(self.MSG, stacklevel=2)
+        yield from []
+
+    def __len__(self) -> int:
+        raise TypeError("GeneratorMDASequence has no len()")
 
 
 class MDARunner:
@@ -119,7 +141,7 @@ class MDARunner:
             self._paused = not self._paused
             self._events.sequencePauseToggled.emit(self._paused)
 
-    def run(self, sequence: MDASequence) -> None:
+    def run(self, events: Iterable[MDAEvent]) -> None:
         """Run the multi-dimensional acquistion defined by `sequence`.
 
         Most users should not use this directly as it will block further
@@ -129,16 +151,17 @@ class MDARunner:
 
         Parameters
         ----------
-        sequence : MDASequence
-            An instance of a `useq.MDASequence` object defining the sequence of events
-            to run.
+        events : Iterable[MDAEvent]
+            An iterable of `useq.MDAEvents` objects to execute.
         """
+        error = None
+        sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
         try:
             self._prepare_to_run(sequence)
             self._engine = cast("PMDAEngine", self._engine)
             teardown_event = getattr(self._engine, "teardown_event", lambda e: None)
 
-            for event in sequence:
+            for event in events:
                 cancelled = self._wait_until_event(event)
 
                 # If cancelled break out of the loop
@@ -161,11 +184,11 @@ class MDARunner:
                 teardown_event(event)
 
         except Exception as e:
-            # clean up so future MDAs can be run
-            with contextlib.suppress(Exception):
-                self._finish_run(sequence)
-            raise e
-        self._finish_run(sequence)
+            error = e
+        with contextlib.suppress(Exception):
+            self._finish_run(sequence)
+        if error is not None:
+            raise error
 
     def _prepare_to_run(self, sequence: MDASequence) -> None:
         """Set up for the MDA run.

@@ -1,11 +1,14 @@
+from __future__ import annotations
+
 import time
-from typing import TYPE_CHECKING
-from unittest.mock import patch
+from typing import TYPE_CHECKING, Iterable, Iterator
+from unittest.mock import Mock, patch
 
 import pytest
+from useq import MDAEvent, MDASequence
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
-from useq import MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -56,7 +59,7 @@ class BrokenEngine:
         ...
 
 
-def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
+def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
     mda = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -96,7 +99,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
         assert not core.mda._canceled
 
 
-def test_autofocus(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
+def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
     # mock_autofocus sets z=100
     mda = MDASequence(
         stage_positions=[{"z": 50}],
@@ -126,7 +129,7 @@ def _assert_event_z_pos(core: CMMCorePlus, events: list[MDAEvent], expected: lis
 
 
 def test_autofocus_relative_z_plan_no_autofocus(
-    core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus
+    core: CMMCorePlus, qtbot: QtBot, mock_fullfocus
 ):
     # mock_autofocus sets z=100
     mda = MDASequence(
@@ -147,7 +150,7 @@ def test_autofocus_relative_z_plan_no_autofocus(
     _assert_event_z_pos(core, events, [49, 50, 51])
 
 
-def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus):
+def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
     # mock_autofocus sets z=100
     mda = MDASequence(
         stage_positions=[
@@ -178,7 +181,7 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: "QtBot", mock_fullf
     assert core.mda.engine._z_correction == {0: 75.0}
 
 
-def test_autofocus_retries(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus_failure):
+def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failure):
     # mock_autofocus sets z=100
     mda = MDASequence(
         stage_positions=[
@@ -204,3 +207,35 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: "QtBot", mock_fullfocus_fai
     # if fullfocus fails, the returned z position should be the home position of the
     # z plan (50). If fullfocus is working, it should 100.
     assert core.getZPosition() == 50
+
+
+def event_generator() -> Iterator[MDAEvent]:
+    yield MDAEvent()
+    yield MDAEvent()
+    return
+
+
+SEQS = [
+    MDASequence(time_plan={"interval": 0.1, "loops": 2}),
+    (MDAEvent(), MDAEvent()),
+    # the core fixture runs twice ... so we need to make this generator each time
+    "event_generator()",
+]
+
+
+@pytest.mark.parametrize("seq", SEQS)
+def test_mda_iterable_of_events(
+    core: CMMCorePlus, seq: Iterable[MDAEvent], qtbot: QtBot
+) -> None:
+    if seq == "event_generator()":  # type: ignore
+        seq = event_generator()
+    start_mock = Mock()
+    frame_mock = Mock()
+    core.mda.events.sequenceStarted.connect(start_mock)
+    core.mda.events.frameReady.connect(frame_mock)
+
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        core.mda.run(seq)
+
+    assert start_mock.call_count == 1
+    assert frame_mock.call_count == 2
