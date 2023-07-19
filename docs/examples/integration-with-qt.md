@@ -18,8 +18,7 @@ pip install qtpy superqt Pyside2 # or pyqt5
 If you make a blocking call on the thread running the Qt event loop then your GUI will become
 unresponsive. `pymmcore-plus` has two options to avoid this. The recommended way is to
 use threads to call [`pymmcore_plus.CMMCorePlus.snapImage`][], and let pymmcore-plus handle the threading when you use
-[`pymmcore_plus.CMMCorePlus.run_mda`][]. If instead you want the interaction with the hardware to run in separate Python process
-then you can instad use `pymmcore_plus.RemoteMMCore`.
+[`pymmcore_plus.CMMCorePlus.run_mda`][].
 
 This example will use the recommended process-local(threads) approach.
 

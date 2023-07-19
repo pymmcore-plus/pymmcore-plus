@@ -3,14 +3,25 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from functools import wraps
 from pathlib import Path
-from typing import Literal, overload
+from time import sleep
+from typing import TYPE_CHECKING, Literal, overload
 
 import appdirs
 
 from ._logger import logger
 
-__all__ = ["find_micromanager", "_qt_app_is_running"]
+if TYPE_CHECKING:
+    from typing import TYPE_CHECKING, Any, Callable, TypeVar
+
+    from typing_extensions import ParamSpec
+
+    P = ParamSpec("P")
+    R = TypeVar("R")
+
+
+__all__ = ["find_micromanager", "_qt_app_is_running", "retry"]
 
 USER_DATA_DIR = Path(appdirs.user_data_dir(appname="pymmcore-plus"))
 USER_DATA_MM_PATH = USER_DATA_DIR / "mm"
@@ -116,3 +127,93 @@ def _qt_app_is_running() -> bool:
             QtWidgets = importlib.import_module(".QtWidgets", modname)
             return QtWidgets.QApplication.instance() is not None
     return False
+
+
+@overload
+def retry(
+    func: Literal[None] | None = ...,
+    tries: int = ...,
+    exceptions: type[BaseException] | tuple[type[BaseException], ...] = ...,
+    delay: float | None = ...,
+    logger: Callable[[str], Any] | None = ...,
+) -> Callable[[Callable[P, R]], Callable[P, R]]:
+    ...
+
+
+@overload
+def retry(
+    func: Callable[P, R],
+    tries: int = ...,
+    exceptions: type[BaseException] | tuple[type[BaseException], ...] = ...,
+    delay: float | None = ...,
+    logger: Callable[[str], Any] | None = ...,
+) -> Callable[P, R]:
+    ...
+
+
+def retry(
+    func: Callable[P, R] | None = None,
+    tries: int = 3,
+    exceptions: type[BaseException] | tuple[type[BaseException], ...] = Exception,
+    delay: float | None = None,
+    logger: Callable[[str], Any] | None = None,
+) -> Callable[P, R] | Callable[[Callable[P, R]], Callable[P, R]]:
+    """Retry a function `tries` times, with an exponential backoff.
+
+    Parameters
+    ----------
+    func : Callable
+        The function to retry.
+    exceptions : Union[Type[Exception], tuple[Type[Exception], ...]]
+        The exception or exceptions to catch and retry on. defaults to `Exception`.
+    tries : int
+        The maximum number of times to retry the function. Defaults to 3.
+    delay : float
+        The delay between retries, in seconds. Defaults to `None`.
+    logger : Callable[[str], Any] | None
+        The logger to use for logging retry attempts.  If `None`, no logging
+        will be performed. Defaults to `None`.
+
+    Returns
+    -------
+    Callable
+        A function that will retry `func` until it either succeeds, or
+        `tries` attempts have been made.
+
+
+    Examples
+    --------
+    ```python
+    from pymmcore_plus import CMMCorePlus
+    from pymmcore_plus._util import retry
+
+    mmc = CMMCorePlus()
+    mmc.loadSystemConfiguration()
+
+    @retry(exceptions=RuntimeError, delay=0.5, logger=print)
+    def snap_image():
+        return mmc.snap()
+
+    snap_image()
+    """
+
+    def deco(_func: Callable[P, R]) -> Callable[P, R]:
+        @wraps(_func)
+        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+            _tries = tries
+            while _tries > 1:
+                try:
+                    return _func(*args, **kwargs)
+                except exceptions as e:
+                    _tries -= 1
+                    if logger is not None:
+                        logger(
+                            f"{type(e).__name__} {e} caught, trying {_tries} more times"
+                        )
+                    if delay:
+                        sleep(delay)
+            return _func(*args, **kwargs)
+
+        return wrapper
+
+    return deco(func) if func is not None else deco

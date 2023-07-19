@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import time
-from typing import TYPE_CHECKING
-from unittest.mock import patch
+from typing import TYPE_CHECKING, Iterable, Iterator
+from unittest.mock import Mock, patch
 
 import pytest
 from pymmcore_plus import CMMCorePlus
@@ -56,7 +58,7 @@ class BrokenEngine:
         ...
 
 
-def test_mda_failures(core: CMMCorePlus, qtbot: "QtBot"):
+def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
     mda = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -119,3 +121,35 @@ def test_set_mda_fov(core: CMMCorePlus, qtbot: "QtBot"):
     assert mda._fov_size == (256, 256)
     assert mda.stage_positions[0].sequence._fov_size == (256, 256)
     assert mda.stage_positions[1].sequence._fov_size == (256, 256)
+
+    
+def event_generator() -> Iterator[MDAEvent]:
+    yield MDAEvent()
+    yield MDAEvent()
+    return
+
+
+SEQS = [
+    MDASequence(time_plan={"interval": 0.1, "loops": 2}),
+    (MDAEvent(), MDAEvent()),
+    # the core fixture runs twice ... so we need to make this generator each time
+    "event_generator()",
+]
+
+
+@pytest.mark.parametrize("seq", SEQS)
+def test_mda_iterable_of_events(
+    core: CMMCorePlus, seq: Iterable[MDAEvent], qtbot: QtBot
+) -> None:
+    if seq == "event_generator()":  # type: ignore
+        seq = event_generator()
+    start_mock = Mock()
+    frame_mock = Mock()
+    core.mda.events.sequenceStarted.connect(start_mock)
+    core.mda.events.frameReady.connect(frame_mock)
+
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        core.mda.run(seq)
+
+    assert start_mock.call_count == 1
+    assert frame_mock.call_count == 2
