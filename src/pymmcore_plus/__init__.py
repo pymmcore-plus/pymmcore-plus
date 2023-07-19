@@ -3,7 +3,6 @@ try:
 except ImportError:
     __version__ = "unknown"
 
-from typing import TYPE_CHECKING, Any, List
 
 from ._mock_sample import mock_sample
 from ._util import find_micromanager
@@ -23,9 +22,7 @@ from .core import (
     PropertyType,
 )
 from .core.events import CMMCoreSignaler, PCoreSignaler
-
-if TYPE_CHECKING:
-    from .remote import RemoteMMCore, server
+from .mda._runner import GeneratorMDASequence
 
 __all__ = [
     "__version__",
@@ -41,30 +38,10 @@ __all__ = [
     "DeviceType",
     "find_micromanager",
     "FocusDirection",
+    "GeneratorMDASequence",
     "Metadata",
     "mock_sample",
     "PCoreSignaler",
     "PortType",
     "PropertyType",
-    "RemoteMMCore",
-    "server",
 ]
-
-
-def __dir__() -> List[str]:
-    return [*list(globals()), "RemoteMMCore", "server"]
-
-
-def __getattr__(name: str) -> Any:
-    if name in {"RemoteMMCore", "server"}:
-        try:
-            from . import remote
-
-            return getattr(remote, name)
-        except ImportError as e:
-            raise ImportError(
-                f"{e}.\nTo use the interprocess features of pymmcore-plus, "
-                "please install with `pip install pymmcore-plus[remote]`"
-            ) from e
-
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
