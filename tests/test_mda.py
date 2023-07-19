@@ -98,7 +98,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
         assert not core.mda._canceled
 
 
-def test_set_mda_fov(core: CMMCorePlus, qtbot: "QtBot"):
+def test_set_mda_fov(core: CMMCorePlus, qtbot: QtBot):
     """Test that the fov size is updated."""
     mda = MDASequence(
         channels=[
@@ -122,7 +122,7 @@ def test_set_mda_fov(core: CMMCorePlus, qtbot: "QtBot"):
     assert mda.stage_positions[0].sequence._fov_size == (256, 256)
     assert mda.stage_positions[1].sequence._fov_size == (256, 256)
 
-    
+
 def event_generator() -> Iterator[MDAEvent]:
     yield MDAEvent()
     yield MDAEvent()
