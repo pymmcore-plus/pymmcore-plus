@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import os
 import re
+import warnings
 import weakref
 from contextlib import contextmanager, suppress
 from datetime import datetime
@@ -276,6 +277,53 @@ class CMMCorePlus(pymmcore.CMMCore):
         os.environ["PATH"] = env_path
         logger.debug(f"setting adapter search paths: {paths}")
         super().setDeviceAdapterSearchPaths(paths)
+
+    def loadDevice(self, label: str, moduleName: str, deviceName: str) -> None:
+        """Load a device from the plugin library.
+
+        **Why Override?** To add much better error messages in the case of failure.
+
+        Parameters
+        ----------
+        label: str
+            Name to be assigned to the device during this core session.
+        moduleName: str
+            The name of the device adapter module (short name, not full file name).
+            See [`pymmcore.CMMCore.getDeviceAdapterNames`][] for a list of valid
+            module names.
+        deviceName: str
+            the name of the device. The name must correspond to one of the names
+            recognized by the specific plugin library. See
+            [`pymmcore.CMMCore.getAvailableDevices`][] for a list of valid device names.
+        """
+        try:
+            super().loadDevice(label, moduleName, deviceName)
+        except RuntimeError as e:
+            msg = str(e)
+            if label in self.getLoadedDevices():
+                lib = super().getDeviceLibrary(label)
+                name = super().getDeviceName(label)
+                if moduleName == lib and deviceName == name:
+                    msg += f". Device {label!r} appears to be loaded already."
+                    warnings.warn(msg, stacklevel=2)
+                    return
+
+                msg += f". Device {label!r} is already taken by {lib}::{name}"
+            else:
+                adapters = super().getDeviceAdapterNames()
+                if moduleName not in adapters:
+                    msg += (
+                        f". Adapter name {moduleName!r} not in list of known adapter "
+                        f"names: {adapters}."
+                    )
+                else:
+                    devices = super().getAvailableDevices(moduleName)
+                    if deviceName not in devices:
+                        msg += (
+                            f". Device name {deviceName!r} not in devices provided by "
+                            f"adapter {moduleName!r}: {devices}"
+                        )
+            raise RuntimeError(msg) from e
 
     @synchronized(_lock)
     def loadSystemConfiguration(
