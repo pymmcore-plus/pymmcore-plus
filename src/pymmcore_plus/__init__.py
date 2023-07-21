@@ -6,11 +6,11 @@ except ImportError:
 
 from ._util import find_micromanager
 from .core import (
-    DeviceAdapter,
     CMMCorePlus,
     ConfigGroup,
     Configuration,
     Device,
+    DeviceAdapter,
     DeviceDetectionStatus,
     DeviceNotification,
     DeviceProperty,

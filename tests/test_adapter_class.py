@@ -1,4 +1,4 @@
-from pymmcore_plus import DeviceAdapter, CMMCorePlus
+from pymmcore_plus import CMMCorePlus, DeviceAdapter
 from pymmcore_plus.core._adapter import AvailableDevice
 
 
