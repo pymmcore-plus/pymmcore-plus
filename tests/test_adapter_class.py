@@ -4,7 +4,7 @@ from pymmcore_plus.core._adapter import AvailableDevice
 
 def test_adapter_object(core: CMMCorePlus) -> None:
     core.unloadAllDevices()
-    for adapter in core.iterAdapters(as_object=True):
+    for adapter in core.iterDeviceAdapters(as_object=True):
         assert adapter.name in repr(adapter)
         assert isinstance(adapter, DeviceAdapter)
         assert adapter.name
