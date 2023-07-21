@@ -708,7 +708,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         Device | str
             `Device` objects (if `as_object==True`) or device label strings.
         """
-        adapters = super().getDeviceAdapterNames()
+        adapters: Sequence[str] = super().getDeviceAdapterNames()
 
         if adapter_pattern:
             if isinstance(adapter_pattern, str):

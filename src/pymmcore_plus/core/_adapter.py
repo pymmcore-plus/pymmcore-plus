@@ -93,7 +93,7 @@ class Adapter:
         """Return string representation of this adapter."""
         core = repr(self._mmc).strip("<>")
         try:
-            ndevs = len(self._mmc.getAvailableDevices(self.name))
+            ndevs = str(len(self._mmc.getAvailableDevices(self.name)))
         except Exception:
             ndevs = "ERR"
         return f"<Adapter {self.name!r} on {core}: {ndevs} devices>"
