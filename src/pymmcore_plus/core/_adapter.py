@@ -62,7 +62,11 @@ class Adapter:
             of each device.  These objects also have a `load` method that can be used
             to load the device under a given label.
         """
-        devs = self._mmc.getAvailableDevices(self.name)
+        try:
+            devs = self._mmc.getAvailableDevices(self.name)
+        except RuntimeError:
+            return ()
+        
         types = self._mmc.getAvailableDeviceTypes(self.name)
         descriptions = self._mmc.getAvailableDeviceDescriptions(self.name)
         return tuple(
@@ -88,5 +92,8 @@ class Adapter:
     def __repr__(self) -> str:
         """Return string representation of this adapter."""
         core = repr(self._mmc).strip("<>")
-        ndevs = len(self._mmc.getAvailableDevices(self.name))
+        try:
+            ndevs = len(self._mmc.getAvailableDevices(self.name))
+        except Exception:
+            ndevs = "ERR"
         return f"<Adapter {self.name!r} on {core}: {ndevs} devices>"
