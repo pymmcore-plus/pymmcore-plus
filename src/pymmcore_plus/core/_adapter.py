@@ -37,9 +37,14 @@ class Adapter:
     """
 
     def __init__(self, library_name: str, mmcore: CMMCorePlus) -> None:
-        self.library = library_name
+        self._name = library_name
         self._mmc = mmcore
         # self.propertyChanged = _DevicePropValueSignal(device_label, None, mmcore)
+
+    @property
+    def name(self) -> str:
+        """Return the short name of this adapter library."""
+        return self._name
 
     @property
     def core(self) -> CMMCorePlus:
@@ -57,31 +62,31 @@ class Adapter:
             of each device.  These objects also have a `load` method that can be used
             to load the device under a given label.
         """
-        devs = self._mmc.getAvailableDevices(self.library)
-        types = self._mmc.getAvailableDeviceTypes(self.library)
-        descriptions = self._mmc.getAvailableDeviceDescriptions(self.library)
+        devs = self._mmc.getAvailableDevices(self.name)
+        types = self._mmc.getAvailableDeviceTypes(self.name)
+        descriptions = self._mmc.getAvailableDeviceDescriptions(self.name)
         return tuple(
-            AvailableDevice(self.library, label, DeviceType(dt), desc, self._mmc)
+            AvailableDevice(self.name, label, DeviceType(dt), desc, self._mmc)
             for label, dt, desc in zip(devs, types, descriptions)
         )
 
     @property
     def loaded_devices(self) -> tuple[Device, ...]:
-        """Get available devices offered by this adapter.
+        """Get currently loaded devices controlled this adapter.
 
         Returns
         -------
         tuple[Device, ...]
             Tuple of loaded `Device` objects.
         """
-        return tuple(self._mmc.iterDevices(device_adapter=self.library))
+        return tuple(self._mmc.iterDevices(device_adapter=self.name))
 
     def unload(self) -> None:
         """Forcefully unload this library."""
-        self._mmc.unloadLibrary(self.library)
+        self._mmc.unloadLibrary(self.name)
 
     def __repr__(self) -> str:
         """Return string representation of this adapter."""
         core = repr(self._mmc).strip("<>")
-        ndevs = len(self._mmc.getAvailableDevices(self.library))
-        return f"<Adapter {self.library!r} on {core}: {ndevs} devices>"
+        ndevs = len(self._mmc.getAvailableDevices(self.name))
+        return f"<Adapter {self.name!r} on {core}: {ndevs} devices>"
