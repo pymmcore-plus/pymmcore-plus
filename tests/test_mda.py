@@ -5,10 +5,9 @@ from typing import TYPE_CHECKING, Iterable, Iterator
 from unittest.mock import Mock, patch
 
 import pytest
-from useq import MDAEvent, MDASequence
-
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
+from useq import MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
