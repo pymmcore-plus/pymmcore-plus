@@ -66,7 +66,7 @@ class Adapter:
             devs = self._mmc.getAvailableDevices(self.name)
         except RuntimeError:
             return ()
-        
+
         types = self._mmc.getAvailableDeviceTypes(self.name)
         descriptions = self._mmc.getAvailableDeviceDescriptions(self.name)
         return tuple(
