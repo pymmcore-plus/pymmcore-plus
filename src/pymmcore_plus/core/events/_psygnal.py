@@ -6,7 +6,7 @@ from ._prop_event_mixin import _DevicePropertyEventMixin
 
 
 class CMMCoreSignaler(_DevicePropertyEventMixin):
-    """Signals that will be emitted from CMMCorePlus and RemoteMMCore objects."""
+    """Signals that will be emitted from CMMCorePlus objects."""
 
     # native MMCore callback events
     propertiesChanged = Signal()
