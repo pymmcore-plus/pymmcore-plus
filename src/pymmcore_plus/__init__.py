@@ -6,11 +6,11 @@ except ImportError:
 
 from ._util import find_micromanager
 from .core import (
-    ActionType,
     CMMCorePlus,
     ConfigGroup,
     Configuration,
     Device,
+    DeviceAdapter,
     DeviceDetectionStatus,
     DeviceNotification,
     DeviceProperty,
@@ -31,6 +31,7 @@ __all__ = [
     "ConfigGroup",
     "Configuration",
     "Device",
+    "DeviceAdapter",
     "DeviceDetectionStatus",
     "DeviceNotification",
     "DeviceProperty",

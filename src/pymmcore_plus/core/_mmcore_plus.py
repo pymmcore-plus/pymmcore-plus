@@ -32,6 +32,7 @@ from pymmcore_plus.core.events import PCoreSignaler
 from .._logger import logger
 from .._util import find_micromanager
 from ..mda import MDAEngine, MDARunner, PMDAEngine
+from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
@@ -661,10 +662,70 @@ class CMMCorePlus(pymmcore.CMMCore):
     # NEW methods
 
     @overload
+    def iterDeviceAdapters(
+        self,
+        adapter_pattern: str | re.Pattern | None = ...,
+        *,
+        as_object: Literal[True] = ...,
+    ) -> Iterator[DeviceAdapter]:
+        ...
+
+    @overload
+    def iterDeviceAdapters(
+        self,
+        adapter_pattern: str | re.Pattern | None = ...,
+        *,
+        as_object: Literal[False],
+    ) -> Iterator[str]:
+        ...
+
+    def iterDeviceAdapters(
+        self,
+        adapter_pattern: str | re.Pattern | None = None,
+        *,
+        as_object: bool = True,
+    ) -> Iterator[DeviceAdapter] | Iterator[str]:
+        """Iterate over all available device adapters.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        It offers a convenient way to iterate over availabe device adaptor libraries,
+        optionally filtering adapter library name. It can also yield
+        [`Adapter`][pymmcore_plus.Adapter] objects if `as_object` is `True` (the
+        default)
+
+        Parameters
+        ----------
+        adapter_pattern : str | None
+            Device adapter name or pattern to filter by, by default all device adapters
+            will be yielded.
+        as_object : bool, optional
+            If `True`, `Adapter` objects will be yielded instead of
+            library name strings. By default True
+
+        Yields
+        ------
+        Device | str
+            `Device` objects (if `as_object==True`) or device label strings.
+        """
+        adapters: Sequence[str] = super().getDeviceAdapterNames()
+
+        if adapter_pattern:
+            if isinstance(adapter_pattern, str):
+                ptrn = re.compile(adapter_pattern, re.IGNORECASE)
+            else:
+                ptrn = adapter_pattern
+            adapters = [d for d in adapters if ptrn.search(d)]
+
+        for adapter in adapters:
+            yield DeviceAdapter(adapter, mmcore=self) if as_object else adapter
+
+    @overload
     def iterDevices(
         self,
         device_type: int | Iterable[int] | None = ...,
         device_label: str | re.Pattern | None = ...,
+        device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[False],
     ) -> Iterator[str]:
@@ -675,6 +736,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self,
         device_type: int | Iterable[int] | None = ...,
         device_label: str | re.Pattern | None = ...,
+        device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
     ) -> Iterator[Device]:
@@ -684,9 +746,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         self,
         device_type: int | Iterable[int] | None = None,
         device_label: str | re.Pattern | None = None,
+        device_adapter: str | re.Pattern | None = None,
         *,
         as_object: bool = True,
-    ) -> Iterator[Device | str]:
+    ) -> Iterator[Device] | Iterator[str]:
         """Iterate over currently loaded devices.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -694,7 +757,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         It offers a convenient way to iterate over loaded devices, optionally filtering
         by [`DeviceType`][pymmcore_plus.DeviceType] and/or device label. It can also
         yield [`Device`][pymmcore_plus.Device] objects if `as_object` is
-        `True`.
+        `True` (the default).
 
         Parameters
         ----------
@@ -702,9 +765,12 @@ class CMMCorePlus(pymmcore.CMMCore):
             DeviceType to filter by, by default all device types will be yielded.
         device_label : str | None
             Device label to filter by, by default all device labels will be yielded.
+        device_adapter : str | None
+            Device adapter library to filter by, by default devices from all libraries
+            will be yielded.
         as_object : bool, optional
             If `True`, `Device` objects will be yielded instead of
-            device label strings. By default False
+            device label strings. By default True
 
         Yields
         ------
@@ -727,6 +793,13 @@ class CMMCorePlus(pymmcore.CMMCore):
             else:
                 ptrn = device_label
             devices = [d for d in devices if ptrn.search(d)]
+
+        if device_adapter:
+            if isinstance(device_adapter, str):
+                ptrn = re.compile(device_adapter, re.IGNORECASE)
+            else:
+                ptrn = device_adapter
+            devices = [d for d in devices if ptrn.search(self.getDeviceLibrary(d))]
 
         for dev in devices:
             yield Device(dev, mmcore=self) if as_object else dev
@@ -772,7 +845,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         is_read_only: bool | None = None,
         is_sequenceable: bool | None = None,
         as_object: bool = True,
-    ) -> Iterator[DeviceProperty | tuple[str, str]]:
+    ) -> Iterator[DeviceProperty] | Iterator[tuple[str, str]]:
         """Iterate over currently loaded (device_label, property_name) pairs.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -780,7 +853,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         It offers a convenient way to iterate over loaded devices, optionally filtering
         by [`DeviceType`][pymmcore_plus.DeviceType] and/or device label. It can also
         yields [`DeviceProperty`][pymmcore_plus.DeviceProperty] objects if
-        `as_object` is `True`.
+        `as_object` is `True` (the default).
 
         Parameters
         ----------
@@ -806,7 +879,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             value will be yielded.
         as_object : bool, optional
             If `True`, `DeviceProperty` objects will be yielded instead of
-            `(device_label, property_name)` tuples. By default False
+            `(device_label, property_name)` tuples. By default True
 
         Yields
         ------
@@ -899,6 +972,18 @@ class CMMCorePlus(pymmcore.CMMCore):
         5.0
         """
         return DeviceProperty(device_label, property_name, self)
+
+    def getAdapterObject(self, library_name: str) -> DeviceAdapter:
+        """Return an `Adapter` object bound to library_name on this core.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        [`Adapter`][pymmcore_plus.Adapter] objects are a convenient object oriented way
+        to interact with device adapters. They allow you to call any method on `CMMCore`
+        that normally requires a `library_name` as the first argument as an
+        argument-free method on the `Adapter` object.
+        """
+        return DeviceAdapter(library_name, mmcore=self)
 
     def getDeviceObject(self, device_label: str) -> Device:
         """Return a `Device` object bound to device_label on this core.
