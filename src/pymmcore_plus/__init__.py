@@ -6,7 +6,7 @@ except ImportError:
 
 from ._util import find_micromanager
 from .core import (
-    Adapter,
+    DeviceAdapter,
     CMMCorePlus,
     ConfigGroup,
     Configuration,
@@ -26,7 +26,7 @@ from .mda._runner import GeneratorMDASequence
 __all__ = [
     "__version__",
     "ActionType",
-    "Adapter",
+    "DeviceAdapter",
     "CMMCorePlus",
     "CMMCoreSignaler",
     "ConfigGroup",

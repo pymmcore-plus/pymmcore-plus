@@ -22,7 +22,7 @@ class AvailableDevice(NamedTuple):
         return self.core.getDeviceObject(label)
 
 
-class Adapter:
+class DeviceAdapter:
     """Convenience view onto a device-adapter library.
 
     This is the type of object that is returned by
@@ -43,7 +43,7 @@ class Adapter:
 
     @property
     def name(self) -> str:
-        """Return the short name of this adapter library."""
+        """Return the short name of this device adapter library."""
         return self._name
 
     @property
@@ -53,7 +53,7 @@ class Adapter:
 
     @property
     def available_devices(self) -> tuple[AvailableDevice, ...]:
-        """Get available devices offered by this adapter.
+        """Get available devices offered by this device adapter.
 
         Returns
         -------

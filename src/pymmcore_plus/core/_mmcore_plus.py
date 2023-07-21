@@ -32,7 +32,7 @@ from pymmcore_plus.core.events import PCoreSignaler
 from .._logger import logger
 from .._util import find_micromanager
 from ..mda import MDAEngine, MDARunner, PMDAEngine
-from ._adapter import Adapter
+from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
@@ -662,16 +662,16 @@ class CMMCorePlus(pymmcore.CMMCore):
     # NEW methods
 
     @overload
-    def iterAdapters(
+    def iterDeviceAdapters(
         self,
         adapter_pattern: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
-    ) -> Iterator[Adapter]:
+    ) -> Iterator[DeviceAdapter]:
         ...
 
     @overload
-    def iterAdapters(
+    def iterDeviceAdapters(
         self,
         adapter_pattern: str | re.Pattern | None = ...,
         *,
@@ -679,12 +679,12 @@ class CMMCorePlus(pymmcore.CMMCore):
     ) -> Iterator[str]:
         ...
 
-    def iterAdapters(
+    def iterDeviceAdapters(
         self,
         adapter_pattern: str | re.Pattern | None = None,
         *,
         as_object: bool = True,
-    ) -> Iterator[Adapter] | Iterator[str]:
+    ) -> Iterator[DeviceAdapter] | Iterator[str]:
         """Iterate over all available device adapters.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -718,7 +718,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             adapters = [d for d in adapters if ptrn.search(d)]
 
         for adapter in adapters:
-            yield Adapter(adapter, mmcore=self) if as_object else adapter
+            yield DeviceAdapter(adapter, mmcore=self) if as_object else adapter
 
     @overload
     def iterDevices(
@@ -973,7 +973,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceProperty(device_label, property_name, self)
 
-    def getAdapterObject(self, library_name: str) -> Adapter:
+    def getAdapterObject(self, library_name: str) -> DeviceAdapter:
         """Return an `Adapter` object bound to library_name on this core.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -983,7 +983,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         that normally requires a `library_name` as the first argument as an
         argument-free method on the `Adapter` object.
         """
-        return Adapter(library_name, mmcore=self)
+        return DeviceAdapter(library_name, mmcore=self)
 
     def getDeviceObject(self, device_label: str) -> Device:
         """Return a `Device` object bound to device_label on this core.
