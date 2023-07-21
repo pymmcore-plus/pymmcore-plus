@@ -852,6 +852,19 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceProperty(device_label, property_name, self)
 
+    def getAdapterObject(self, library_name: str) -> Adapter:
+        """Return an `Adapter` object bound to library_name on this core.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        [`Adapter`][pymmcore_plus.Adapter] objects are a convenient object oriented way
+        to interact with device adapters. They allow you to call any method on `CMMCore`
+        that normally requires a `library_name` as the first argument as an
+        argument-free method on the `Adapter` object.
+        """
+        return Adapter(library_name, mmcore=self)
+        
+
     def getDeviceObject(self, device_label: str) -> Device:
         """Return a `Device` object bound to device_label on this core.
 
