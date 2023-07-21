@@ -84,9 +84,6 @@ pip install pymmcore-plus
 # from conda
 conda install -c conda-forge pymmcore-plus
 
-# if you also want the experimental inter-process RemoteCMMCore feature
-pip install pymmcore-plus[remote]
-
 # or from source tree
 pip install git+https://github.com/pymmcore-plus/pymmcore-plus.git
 ```
