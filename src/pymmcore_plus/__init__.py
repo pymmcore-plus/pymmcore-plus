@@ -26,12 +26,12 @@ from .mda._runner import GeneratorMDASequence
 __all__ = [
     "__version__",
     "ActionType",
-    "DeviceAdapter",
     "CMMCorePlus",
     "CMMCoreSignaler",
     "ConfigGroup",
     "Configuration",
     "Device",
+    "DeviceAdapter",
     "DeviceDetectionStatus",
     "DeviceNotification",
     "DeviceProperty",
