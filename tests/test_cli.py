@@ -8,10 +8,11 @@ from typing import Any, Callable, cast
 from unittest.mock import patch
 
 import pytest
-from pymmcore_plus import __version__, _cli, install
-from pymmcore_plus._cli import app
 from typer.testing import CliRunner
 from useq import MDASequence
+
+from pymmcore_plus import __version__, _cli, install
+from pymmcore_plus._cli import app
 
 runner = CliRunner()
 subrun = subprocess.run
@@ -123,9 +124,9 @@ def test_find() -> None:
 
 ARGS: list[dict[str, dict | str]] = [
     {"z_plan": {"step": 0.24, "above": 1, "below": 2}},
-    {"z_plan": {"step": 0.24}},
+    {"z_plan": {"step": 0.24, "range": 1}},
     {"z_plan": {"step": 0.24, "range": 4}, "time_plan": {"interval": 0.2, "loops": 20}},
-    {"time_plan": {"interval": 0.2}},
+    {"time_plan": {"interval": 0.2, "loops": 20}},
     {"axis_order": "TPCZ", "time_plan": {"interval": 0.2, "loops": 20}},
 ]
 

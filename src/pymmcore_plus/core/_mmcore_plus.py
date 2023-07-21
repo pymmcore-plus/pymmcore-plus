@@ -1585,6 +1585,31 @@ class CMMCorePlus(pymmcore.CMMCore):
             super().setFocusDevice(focusLabel)
             self.events.propertyChanged.emit("Core", "Focus", focusLabel)
 
+    def saveSystemConfiguration(self, filename: str) -> None:
+        """Saves the current system configuration to a text file.
+
+        **Why Override?** To also save pixel size configurations.
+        """
+        super().saveSystemConfiguration(filename)
+        px_configs = self.getAvailablePixelSizeConfigs()
+        if not px_configs:
+            return
+        # saveSystemConfiguration does not save the pixel size config so here
+        # we add to the saved file also any pixel size config.
+        with open(filename, "a") as f:
+            f.write("# PixelSize settings")
+            for px_config in px_configs:
+                data = self.getPixelSizeConfigData(px_config)
+                obj = data.dict()["Objective"]["Label"]
+                px_size = self.getPixelSizeUmByID(px_config)
+                px_affine = self.getPixelSizeAffineByID(px_config)
+                cfg = (
+                    f"\nConfigPixelSize,{px_config},Objective,Label,{obj}\n"
+                    f"PixelSize_um,{px_config},{px_size}\n"
+                    f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}"
+                )
+                f.write(cfg)
+
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.
 
