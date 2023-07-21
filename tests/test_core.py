@@ -513,3 +513,21 @@ def test_snap_signals(core: CMMCorePlus, qtbot: "QtBot") -> None:
         order="strict",
     ):
         core.snapImage()
+
+
+def test_save_config(core: CMMCorePlus, tmp_path: Path) -> None:
+    assert "Res10x" in core.getAvailablePixelSizeConfigs()
+    core.deletePixelSizeConfig("Res10x")
+    assert "Res10x" not in core.getAvailablePixelSizeConfigs()
+
+    core.definePixelSizeConfig("r10x", "Objective", "Label", "Nikon 10X S Fluor")
+    core.setPixelSizeUm("r10x", 2)
+    assert "r10x" in core.getAvailablePixelSizeConfigs()
+
+    test_cfg = str(tmp_path / "test.cfg")
+    core.saveSystemConfiguration(test_cfg)
+
+    core.loadSystemConfiguration()
+    assert "r10x" not in core.getAvailablePixelSizeConfigs()
+    core.loadSystemConfiguration(test_cfg)
+    assert "r10x" in core.getAvailablePixelSizeConfigs()
