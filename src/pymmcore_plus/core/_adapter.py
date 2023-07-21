@@ -2,26 +2,28 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, NamedTuple
 
-from pymmcore import DeviceType
-
-from ._device import Device
+from pymmcore_plus.core._constants import DeviceType
+from pymmcore_plus.core._device import Device
 
 if TYPE_CHECKING:
     from ._mmcore_plus import CMMCorePlus
 
 
 class AvailableDevice(NamedTuple):
-    name: str
+    module_name: str
+    device_name: str
     type: DeviceType
     description: str
     core: CMMCorePlus
 
     def load(self, label: str) -> Device:
         """Load the device under the label `label`."""
-        self._mmc.loadDevice(self.name, label)
+        self.core.loadDevice(label, self.module_name, self.device_name)
+        return self.core.getDeviceObject(label)
+
 
 class Adapter:
-    """Convenience view onto a device adapter library.
+    """Convenience view onto a device-adapter library.
 
     This is the type of object that is returned by
     [`pymmcore_plus.CMMCorePlus.getAdapterObject`][]
@@ -32,7 +34,6 @@ class Adapter:
         Device this property belongs to
     mmcore : CMMCorePlus
         CMMCorePlus instance
-
     """
 
     def __init__(self, library_name: str, mmcore: CMMCorePlus) -> None:
@@ -47,11 +48,40 @@ class Adapter:
 
     @property
     def available_devices(self) -> tuple[AvailableDevice, ...]:
-        """Get all properties supported by device as DeviceProperty objects."""
+        """Get available devices offered by this adapter.
+
+        Returns
+        -------
+        tuple[AvailableDevice, ...]
+            Tuple of `AvailableDevice` objects, with the name, type, and description
+            of each device.  These objects also have a `load` method that can be used
+            to load the device under a given label.
+        """
         devs = self._mmc.getAvailableDevices(self.library)
         types = self._mmc.getAvailableDeviceTypes(self.library)
         descriptions = self._mmc.getAvailableDeviceDescriptions(self.library)
         return tuple(
-            AvailableDevice(label, DeviceType(dt), desc, self._mmc)
+            AvailableDevice(self.library, label, DeviceType(dt), desc, self._mmc)
             for label, dt, desc in zip(devs, types, descriptions)
         )
+
+    @property
+    def loaded_devices(self) -> tuple[Device, ...]:
+        """Get available devices offered by this adapter.
+
+        Returns
+        -------
+        tuple[Device, ...]
+            Tuple of loaded `Device` objects.
+        """
+        return tuple(self._mmc.iterDevices(device_adapter=self.library))
+
+    def unload(self) -> None:
+        """Forcefully unload this library."""
+        self._mmc.unloadLibrary(self.library)
+
+    def __repr__(self) -> str:
+        """Return string representation of this adapter."""
+        core = repr(self._mmc).strip("<>")
+        ndevs = len(self._mmc.getAvailableDevices(self.library))
+        return f"<Adapter {self.library!r} on {core}: {ndevs} devices>"
