@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 
 class AvailableDevice(NamedTuple):
-    module_name: str
+    adapter_name: str
     device_name: str
     type: DeviceType
     description: str
@@ -18,7 +18,7 @@ class AvailableDevice(NamedTuple):
 
     def load(self, label: str) -> Device:
         """Load the device under the label `label`."""
-        self.core.loadDevice(label, self.module_name, self.device_name)
+        self.core.loadDevice(label, self.adapter_name, self.device_name)
         return self.core.getDeviceObject(label)
 
 
