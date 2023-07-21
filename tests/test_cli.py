@@ -124,7 +124,7 @@ def test_find() -> None:
 
 ARGS: list[dict[str, dict | str]] = [
     {"z_plan": {"step": 0.24, "above": 1, "below": 2}},
-    {"z_plan": {"step": 0.24, "range": 1}},
+    {"z_plan": {"step": 0.24, "range": 4}},
     {"z_plan": {"step": 0.24, "range": 4}, "time_plan": {"interval": 0.2, "loops": 20}},
     {"time_plan": {"interval": 0.2, "loops": 20}},
     {"axis_order": "TPCZ", "time_plan": {"interval": 0.2, "loops": 20}},
