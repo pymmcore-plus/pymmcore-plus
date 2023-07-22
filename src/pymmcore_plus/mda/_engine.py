@@ -1,12 +1,12 @@
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING, Any, NamedTuple
 
 from useq import HardwareAutofocus, MDAEvent, MDASequence  # type: ignore
 
 from pymmcore_plus._logger import logger
 
+from .._util import retry
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
@@ -97,15 +97,17 @@ class MDAEngine(PMDAEngine):
         )
         self._mmc.waitForSystem()
 
-        # perform fullFocus 'action.max_retries' times in case of failure
-        for _ in range(action.max_retries):
-            with contextlib.suppress(RuntimeError):
-                self._mmc.fullFocus()
-                self._mmc.waitForSystem()
-                return self._mmc.getZPosition()
+        @retry(exceptions=RuntimeError, tries=action.max_retries, logger=logger.warning)
+        def _full_focus() -> float:
+            self._mmc.fullFocus()
+            self._mmc.waitForSystem()
+            return self._mmc.getZPosition()
 
-        logger.warning("Warning: Hardware autofocus failed. Maximum retries exceeded.")
-        return self._mmc.getZPosition()
+        try:
+            return _full_focus()
+        except RuntimeError:
+            logger.warning("Warning: Hardware autofocus failed.")
+            return self._mmc.getZPosition()
 
 
 class EventPayload(NamedTuple):
