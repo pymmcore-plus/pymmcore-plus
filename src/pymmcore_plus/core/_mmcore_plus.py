@@ -1356,7 +1356,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._mda_runner = mda()
         self._mda_runner.set_engine(MDAEngine(self))
 
-
     def run_mda(self, events: Iterable[MDAEvent], block: bool = False) -> Thread:
         """Run a sequence of [useq.MDAEvent][] on a new thread.
 

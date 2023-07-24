@@ -6,8 +6,8 @@ from unittest.mock import Mock, patch
 
 import pytest
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.mda.events import MDASignaler
 from pymmcore_plus.mda import MDARunner
+from pymmcore_plus.mda.events import MDASignaler
 from useq import MDAEvent, MDASequence
 
 if TYPE_CHECKING:
@@ -130,8 +130,11 @@ def test_mda_iterable_of_events(
     assert start_mock.call_count == 1
     assert frame_mock.call_count == 2
 
+
 @pytest.mark.parametrize("seq", SEQS)
-def test_mda_replace_runner(core: CMMCorePlus, seq: Iterable[MDAEvent], qtbot: QtBot) -> None:
+def test_mda_replace_runner(
+    core: CMMCorePlus, seq: Iterable[MDAEvent], qtbot: QtBot
+) -> None:
     core.set_mda(MDARunner)
     test_mda_iterable_of_events(core, seq, qtbot)
     test_mda_failures(core, qtbot)
