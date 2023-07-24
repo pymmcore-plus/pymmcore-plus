@@ -1343,6 +1343,20 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self._mda_runner
 
+    def set_mda(self, mda) -> None:
+        """Set the `MDARunner` for this `CMMCorePlus` instance.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        Parameters
+        ----------
+        mda : MDARunner
+            Any object conforming to the `MDARunner` protocol.
+        """
+        self._mda_runner = mda()
+        self._mda_runner.set_engine(MDAEngine(self))
+
+
     def run_mda(self, events: Iterable[MDAEvent], block: bool = False) -> Thread:
         """Run a sequence of [useq.MDAEvent][] on a new thread.
 
