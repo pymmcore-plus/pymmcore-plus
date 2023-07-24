@@ -3,8 +3,27 @@ on:
   push:
     branches:
       - main
+  pull_request:
+    branches:
+      - main
+
 jobs:
+  build:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: 3.x
+      - run: |
+          pip install -e .[docs]
+          # bugfix until https://github.com/mkdocstrings/griffe/pull/115
+          pip install git+https://github.com/tlambert03/griffe@recursion#egg=griffe -U
+      - run: mkdocs build --strict
+
   deploy:
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v3

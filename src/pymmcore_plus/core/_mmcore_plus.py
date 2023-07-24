@@ -691,7 +691,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         It offers a convenient way to iterate over availabe device adaptor libraries,
         optionally filtering adapter library name. It can also yield
-        [`Adapter`][pymmcore_plus.Adapter] objects if `as_object` is `True` (the
+        [`Adapter`][pymmcore_plus.DeviceAdapter] objects if `as_object` is `True` (the
         default)
 
         Parameters
@@ -978,9 +978,9 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`.*
 
-        [`Adapter`][pymmcore_plus.Adapter] objects are a convenient object oriented way
-        to interact with device adapters. They allow you to call any method on `CMMCore`
-        that normally requires a `library_name` as the first argument as an
+        [`Adapter`][pymmcore_plus.DeviceAdapter] objects are a convenient object
+        oriented way to interact with device adapters. They allow you to call any method
+        on `CMMCore` that normally requires a `library_name` as the first argument as an
         argument-free method on the `Adapter` object.
         """
         return DeviceAdapter(library_name, mmcore=self)
