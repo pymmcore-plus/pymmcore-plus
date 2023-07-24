@@ -110,35 +110,7 @@ class Device:
             recognized by the specific plugin library. (This is what is returned by
             `Device.name()`)
         """
-        try:
-            self._mmc.loadDevice(self.label, adapter_name, device_name)
-        except RuntimeError as e:
-            msg = str(e)
-            if self.isLoaded():
-                if adapter_name == self.library() and device_name == self.name():
-                    msg += f". Device {self.label!r} appears to be loaded already."
-                    import warnings
-
-                    warnings.warn(msg, stacklevel=2)
-                    return
-                lib = self._mmc.getDeviceLibrary(self.label)
-                name = self._mmc.getDeviceName(self.label)
-                msg += f". Device {self.label!r} is already taken by {lib}::{name}"
-            else:
-                adapters = self._mmc.getDeviceAdapterNames()
-                if adapter_name not in adapters:
-                    msg += (
-                        f". Adapter name {adapter_name!r} not in list of "
-                        f"known adapter names: {adapters}."
-                    )
-                else:
-                    devices = self._mmc.getAvailableDevices(adapter_name)
-                    if device_name not in devices:
-                        msg += (
-                            f". Device name {device_name!r} not in devices provided by "
-                            f"adapter {adapter_name!r}: {devices}"
-                        )
-            raise RuntimeError(msg) from e
+        self._mmc.loadDevice(self.label, adapter_name, device_name)
 
     def unload(self) -> None:
         """Unload device from the core and adjust all configuration data."""
