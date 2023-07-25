@@ -3,8 +3,6 @@ ci:
   autofix_commit_msg: "style(pre-commit.ci): auto fixes [...]"
   autoupdate_commit_msg: "ci(pre-commit.ci): autoupdate"
 
-default_install_hook_types: [pre-commit, commit-msg]
-
 repos:
   - repo: https://github.com/pre-commit/pre-commit-hooks
     rev: v4.4.0

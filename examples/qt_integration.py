@@ -1,5 +1,5 @@
 """
-An example of integrating a remote MMCore object into an event loop.
+An example of integrating a MMCore object into an event loop.
 
 This example requires qtpy and an Qt backend installed in the env:
 ```

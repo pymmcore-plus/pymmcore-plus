@@ -7,7 +7,7 @@ build-backend = "hatchling.build"
 [project]
 name = "pymmcore-plus"
 description = "pymmcore superset providing improved APIs, event connection, and a pure python acquisition engine"
-keywords = ["microscope", "micro-manager", "remote", "multi-processing"]
+keywords = ["microscope", "micro-manager", "multi-processing"]
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "BSD 3-Clause License" }
@@ -53,9 +53,10 @@ dependencies = [
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material",
-    "mkdocstrings-python",
+    "mkdocstrings ==0.22.0",
+    "mkdocstrings-python ==1.1.2",
+    # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
-remote = ["Pyro5>=5.10", "msgpack", "psutil"]
 testing = ["PyQt6", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
 dev = [
     "black",
@@ -146,16 +147,6 @@ disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
 plugins = "pydantic.mypy"
-
-[[tool.mypy.overrides]]
-module = ["pymmcore_plus.remote.*"]
-ignore_errors = true
-
-
-[[tool.mypy.overrides]]
-module = ["Pyro5.*", "wrapt"]
-ignore_missing_imports = true
-
 
 # https://coverage.readthedocs.io/en/6.4/config.html
 [tool.coverage.report]
