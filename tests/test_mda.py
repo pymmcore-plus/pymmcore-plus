@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, Iterable, Iterator
 from unittest.mock import Mock, patch
 
 import pytest
+from useq import MDAEvent, MDASequence
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
-from useq import MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -151,6 +152,8 @@ def test_autofocus_relative_z_plan_no_autofocus(
 
 def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
     # mock_autofocus sets z=100
+    # setting both z pos and autofocus offset to 25 because core does not have a
+    # demo AF stage with both `State` and `Offset` properties.
     mda = MDASequence(
         stage_positions=[
             {
@@ -158,7 +161,7 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: QtBot, mock_fullfoc
                 "sequence": {
                     "autofocus_plan": {
                         "autofocus_device_name": "Z",
-                        "autofocus_motor_offset": 50,
+                        "autofocus_motor_offset": 25,
                         "axes": ("p",),
                     }
                 },
@@ -182,6 +185,8 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: QtBot, mock_fullfoc
 
 def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failure):
     # mock_autofocus sets z=100
+    # setting both z pos and autofocus offset to 25 because core does not have a
+    # demo AF stage with both `State` and `Offset` properties.
     mda = MDASequence(
         stage_positions=[
             {
@@ -189,7 +194,7 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
                 "sequence": {
                     "autofocus_plan": {
                         "autofocus_device_name": "Z",
-                        "autofocus_motor_offset": 50,
+                        "autofocus_motor_offset": 25,
                         "axes": ("p",),
                     }
                 },
@@ -205,7 +210,7 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
 
     # if fullfocus fails, the returned z position should be the home position of the
     # z plan (50). If fullfocus is working, it should 100.
-    assert core.getZPosition() == 50
+    assert core.getZPosition() == 25
 
 
 def event_generator() -> Iterator[MDAEvent]:
