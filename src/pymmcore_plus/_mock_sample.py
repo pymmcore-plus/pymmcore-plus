@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from typing_extensions import Literal, ParamSpec
 
     P = ParamSpec("P")
-    
+
 R = TypeVar("R")
 
 
@@ -84,7 +84,7 @@ class _CorePatcher(AbstractContextManager, ContextDecorator, Generic[R]):
         self.stop()
 
 
-class _MockSampleContextManager(_CorePatcher['np.ndarray']):
+class _MockSampleContextManager(_CorePatcher["np.ndarray"]):
     def snapImage(self, *args: Any, **kwargs: Any) -> None:
         # not currently used, but could be.
         ...
