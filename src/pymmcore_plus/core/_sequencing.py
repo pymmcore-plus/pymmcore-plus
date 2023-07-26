@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from itertools import product
 from typing import TYPE_CHECKING, Literal, Sequence, overload
 
 from useq import MDAEvent
@@ -18,11 +19,6 @@ class SequencedEvent(MDAEvent):
     z_sequence: tuple[float, ...]
     channels: tuple[str, ...]
 
-    @property
-    def min_start_time(self) -> float | None:
-        """Return the minimum start time of all events, or None."""
-        return self.events[0].min_start_time
-
     def property_sequences(self, core: CMMCorePlus) -> dict[tuple[str, str], list[str]]:
         prop_seqs: dict[tuple[str, str], list[str]] = {}
         if not self.events[0].channel:
@@ -37,34 +33,24 @@ class SequencedEvent(MDAEvent):
     @classmethod
     def create(cls, events: Sequence[MDAEvent]) -> SequencedEvent:
         """Create a new SequencedEvent from a sequence of events."""
-        if len(events) <= 1:
+        _events = tuple(events)
+        if len(_events) <= 1:
             raise ValueError("Sequences must have at least two events.")
 
-        z_positions: list[float] = []
-        x_positions: list[float] = []
-        y_positions: list[float] = []
-        exposures: list[float] = []
-        channels: list[str] = []
-        _events = tuple(events)
-        for event in _events:
-            if event.z_pos is not None:
-                z_positions.append(event.z_pos)
-            if event.x_pos is not None:
-                x_positions.append(event.x_pos)
-            if event.y_pos is not None:
-                y_positions.append(event.y_pos)
-            if event.exposure is not None:
-                exposures.append(event.exposure)
-            if event.channel is not None:
-                channels.append(event.channel.config)
+        attrs = ("z_pos", "x_pos", "y_pos", "exposure", "channel")
+        dd: dict[str, list] = dict.fromkeys(attrs, [])
+        for event, attr in product(_events, attrs):
+            if (val := getattr(event, attr)) is not None:
+                dd[attr].append(val)
 
         return cls(
             events=_events,
-            exposure_sequence=tuple(exposures),
-            x_sequence=tuple(x_positions),
-            y_sequence=tuple(y_positions),
-            z_sequence=tuple(z_positions),
-            channels=tuple(channels),
+            exposure_sequence=tuple(dd["exposure"]),
+            x_sequence=tuple(dd["x_pos"]),
+            y_sequence=tuple(dd["y_pos"]),
+            z_sequence=tuple(dd["z_pos"]),
+            channels=tuple(c.config for c in dd["channel"]),
+            **_events[0].dict(),  # use the first event as the "base" event
         )
 
     @property
