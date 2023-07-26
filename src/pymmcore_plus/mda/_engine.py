@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from ..core import CMMCorePlus
 
 
-class MDAEngine(PMDAEngine[SequencedEvent]):
+class MDAEngine(PMDAEngine):
     """The default MDAengine that ships with pymmcore-plus.
 
     This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
@@ -34,7 +34,7 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
 
         self._mmc = self._mmc or CMMCorePlus.instance()
 
-    def _setup_sequence(self, seq_event: SequencedEvent) -> None:
+    def setup_sequenced_event(self, seq_event: SequencedEvent) -> None:
         core = self._mmc
         cam_device = self._mmc.getCameraDevice()
         if seq_event.is_exposure_sequenced:
@@ -51,6 +51,9 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             prop_seqs = seq_event.property_sequences(core)
             for (dev, prop), value_sequence in prop_seqs.items():
                 core.loadPropertySequence(dev, prop, value_sequence)
+        elif seq_event.channel_info:
+            self._mmc.setConfig(*seq_event.channel_info)
+            
 
         # TODO: SLM
         core.prepareSequenceAcquisition(cam_device)
@@ -65,7 +68,7 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
         if seq_event.is_exposure_sequenced:
             core.startExposureSequence(cam_device)
 
-    def _setup_single_event(self, event: MDAEvent) -> None:
+    def setup_single_event(self, event: MDAEvent) -> None:
         if event.x_pos is not None or event.y_pos is not None:
             x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
             y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
@@ -77,7 +80,7 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
         if event.exposure is not None:
             self._mmc.setExposure(event.exposure)
 
-    def setup_event(self, event: MDAEvent | SequencedEvent) -> None:
+    def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
         Parameters
@@ -86,9 +89,9 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             The event to use for the Hardware config
         """
         if isinstance(event, SequencedEvent):
-            self._setup_sequence(event)
+            self.setup_sequenced_event(event)
         else:
-            self._setup_single_event(event)
+            self.setup_single_event(event)
         self._mmc.waitForSystem()
 
     def _exec_sequenced_event(self, event: SequencedEvent) -> EventPayload:
@@ -96,10 +99,11 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
         n_events = len(event.events)
         self._mmc.startSequenceAcquisition(
             n_events,
-            0,  # intervalMS
+            0,  # intervalMS  # TODO: add support for this
             True,  # stopOnOverflow
         )
-        # TODO: make a waitForSequence method?
+
+        # block until the sequence is done
         while self._mmc.isSequenceRunning():
             time.sleep(0.001)
 
@@ -111,16 +115,14 @@ class MDAEngine(PMDAEngine[SequencedEvent]):
             tagged_imgs.append(self._mmc.popNextImage())
         return EventPayload(image_sequence=tagged_imgs)
 
-    def exec_event(self, event: MDAEvent | SequencedEvent) -> EventPayload:
+    def exec_event(self, event: MDAEvent) -> EventPayload:
         """Execute an individual event and return the image data."""
         if isinstance(event, SequencedEvent):
             return self._exec_sequenced_event(event)
         self._mmc.snapImage()
         return EventPayload(image=self._mmc.getImage())
 
-    def event_iterator(
-        self, events: Iterable[MDAEvent]
-    ) -> Iterator[MDAEvent | SequencedEvent]:
+    def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
         """Event iterator that merges events for hardware sequencing if possible.
 
         This simply wraps `for event in events: ...` inside `MDARunner.run()`

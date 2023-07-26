@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Protocol, TypeVar, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from typing import TYPE_CHECKING, Iterable, Iterator
@@ -9,14 +9,12 @@ if TYPE_CHECKING:
     from useq import MDAEvent, MDASequence
 
 
-CustomEvent = TypeVar("CustomEvent")
-
 # NOTE: This whole thing could potentially go in useq-schema
 # as it makes no assumptions about pymmcore-plus
 
 
 @runtime_checkable
-class PMDAEngine(Protocol[CustomEvent]):
+class PMDAEngine(Protocol):
     """Protocol that all MDA engines must implement."""
 
     @abstractmethod
@@ -27,7 +25,7 @@ class PMDAEngine(Protocol[CustomEvent]):
         """
 
     @abstractmethod
-    def setup_event(self, event: MDAEvent | CustomEvent) -> None:
+    def setup_event(self, event: MDAEvent) -> None:
         """Prepare state of system (hardware, etc.) for `event`.
 
         This method is called before each event in the sequence.  It is
@@ -39,7 +37,7 @@ class PMDAEngine(Protocol[CustomEvent]):
         """
 
     @abstractmethod
-    def exec_event(self, event: MDAEvent | CustomEvent) -> object:
+    def exec_event(self, event: MDAEvent) -> object:
         """Execute `event`.
 
         This method is called after `setup_event` and is responsible for
@@ -53,9 +51,7 @@ class PMDAEngine(Protocol[CustomEvent]):
         """
         # TODO: nail down a spec for the return object.
 
-    def event_iterator(
-        self, events: Iterable[MDAEvent]
-    ) -> Iterator[MDAEvent | CustomEvent]:
+    def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
         """Optional wrapper on the event iterator.
 
         This can be used to wrap the event iterator to perform any event merging
@@ -68,10 +64,10 @@ class PMDAEngine(Protocol[CustomEvent]):
         yield from events
 
 
-class FullPMDAEngine(PMDAEngine[CustomEvent], Protocol):
+class FullPMDAEngine(PMDAEngine):
     """Optional methods that a PMDAEngine MAY implement."""
 
-    def teardown_event(self, event: MDAEvent | CustomEvent) -> None:
+    def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`.
 
         If the engine provides this function, it will be called after

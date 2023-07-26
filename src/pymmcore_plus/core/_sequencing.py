@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Literal, Sequence, overload
 
 from useq import MDAEvent
@@ -11,9 +10,8 @@ if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
 
 
-@dataclass(frozen=True)
-class SequencedEvent:
-    events: tuple[MDAEvent, ...] = field(repr=False)
+class SequencedEvent(MDAEvent):
+    events: tuple[MDAEvent, ...]
     exposure_sequence: tuple[float, ...]
     x_sequence: tuple[float, ...]
     y_sequence: tuple[float, ...]
@@ -92,7 +90,7 @@ class SequencedEvent:
         return (e0.channel.group, e0.channel.config) if e0.channel else None
 
 
-def get_sequencable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str], int]:
+def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str], int]:
     """Return all sequenceable devices in `core`.
 
     Returns
