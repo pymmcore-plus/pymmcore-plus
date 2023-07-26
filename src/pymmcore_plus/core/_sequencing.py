@@ -38,7 +38,8 @@ class SequencedEvent(MDAEvent):
             raise ValueError("Sequences must have at least two events.")
 
         attrs = ("z_pos", "x_pos", "y_pos", "exposure", "channel")
-        dd: dict[str, list] = dict.fromkeys(attrs, [])
+        dd: dict[str, list] = {attr: [] for attr in attrs}
+
         for event, attr in product(_events, attrs):
             if (val := getattr(event, attr)) is not None:
                 dd[attr].append(val)

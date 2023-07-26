@@ -217,3 +217,77 @@ def retry(
         return wrapper
 
     return deco(func) if func is not None else deco
+
+
+def print_tabular_data(data: dict[str, list[str]], sort: str | None = None) -> None:
+    """Print tabular data in a human-readable format.
+
+    Parameters
+    ----------
+    data : dict[str, list[str]]
+        A dictionary of column names and lists of values.
+    sort : str | None
+        Optionally sort the table by the given column name.
+    """
+    try:
+        _rich_print_table(data, sort=sort)
+        return
+    except ImportError:
+        logger.info("`pip install rich` for a nicer table display")
+
+    col_widths = [len(x) for x in data]
+    for i, col in enumerate(data.values()):
+        for val in col:
+            col_widths[i] = max(col_widths[i], len(str(val)))
+    fmt = " | ".join(f"{{:<{w}s}}" for w in col_widths)
+
+    print(fmt.format(*data.keys()))
+
+    dashs = ["-" * w for w in col_widths]
+    print(fmt.format(*dashs))
+
+    for row in _sorted_rows(data, sort=sort):
+        print(fmt.format(*(str(x) for x in row)))
+
+
+def _rich_print_table(data: dict[str, list[str]], sort: str | None = None) -> None:
+    """Print pretty table with rich."""
+    from rich.console import Console
+    from rich.table import Table
+
+    if "Type" in data:
+        type_emojis = {
+            "Hub": ":electric_plug: ",
+            "Camera": ":camera: ",
+            "Shutter": ":light_bulb: ",
+            "State": ":green_circle: ",
+            "Stage": ":up_arrow:  ",
+            "XYStage": ":joystick:  ",
+            "Core": ":blue_heart: ",
+            "AutoFocus": ":wavy_dash: ",
+        }
+        data["Type"] = [type_emojis.get(x, "") + x for x in data["Type"]]
+
+    console = Console()
+    table = Table(title="Microscope Config")
+    for i, header in enumerate(data):
+        table.add_column(header, style="" if i else "bold green")
+
+    for row in _sorted_rows(data, sort=sort):
+        table.add_row(*row)
+
+    console.print(table)
+
+
+def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
+    """Return a list of rows, sorted by the given column name."""
+    rows = list(zip(*data.values()))
+    if sort is not None:
+        try:
+            sort_idx = [x.lower() for x in data].index(sort.lower())
+        except ValueError:
+            raise ValueError(
+                f"invalid sort column: {sort!r}. Must be one of {list(data)}"
+            ) from None
+        rows.sort(key=lambda x: x[sort_idx])
+    return rows

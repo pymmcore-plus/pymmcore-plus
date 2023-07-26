@@ -5,6 +5,7 @@ import os
 import re
 import warnings
 import weakref
+from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
@@ -14,6 +15,7 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    DefaultDict,
     Iterable,
     Iterator,
     Pattern,
@@ -27,7 +29,7 @@ import pymmcore
 from psygnal import SignalInstance
 
 from .._logger import logger
-from .._util import find_micromanager
+from .._util import find_micromanager, print_tabular_data
 from ..mda import MDAEngine, MDARunner, PMDAEngine
 from ._adapter import DeviceAdapter
 from ._config import Configuration
@@ -1740,6 +1742,38 @@ class CMMCorePlus(pymmcore.CMMCore):
                     f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}"
                 )
                 f.write(cfg)
+
+    def describe(self, sort: str | None = None) -> None:
+        """Print information about the current configuration.
+
+        Intended to provide a quick overview of the microscope configuration during
+        interactive terminal usage.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+        """
+        _current = {
+            self.getCameraDevice(): "Camera",
+            self.getXYStageDevice(): "XYStage",
+            self.getFocusDevice(): "Focus",
+            self.getShutterDevice(): "Shutter",
+            self.getSLMDevice(): "SLM",
+            self.getGalvoDevice(): "Galvo",
+            self.getAutoFocusDevice(): "AutoFocus",
+            self.getImageProcessorDevice(): "ImageProcessor",
+        }
+
+        data: defaultdict[str, list[str]] = DefaultDict(list)
+        for device in self.iterDevices():
+            data["Device Label"].append(device.label)
+            data["Type"].append(str(device.type()))
+            data["Library::DeviceName"].append(f"{device.library()}::{device.name()}")
+            data["Description"].append(device.description())
+            data["Current"].append(_current.get(device.label, ""))
+
+        if not any(data["Current"]):
+            data.pop("Current")
+
+        print_tabular_data(data, sort=sort)
 
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.
