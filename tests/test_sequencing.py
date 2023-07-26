@@ -43,9 +43,12 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     assert core_mock.prepareSequenceAcquisition.call_count == EXPECTED_SEQUENCES
     assert core_mock.startSequenceAcquisition.call_count == EXPECTED_SEQUENCES
     core_mock.startSequenceAcquisition.assert_called_with(NLOOPS, 0, True)
-    assert core_mock.setConfig.call_args_list == [
-        call("Channel", "DAPI"),
-        call("Channel", "FITC"),
-        call("Channel", "DAPI"),
-        call("Channel", "FITC"),
-    ]
+
+    expected_ch = [call("Channel", "DAPI"), call("Channel", "FITC")] * 2
+    assert core_mock.setConfig.call_args_list == expected_ch
+
+    expected_exposure = [call(5), call(10)] * 2
+    assert core_mock.setExposure.call_args_list == expected_exposure
+
+    expected_pos = [call(0, 0), call(0, 0), call(1, 1), call(1, 1)]
+    assert core_mock.setXYPosition.call_args_list == expected_pos

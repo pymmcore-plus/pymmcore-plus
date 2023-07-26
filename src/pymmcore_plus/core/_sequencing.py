@@ -3,6 +3,7 @@ from __future__ import annotations
 from itertools import product
 from typing import TYPE_CHECKING, Literal, Sequence, overload
 
+from pydantic import root_validator
 from useq import MDAEvent
 
 from pymmcore_plus.core._constants import DeviceType
@@ -13,67 +14,69 @@ if TYPE_CHECKING:
 
 class SequencedEvent(MDAEvent):
     events: tuple[MDAEvent, ...]
+    # each of these will be empty if the len(set(...)) <= 1
     exposure_sequence: tuple[float, ...]
     x_sequence: tuple[float, ...]
     y_sequence: tuple[float, ...]
     z_sequence: tuple[float, ...]
-    channels: tuple[str, ...]
 
+    # technically this is more like a field, but it requires a core instance
+    # to getConfigData for channels, so we leave it as a method.
     def property_sequences(self, core: CMMCorePlus) -> dict[tuple[str, str], list[str]]:
         prop_seqs: dict[tuple[str, str], list[str]] = {}
         if not self.events[0].channel:
-            return prop_seqs
+            return {}
+
+        # NOTE: we already should have checked that all of these properties were
+        # Sequenceable in can_sequence_events, so we don't check again here.
         for e in self.events:
-            e_cfg = core.getConfigData(e.channel.group, e.channel.config)  # type: ignore # noqa
-            for dev, prop, val in e_cfg:
-                if core.isPropertySequenceable(dev, prop):
+            if e.channel is not None:
+                e_cfg = core.getConfigData(e.channel.group, e.channel.config)
+                for dev, prop, val in e_cfg:
                     prop_seqs.setdefault((dev, prop), []).append(val)
-        return prop_seqs
+            if e.properties:
+                for dev, prop, val in e.properties:
+                    prop_seqs.setdefault((dev, prop), []).append(val)
+
+        # filter out any sequences that are all the same value
+        return {k: v for k, v in prop_seqs.items() if len(set(v)) > 1}
 
     @classmethod
     def create(cls, events: Sequence[MDAEvent]) -> SequencedEvent:
-        """Create a new SequencedEvent from a sequence of events."""
+        """Create a SequencedEvent from a sequence of events.
+
+        This pre-calculates sequences of length > 1 for x, y, z positions, and exposure.
+        Channel configs and other sequenceable properties are determined by the
+        `property_sequences` method, which requires access to a core instance.
+        """
         _events = tuple(events)
         if len(_events) <= 1:
             raise ValueError("Sequences must have at least two events.")
 
-        attrs = ("z_pos", "x_pos", "y_pos", "exposure", "channel")
-        dd: dict[str, list] = dict.fromkeys(attrs, [])
-        for event, attr in product(_events, attrs):
-            if (val := getattr(event, attr)) is not None:
-                dd[attr].append(val)
+        data: dict[str, list] = {a: [] for a in ("z_pos", "x_pos", "y_pos", "exposure")}
+        for event, attr in product(_events, list(data)):
+            # do we need to check if not None?
+            # the only problem might occur if some are None and some are not
+            data[attr].append(getattr(event, attr))
 
         return cls(
             events=_events,
-            exposure_sequence=tuple(dd["exposure"]),
-            x_sequence=tuple(dd["x_pos"]),
-            y_sequence=tuple(dd["y_pos"]),
-            z_sequence=tuple(dd["z_pos"]),
-            channels=tuple(c.config for c in dd["channel"]),
-            **_events[0].dict(),  # use the first event as the "base" event
+            exposure_sequence=(
+                data["exposure"] if len(set(data["exposure"])) > 1 else ()
+            ),
+            x_sequence=data["x_pos"] if len(set(data["x_pos"])) > 1 else (),
+            y_sequence=data["y_pos"] if len(set(data["y_pos"])) > 1 else (),
+            z_sequence=data["z_pos"] if len(set(data["z_pos"])) > 1 else (),
+            # use the first event to provide all other values like min_start_time, etc.
+            **_events[0].dict(),
         )
 
-    @property
-    def is_exposure_sequenced(self) -> bool:
-        return len(set(self.exposure_sequence)) > 1
-
-    @property
-    def is_xy_sequenced(self) -> bool:
-        return len(set(self.x_sequence)) > 1 and len(set(self.y_sequence)) > 1
-
-    @property
-    def is_z_sequenced(self) -> bool:
-        return len(set(self.z_sequence)) > 1
-
-    @property
-    def is_channel_sequenced(self) -> bool:
-        return len(set(self.channels)) > 1
-
-    @property
-    def channel_info(self) -> tuple[str, str] | None:
-        """Return channel group & config, or None."""
-        e0 = self.events[0]
-        return (e0.channel.group, e0.channel.config) if e0.channel else None
+    @root_validator()
+    @classmethod
+    def _validate_root(cls, value: dict) -> dict:
+        if len(value.get("x_sequence", ())) != len(value.get("y_sequence", ())):
+            raise ValueError("x_sequence and y_sequence must be the same length")
+        return value
 
 
 def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str], int]:
@@ -205,28 +208,33 @@ def can_sequence_events(
     ```
     """
 
-    # channel
-    def _r(reason: str) -> tuple[bool, str] | bool:
+    def _nope(reason: str) -> tuple[bool, str] | bool:
         return (False, reason) if return_reason else False
 
+    # channel
     if e1.channel and e2.channel and (e1.channel != e2.channel):
+        if e1.channel.group != e2.channel.group:
+            return _nope(
+                "Cannot sequence across config groups: "
+                f"{e1.channel.group=}, {e2.channel.group=}"
+            )
         cfg = core.getConfigData(e1.channel.group, e1.channel.config)
         for dev, prop, _ in cfg:
             # note: we don't need _ here, so can perhaps speed up with native=True
             if not core.isPropertySequenceable(dev, prop):
-                return _r(f"'{dev}-{prop}' is not sequenceable")
+                return _nope(f"'{dev}-{prop}' is not sequenceable")
             max_len = core.getPropertySequenceMaxLength(dev, prop)
             if cur_length >= max_len:
-                return _r(f"'{dev}-{prop}' {max_len=} < {cur_length=}")
+                return _nope(f"'{dev}-{prop}' {max_len=} < {cur_length=}")
 
     # Z
     if e1.z_pos and e2.z_pos and (e1.z_pos != e2.z_pos):
         focus_dev = core.getFocusDevice()
         if not core.isStageSequenceable(focus_dev):
-            return _r(f"Focus device {focus_dev!r} is not sequenceable")
+            return _nope(f"Focus device {focus_dev!r} is not sequenceable")
         max_len = core.getStageSequenceMaxLength(focus_dev)
         if cur_length >= max_len:
-            return _r(f"Focus device {focus_dev!r} {max_len=} < {cur_length=}")
+            return _nope(f"Focus device {focus_dev!r} {max_len=} < {cur_length=}")
 
     # XY
     if (e1.x_pos and e2.x_pos and (e1.x_pos != e2.x_pos)) or (
@@ -234,18 +242,18 @@ def can_sequence_events(
     ):
         stage = core.getXYStageDevice()
         if not core.isXYStageSequenceable(stage):
-            return _r(f"XYStage {stage!r} is not sequenceable")
+            return _nope(f"XYStage {stage!r} is not sequenceable")
         max_len = core.getXYStageSequenceMaxLength(stage)
         if cur_length >= max_len:
-            return _r(f"XYStage {stage!r} {max_len=} < {cur_length=}")
+            return _nope(f"XYStage {stage!r} {max_len=} < {cur_length=}")
 
     # camera
     cam_dev = core.getCameraDevice()
     if not core.isExposureSequenceable(cam_dev):
         if e1.exposure != e2.exposure:
-            return _r(f"Camera {cam_dev!r} is not exposure-sequenceable")
+            return _nope(f"Camera {cam_dev!r} is not exposure-sequenceable")
     elif cur_length >= core.getExposureSequenceMaxLength(cam_dev):
-        return _r(f"Camera {cam_dev!r} {max_len=} < {cur_length=}")
+        return _nope(f"Camera {cam_dev!r} {max_len=} < {cur_length=}")
 
     # time
     # TODO: use better axis keys when they are available
@@ -254,7 +262,7 @@ def can_sequence_events(
         and e1.min_start_time != e2.min_start_time
     ):
         pause = (e2.min_start_time or 0) - (e1.min_start_time or 0)
-        return _r(f"Must pause at least {pause} s between events.")
+        return _nope(f"Must pause at least {pause} s between events.")
 
     # misc additional properties
     if e1.properties and e2.properties:
@@ -262,8 +270,8 @@ def can_sequence_events(
             for dev2, prop2, value2 in e2.properties:
                 if dev == dev2 and prop == prop2 and value1 != value2:
                     if not core.isPropertySequenceable(dev, prop):
-                        return _r(f"'{dev}-{prop}' is not sequenceable")
+                        return _nope(f"'{dev}-{prop}' is not sequenceable")
                     if cur_length >= core.getPropertySequenceMaxLength(dev, prop):
-                        return _r(f"'{dev}-{prop}' {max_len=} < {cur_length=}")
+                        return _nope(f"'{dev}-{prop}' {max_len=} < {cur_length=}")
 
     return (True, "") if return_reason else True

@@ -34,50 +34,61 @@ class MDAEngine(PMDAEngine):
 
         self._mmc = self._mmc or CMMCorePlus.instance()
 
-    def setup_sequenced_event(self, seq_event: SequencedEvent) -> None:
+    def setup_sequenced_event(self, event: SequencedEvent) -> None:
         core = self._mmc
         cam_device = self._mmc.getCameraDevice()
-        if seq_event.is_exposure_sequenced:
-            core.loadExposureSequence(cam_device, seq_event.exposure_sequence)
-        if seq_event.is_xy_sequenced:
-            stage = core.getXYStageDevice()
-            core.loadXYStageSequence(stage, seq_event.x_sequence, seq_event.y_sequence)
-        if seq_event.is_z_sequenced:
-            zstage = core.getFocusDevice()
-            core.loadStageSequence(zstage, seq_event.z_sequence)
 
-        prop_seqs = None
-        if seq_event.is_channel_sequenced and seq_event.channel_info:
-            prop_seqs = seq_event.property_sequences(core)
+        if event.exposure_sequence:
+            core.loadExposureSequence(cam_device, event.exposure_sequence)
+        if event.x_sequence:  # y_sequence is implied and will be the same length
+            stage = core.getXYStageDevice()
+            core.loadXYStageSequence(stage, event.x_sequence, event.y_sequence)
+        if event.z_sequence:
+            zstage = core.getFocusDevice()
+            core.loadStageSequence(zstage, event.z_sequence)
+        if prop_seqs := event.property_sequences(core):
             for (dev, prop), value_sequence in prop_seqs.items():
                 core.loadPropertySequence(dev, prop, value_sequence)
-        elif seq_event.channel_info:
-            self._mmc.setConfig(*seq_event.channel_info)
 
         # TODO: SLM
         core.prepareSequenceAcquisition(cam_device)
 
-        if seq_event.is_z_sequenced:
-            core.startStageSequence(zstage)
-        if seq_event.is_xy_sequenced:
+        # start sequences or set non-sequenced values
+        if event.x_sequence:
             core.startXYStageSequence(stage)
+        elif event.x_pos is not None or event.y_pos is not None:
+            self._set_event_position(event)
+
+        if event.z_sequence:
+            core.startStageSequence(zstage)
+        elif event.z_pos is not None:
+            self._mmc.setZPosition(event.z_pos)
+
+        if event.exposure_sequence:
+            core.startExposureSequence(cam_device)
+        elif event.exposure is not None:
+            core.setExposure(event.exposure)
+
         if prop_seqs:
             for dev, prop in prop_seqs:
                 core.startPropertySequence(dev, prop)
-        if seq_event.is_exposure_sequenced:
-            core.startExposureSequence(cam_device)
+        elif event.channel is not None:
+            core.setConfig(event.channel.group, event.channel.config)
 
     def setup_single_event(self, event: MDAEvent) -> None:
         if event.x_pos is not None or event.y_pos is not None:
-            x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
-            y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
-            self._mmc.setXYPosition(x, y)
+            self._set_event_position(event)
         if event.z_pos is not None:
             self._mmc.setZPosition(event.z_pos)
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
         if event.exposure is not None:
             self._mmc.setExposure(event.exposure)
+
+    def _set_event_position(self, event: MDAEvent) -> None:
+        x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
+        y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
+        self._mmc.setXYPosition(x, y)
 
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
