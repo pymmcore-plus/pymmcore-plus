@@ -15,7 +15,6 @@ from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    DefaultDict,
     Iterable,
     Iterator,
     Literal,
@@ -1764,7 +1763,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.getImageProcessorDevice(): "ImageProcessor",
         }
 
-        data: defaultdict[str, list[str]] = DefaultDict(list)
+        data: defaultdict[str, list[str]] = defaultdict(list)
         for device in self.iterDevices():
             data["Device Label"].append(device.label)
             data["Type"].append(str(device.type()))
