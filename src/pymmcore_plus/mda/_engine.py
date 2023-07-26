@@ -96,6 +96,11 @@ class MDAEngine(PMDAEngine):
     def _exec_sequenced_event(self, event: SequencedEvent) -> EventPayload:
         # TODO: add support for multiple camera devices
         n_events = len(event.events)
+
+        # Start sequence
+        # Note that the overload of startSequenceAcquisition that takes a camera
+        # label does NOT automatically initialize a circular buffer.  So if this call
+        # is changed to accept the camera in the future, that should be kept in mind.
         self._mmc.startSequenceAcquisition(
             n_events,
             0,  # intervalMS  # TODO: add support for this
