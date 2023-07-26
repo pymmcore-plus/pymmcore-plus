@@ -146,7 +146,6 @@ disallow_any_generics = false
 disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
-plugins = "pydantic.mypy"
 
 # https://coverage.readthedocs.io/en/6.4/config.html
 [tool.coverage.report]
