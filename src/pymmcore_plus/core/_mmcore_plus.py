@@ -1744,7 +1744,7 @@ class CMMCorePlus(pymmcore.CMMCore):
                 f.write(cfg)
 
     def describe(self, sort: str | None = None) -> None:
-        """Print information about the current configuration.
+        """Print information table with the current configuration.
 
         Intended to provide a quick overview of the microscope configuration during
         interactive terminal usage.
