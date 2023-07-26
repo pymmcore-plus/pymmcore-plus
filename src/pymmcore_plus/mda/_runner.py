@@ -170,19 +170,14 @@ class MDARunner:
         """Main execution of events, inside the try/except block of `run`."""
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
         event_iterator = getattr(engine, "event_iterator", iter)
-
         _events: Iterator[MDAEvent] = event_iterator(events)
-        for event in _events:
-            cancelled = self._wait_until_event(event)
 
+        for event in _events:
             # If cancelled break out of the loop
-            if cancelled:
+            if self._wait_until_event(event) or not self._running:
                 break
 
             logger.info(event)
-            if not self._running:
-                break
-
             engine.setup_event(event)
 
             output = engine.exec_event(event)
@@ -190,11 +185,12 @@ class MDARunner:
             if (img := getattr(output, "image", None)) is not None:
                 with contextlib.suppress(EmitLoopError):
                     self._events.frameReady.emit(img, event)
+
+            # FIXME: this is here to make tests pass with sequenced events for now,
+            # but we might not want to do this for sequences for performance reasons.s
             if (imgs := getattr(output, "image_sequence", None)) is not None:
                 with contextlib.suppress(EmitLoopError):
                     for img in imgs:
-                        # FIXME: this is here to make tests pass for now,
-                        # but we probably don't want to do this for performance reasonss
                         self._events.frameReady.emit(img, event)
 
             teardown_event(event)
