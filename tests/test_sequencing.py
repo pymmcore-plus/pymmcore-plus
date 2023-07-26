@@ -72,6 +72,7 @@ def test_fully_sequenceable_core():
     core_mock.getXYStageDevice.return_value = XYSTAGE
     core_mock.getFocusDevice.return_value = FOCUS
     core_mock.getFocusDevice.return_value = FOCUS
+    core_mock.getPixelSizeUm.return_value = None
 
     engine = MDAEngine(mmc=core_mock)
 

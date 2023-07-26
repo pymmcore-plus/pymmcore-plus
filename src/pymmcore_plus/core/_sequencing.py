@@ -240,7 +240,7 @@ def can_sequence_events(
             if not core.isPropertySequenceable(dev, prop):
                 return _nope(f"'{dev}-{prop}' is not sequenceable")
             max_len = core.getPropertySequenceMaxLength(dev, prop)
-            if cur_length >= max_len:
+            if cur_length >= max_len:  # pragma: no cover
                 return _nope(f"'{dev}-{prop}' {max_len=} < {cur_length=}")
 
     # Z
@@ -249,7 +249,7 @@ def can_sequence_events(
         if not core.isStageSequenceable(focus_dev):
             return _nope(f"Focus device {focus_dev!r} is not sequenceable")
         max_len = core.getStageSequenceMaxLength(focus_dev)
-        if cur_length >= max_len:
+        if cur_length >= max_len:  # pragma: no cover
             return _nope(f"Focus device {focus_dev!r} {max_len=} < {cur_length=}")
 
     # XY
@@ -260,7 +260,7 @@ def can_sequence_events(
         if not core.isXYStageSequenceable(stage):
             return _nope(f"XYStage {stage!r} is not sequenceable")
         max_len = core.getXYStageSequenceMaxLength(stage)
-        if cur_length >= max_len:
+        if cur_length >= max_len:  # pragma: no cover
             return _nope(f"XYStage {stage!r} {max_len=} < {cur_length=}")
 
     # camera
@@ -268,7 +268,7 @@ def can_sequence_events(
     if not core.isExposureSequenceable(cam_dev):
         if e1.exposure != e2.exposure:
             return _nope(f"Camera {cam_dev!r} is not exposure-sequenceable")
-    elif cur_length >= core.getExposureSequenceMaxLength(cam_dev):
+    elif cur_length >= core.getExposureSequenceMaxLength(cam_dev):  # pragma: no cover
         return _nope(f"Camera {cam_dev!r} {max_len=} < {cur_length=}")
 
     # time
