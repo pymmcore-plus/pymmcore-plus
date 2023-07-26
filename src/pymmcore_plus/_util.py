@@ -269,9 +269,13 @@ def _rich_print_table(data: dict[str, list[str]], sort: str | None = None) -> No
         data["Type"] = [type_emojis.get(x, "") + x for x in data["Type"]]
 
     console = Console()
-    table = Table(title="Microscope Config")
+    table = Table()
     for i, header in enumerate(data):
-        table.add_column(header, style="" if i else "bold green")
+        if header == "Current":
+            style = "bold"
+        else:
+            style = "" if i else "bold green"
+        table.add_column(header, style=style)
 
     for row in _sorted_rows(data, sort=sort):
         table.add_row(*row)

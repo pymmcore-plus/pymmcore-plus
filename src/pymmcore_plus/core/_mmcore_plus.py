@@ -1766,13 +1766,15 @@ class CMMCorePlus(pymmcore.CMMCore):
         for device in self.iterDevices():
             data["Device Label"].append(device.label)
             data["Type"].append(str(device.type()))
+            data["Current"].append(_current.get(device.label, ""))
             data["Library::DeviceName"].append(f"{device.library()}::{device.name()}")
             data["Description"].append(device.description())
-            data["Current"].append(_current.get(device.label, ""))
 
         if not any(data["Current"]):
             data.pop("Current")
 
+        print(f"{self.getVersionInfo()}, {self.getAPIVersionInfo()}")
+        print("Adapter path:", ",".join(self.getDeviceAdapterSearchPaths()))
         print_tabular_data(data, sort=sort)
 
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
