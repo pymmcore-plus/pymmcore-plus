@@ -53,9 +53,6 @@ class MDAEngine(PMDAEngine):
                         if p.sequence is not None:
                             p.sequence.set_fov_size((width * px, height * px))
 
-        # switch off autofocus device if it is on
-        self._mmc.enableContinuousFocus(False)
-
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
@@ -87,6 +84,8 @@ class MDAEngine(PMDAEngine):
 
         # execute hardware autofocus
         if isinstance(action, HardwareAutofocus) and event.z_pos is not None:
+            # switch off autofocus device if it is on
+            self._mmc.enableContinuousFocus(False)
             # get position index
             p_idx = event.index.get("p", None)
             # run autofocus and get the correction to apply to each z position
