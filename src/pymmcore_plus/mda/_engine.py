@@ -52,7 +52,7 @@ class MDAEngine(PMDAEngine):
                     for p in sequence.stage_positions:
                         if p.sequence is not None:
                             p.sequence.set_fov_size((width * px, height * px))
-        
+
         # switch off autofocus device if it is on
         self._mmc.enableContinuousFocus(False)
 
@@ -103,7 +103,7 @@ class MDAEngine(PMDAEngine):
     def _execute_autofocus(self, action: HardwareAutofocus) -> float:
         """Perform the hardware autofocus.
 
-        Returns the change in ZPosition that occurred during the autofocus event. 
+        Returns the change in ZPosition that occurred during the autofocus event.
         """
         self._mmc.setPosition(
             action.autofocus_device_name,
