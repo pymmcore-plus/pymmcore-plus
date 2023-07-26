@@ -57,9 +57,8 @@ class MDAEngine(PMDAEngine):
 
         if event.z_pos is not None:
             p_idx = event.index.get("p", None)
-            if p_idx not in self._z_correction:
-                self._z_correction[p_idx] = 0.0
-            self._mmc.setZPosition(event.z_pos + self._z_correction[p_idx])
+            correction = self._z_correction.setdefault(p_idx, 0.0)
+            self._mmc.setZPosition(event.z_pos + correction)
 
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
