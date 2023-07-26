@@ -77,7 +77,10 @@ class MDAEngine(PMDAEngine):
             # get position index
             p_idx = event.index.get("p", None)
             # run autofocus and get the correction to apply to each z position
-            self._z_correction[p_idx] = self._execute_autofocus(action)
+            try:
+                self._z_correction[p_idx] = self._execute_autofocus(action)
+            except RuntimeError:
+                logger.warning("Warning: Hardware autofocus failed.")
             return None
 
         # acquire an image and emit the image data
@@ -103,11 +106,7 @@ class MDAEngine(PMDAEngine):
             self._mmc.waitForSystem()
             return self._mmc.getZPosition() - current_z
 
-        try:
-            return _full_focus()
-        except RuntimeError:
-            logger.warning("Warning: Hardware autofocus failed.")
-            return 0.0
+        return _full_focus()
 
 
 class EventPayload(NamedTuple):
