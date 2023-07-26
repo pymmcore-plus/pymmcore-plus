@@ -53,7 +53,6 @@ class MDAEngine(PMDAEngine):
                 core.loadPropertySequence(dev, prop, value_sequence)
         elif seq_event.channel_info:
             self._mmc.setConfig(*seq_event.channel_info)
-            
 
         # TODO: SLM
         core.prepareSequenceAcquisition(cam_device)
