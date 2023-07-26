@@ -16,8 +16,6 @@ from .events import PMDASignaler, _get_auto_MDA_callback_class
 if TYPE_CHECKING:
     from useq import MDAEvent
 
-    from ..core._sequencing import SequencedEvent
-
 
 class GeneratorMDASequence(MDASequence):
     MSG = (
@@ -173,7 +171,7 @@ class MDARunner:
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
         event_iterator = getattr(engine, "event_iterator", iter)
 
-        _events: Iterator[MDAEvent | SequencedEvent] = event_iterator(events)
+        _events: Iterator[MDAEvent] = event_iterator(events)
         for event in _events:
             cancelled = self._wait_until_event(event)
 
@@ -248,7 +246,7 @@ class MDARunner:
             return True
         return False
 
-    def _wait_until_event(self, event: MDAEvent | SequencedEvent) -> bool:
+    def _wait_until_event(self, event: MDAEvent) -> bool:
         """Wait until the event's min start time, checking for pauses cancelations.
 
         Parameters

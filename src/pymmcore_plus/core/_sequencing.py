@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from itertools import product
-from typing import TYPE_CHECKING, Literal, Sequence, overload
+from typing import TYPE_CHECKING, Literal, Sequence, Tuple, overload
 
 from pydantic import root_validator
 from useq import MDAEvent
@@ -13,16 +13,29 @@ if TYPE_CHECKING:
 
 
 class SequencedEvent(MDAEvent):
-    events: tuple[MDAEvent, ...]
-    # each of these will be empty if the len(set(...)) <= 1
-    exposure_sequence: tuple[float, ...]
-    x_sequence: tuple[float, ...]
-    y_sequence: tuple[float, ...]
-    z_sequence: tuple[float, ...]
+    """Subclass of MDAEvent that represents a sequence of triggered events.
+
+    Prefer instantiating this class via the `create` classmethod, which will
+    calculate sequences for x, y, z, and exposure based on an a sequence of events.
+    """
+
+    events: Tuple[MDAEvent, ...]  # noqa: UP
+
+    exposure_sequence: Tuple[float, ...]  # noqa: UP
+    x_sequence: Tuple[float, ...]  # noqa: UP
+    y_sequence: Tuple[float, ...]  # noqa: UP
+    z_sequence: Tuple[float, ...]  # noqa: UP
 
     # technically this is more like a field, but it requires a core instance
     # to getConfigData for channels, so we leave it as a method.
     def property_sequences(self, core: CMMCorePlus) -> dict[tuple[str, str], list[str]]:
+        """Return a dict of all sequenceable properties and their sequences.
+
+        Returns
+        -------
+        dict[tuple[str, str], list[str]]
+            mapping of (device_name, prop_name) -> sequence of values
+        """
         prop_seqs: dict[tuple[str, str], list[str]] = {}
         if not self.events[0].channel:
             return {}
@@ -81,6 +94,9 @@ class SequencedEvent(MDAEvent):
 
 def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str], int]:
     """Return all sequenceable devices in `core`.
+
+    This is just a convenience function to help determine which devices can be
+    sequenced on a given configuration.
 
     Returns
     -------

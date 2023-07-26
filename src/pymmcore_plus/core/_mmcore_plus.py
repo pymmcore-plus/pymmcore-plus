@@ -1871,7 +1871,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def canSequenceEvents(
         self, e1: MDAEvent, e2: MDAEvent, cur_length: int = -1
     ) -> bool:
-        """Check whether two [`useq.MDAEvent`][] are sequenceable.
+        """Check whether two [`useq.MDAEvent`][] are sequenceable by this core instance.
 
         Micro-manager calls hardware triggering "sequencing".  Two events can be
         sequenced if *all* device properties that are changing between the first and
