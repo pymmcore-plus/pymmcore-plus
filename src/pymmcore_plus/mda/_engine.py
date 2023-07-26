@@ -87,7 +87,7 @@ class MDAEngine(PMDAEngine):
     def _execute_autofocus(self, action: HardwareAutofocus) -> float:
         """Perform the hardware autofocus.
 
-        Returns the z correction to apply to each z position.
+        Returns the change in ZPosition that occurred during the autofocus event. 
         """
         self._mmc.setPosition(
             action.autofocus_device_name,
