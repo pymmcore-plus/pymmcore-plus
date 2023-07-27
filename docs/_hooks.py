@@ -18,6 +18,7 @@ HAS_RUN = False  # sentinel to prevent loop on mkdocs serve
 CORE_API_TABLE = "{{ CMMCorePlus_API_Table }}"
 PLUS_MEMBERS = "{{ CMMCorePlus_Members }}"
 CORE_MEMBERS = "{{ CMMCore_Members }}"
+CLI_LOGS = "{{ CLI_Logs }}"
 
 PLUS_SVG = (
     '<span class="twemoji">'
@@ -43,6 +44,8 @@ def on_page_markdown(md: str, page: "Page", config: "MkDocsConfig", files) -> st
 
     can be used to alter the Markdown source text.
     """
+    if CLI_LOGS in md:
+        md = md.replace(CLI_LOGS, _cli_logs_help())
     if CORE_API_TABLE in md:
         md = md.replace(CORE_API_TABLE, _build_table())
     if PLUS_MEMBERS in md or CORE_MEMBERS in md:
@@ -119,3 +122,13 @@ def _build_table() -> str:
 
         out += f"| {link} | {icon} | {doc} |\n"
     return out
+
+
+def _cli_logs_help() -> str:
+    import os
+    import subprocess
+
+    env = os.environ.copy()
+    env["COLUMNS"] = "76"
+    out = subprocess.check_output(["mmcore", "logs", "--help"], env=env)
+    return f"```bash\n$ mmcore logs --help\n{out.decode()}\n```"

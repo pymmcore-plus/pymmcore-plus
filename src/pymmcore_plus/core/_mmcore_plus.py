@@ -30,7 +30,7 @@ from psygnal import SignalInstance
 
 from pymmcore_plus.core.events import PCoreSignaler
 
-from .._logger import logger
+from .._logger import current_logfile, logger
 from .._util import find_micromanager, print_tabular_data
 from ..mda import MDAEngine, MDARunner, PMDAEngine
 from ._adapter import DeviceAdapter
@@ -173,6 +173,10 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__()
+
+        if logfile := current_logfile(logger):
+            self.setPrimaryLogFile(str(logfile))
+            logger.debug("Initialized core {}", self)
 
         self._mm_path = mm_path or find_micromanager()
         if not adapter_paths and self._mm_path:

@@ -16,6 +16,8 @@ nav:
   - pymmcore-plus:
     - index.md
     - install.md
+    - Guides:
+      - guides/logging.md
     - Examples:
       - examples/mda.md
       - examples/integration-with-qt.md
@@ -29,8 +31,8 @@ nav:
       - api/device.md
       - api/configuration.md
       - api/constants.md
-      - api/metadata.md
-      - api/utils.md
+      - Metadata: api/metadata.md
+      - Utilities: api/utils.md
     - contributing.md
   - useq-schema: /useq-schema/
   - pymmcore-widgets: /pymmcore-widgets/

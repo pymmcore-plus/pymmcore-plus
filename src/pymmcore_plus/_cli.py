@@ -301,9 +301,11 @@ def logs(
     num: Optional[int] = typer.Option(
         None, "-n", "--num", help="Number of lines to display."
     ),
-    tail: bool = typer.Option(False, help="Continually stream logs."),
-    clean: bool = typer.Option(False, help="Delete all log files."),
-    reveal: bool = typer.Option(False, help="Reveal log file in Finder."),
+    tail: bool = typer.Option(False, "-t", "--tail", help="Continually stream logs."),
+    clear: bool = typer.Option(False, "-c", "--clear", help="Delete all log files."),
+    reveal: bool = typer.Option(
+        False, "--reveal", help="Reveal log file in Explorer/Finder."
+    ),
 ) -> None:
     """Display recent output from pymmcore-plus log."""
     # NOTE: technically LOG_FILE may not be the active log if the user configured
@@ -324,7 +326,7 @@ def logs(
 
         raise typer.Exit(0)
 
-    if clean:
+    if clear:
         for f in LOG_FILE.parent.glob("*.log"):
             f.unlink()
             print(f":wastebasket: [bold red] Cleared log file {f}")
