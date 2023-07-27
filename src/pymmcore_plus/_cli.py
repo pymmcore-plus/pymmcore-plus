@@ -318,7 +318,7 @@ def logs(
         print(":sparkles: [bold green]No log file.")
         raise typer.Exit(0)
 
-    if reveal:
+    if reveal:  # pragma: no cover
         if os.name == "nt":  # Windows
             subprocess.run(["explorer", "/select,", str(LOG_FILE)])
         elif os.name == "posix":  # macOS or Linux
@@ -334,7 +334,13 @@ def logs(
 
     if tail:
         lf = str(LOG_FILE)
-        process = subprocess.Popen(["tail", "-f", lf], stdout=subprocess.PIPE)
+        if os.name == "nt":  # Windows
+            process = subprocess.Popen(
+                ["powershell", "-Command", f"Get-Content -Path {lf} -Wait"],
+                stdout=subprocess.PIPE,
+            )
+        else:
+            process = subprocess.Popen(["tail", "-f", lf], stdout=subprocess.PIPE)
         while True:
             output = process.stdout.readline()  # type: ignore [union-attr]
             if output:

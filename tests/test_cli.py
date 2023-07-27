@@ -3,12 +3,14 @@ from __future__ import annotations
 import json
 import shutil
 import subprocess
+from multiprocessing import Process, Queue
 from pathlib import Path
+from time import sleep
 from typing import Any, Callable, cast
 from unittest.mock import patch
 
 import pytest
-from pymmcore_plus import __version__, _cli, install
+from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, install
 from pymmcore_plus._cli import app
 from typer.testing import CliRunner
 from useq import MDASequence
@@ -213,3 +215,56 @@ def test_run_mda_channels() -> None:
 
     assert result.exit_code == 0
     mock.run_mda.assert_called_with(expected)
+
+    # Running out app in SubProcess and after a while using signal sending
+    # SIGINT, results passed back via channel/queue
+
+
+# background process to test `logs --tail`
+def _background_tail(q: Queue, runner: Any, logfile: Path) -> None:
+    from os import getpid, kill
+    from signal import SIGINT
+    from threading import Timer
+
+    from pymmcore_plus import _logger
+
+    _logger.LOG_FILE = logfile
+
+    Timer(0.2, lambda: kill(getpid(), SIGINT)).start()
+    result = runner.invoke(app, ["logs", "--tail"], input="ctrl-c")
+    q.put(result.output)
+
+
+def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    # at first there should be no logs
+    result = runner.invoke(app, ["logs"])
+    assert result.exit_code == 0
+    assert "No log file" in result.stdout
+
+    # create mock log file
+    TEST_LOG = tmp_path / "test.log"
+    _logger.configure_logging(file=TEST_LOG)
+    monkeypatch.setattr(_logger, "LOG_FILE", TEST_LOG)
+    assert TEST_LOG.exists()
+
+    # instantiate core
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+
+    # run mmcore logs
+    result = runner.invoke(app, ["logs"])
+    assert result.exit_code == 0
+    assert "[IFO,Core]" in result.output  # this will come from CMMCore
+    assert "Initialized core" in result.output  # this will come from CMMCorePlus
+
+    # run mmcore logs --tail
+    q: Queue = Queue()
+    p = Process(target=_background_tail, args=(q, runner, TEST_LOG))
+    p.start()
+    while p.is_alive():
+        sleep(0.1)
+    output = q.get()
+    assert "[IFO,Core]" in output
+
+    runner.invoke(app, ["logs", "--clear"])
+    assert not TEST_LOG.exists()
