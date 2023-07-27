@@ -1,4 +1,6 @@
+import os
 import shutil
+import subprocess
 import sys
 from contextlib import suppress
 from pathlib import Path
@@ -8,7 +10,7 @@ import typer
 from rich import print
 
 import pymmcore_plus
-from pymmcore_plus._logger import set_log_level
+from pymmcore_plus._logger import configure_logging
 from pymmcore_plus._util import USER_DATA_MM_PATH
 from pymmcore_plus.install import PLATFORM
 
@@ -80,7 +82,8 @@ def _list() -> None:
 @app.command()
 def find() -> None:
     """Show the location of Micro-Manager in use by pymmcore-plus."""
-    set_log_level("CRITICAL")
+    configure_logging(strerr_level="CRITICAL")
+
     found = None
     with suppress(Exception):
         found = pymmcore_plus.find_micromanager(return_first=False)
@@ -101,8 +104,6 @@ def find() -> None:
 @app.command()
 def mmgui() -> None:
     """Run the Java Micro-Manager GUI for the MM install returned by `mmcore find`."""
-    import subprocess
-
     mm = pymmcore_plus.find_micromanager()
     app = (
         next((x for x in Path(mm).glob("ImageJ*") if not str(x).endswith("cfg")), None)
@@ -198,6 +199,7 @@ def run(
         "Channel", help="Name of Micro-Manager configuration group for channels."
     ),
 ) -> None:
+    """Run a Micro-Manager acquisition from a useq-schema MDASequence file."""
     import json
 
     from useq import MDASequence
@@ -292,6 +294,58 @@ def build_dev(
     import pymmcore_plus._build
 
     pymmcore_plus._build.build(dest, overwrite=overwrite)
+
+
+@app.command()
+def logs(
+    num: Optional[int] = typer.Option(
+        None, "-n", "--num", help="Number of lines to display."
+    ),
+    tail: bool = typer.Option(False, help="Continually stream logs."),
+    clean: bool = typer.Option(False, help="Delete all log files."),
+    reveal: bool = typer.Option(False, help="Reveal log file in Finder."),
+) -> None:
+    """Display recent output from pymmcore-plus log."""
+    # NOTE: technically LOG_FILE may not be the active log if the user configured
+    # logging manually. But this is a reasonable default.  To really know this, in
+    # a cross-process safe way, we would need to write the path to the active log file
+    # in a file in the user data directory.
+    from ._logger import LOG_FILE
+
+    if not LOG_FILE or not LOG_FILE.exists():
+        print(":sparkles: [bold green]No log file.")
+        raise typer.Exit(0)
+
+    if reveal:
+        if os.name == "nt":  # Windows
+            subprocess.run(["explorer", "/select,", str(LOG_FILE)])
+        elif os.name == "posix":  # macOS or Linux
+            subprocess.run(["open", "-R", str(LOG_FILE)])
+
+        raise typer.Exit(0)
+
+    if clean:
+        for f in LOG_FILE.parent.glob("*.log"):
+            f.unlink()
+            print(f":wastebasket: [bold red] Cleared log file {f}")
+        raise typer.Exit(0)
+
+    if tail:
+        lf = str(LOG_FILE)
+        process = subprocess.Popen(["tail", "-f", lf], stdout=subprocess.PIPE)
+        while True:
+            output = process.stdout.readline()  # type: ignore [union-attr]
+            if output:
+                print(output.strip().decode())
+            elif process.poll() is not None:
+                break
+    else:
+        with open(LOG_FILE) as fh:
+            lines = fh.readlines()
+        if num:
+            lines = lines[-num:]
+        for line in lines:
+            print(line.strip())
 
 
 def main() -> None:
