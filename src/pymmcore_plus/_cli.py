@@ -345,7 +345,7 @@ def logs(
             output = process.stdout.readline()  # type: ignore [union-attr]
             if output:
                 print(output.strip().decode())
-            elif process.poll() is not None:
+            elif process.poll() is not None:  # pragma: no cover
                 break
     else:
         with open(LOG_FILE) as fh:
