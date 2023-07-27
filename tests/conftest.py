@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import pymmcore_plus
 import pytest
 from _pytest.logging import LogCaptureFixture
