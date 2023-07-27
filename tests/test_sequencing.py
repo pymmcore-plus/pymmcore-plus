@@ -67,6 +67,7 @@ def test_fully_sequenceable_core():
     FOCUS = "Z"
     core_mock = cast("CMMCorePlus", MagicMock(spec=CMMCorePlus))
     core_mock.isSequenceRunning.return_value = False
+    core_mock.getRemainingImageCount.return_value = 0
     core_mock.isBufferOverflowed.return_value = False
     core_mock.getCameraDevice.return_value = CAM
     core_mock.getXYStageDevice.return_value = XYSTAGE
@@ -93,3 +94,14 @@ def test_fully_sequenceable_core():
     core_mock.loadXYStageSequence.assert_called_once_with(
         XYSTAGE, seq_event.x_sequence, seq_event.y_sequence
     )
+
+
+def test_sequenced_circular_buffer(core: CMMCorePlus):
+    core.initializeCircularBuffer()
+    core.setCircularBufferMemoryFootprint(20)
+    max_imgs = core.getBufferFreeCapacity()
+    mda = useq.MDASequence(
+        channels=["DAPI"],
+        time_plan=useq.TIntervalLoops(interval=0, loops=max_imgs * 2),
+    )
+    core.mda.run(mda)
