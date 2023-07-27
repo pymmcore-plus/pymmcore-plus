@@ -33,7 +33,7 @@ repos:
       - id: mypy
         additional_dependencies:
           - pymmcore
-          - useq-schema
+          - useq-schema >= 0.3.0
           - psygnal
           - typer
         files: "^src/"
