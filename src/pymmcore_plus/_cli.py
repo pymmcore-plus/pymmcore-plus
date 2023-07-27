@@ -2,6 +2,7 @@ import os
 import shutil
 import subprocess
 import sys
+import time
 from contextlib import suppress
 from pathlib import Path
 from typing import List, Optional, cast
@@ -333,20 +334,7 @@ def logs(
         raise typer.Exit(0)
 
     if tail:
-        lf = str(LOG_FILE)
-        if os.name == "nt":  # Windows
-            process = subprocess.Popen(
-                ["powershell", "-Command", f"Get-Content -Path {lf} -Wait"],
-                stdout=subprocess.PIPE,
-            )
-        else:
-            process = subprocess.Popen(["tail", "-f", lf], stdout=subprocess.PIPE)
-        while True:
-            output = process.stdout.readline()  # type: ignore [union-attr]
-            if output:
-                print(output.strip().decode())
-            elif process.poll() is not None:  # pragma: no cover
-                break
+        _tail_file(LOG_FILE)
     else:
         with open(LOG_FILE) as fh:
             lines = fh.readlines()
@@ -354,6 +342,20 @@ def logs(
             lines = lines[-num:]
         for line in lines:
             print(line.strip())
+
+
+def _tail_file(file_path: str | Path, interval: float = 0.1) -> None:
+    with open(file_path) as file:
+        # Move the file pointer to the end
+        while True:
+            # Read new lines
+            new_lines = file.readlines()
+            if new_lines:
+                # Display the last 'num_lines' lines
+                print("".join(new_lines), end="")
+
+            # Sleep for a short interval before checking again
+            time.sleep(1)
 
 
 def main() -> None:  # pragma: no cover
