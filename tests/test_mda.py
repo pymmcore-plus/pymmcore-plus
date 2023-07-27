@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Iterable, Iterator, cast
-from unittest.mock import Mock, patch
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from pymmcore_plus import CMMCorePlus
@@ -112,38 +112,9 @@ def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
     assert engine._z_correction[0] == 50
 
 
-def _assert_event_z_pos(core: CMMCorePlus, events: list[MDAEvent], expected: list):
-    """Helper function to setup_event and assert expected z position"""
-    for event, z in zip(events, expected):
-        core.mda.engine.setup_event(event)
-        core.mda.engine.exec_event(event)
-        assert core.getPosition() == z
-
-
-def test_autofocus_relative_z_plan_no_autofocus(
-    core: CMMCorePlus, qtbot: QtBot, mock_fullfocus
-):
-    # mock_autofocus sets z=100
-    mda = MDASequence(
-        stage_positions=[{"z": 50}],
-        z_plan={"above": 1, "below": 1, "step": 1},
-    )
-
-    events = list(mda.iter_events())
-    assert len(events) == 3
-
-    assert events[0].z_pos == 49
-    assert events[1].z_pos == 50
-    assert events[2].z_pos == 51
-
-    core.mda._engine.setup_event(events[0])
-    assert core.getPosition() == 49.0
-
-    _assert_event_z_pos(core, events, [49, 50, 51])
-
-
-def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
-    # mock_autofocus sets z=100
+def test_autofocus_relative_z_plan(
+    core: CMMCorePlus, qtbot: QtBot, mock_fullfocus: Any
+) -> None:
     # setting both z pos and autofocus offset to 25 because core does not have a
     # demo AF stage with both `State` and `Offset` properties.
     mda = MDASequence(
@@ -151,17 +122,22 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: QtBot, mock_fullfoc
         z_plan={"above": 1, "below": 1, "step": 1},
     )
 
-    events = list(mda.iter_events())
+    z_positions = []  # will be populated by _snap
 
-    assert len(events) == 4  # first event is the autofocus...
+    def _snap(*args):
+        z_positions.append(core.getZPosition())
+        core.snapImage(*args)
 
-    assert events[0].z_pos == 25  # ...and should have the mid z stack position
-    assert events[1].z_pos == 24
-    assert events[2].z_pos == 25
-    assert events[3].z_pos == 26
+    # mock the engine core snap to store the z position
+    mock_core = MagicMock(wraps=core)
+    mock_core.snapImage.side_effect = _snap
+    core.mda.engine._mmc = mock_core
+    core.mda.run(mda)
 
-    _assert_event_z_pos(core, events, [100, 99, 100, 101])
-    assert core.mda.engine._z_correction == {0: 75.0}
+    # the mock_fullfocus fixture nudges the focus upward by 50
+    # so we should have ranged around z of 25 + 50 = 75
+    assert z_positions == [74, 75, 76]
+    assert core.mda.engine._z_correction == {0: 50.0}  # saved the correction
 
 
 def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failure):
