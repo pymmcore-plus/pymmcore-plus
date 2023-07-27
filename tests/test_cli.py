@@ -2,13 +2,12 @@ from __future__ import annotations
 
 import json
 import os
-import platform
 import shutil
 import subprocess
+import time
 from multiprocessing import Process, Queue
 from pathlib import Path
 from time import sleep
-import time
 from typing import Any, Callable, cast
 from unittest.mock import patch
 
