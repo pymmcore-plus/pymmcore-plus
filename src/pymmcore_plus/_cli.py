@@ -1,3 +1,4 @@
+# do NOT use __future__.annotations here. It breaks typer.
 import os
 import shutil
 import subprocess
@@ -5,7 +6,7 @@ import sys
 import time
 from contextlib import suppress
 from pathlib import Path
-from typing import List, Optional, cast
+from typing import List, Optional, Union, cast
 
 import typer
 from rich import print
@@ -344,7 +345,7 @@ def logs(
             print(line.strip())
 
 
-def _tail_file(file_path: str | Path, interval: float = 0.1) -> None:
+def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
     with open(file_path) as file:
         # Move the file pointer to the end
         while True:
