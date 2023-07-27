@@ -10,8 +10,6 @@ from typing import TYPE_CHECKING, Literal, overload
 
 import appdirs
 
-from ._logger import logger
-
 if TYPE_CHECKING:
     from typing import TYPE_CHECKING, Any, Callable, TypeVar
 
@@ -73,6 +71,8 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         If True (default), return the first found path.  If False, return a list of
         all found paths.
     """
+    from ._logger import logger
+
     # environment variable takes precedence
     full_list: list[str] = []
     env_path = os.getenv("MICROMANAGER_PATH")
@@ -233,7 +233,9 @@ def print_tabular_data(data: dict[str, list[str]], sort: str | None = None) -> N
         _rich_print_table(data, sort=sort)
         return
     except ImportError:
-        logger.info("`pip install rich` for a nicer table display")
+        from ._logger import logger
+
+        logger.warning("`pip install rich` for a nicer table display")
 
     col_widths = [len(x) for x in data]
     for i, col in enumerate(data.values()):

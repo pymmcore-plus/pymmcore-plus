@@ -1,14 +1,18 @@
+# do NOT use __future__.annotations here. It breaks typer.
+import os
 import shutil
+import subprocess
 import sys
+import time
 from contextlib import suppress
 from pathlib import Path
-from typing import List, Optional, cast
+from typing import List, Optional, Union, cast
 
 import typer
 from rich import print
 
 import pymmcore_plus
-from pymmcore_plus._logger import set_log_level
+from pymmcore_plus._logger import configure_logging
 from pymmcore_plus._util import USER_DATA_MM_PATH
 from pymmcore_plus.install import PLATFORM
 
@@ -80,7 +84,8 @@ def _list() -> None:
 @app.command()
 def find() -> None:
     """Show the location of Micro-Manager in use by pymmcore-plus."""
-    set_log_level("CRITICAL")
+    configure_logging(strerr_level="CRITICAL")
+
     found = None
     with suppress(Exception):
         found = pymmcore_plus.find_micromanager(return_first=False)
@@ -99,10 +104,8 @@ def find() -> None:
 
 
 @app.command()
-def mmgui() -> None:
+def mmgui() -> None:  # pragma: no cover
     """Run the Java Micro-Manager GUI for the MM install returned by `mmcore find`."""
-    import subprocess
-
     mm = pymmcore_plus.find_micromanager()
     app = (
         next((x for x in Path(mm).glob("ImageJ*") if not str(x).endswith("cfg")), None)
@@ -198,6 +201,7 @@ def run(
         "Channel", help="Name of Micro-Manager configuration group for channels."
     ),
 ) -> None:
+    """Run a Micro-Manager acquisition from a useq-schema MDASequence file."""
     import json
 
     from useq import MDASequence
@@ -287,12 +291,73 @@ def build_dev(
         help="Overwrite existing if git sha is already built. "
         "If not specified, will prompt.",
     ),
-) -> None:
+) -> None:  # pragma: no cover
     """Build DemoCamera and Utility adapters from source for apple silicon."""
     import pymmcore_plus._build
 
     pymmcore_plus._build.build(dest, overwrite=overwrite)
 
 
-def main() -> None:
+@app.command()
+def logs(
+    num: Optional[int] = typer.Option(
+        None, "-n", "--num", help="Number of lines to display."
+    ),
+    tail: bool = typer.Option(False, "-t", "--tail", help="Continually stream logs."),
+    clear: bool = typer.Option(False, "-c", "--clear", help="Delete all log files."),
+    reveal: bool = typer.Option(
+        False, "--reveal", help="Reveal log file in Explorer/Finder."
+    ),
+) -> None:
+    """Display recent output from pymmcore-plus log."""
+    # NOTE: technically LOG_FILE may not be the active log if the user configured
+    # logging manually. But this is a reasonable default.  To really know this, in
+    # a cross-process safe way, we would need to write the path to the active log file
+    # in a file in the user data directory.
+    from ._logger import LOG_FILE
+
+    if not LOG_FILE or not LOG_FILE.exists():
+        print(":sparkles: [bold green]No log file.")
+        raise typer.Exit(0)
+
+    if reveal:  # pragma: no cover
+        if os.name == "nt":  # Windows
+            subprocess.run(["explorer", "/select,", str(LOG_FILE)])
+        elif os.name == "posix":  # macOS or Linux
+            subprocess.run(["open", "-R", str(LOG_FILE)])
+
+        raise typer.Exit(0)
+
+    if clear:
+        for f in LOG_FILE.parent.glob("*.log"):
+            f.unlink()
+            print(f":wastebasket: [bold red] Cleared log file {f}")
+        raise typer.Exit(0)
+
+    if tail:
+        _tail_file(LOG_FILE)
+    else:
+        with open(LOG_FILE) as fh:
+            lines = fh.readlines()
+        if num:
+            lines = lines[-num:]
+        for line in lines:
+            print(line.strip())
+
+
+def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
+    with open(file_path) as file:
+        # Move the file pointer to the end
+        while True:
+            # Read new lines
+            new_lines = file.readlines()
+            if new_lines:
+                # Display the last 'num_lines' lines
+                print("".join(new_lines), end="")
+
+            # Sleep for a short interval before checking again
+            time.sleep(1)
+
+
+def main() -> None:  # pragma: no cover
     app()
