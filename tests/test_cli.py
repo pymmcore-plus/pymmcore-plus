@@ -7,7 +7,6 @@ import shutil
 import subprocess
 from multiprocessing import Process, Queue
 from pathlib import Path
-import sys
 from time import sleep
 from typing import Any, Callable, cast
 from unittest.mock import patch
