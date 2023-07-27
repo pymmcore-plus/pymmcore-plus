@@ -143,6 +143,19 @@ class MDAEngine(PMDAEngine):
 
     def exec_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute an individual event and return the image data."""
+        action = getattr(event, "action", None)
+        if isinstance(action, HardwareAFType) and event.z_pos is not None:
+            try:
+                # execute hardware autofocus
+                new_correction = self._execute_autofocus(action)  # type: ignore
+            except RuntimeError as e:
+                logger.warning("Hardware autofocus failed. {}", e)
+            else:
+                # store correction for this position index
+                p_idx = event.index.get("p", None)
+                self._z_correction[p_idx] = new_correction
+            return None
+
         if isinstance(event, SequencedEvent):
             return self.exec_sequenced_event(event)
         else:
@@ -187,20 +200,6 @@ class MDAEngine(PMDAEngine):
         `exec_event`, which *is* part of the protocol), but it is made public
         in case a user wants to subclass this engine and override this method.
         """
-        action = getattr(event, "action", None)
-
-        if isinstance(action, HardwareAFType) and event.z_pos is not None:
-            try:
-                # execute hardware autofocus
-                new_correction = self._execute_autofocus(action)  # type: ignore
-            except RuntimeError as e:
-                logger.warning("Hardware autofocus failed. {}", e)
-            else:
-                # store correction for this position index
-                p_idx = event.index.get("p", None)
-                self._z_correction[p_idx] = new_correction
-            return None
-
         self._mmc.snapImage()
         return EventPayload(image=self._mmc.getImage())
 

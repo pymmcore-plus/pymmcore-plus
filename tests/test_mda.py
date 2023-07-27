@@ -1,15 +1,16 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Iterable, Iterator
+from typing import TYPE_CHECKING, Iterable, Iterator, cast
 from unittest.mock import Mock, patch
 
 import pytest
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
-from useq import MDAEvent, MDASequence
+from useq import AxesBasedAF, MDAEvent, MDASequence
 
 if TYPE_CHECKING:
+    from pymmcore_plus.mda import MDAEngine
     from pytestqt.qtbot import QtBot
 
 
@@ -98,25 +99,17 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
         assert not core.mda._canceled
 
 
+AFPlan = AxesBasedAF(autofocus_device_name="Z", autofocus_motor_offset=25, axes=("p",))
+
+
 def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
-    # mock_autofocus sets z=100
-    mda = MDASequence(
-        stage_positions=[{"z": 50}],
-        autofocus_plan={
-            "autofocus_device_name": "Z",
-            "autofocus_motor_offset": 50,
-            "axes": ("p",),
-        },
-    )
-    with qtbot.waitSignals(
-        [
-            core.mda.events.frameReady,
-            core.mda.events.sequenceFinished,
-        ]
-    ):
+    mda = MDASequence(stage_positions=[{"z": 50}], autofocus_plan=AFPlan)
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
         core.run_mda(mda)
 
-    assert core.getPosition() == 100
+    engine = cast("MDAEngine", core.mda._engine)
+    # the 50 here is because mock_full_focus shifts the z position by 50
+    assert engine._z_correction[0] == 50
 
 
 def _assert_event_z_pos(core: CMMCorePlus, events: list[MDAEvent], expected: list):
@@ -154,18 +147,7 @@ def test_autofocus_relative_z_plan(core: CMMCorePlus, qtbot: QtBot, mock_fullfoc
     # setting both z pos and autofocus offset to 25 because core does not have a
     # demo AF stage with both `State` and `Offset` properties.
     mda = MDASequence(
-        stage_positions=[
-            {
-                "z": 25,
-                "sequence": {
-                    "autofocus_plan": {
-                        "autofocus_device_name": "Z",
-                        "autofocus_motor_offset": 25,
-                        "axes": ("p",),
-                    }
-                },
-            }
-        ],
+        stage_positions=[{"z": 25, "sequence": {"autofocus_plan": AFPlan}}],
         z_plan={"above": 1, "below": 1, "step": 1},
     )
 
@@ -187,18 +169,7 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
     # setting both z pos and autofocus offset to 25 because core does not have a
     # demo AF stage with both `State` and `Offset` properties.
     mda = MDASequence(
-        stage_positions=[
-            {
-                "z": 25,
-                "sequence": {
-                    "autofocus_plan": {
-                        "autofocus_device_name": "Z",
-                        "autofocus_motor_offset": 25,
-                        "axes": ("p",),
-                    }
-                },
-            }
-        ],
+        stage_positions=[{"z": 25, "sequence": {"autofocus_plan": AFPlan}}],
         z_plan={"above": 1, "below": 1, "step": 1},
     )
 
