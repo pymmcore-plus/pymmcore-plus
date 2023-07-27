@@ -85,13 +85,13 @@ source = "vcs"
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.hatch.build.hooks.vcs]
-version-file = "src/pymmcore_plus/_version.py"
-
 # https://hatch.pypa.io/latest/config/build/#file-selection
-# [tool.hatch.build.targets.sdist]
-# include = ["/src", "/tests"]
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests"]
 
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
 
 # https://github.com/charliermarsh/ruff
 [tool.ruff]
@@ -110,7 +110,7 @@ select = [
     "RUF",  # ruff-specific rules
     "TID",  # tidy
     "TCH",  # typecheck
-    "SLF"
+    "SLF",  # private-access
 ]
 ignore = [
     "D100", # Missing docstring in public module
@@ -139,7 +139,7 @@ filterwarnings = ["error"]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
-files = "src/**/*/*.py"
+files = "src/**"
 strict = true
 disallow_any_generics = false
 disallow_subclassing_any = false
@@ -159,7 +159,7 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 [tool.coverage.run]
-source = ['src/pymmcore_plus']
+source = ['pymmcore_plus']
 
 # https://github.com/mgedmin/check-manifest#configuration
 [tool.check-manifest]
