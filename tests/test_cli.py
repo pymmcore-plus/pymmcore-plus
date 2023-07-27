@@ -252,7 +252,7 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     core.loadSystemConfiguration()
 
     # run mmcore logs
-    result = runner.invoke(app, ["logs"])
+    result = runner.invoke(app, ["logs", "-n", "100"])
     assert result.exit_code == 0
     assert "[IFO,Core]" in result.output  # this will come from CMMCore
     assert "Initialized core" in result.output  # this will come from CMMCorePlus

@@ -102,7 +102,7 @@ def find() -> None:
 
 
 @app.command()
-def mmgui() -> None:
+def mmgui() -> None:  # pragma: no cover
     """Run the Java Micro-Manager GUI for the MM install returned by `mmcore find`."""
     mm = pymmcore_plus.find_micromanager()
     app = (
@@ -289,7 +289,7 @@ def build_dev(
         help="Overwrite existing if git sha is already built. "
         "If not specified, will prompt.",
     ),
-) -> None:
+) -> None:  # pragma: no cover
     """Build DemoCamera and Utility adapters from source for apple silicon."""
     import pymmcore_plus._build
 
@@ -356,5 +356,5 @@ def logs(
             print(line.strip())
 
 
-def main() -> None:
+def main() -> None:  # pragma: no cover
     app()
