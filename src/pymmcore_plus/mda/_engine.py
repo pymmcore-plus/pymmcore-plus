@@ -1,17 +1,24 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Iterable, Iterator, NamedTuple, Sequence
+from typing import TYPE_CHECKING, Iterable, Iterator, NamedTuple, Sequence, cast
 
+import useq
 from useq import MDAEvent, MDASequence
 
-from ..core._sequencing import SequencedEvent
+from pymmcore_plus._logger import logger
+from pymmcore_plus._util import retry
+from pymmcore_plus.core._sequencing import SequencedEvent
+
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
     import numpy as np
+    from useq import HardwareAutofocus
 
     from ..core import CMMCorePlus
+
+HardwareAFType = getattr(useq, "HardwareAutofocus", ())  # useq v0.3.0+
 
 
 class MDAEngine(PMDAEngine):
@@ -23,6 +30,10 @@ class MDAEngine(PMDAEngine):
 
     def __init__(self, mmc: CMMCorePlus) -> None:
         self._mmc = mmc
+
+        # used for one_shot autofocus to store the z correction for each position index.
+        # map of {position_index: z_correction}
+        self._z_correction: dict[int | None, float] = {}
 
     # ===================== SETUP =====================
 
@@ -98,7 +109,7 @@ class MDAEngine(PMDAEngine):
         if event.z_sequence:
             core.startStageSequence(zstage)
         elif event.z_pos is not None:
-            self._mmc.setZPosition(event.z_pos)
+            self._set_event_z(event)
 
         if event.exposure_sequence:
             core.startExposureSequence(cam_device)
@@ -121,7 +132,8 @@ class MDAEngine(PMDAEngine):
         if event.x_pos is not None or event.y_pos is not None:
             self._set_event_position(event)
         if event.z_pos is not None:
-            self._mmc.setZPosition(event.z_pos)
+            self._set_event_z(event)
+
         if event.channel is not None:
             self._mmc.setConfig(event.channel.group, event.channel.config)
         if event.exposure is not None:
@@ -129,8 +141,21 @@ class MDAEngine(PMDAEngine):
 
     # ===================== EXEC =====================
 
-    def exec_event(self, event: MDAEvent) -> EventPayload:
+    def exec_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute an individual event and return the image data."""
+        action = getattr(event, "action", None)
+        if isinstance(action, HardwareAFType) and event.z_pos is not None:
+            try:
+                # execute hardware autofocus
+                new_correction = self._execute_autofocus(action)  # type: ignore
+            except RuntimeError as e:
+                logger.warning("Hardware autofocus failed. {}", e)
+            else:
+                # store correction for this position index
+                p_idx = event.index.get("p", None)
+                self._z_correction[p_idx] = new_correction
+            return None
+
         if isinstance(event, SequencedEvent):
             return self.exec_sequenced_event(event)
         else:
@@ -168,7 +193,7 @@ class MDAEngine(PMDAEngine):
             tagged_imgs.append(self._mmc.popNextImage())
         return EventPayload(image_sequence=tagged_imgs)
 
-    def exec_single_event(self, event: MDAEvent) -> EventPayload:
+    def exec_single_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute a single (non-triggered) event and return the image data.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -202,10 +227,38 @@ class MDAEngine(PMDAEngine):
         if seq:
             yield seq[0] if len(seq) == 1 else SequencedEvent.create(seq)
 
+    def _execute_autofocus(self, action: HardwareAutofocus) -> float:
+        """Perform the hardware autofocus.
+
+        Returns the change in ZPosition that occurred during the autofocus event.
+        """
+        # switch off autofocus device if it is on
+        self._mmc.enableContinuousFocus(False)
+
+        # setup the autofocus device
+        self._mmc.setPosition(
+            action.autofocus_device_name,
+            action.autofocus_motor_offset,
+        )
+        self._mmc.waitForSystem()
+
+        @retry(exceptions=RuntimeError, tries=action.max_retries, logger=logger.warning)
+        def _perform_full_focus(previous_z: float) -> float:
+            self._mmc.fullFocus()
+            self._mmc.waitForSystem()
+            return self._mmc.getZPosition() - previous_z
+
+        return _perform_full_focus(self._mmc.getZPosition())
+
     def _set_event_position(self, event: MDAEvent) -> None:
         x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
         y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
         self._mmc.setXYPosition(x, y)
+
+    def _set_event_z(self, event: MDAEvent) -> None:
+        p_idx = event.index.get("p", None)
+        correction = self._z_correction.setdefault(p_idx, 0.0)
+        self._mmc.setZPosition(cast("float", event.z_pos) + correction)
 
 
 class EventPayload(NamedTuple):

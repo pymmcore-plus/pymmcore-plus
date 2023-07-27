@@ -1,3 +1,7 @@
+from __future__ import annotations
+
+from unittest.mock import patch
+
 import pymmcore_plus
 import pytest
 from _pytest.logging import LogCaptureFixture
@@ -30,3 +34,27 @@ def caplog(caplog: LogCaptureFixture):
         yield caplog
     finally:
         logger.remove(handler_id)
+
+
+@pytest.fixture
+def mock_fullfocus(core: pymmcore_plus.CMMCorePlus):
+    def _fullfocus():
+        core.setZPosition(core.getZPosition() + 50)
+
+    with patch.object(core, "fullFocus", _fullfocus):
+        yield
+
+
+@pytest.fixture
+def mock_fullfocus_failure(core: pymmcore_plus.CMMCorePlus):
+    def _fullfocus():
+        raise RuntimeError()
+
+    with patch.object(core, "fullFocus", _fullfocus):
+        yield
+
+
+def pytest_collection_modifyitems(session, config, items: list[pytest.Function]):
+    # putting test_cli_logs first, because I can't figure out how to mock the log
+    # file after the core fixture has been created :/
+    items.sort(key=lambda item: item.name != "test_cli_logs")
