@@ -134,7 +134,8 @@ def _download_url(url: str, output_path: Path) -> None:
         urlretrieve(url=url, filename=output_path, reporthook=hook)
 
 
-def _install(dest: Path, release: str) -> None:
+def install(dest: Path, release: str) -> None:
+    """Install Micro-Manager to `dest`."""
     if PLATFORM not in ("Darwin", "Windows"):  # pragma: no cover
         print(f":x: [bold red]Unsupported platform: {PLATFORM!r}")
         raise sys.exit(1)
@@ -242,7 +243,7 @@ def main() -> None:  # pragma: no cover
     )
 
     args = parser.parse_args()
-    _install(Path(args.dest), args.release)
+    install(Path(args.dest), args.release)
 
 
 if __name__ == "__main__":

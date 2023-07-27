@@ -139,7 +139,7 @@ def install(
     """Install Micro-Manager Device adapters."""
     import pymmcore_plus.install
 
-    pymmcore_plus.install._install(dest, release)
+    pymmcore_plus.install.install(dest, release)
 
 
 @app.command()
@@ -293,9 +293,9 @@ def build_dev(
     ),
 ) -> None:  # pragma: no cover
     """Build DemoCamera and Utility adapters from source for apple silicon."""
-    import pymmcore_plus._build
+    from pymmcore_plus._build import build
 
-    pymmcore_plus._build.build(dest, overwrite=overwrite)
+    build(dest, overwrite=overwrite)
 
 
 @app.command()

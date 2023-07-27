@@ -4,6 +4,7 @@ import atexit
 import contextlib
 import os
 import sys
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -157,9 +158,16 @@ def set_log_level(level: LogLvlStr | LogLvlInt = DEFAULT_LOG_LEVEL) -> None:
 def current_logfile(logger: Any) -> Path | None:
     """Hacky way to return the current log file."""
     # sourcery skip: use-next
-    for h in logger._core.handlers.values():
-        if hasattr(h, "_sink") and getattr(h._sink, "_path", None):
-            return Path(h._sink._path)
+    try:
+        for h in logger._core.handlers.values():  # noqa: SLF001
+            if hasattr(h, "_sink") and getattr(h._sink, "_path", None):  # noqa: SLF001
+                return Path(h._sink._path)  # noqa: SLF001
+    except AttributeError as e:
+        warnings.warn(
+            f"Error determining current log file {e}. Please check loguru version.",
+            RuntimeWarning,
+            stacklevel=1,
+        )
     return None
 
 
