@@ -22,7 +22,7 @@ use threads to call [`pymmcore_plus.CMMCorePlus.snapImage`][], and let pymmcore-
 
 This example will use the recommended process-local(threads) approach.
 
-The simple application will consist of a counter that increments so long as the event loop is not blocked, and two buttons to call the `snapImage` method. One button will call from a thread and the counter should continue, the other will blcok and will stop the counter.
+The simple application will consist of a counter that increments so long as the event loop is not blocked, and two buttons to call the `snapImage` method. One button will call from a thread and the counter should continue, the other will block and will stop the counter.
 
 **Key takeaways:**
 

@@ -243,7 +243,7 @@ class MDARunner:
         return False
 
     def _wait_until_event(self, event: MDAEvent) -> bool:
-        """Wait until the event's min start time, checking for pauses cancelations.
+        """Wait until the event's min start time, checking for pauses cancellations.
 
         Parameters
         ----------

@@ -693,7 +693,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`.*
 
-        It offers a convenient way to iterate over availabe device adaptor libraries,
+        It offers a convenient way to iterate over available device adaptor libraries,
         optionally filtering adapter library name. It can also yield
         [`Adapter`][pymmcore_plus.DeviceAdapter] objects if `as_object` is `True` (the
         default)
@@ -965,7 +965,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         >>> exposure.upperLimit()
         10000.0
 
-        get/set propery values easily:
+        get/set property values easily:
 
         >>> exposure.value
         10.0
@@ -2010,7 +2010,7 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
                 getattr(self._emitter, sig_name).emit(*args)
             except Exception as e:
                 logger.error(
-                    f"Exception occured in MMCorePlus callback {sig_name!r}: {e}"
+                    f"Exception occurred in MMCorePlus callback {sig_name!r}: {e}"
                 )
 
         return reemit
