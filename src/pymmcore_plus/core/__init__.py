@@ -1,5 +1,6 @@
 __all__ = [
     "ActionType",
+    "DeviceAdapter",
     "CMMCorePlus",
     "ConfigGroup",
     "Configuration",
@@ -14,6 +15,7 @@ __all__ = [
     "PropertyType",
 ]
 
+from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
 from ._constants import (

@@ -513,3 +513,44 @@ def test_snap_signals(core: CMMCorePlus, qtbot: "QtBot") -> None:
         order="strict",
     ):
         core.snapImage()
+
+
+def test_save_config(core: CMMCorePlus, tmp_path: Path) -> None:
+    assert "Res10x" in core.getAvailablePixelSizeConfigs()
+    core.deletePixelSizeConfig("Res10x")
+    assert "Res10x" not in core.getAvailablePixelSizeConfigs()
+
+    core.definePixelSizeConfig("r10x", "Objective", "Label", "Nikon 10X S Fluor")
+    core.setPixelSizeUm("r10x", 2)
+    assert "r10x" in core.getAvailablePixelSizeConfigs()
+
+    test_cfg = str(tmp_path / "test.cfg")
+    core.saveSystemConfiguration(test_cfg)
+
+    core.loadSystemConfiguration()
+    assert "r10x" not in core.getAvailablePixelSizeConfigs()
+    core.loadSystemConfiguration(test_cfg)
+    assert "r10x" in core.getAvailablePixelSizeConfigs()
+
+
+@pytest.mark.parametrize("use_rich", [True, False])
+def test_describe(
+    core: CMMCorePlus,
+    use_rich: bool,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture,
+) -> None:
+    if not use_rich:
+        import builtins
+
+        real_import = builtins.__import__
+
+        def no_rich(name: str, *args, **kwargs):
+            if name.startswith("rich"):
+                raise ImportError
+            return real_import(name, *args, **kwargs)
+
+        monkeypatch.setattr(builtins, "__import__", no_rich)
+
+    core.describe(sort="Type")
+    assert "Core" in capsys.readouterr().out

@@ -3,7 +3,9 @@ from __future__ import annotations
 import atexit
 import os
 import re
+import warnings
 import weakref
+from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
@@ -15,7 +17,6 @@ from typing import (
     Callable,
     Iterable,
     Iterator,
-    Literal,
     Pattern,
     Sequence,
     TypeVar,
@@ -26,23 +27,23 @@ from typing import (
 import pymmcore
 from psygnal import SignalInstance
 
-from pymmcore_plus.core.events import PCoreSignaler
-
 from .._logger import logger
-from .._util import find_micromanager
+from .._util import find_micromanager, print_tabular_data
 from ..mda import MDAEngine, MDARunner, PMDAEngine
+from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
 from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
-from .events import CMMCoreSignaler, _get_auto_core_callback_class
+from ._sequencing import can_sequence_events
+from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
     import numpy as np
-    from typing_extensions import TypedDict
-    from useq import MDASequence
+    from typing_extensions import Literal, TypedDict
+    from useq import MDAEvent
 
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
@@ -276,6 +277,53 @@ class CMMCorePlus(pymmcore.CMMCore):
         os.environ["PATH"] = env_path
         logger.debug(f"setting adapter search paths: {paths}")
         super().setDeviceAdapterSearchPaths(paths)
+
+    def loadDevice(self, label: str, moduleName: str, deviceName: str) -> None:
+        """Load a device from the plugin library.
+
+        **Why Override?** To add much better error messages in the case of failure.
+
+        Parameters
+        ----------
+        label: str
+            Name to be assigned to the device during this core session.
+        moduleName: str
+            The name of the device adapter module (short name, not full file name).
+            See [`pymmcore.CMMCore.getDeviceAdapterNames`][] for a list of valid
+            module names.
+        deviceName: str
+            the name of the device. The name must correspond to one of the names
+            recognized by the specific plugin library. See
+            [`pymmcore.CMMCore.getAvailableDevices`][] for a list of valid device names.
+        """
+        try:
+            super().loadDevice(label, moduleName, deviceName)
+        except RuntimeError as e:
+            msg = str(e)
+            if label in self.getLoadedDevices():
+                lib = super().getDeviceLibrary(label)
+                name = super().getDeviceName(label)
+                if moduleName == lib and deviceName == name:
+                    msg += f". Device {label!r} appears to be loaded already."
+                    warnings.warn(msg, stacklevel=2)
+                    return
+
+                msg += f". Device {label!r} is already taken by {lib}::{name}"
+            else:
+                adapters = super().getDeviceAdapterNames()
+                if moduleName not in adapters:
+                    msg += (
+                        f". Adapter name {moduleName!r} not in list of known adapter "
+                        f"names: {adapters}."
+                    )
+                else:
+                    devices = super().getAvailableDevices(moduleName)
+                    if deviceName not in devices:
+                        msg += (
+                            f". Device name {deviceName!r} not in devices provided by "
+                            f"adapter {moduleName!r}: {devices}"
+                        )
+            raise RuntimeError(msg) from e
 
     @synchronized(_lock)
     def loadSystemConfiguration(
@@ -613,10 +661,70 @@ class CMMCorePlus(pymmcore.CMMCore):
     # NEW methods
 
     @overload
+    def iterDeviceAdapters(
+        self,
+        adapter_pattern: str | re.Pattern | None = ...,
+        *,
+        as_object: Literal[True] = ...,
+    ) -> Iterator[DeviceAdapter]:
+        ...
+
+    @overload
+    def iterDeviceAdapters(
+        self,
+        adapter_pattern: str | re.Pattern | None = ...,
+        *,
+        as_object: Literal[False],
+    ) -> Iterator[str]:
+        ...
+
+    def iterDeviceAdapters(
+        self,
+        adapter_pattern: str | re.Pattern | None = None,
+        *,
+        as_object: bool = True,
+    ) -> Iterator[DeviceAdapter] | Iterator[str]:
+        """Iterate over all available device adapters.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        It offers a convenient way to iterate over availabe device adaptor libraries,
+        optionally filtering adapter library name. It can also yield
+        [`Adapter`][pymmcore_plus.DeviceAdapter] objects if `as_object` is `True` (the
+        default)
+
+        Parameters
+        ----------
+        adapter_pattern : str | None
+            Device adapter name or pattern to filter by, by default all device adapters
+            will be yielded.
+        as_object : bool, optional
+            If `True`, `Adapter` objects will be yielded instead of
+            library name strings. By default True
+
+        Yields
+        ------
+        Device | str
+            `Device` objects (if `as_object==True`) or device label strings.
+        """
+        adapters: Sequence[str] = super().getDeviceAdapterNames()
+
+        if adapter_pattern:
+            if isinstance(adapter_pattern, str):
+                ptrn = re.compile(adapter_pattern, re.IGNORECASE)
+            else:
+                ptrn = adapter_pattern
+            adapters = [d for d in adapters if ptrn.search(d)]
+
+        for adapter in adapters:
+            yield DeviceAdapter(adapter, mmcore=self) if as_object else adapter
+
+    @overload
     def iterDevices(
         self,
         device_type: int | Iterable[int] | None = ...,
         device_label: str | re.Pattern | None = ...,
+        device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[False],
     ) -> Iterator[str]:
@@ -627,6 +735,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self,
         device_type: int | Iterable[int] | None = ...,
         device_label: str | re.Pattern | None = ...,
+        device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
     ) -> Iterator[Device]:
@@ -636,9 +745,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         self,
         device_type: int | Iterable[int] | None = None,
         device_label: str | re.Pattern | None = None,
+        device_adapter: str | re.Pattern | None = None,
         *,
         as_object: bool = True,
-    ) -> Iterator[Device | str]:
+    ) -> Iterator[Device] | Iterator[str]:
         """Iterate over currently loaded devices.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -646,7 +756,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         It offers a convenient way to iterate over loaded devices, optionally filtering
         by [`DeviceType`][pymmcore_plus.DeviceType] and/or device label. It can also
         yield [`Device`][pymmcore_plus.Device] objects if `as_object` is
-        `True`.
+        `True` (the default).
 
         Parameters
         ----------
@@ -654,9 +764,12 @@ class CMMCorePlus(pymmcore.CMMCore):
             DeviceType to filter by, by default all device types will be yielded.
         device_label : str | None
             Device label to filter by, by default all device labels will be yielded.
+        device_adapter : str | None
+            Device adapter library to filter by, by default devices from all libraries
+            will be yielded.
         as_object : bool, optional
             If `True`, `Device` objects will be yielded instead of
-            device label strings. By default False
+            device label strings. By default True
 
         Yields
         ------
@@ -679,6 +792,13 @@ class CMMCorePlus(pymmcore.CMMCore):
             else:
                 ptrn = device_label
             devices = [d for d in devices if ptrn.search(d)]
+
+        if device_adapter:
+            if isinstance(device_adapter, str):
+                ptrn = re.compile(device_adapter, re.IGNORECASE)
+            else:
+                ptrn = device_adapter
+            devices = [d for d in devices if ptrn.search(self.getDeviceLibrary(d))]
 
         for dev in devices:
             yield Device(dev, mmcore=self) if as_object else dev
@@ -724,7 +844,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         is_read_only: bool | None = None,
         is_sequenceable: bool | None = None,
         as_object: bool = True,
-    ) -> Iterator[DeviceProperty | tuple[str, str]]:
+    ) -> Iterator[DeviceProperty] | Iterator[tuple[str, str]]:
         """Iterate over currently loaded (device_label, property_name) pairs.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -732,7 +852,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         It offers a convenient way to iterate over loaded devices, optionally filtering
         by [`DeviceType`][pymmcore_plus.DeviceType] and/or device label. It can also
         yields [`DeviceProperty`][pymmcore_plus.DeviceProperty] objects if
-        `as_object` is `True`.
+        `as_object` is `True` (the default).
 
         Parameters
         ----------
@@ -758,7 +878,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             value will be yielded.
         as_object : bool, optional
             If `True`, `DeviceProperty` objects will be yielded instead of
-            `(device_label, property_name)` tuples. By default False
+            `(device_label, property_name)` tuples. By default True
 
         Yields
         ------
@@ -851,6 +971,18 @@ class CMMCorePlus(pymmcore.CMMCore):
         5.0
         """
         return DeviceProperty(device_label, property_name, self)
+
+    def getAdapterObject(self, library_name: str) -> DeviceAdapter:
+        """Return an `Adapter` object bound to library_name on this core.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        [`Adapter`][pymmcore_plus.DeviceAdapter] objects are a convenient object
+        oriented way to interact with device adapters. They allow you to call any method
+        on `CMMCore` that normally requires a `library_name` as the first argument as an
+        argument-free method on the `Adapter` object.
+        """
+        return DeviceAdapter(library_name, mmcore=self)
 
     def getDeviceObject(self, device_label: str) -> Device:
         """Return a `Device` object bound to device_label on this core.
@@ -1210,12 +1342,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self._mda_runner
 
-    def run_mda(self, sequence: MDASequence, block: bool = False) -> Thread:
-        """Run MDA defined by *sequence* on a new thread.
+    def run_mda(self, events: Iterable[MDAEvent], block: bool = False) -> Thread:
+        """Run a sequence of [useq.MDAEvent][] on a new thread.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
 
-        The currently registered MDAEngine (`core.mda`) will be responsible for
+        The currently registered MDAEngine (`core.mda.engine`) will be responsible for
         executing the acquisition.
 
         After starting the sequence you can pause or cancel with the mda with
@@ -1223,22 +1355,23 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Parameters
         ----------
-        sequence : useq.MDASequence
-            The useq.MDASequence to run.
+        events : Iterable[useq.MDAEvent]
+            An iterable of [useq.MDAEvent][] to execute.  This may be an instance
+            of [useq.MDASequence][], or any other iterable of [useq.MDAEvent][].
         block : bool, optional
             If True, block until the sequence is complete, by default False.
 
         Returns
         -------
         Thread
-            The thread the MDA is running on.  Use `thread.join()` to block until
+            The thread the sequence is running on.  Use `thread.join()` to block until
             done, or `thread.is_alive()` to check if the sequence is complete.
         """
         if self.mda.is_running():
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self.mda.run, args=(sequence,))
+        th = Thread(target=self.mda.run, args=(events,))
         th.start()
         if block:
             th.join()
@@ -1584,6 +1717,65 @@ class CMMCorePlus(pymmcore.CMMCore):
             super().setFocusDevice(focusLabel)
             self.events.propertyChanged.emit("Core", "Focus", focusLabel)
 
+    def saveSystemConfiguration(self, filename: str) -> None:
+        """Saves the current system configuration to a text file.
+
+        **Why Override?** To also save pixel size configurations.
+        """
+        super().saveSystemConfiguration(filename)
+        px_configs = self.getAvailablePixelSizeConfigs()
+        if not px_configs:
+            return
+        # saveSystemConfiguration does not save the pixel size config so here
+        # we add to the saved file also any pixel size config.
+        with open(filename, "a") as f:
+            f.write("# PixelSize settings")
+            for px_config in px_configs:
+                data = self.getPixelSizeConfigData(px_config)
+                obj = data.dict()["Objective"]["Label"]
+                px_size = self.getPixelSizeUmByID(px_config)
+                px_affine = self.getPixelSizeAffineByID(px_config)
+                cfg = (
+                    f"\nConfigPixelSize,{px_config},Objective,Label,{obj}\n"
+                    f"PixelSize_um,{px_config},{px_size}\n"
+                    f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}"
+                )
+                f.write(cfg)
+
+    def describe(self, sort: str | None = None) -> None:
+        """Print information table with the current configuration.
+
+        Intended to provide a quick overview of the microscope configuration during
+        interactive terminal usage.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+        """
+        _current = {
+            self.getCameraDevice(): "Camera",
+            self.getXYStageDevice(): "XYStage",
+            self.getFocusDevice(): "Focus",
+            self.getShutterDevice(): "Shutter",
+            self.getSLMDevice(): "SLM",
+            self.getGalvoDevice(): "Galvo",
+            self.getAutoFocusDevice(): "AutoFocus",
+            self.getImageProcessorDevice(): "ImageProcessor",
+        }
+
+        data: defaultdict[str, list[str]] = defaultdict(list)
+        for device in self.iterDevices():
+            data["Device Label"].append(device.label)
+            data["Type"].append(str(device.type()))
+            data["Current"].append(_current.get(device.label, ""))
+            data["Library::DeviceName"].append(f"{device.library()}::{device.name()}")
+            data["Description"].append(device.description())
+
+        if not any(data["Current"]):
+            data.pop("Current")
+
+        print(f"{self.getVersionInfo()}, {self.getAPIVersionInfo()}")
+        print("Adapter path:", ",".join(self.getDeviceAdapterSearchPaths()))
+        print_tabular_data(data, sort=sort)
+
     def state(self, exclude: Iterable[str] = ()) -> StateDict:
         """Return `StateDict` with commonly accessed state values.
 
@@ -1710,6 +1902,63 @@ class CMMCorePlus(pymmcore.CMMCore):
             for k, v in orig_values.items():
                 with suppress(AttributeError):
                     getattr(self, f"set{k}")(v)
+
+    def canSequenceEvents(
+        self, e1: MDAEvent, e2: MDAEvent, cur_length: int = -1
+    ) -> bool:
+        """Check whether two [`useq.MDAEvent`][] are sequenceable by this core instance.
+
+        Micro-manager calls hardware triggering "sequencing".  Two events can be
+        sequenced if *all* device properties that are changing between the first and
+        second event support sequencing.
+
+        If `cur_length` is provided, it is used to determine if the sequence is
+        "full" (i.e. the sequence is already at the maximum length) as determined by
+        the `...SequenceMaxLength()` method corresponding to the device property.
+
+        See: <https://micro-manager.org/Hardware-based_Synchronization_in_Micro-Manager>
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        Parameters
+        ----------
+        e1 : MDAEvent
+            The first event.
+        e2 : MDAEvent
+            The second event.
+        cur_length : int
+            The current length of the sequence.  Used when checking
+            `.get<...>SequenceMaxLength` for a given property. If the current length
+            is greater than the max length, the events cannot be sequenced. By default
+            -1, which means the current length is not checked.
+
+        Returns
+        -------
+        bool
+            True if the events can be sequenced, False otherwise.
+
+        Examples
+        --------
+        !!! note
+
+            The results here will depend on the current state of the core and devices.
+
+        ```python
+        >>> from useq import MDAEvent
+        >>> core = CMMCorePlus.instance()
+        >>> core.loadSystemConfiguration()
+        >>> core.canSequenceEvents(MDAEvent(), MDAEvent())
+        True
+        >>> core.canSequenceEvents(MDAEvent(x_pos=1), MDAEvent(x_pos=2))
+        False
+        >>> core.canSequenceEvents(
+        ...     MDAEvent(channel={'config': 'DAPI'}),
+        ...     MDAEvent(channel={'config': 'FITC'})
+        ... )
+        False
+        ```
+        """
+        return can_sequence_events(self, e1, e2, cur_length)
 
 
 for name in (
