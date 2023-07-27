@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pymmcore_plus
 import pytest
-from _pytest.logging import LogCaptureFixture
 from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler, QMDASignaler
+
+if TYPE_CHECKING:
+    from _pytest.logging import LogCaptureFixture
 
 
 @pytest.fixture(params=["QSignal", "psygnal"], scope="function")

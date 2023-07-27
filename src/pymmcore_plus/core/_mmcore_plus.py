@@ -27,9 +27,10 @@ from typing import (
 import pymmcore
 from psygnal import SignalInstance
 
-from .._logger import current_logfile, logger
-from .._util import find_micromanager, print_tabular_data
-from ..mda import MDAEngine, MDARunner, PMDAEngine
+from pymmcore_plus._logger import current_logfile, logger
+from pymmcore_plus._util import find_micromanager, print_tabular_data
+from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
+
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
@@ -1052,10 +1053,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         ----------
         group_name : str
             Configuration group name to get a config group object for.
+        allow_missing : bool
+            If `False` and the `ConfigGroup` does not exist, a `KeyError` will be
+            raised. By default False.
 
-        Examples
-        --------
 
+        Returns
+        -------
+        ConfigGroup
+            [`ConfigGroup`][pymmcore_plus.ConfigGroup] object bound to `group_name`
+            on this core.
         """
         group = ConfigGroup(group_name, mmcore=self)
         if not allow_missing and not group.exists():
@@ -1453,12 +1460,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         return img
 
     @overload
-    def getImage(self, *, fix: bool = True) -> np.ndarray:
+    def getImage(self, *, fix: bool = True) -> np.ndarray:  # noqa: D418
         """Return the internal image buffer."""
 
     @overload
-    def getImage(self, numChannel: int, *, fix: bool = True) -> np.ndarray:
-        """Return the internal image buffer for a given Camera Channel"""
+    def getImage(self, numChannel: int, *, fix: bool = True) -> np.ndarray:  # noqa
+        """Return the internal image buffer for a given Camera Channel."""
 
     def getImage(
         self, numChannel: int | None = None, *, fix: bool = True

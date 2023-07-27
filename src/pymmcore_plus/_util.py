@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Literal, overload
 import appdirs
 
 if TYPE_CHECKING:
-    from typing import TYPE_CHECKING, Any, Callable, TypeVar
+    from typing import Any, Callable, TypeVar
 
     from typing_extensions import ParamSpec
 

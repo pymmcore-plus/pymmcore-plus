@@ -16,7 +16,7 @@ if TYPE_CHECKING:
     import numpy as np
     from useq import HardwareAutofocus
 
-    from ..core import CMMCorePlus
+    from pymmcore_plus.core import CMMCorePlus
 
 HardwareAFType = getattr(useq, "HardwareAutofocus", ())  # useq v0.3.0+
 
@@ -43,7 +43,7 @@ class MDAEngine(PMDAEngine):
         (currently, this does nothing but get the global `CMMCorePlus` singleton
         if one is not already provided).
         """
-        from ..core import CMMCorePlus
+        from pymmcore_plus.core import CMMCorePlus
 
         self._mmc = self._mmc or CMMCorePlus.instance()
 

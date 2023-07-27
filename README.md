@@ -1,10 +1,11 @@
 # pymmcore-plus
 
 [![License](https://img.shields.io/pypi/l/pymmcore-plus.svg?color=green)](https://github.com/pymmcore-plus/pymmcore-plus/raw/master/LICENSE)
+[![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pymmcore-plus)](https://pypi.org/project/pymmcore-plus)
 [![PyPI](https://img.shields.io/pypi/v/pymmcore-plus.svg?color=green)](https://pypi.org/project/pymmcore-plus)
-[![Python
-Version](https://img.shields.io/pypi/pyversions/pymmcore-plus.svg?color=green)](https://python.org)
+[![Conda](https://img.shields.io/conda/vn/conda-forge/pymmcore-plus)](https://anaconda.org/conda-forge/pymmcore-plus)
 [![CI](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/test_and_deploy.yml/badge.svg)](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/test_and_deploy.yml)
+[![docs](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/docs.yml/badge.svg)](https://pymmcore-plus.github.io/pymmcore-plus/)
 [![codecov](https://codecov.io/gh/pymmcore-plus/pymmcore-plus/branch/main/graph/badge.svg)](https://codecov.io/gh/pymmcore-plus/pymmcore-plus)
 
 `pymmcore-plus` extends [pymmcore](https://github.com/micro-manager/pymmcore)
@@ -29,7 +30,7 @@ environments**.
 - Adds a [callback
   system](https://pymmcore-plus.github.io/pymmcore-plus/api/events/) that adapts
   the CMMCore callback object to an existing python event loop (such as Qt, or
-  perhaps asyncio/etc...).  The `CMMCorePlus` class also fixes a number of
+  perhaps asyncio/etc...). The `CMMCorePlus` class also fixes a number of
   "missed" events that are not currently emitted by the CMMCore API.
 
 ## Documentation
@@ -40,7 +41,7 @@ https://pymmcore-plus.github.io/pymmcore-plus/
 
 [pymmcore](https://github.com/micro-manager/pymmcore) is (and should probably
 remain) a thin SWIG wrapper for the C++ code at the core of the
-[Micro-Manager](https://github.com/micro-manager/mmCoreAndDevices/) project.  It
+[Micro-Manager](https://github.com/micro-manager/mmCoreAndDevices/) project. It
 is sufficient to control micromanager via python, but lacks some "niceties" that
 python users are accustomed to. This library:
 
@@ -57,15 +58,15 @@ python users are accustomed to. This library:
   constants](https://pymmcore-plus.github.io/pymmcore-plus/api/constants/)
 - improves docstrings and type annotations.
 - generally feel more pythonic (note however, `camelCase` method names from the
-  CMMCore API are *not* substituted with `snake_case`).
+  CMMCore API are _not_ substituted with `snake_case`).
 
 ## What about `Pycro-Manager`?
 
 [Pycro-Manager](https://github.com/micro-manager/pycro-manager) is a library
 designed to make it easier to work with and control the **Java** Micro-manager
-application using python.  As such, it requires Java to be installed and running
+application using python. As such, it requires Java to be installed and running
 in the background (either via the micro-manager GUI application directly, or via
-a headless process).  The python half communicates with the Java half using
+a headless process). The python half communicates with the Java half using
 ZeroMQ messaging.
 
 **In brief**: while `Pycro-Manager` provides a python API to control the Java
@@ -95,7 +96,7 @@ you can also download these manually from [micro-manager.org](https://micro-mana
 mmcore install
 ```
 
-*See [installation documentation ](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details.*
+_See [installation documentation ](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details._
 
 ### Usage
 
@@ -119,4 +120,4 @@ this repository
 
 ## Contributing
 
-Contributions are welcome!  See [contributing guide](http://pymmcore-plus.github.io/pymmcore-plus/contributing/).
+Contributions are welcome! See [contributing guide](http://pymmcore-plus.github.io/pymmcore-plus/contributing/).

@@ -1,7 +1,8 @@
 import numpy as np
 from psygnal import Signal, SignalInstance
 
-from ...mda import MDAEngine
+from pymmcore_plus.mda import MDAEngine
+
 from ._prop_event_mixin import _DevicePropertyEventMixin
 
 
