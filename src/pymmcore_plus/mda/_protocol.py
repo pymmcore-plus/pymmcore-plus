@@ -4,6 +4,8 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
+    from typing import TYPE_CHECKING, Iterable, Iterator
+
     from useq import MDAEvent, MDASequence
 
 
@@ -49,8 +51,20 @@ class PMDAEngine(Protocol):
         """
         # TODO: nail down a spec for the return object.
 
+    def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
+        """Optional wrapper on the event iterator.
 
-class FullPMDAEngine(PMDAEngine, Protocol):
+        This can be used to wrap the event iterator to perform any event merging
+        (e.g. if the engine supports HardwareSequencing) or event modification.
+        The default implementation is just `iter(events)`.
+
+        Be careful when using this method.  It is powerful and can result in unexpected
+        event iteration if used incorrectly.
+        """
+        yield from events
+
+
+class FullPMDAEngine(PMDAEngine):
     """Optional methods that a PMDAEngine MAY implement."""
 
     def teardown_event(self, event: MDAEvent) -> None:

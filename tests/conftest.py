@@ -22,7 +22,6 @@ def core(request):
     if not core.getDeviceAdapterSearchPaths():
         pytest.fail("To run tests, please install MM with `mmcore install`")
     core.loadSystemConfiguration()
-
     return core
 
 

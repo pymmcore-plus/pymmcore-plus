@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import time
 import warnings
-from typing import TYPE_CHECKING, Iterable, Iterator, cast
+from typing import TYPE_CHECKING, Iterable, Iterator
 
 from psygnal import EmitLoopError
 from useq import MDASequence
@@ -157,32 +157,8 @@ class MDARunner:
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
         try:
-            self._prepare_to_run(sequence)
-            self._engine = cast("PMDAEngine", self._engine)
-            teardown_event = getattr(self._engine, "teardown_event", lambda e: None)
-
-            for event in events:
-                cancelled = self._wait_until_event(event)
-
-                # If cancelled break out of the loop
-                if cancelled:
-                    break
-
-                if not self._running:
-                    break
-
-                logger.info(event)
-
-                self._engine.setup_event(event)
-
-                output = self._engine.exec_event(event)
-
-                if (img := getattr(output, "image", None)) is not None:
-                    with contextlib.suppress(EmitLoopError):
-                        self._events.frameReady.emit(img, event)
-
-                teardown_event(event)
-
+            engine = self._prepare_to_run(sequence)
+            self._run(engine, events)
         except Exception as e:
             error = e
         with contextlib.suppress(Exception):
@@ -190,7 +166,36 @@ class MDARunner:
         if error is not None:
             raise error
 
-    def _prepare_to_run(self, sequence: MDASequence) -> None:
+    def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
+        """Main execution of events, inside the try/except block of `run`."""
+        teardown_event = getattr(engine, "teardown_event", lambda e: None)
+        event_iterator = getattr(engine, "event_iterator", iter)
+        _events: Iterator[MDAEvent] = event_iterator(events)
+
+        for event in _events:
+            # If cancelled break out of the loop
+            if self._wait_until_event(event) or not self._running:
+                break
+
+            logger.info(event)
+            engine.setup_event(event)
+
+            output = engine.exec_event(event)
+
+            if (img := getattr(output, "image", None)) is not None:
+                with contextlib.suppress(EmitLoopError):
+                    self._events.frameReady.emit(img, event)
+
+            # FIXME: this is here to make tests pass with sequenced events for now,
+            # but we might not want to do this for sequences for performance reasons.s
+            if (imgs := getattr(output, "image_sequence", None)) is not None:
+                with contextlib.suppress(EmitLoopError):
+                    for img in imgs:
+                        self._events.frameReady.emit(img, event)
+
+            teardown_event(event)
+
+    def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
 
         Parameters
@@ -198,19 +203,20 @@ class MDARunner:
         sequence : MDASequence
             The sequence of events to run.
         """
+        if not self._engine:
+            raise RuntimeError("No MDAEngine set.")
+
         self._running = True
         self._paused = False
         self._paused_time = 0.0
         self._sequence = sequence
-
-        if not self._engine:
-            raise RuntimeError("No MDAEngine set.")
 
         self._engine.setup_sequence(sequence)
         logger.info("MDA Started: {}", sequence)
 
         self._events.sequenceStarted.emit(sequence)
         self._reset_timer()
+        return self._engine
 
     def _reset_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
@@ -260,6 +266,10 @@ class MDARunner:
             if self._check_canceled():
                 return True
 
+        # FIXME: this is actually the only place where the runner assumes our event is
+        # an MDAevent.  For everything else, the engine is technically the only thing
+        # that cares about the event time.
+        # So this whole method could potentially be moved to the engine.
         if event.min_start_time:
             go_at = event.min_start_time + self._paused_time
             # We need to enter a loop here checking paused and canceled.
