@@ -67,6 +67,7 @@ def test_fully_sequenceable_core():
     FOCUS = "Z"
     core_mock = cast("CMMCorePlus", MagicMock(spec=CMMCorePlus))
     core_mock.isSequenceRunning.return_value = False
+    core_mock.getRemainingImageCount.return_value = 0
     core_mock.isBufferOverflowed.return_value = False
     core_mock.getCameraDevice.return_value = CAM
     core_mock.getXYStageDevice.return_value = XYSTAGE
