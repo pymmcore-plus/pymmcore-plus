@@ -17,7 +17,6 @@ from typing import (
     Callable,
     Iterable,
     Iterator,
-    Literal,
     Pattern,
     Sequence,
     TypeVar,
@@ -27,8 +26,6 @@ from typing import (
 
 import pymmcore
 from psygnal import SignalInstance
-
-from pymmcore_plus.core.events import PCoreSignaler
 
 from .._logger import logger
 from .._util import find_micromanager, print_tabular_data
@@ -40,11 +37,12 @@ from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
-from .events import CMMCoreSignaler, _get_auto_core_callback_class
+from ._sequencing import can_sequence_events
+from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
     import numpy as np
-    from typing_extensions import TypedDict
+    from typing_extensions import Literal, TypedDict
     from useq import MDAEvent
 
     _T = TypeVar("_T")
@@ -1904,6 +1902,63 @@ class CMMCorePlus(pymmcore.CMMCore):
             for k, v in orig_values.items():
                 with suppress(AttributeError):
                     getattr(self, f"set{k}")(v)
+
+    def canSequenceEvents(
+        self, e1: MDAEvent, e2: MDAEvent, cur_length: int = -1
+    ) -> bool:
+        """Check whether two [`useq.MDAEvent`][] are sequenceable by this core instance.
+
+        Micro-manager calls hardware triggering "sequencing".  Two events can be
+        sequenced if *all* device properties that are changing between the first and
+        second event support sequencing.
+
+        If `cur_length` is provided, it is used to determine if the sequence is
+        "full" (i.e. the sequence is already at the maximum length) as determined by
+        the `...SequenceMaxLength()` method corresponding to the device property.
+
+        See: <https://micro-manager.org/Hardware-based_Synchronization_in_Micro-Manager>
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        Parameters
+        ----------
+        e1 : MDAEvent
+            The first event.
+        e2 : MDAEvent
+            The second event.
+        cur_length : int
+            The current length of the sequence.  Used when checking
+            `.get<...>SequenceMaxLength` for a given property. If the current length
+            is greater than the max length, the events cannot be sequenced. By default
+            -1, which means the current length is not checked.
+
+        Returns
+        -------
+        bool
+            True if the events can be sequenced, False otherwise.
+
+        Examples
+        --------
+        !!! note
+
+            The results here will depend on the current state of the core and devices.
+
+        ```python
+        >>> from useq import MDAEvent
+        >>> core = CMMCorePlus.instance()
+        >>> core.loadSystemConfiguration()
+        >>> core.canSequenceEvents(MDAEvent(), MDAEvent())
+        True
+        >>> core.canSequenceEvents(MDAEvent(x_pos=1), MDAEvent(x_pos=2))
+        False
+        >>> core.canSequenceEvents(
+        ...     MDAEvent(channel={'config': 'DAPI'}),
+        ...     MDAEvent(channel={'config': 'FITC'})
+        ... )
+        False
+        ```
+        """
+        return can_sequence_events(self, e1, e2, cur_length)
 
 
 for name in (
