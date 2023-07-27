@@ -243,13 +243,15 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     # create mock log file
     TEST_LOG = tmp_path / "test.log"
-    _logger.configure_logging(file=TEST_LOG)
     monkeypatch.setattr(_logger, "LOG_FILE", TEST_LOG)
+    _logger.configure_logging(file=TEST_LOG)
+    assert _logger.current_logfile(_logger.logger) == TEST_LOG
     assert TEST_LOG.exists()
 
     # instantiate core
     core = CMMCorePlus()
     core.loadSystemConfiguration()
+    assert core.getPrimaryLogFile() == str(TEST_LOG)
 
     # run mmcore logs
     result = runner.invoke(app, ["logs", "-n", "100"])

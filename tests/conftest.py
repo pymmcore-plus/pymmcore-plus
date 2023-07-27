@@ -30,3 +30,9 @@ def caplog(caplog: LogCaptureFixture):
         yield caplog
     finally:
         logger.remove(handler_id)
+
+
+def pytest_collection_modifyitems(session, config, items: list[pytest.Function]):
+    # putting test_cli_logs first, because I can't figure out how to mock the log
+    # file after the core fixture has been created :/
+    items.sort(key=lambda item: item.name != "test_cli_logs")
