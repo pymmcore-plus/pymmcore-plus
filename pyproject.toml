@@ -93,7 +93,7 @@ include = ["/src", "/tests"]
 only-include = ["src"]
 sources = ["src"]
 
-# https://github.com/charliermarsh/ruff
+# https://beta.ruff.rs/docs/rules/
 [tool.ruff]
 line-length = 88
 target-version = "py38"

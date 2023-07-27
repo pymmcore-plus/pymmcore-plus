@@ -4,15 +4,8 @@ ci:
   autoupdate_commit_msg: "ci(pre-commit.ci): autoupdate"
 
 repos:
-  - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v4.4.0
-    hooks:
-      - id: check-docstring-first
-      - id: end-of-file-fixer
-      - id: trailing-whitespace
-
   - repo: https://github.com/crate-ci/typos
-    rev: v1.14.12
+    rev: v1.16.1
     hooks:
       - id: typos
 
