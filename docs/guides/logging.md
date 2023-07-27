@@ -31,6 +31,10 @@ You may also configure logging using the following environment variables:
     You can also use `mmcore logs --reveal` to open the log directory in your
     file manager.
 
+Note that both pymmcore-plus and the underlying CMMCore object will write to the log
+file. By default, [CMMCorePlus](../api/cmmcoreplus.md) will call `setPrimaryLogFile()`
+with the location of the pymmcore-plus logfile upon instantiation.
+
 ## Managing logs with the CLI
 
 The `mmcore` CLI provides a `logs` subcommand for managing logs.
