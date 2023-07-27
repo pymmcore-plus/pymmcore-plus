@@ -13,10 +13,10 @@ requires-python = ">=3.8"
 license = { text = "BSD 3-Clause License" }
 authors = [
     { name = "Talley Lambert", email = "talley.lambert@gmail.com" },
-    { name = "Ian Hunt-Isaak" },
+    { name = "Federico Gasparoli", email = "federico.gasparoli@gmail.com" },
+    { name = "Ian Hunt-Isaak", email = "ianhuntisaak@gmail.com" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
     "Development Status :: 3 - Alpha",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
@@ -31,7 +31,6 @@ classifiers = [
     "Topic :: System :: Hardware",
     "Topic :: System :: Hardware :: Hardware Drivers",
     "Topic :: Utilities",
-
 ]
 dynamic = ["version"]
 dependencies = [
@@ -40,10 +39,10 @@ dependencies = [
     "numpy",
     "psygnal>=0.4.2",
     "pymmcore>=10.1.1.70.4",
-    "typer",
     "rich",
+    "typer",
     "typing-extensions",
-    "useq-schema",
+    "useq-schema >=0.3.1",
     "wrapt",
 ]
 
@@ -99,11 +98,11 @@ version-file = "src/pymmcore_plus/_version.py"
 line-length = 88
 target-version = "py38"
 extend-select = [
-    "E",    # style errors
-    "F",    # flakes
-    "D",    # pydocstyle
-    "I",    # isort
-    "UP",   # pyupgrade
+    "E",  # style errors
+    "F",  # flakes
+    "D",  # pydocstyle
+    "I",  # isort
+    "UP", # pyupgrade
     # "N",  # pep8-naming
     # "S",  # bandit
     "C",    # flake8-comprehensions
