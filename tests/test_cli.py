@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from multiprocessing import Process, Queue
@@ -260,13 +261,15 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     assert "Initialized core" in result.output  # this will come from CMMCorePlus
 
     # run mmcore logs --tail
-    q: Queue = Queue()
-    p = Process(target=_background_tail, args=(q, runner, TEST_LOG))
-    p.start()
-    while p.is_alive():
-        sleep(0.1)
-    output = q.get()
-    assert "[IFO,Core]" in output
+    # not sure how to kill the subprocess correctly on windows yet
+    if os.name != "nt":
+        q: Queue = Queue()
+        p = Process(target=_background_tail, args=(q, runner, TEST_LOG))
+        p.start()
+        while p.is_alive():
+            sleep(0.1)
+        output = q.get()
+        assert "[IFO,Core]" in output
 
     runner.invoke(app, ["logs", "--clear"])
     assert not TEST_LOG.exists()
