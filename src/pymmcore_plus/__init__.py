@@ -4,6 +4,7 @@ except ImportError:
     __version__ = "unknown"
 
 
+from ._logger import configure_logging
 from ._util import find_micromanager
 from .core import (
     CMMCorePlus,
@@ -30,6 +31,7 @@ __all__ = [
     "CMMCoreSignaler",
     "ConfigGroup",
     "Configuration",
+    "configure_logging",
     "Device",
     "DeviceAdapter",
     "DeviceDetectionStatus",
