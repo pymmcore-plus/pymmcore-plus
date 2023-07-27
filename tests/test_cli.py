@@ -8,6 +8,7 @@ import subprocess
 from multiprocessing import Process, Queue
 from pathlib import Path
 from time import sleep
+import time
 from typing import Any, Callable, cast
 from unittest.mock import patch
 
@@ -252,17 +253,15 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 
     # instantiate core
     core = CMMCorePlus()
-    core.loadSystemConfiguration()
     assert core.getPrimaryLogFile() == str(TEST_LOG)
+    core.loadSystemConfiguration()
+    # it may take a moment for the log file to be written
+    time.sleep(0.2)
 
     # run mmcore logs
-    result = runner.invoke(app, ["logs", "-n", "100"])
+    result = runner.invoke(app, ["logs", "-n", "60"])
     assert result.exit_code == 0
-
-    # logging from CMMCore doesn't seem to be working on apple silicon
-    if platform.machine() != "arm64":
-        assert "[IFO,Core]" in result.output  # this will come from CMMCore
-
+    assert "[IFO,Core]" in result.output  # this will come from CMMCore
     assert "Initialized core" in result.output  # this will come from CMMCorePlus
 
     # run mmcore logs --tail
