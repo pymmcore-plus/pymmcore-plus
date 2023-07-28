@@ -93,7 +93,7 @@ def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot: "QtBot"):
         pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
         msg = caplog.records[0].message
         assert msg.startswith(
-            "Exception occured in MMCorePlus callback 'propertyChanged'"
+            "Exception occurred in MMCorePlus callback 'propertyChanged'"
         )
     else:
         with qtbot.capture_exceptions() as exceptions:

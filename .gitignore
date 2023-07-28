@@ -137,7 +137,6 @@ dmypy.json
 # Cython debug symbols
 cython_debug/
 
-src/pymmcore_plus/_version.py
 Micro-Manager-*
 .vscode
 

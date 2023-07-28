@@ -1,4 +1,4 @@
-# Multi-Dimensional Aquisition
+# Multi-Dimensional Acquisition
 
 The [`mda`][pymmcore_plus.CMMCorePlus.mda] attribute on the
 [`CMMCorePlus`][pymmcore_plus.CMMCorePlus] object provides a high-level

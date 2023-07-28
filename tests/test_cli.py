@@ -6,9 +6,8 @@ import shutil
 import subprocess
 import time
 from multiprocessing import Process, Queue
-from pathlib import Path
 from time import sleep
-from typing import Any, Callable, cast
+from typing import TYPE_CHECKING, Any, Callable, cast
 from unittest.mock import patch
 
 import pytest
@@ -16,6 +15,9 @@ from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, install
 from pymmcore_plus._cli import app
 from typer.testing import CliRunner
 from useq import MDASequence
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 runner = CliRunner()
 subrun = subprocess.run

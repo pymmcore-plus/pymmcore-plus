@@ -29,6 +29,10 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     core_mock = cast("CMMCorePlus", MagicMock(wraps=core))  # so we can spy on all_calls
     engine = MDAEngine(mmc=core_mock)
 
+    engine.use_hardware_sequencing = False
+    assert len(list(engine.event_iterator(mda))) == NLOOPS * 2 * 2
+
+    engine.use_hardware_sequencing = True
     events = list(engine.event_iterator(mda))
     assert len(events) == EXPECTED_SEQUENCES
 
@@ -49,6 +53,15 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
 
     expected_pos = [call(0, 0), call(0, 0), call(1, 1), call(1, 1)]
     assert core_mock.setXYPosition.call_args_list == expected_pos
+
+
+def test_sequenced_mda_with_zero_values() -> None:
+    # just testing a bug I found where if z, x, or y are 0, they accidentally
+    # get sequenced
+    mda = useq.MDASequence(z_plan=useq.ZRangeAround(range=3.0, step=0.5))
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    core.mda.run(mda)
 
 
 def test_fully_sequenceable_core():

@@ -4,7 +4,7 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from typing import TYPE_CHECKING, Iterable, Iterator
+    from typing import Iterable, Iterator
 
     from useq import MDAEvent, MDASequence
 

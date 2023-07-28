@@ -35,12 +35,12 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "appdirs",
-    "loguru",
+    "loguru >=0.5.0",
     "numpy",
-    "psygnal>=0.4.2",
-    "pymmcore>=10.1.1.70.4",
-    "rich",
-    "typer",
+    "psygnal >=0.4.2",
+    "pymmcore >=10.1.1.70.4",
+    "rich >=10.2.0",
+    "typer >=0.4.2",
     "typing-extensions",
     "useq-schema >=0.3.1",
     "wrapt",
@@ -85,32 +85,34 @@ source = "vcs"
 [tool.hatch.metadata]
 allow-direct-references = true
 
-[tool.hatch.build.hooks.vcs]
-version-file = "src/pymmcore_plus/_version.py"
-
 # https://hatch.pypa.io/latest/config/build/#file-selection
-# [tool.hatch.build.targets.sdist]
-# include = ["/src", "/tests"]
+[tool.hatch.build.targets.sdist]
+include = ["/src", "/tests"]
 
+[tool.hatch.build.targets.wheel]
+only-include = ["src"]
+sources = ["src"]
 
-# https://github.com/charliermarsh/ruff
+# https://beta.ruff.rs/docs/rules/
 [tool.ruff]
 line-length = 88
 target-version = "py38"
-extend-select = [
-    "E",  # style errors
-    "F",  # flakes
-    "D",  # pydocstyle
-    "I",  # isort
-    "UP", # pyupgrade
-    # "N",  # pep8-naming
-    # "S",  # bandit
-    "C",    # flake8-comprehensions
+select = [
+    "E",    # style errors
+    "F",    # flakes
+    "W",    # warnings
+    "D",    # pydocstyle
+    "I",    # isort
+    "UP",   # pyupgrade
+    "C4",   # flake8-comprehensions
     "B",    # flake8-bugbear
     "A001", # flake8-builtins
     "RUF",  # ruff-specific rules
+    "TID",  # tidy
+    "TCH",  # typecheck
+    "SLF",  # private-access
 ]
-extend-ignore = [
+ignore = [
     "D100", # Missing docstring in public module
     "D104", # Missing docstring in public package
     "D107", # Missing docstring in __init__
@@ -121,14 +123,12 @@ extend-ignore = [
     "D401", # First line should be in imperative mood
     "D413", # Missing blank line after last section
     "D416", # Section name should end with a colon
-    "C901", # Function is too complex
 ]
 
 [tool.ruff.per-file-ignores]
-"tests/*.py" = ["D"]
+"tests/*.py" = ["D", "SLF"]
 "examples/*.py" = ["D"]
 "_cli.py" = ["B008"]
-"_mmcore_plus*.py" = ["D4"]
 "docs/*.py" = ["A", "D"]
 
 # https://docs.pytest.org/en/6.2.x/customize.html
@@ -139,7 +139,7 @@ filterwarnings = ["error"]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
-files = "src/**/*/*.py"
+files = "src/**"
 strict = true
 disallow_any_generics = false
 disallow_subclassing_any = false
@@ -159,7 +159,7 @@ exclude_lines = [
     "raise NotImplementedError",
 ]
 [tool.coverage.run]
-source = ['src/pymmcore_plus']
+source = ['pymmcore_plus']
 
 # https://github.com/mgedmin/check-manifest#configuration
 [tool.check-manifest]

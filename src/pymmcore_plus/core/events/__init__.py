@@ -1,11 +1,13 @@
 from typing import TYPE_CHECKING, Any, List, Type
 
-from ..._util import _qt_app_is_running
+from pymmcore_plus._util import _qt_app_is_running
+
 from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
 
 if TYPE_CHECKING:
-    from ._qsignals import QCoreSignaler
+    from ._qsignals import QCoreSignaler  # noqa: TCH004
+
 
 __all__ = [
     "CMMCoreSignaler",
