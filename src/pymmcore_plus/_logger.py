@@ -162,7 +162,7 @@ def current_logfile(logger: Any) -> Path | None:
         for h in logger._core.handlers.values():  # noqa: SLF001
             if hasattr(h, "_sink") and getattr(h._sink, "_path", None):  # noqa: SLF001
                 return Path(h._sink._path)  # noqa: SLF001
-    except AttributeError as e:
+    except AttributeError as e:  # pragma: no cover
         warnings.warn(
             f"Error determining current log file {e}. Please check loguru version.",
             RuntimeWarning,
