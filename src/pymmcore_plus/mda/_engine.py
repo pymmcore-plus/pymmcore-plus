@@ -31,7 +31,7 @@ class MDAEngine(PMDAEngine):
         Whether to use hardware sequencing if possible. If `True`, the engine will
         attempt to combine MDAEvents into a single `SequencedEvent` if
         [`core.canSequenceEvents()`][pymmcore_plus.CMMCorePlus.canSequenceEvents]
-        reports that the events can be sequenced.
+        reports that the events can be sequenced. This can be set after instantiation.
     """
 
     def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = True) -> None:
