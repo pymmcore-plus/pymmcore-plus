@@ -181,17 +181,29 @@ class MDAEngine(PMDAEngine):
             True,  # stopOnOverflow
         )
 
-        # block until the sequence is done
+        # block until the sequence is done, popping images in the meantime
+        images = []
         while self._mmc.isSequenceRunning():
-            time.sleep(0.001)
+            if self._mmc.getRemainingImageCount():
+                images.append(self._mmc.popNextImage())
+            else:
+                time.sleep(0.001)
 
-        # TODO: collect images
-        tagged_imgs = []
-        for _ in range(n_events):  # or getRemainingImageCount()
-            if self._mmc.isBufferOverflowed():
-                raise MemoryError("Buffer overflowed")
-            tagged_imgs.append(self._mmc.popNextImage())
-        return EventPayload(image_sequence=tagged_imgs)
+        if self._mmc.isBufferOverflowed():
+            raise MemoryError("Buffer overflowed")
+
+        while self._mmc.getRemainingImageCount():
+            images.append(self._mmc.popNextImage())
+
+        if len(images) != n_events:
+            logger.warning(
+                "Unexpected number of images returned from sequence. "
+                "Expected {}, got {}",
+                n_events,
+                len(images),
+            )
+
+        return EventPayload(image_sequence=images)
 
     def exec_single_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute a single (non-triggered) event and return the image data.
