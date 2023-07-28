@@ -228,11 +228,12 @@ def can_sequence_events(
         return (False, reason) if return_reason else False
 
     # channel
-    if e1.channel and e2.channel and (e1.channel != e2.channel):
-        if e1.channel.group != e2.channel.group:
+    if e1.channel and e1.channel != e2.channel:
+        if not e2.channel or e1.channel.group != e2.channel.group:
+            e2_channel_group = getattr(e2.channel, "group", None)
             return _nope(
                 "Cannot sequence across config groups: "
-                f"{e1.channel.group=}, {e2.channel.group=}"
+                f"{e1.channel.group=}, {e2_channel_group=}"
             )
         cfg = core.getConfigData(e1.channel.group, e1.channel.config)
         for dev, prop, _ in cfg:
@@ -244,7 +245,7 @@ def can_sequence_events(
                 return _nope(f"'{dev}-{prop}' {max_len=} < {cur_length=}")
 
     # Z
-    if (e1.z_pos or e2.z_pos) and (e1.z_pos != e2.z_pos):
+    if e1.z_pos != e2.z_pos:
         focus_dev = core.getFocusDevice()
         if not core.isStageSequenceable(focus_dev):
             return _nope(f"Focus device {focus_dev!r} is not sequenceable")
@@ -253,9 +254,7 @@ def can_sequence_events(
             return _nope(f"Focus device {focus_dev!r} {max_len=} < {cur_length=}")
 
     # XY
-    if ((e1.x_pos or e2.x_pos) and (e1.x_pos != e2.x_pos)) or (
-        (e1.y_pos or e2.y_pos) and (e1.y_pos != e2.y_pos)
-    ):
+    if e1.x_pos != e2.x_pos or e1.y_pos != e2.y_pos:
         stage = core.getXYStageDevice()
         if not core.isXYStageSequenceable(stage):
             return _nope(f"XYStage {stage!r} is not sequenceable")

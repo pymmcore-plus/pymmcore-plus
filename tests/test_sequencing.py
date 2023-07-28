@@ -29,6 +29,10 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     core_mock = cast("CMMCorePlus", MagicMock(wraps=core))  # so we can spy on all_calls
     engine = MDAEngine(mmc=core_mock)
 
+    engine.use_hardware_sequencing = False
+    assert len(list(engine.event_iterator(mda))) == NLOOPS * 2 * 2
+
+    engine.use_hardware_sequencing = True
     events = list(engine.event_iterator(mda))
     assert len(events) == EXPECTED_SEQUENCES
 
