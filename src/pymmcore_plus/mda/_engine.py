@@ -257,7 +257,7 @@ class MDAEngine(PMDAEngine):
                 len(images),
             )
 
-        return EventPayload(image_sequence=images)
+        return EventPayload(image_sequence=tuple(zip(images, event.events)))
 
     # ===================== EXTRA =====================
 
@@ -297,4 +297,4 @@ class MDAEngine(PMDAEngine):
 
 class EventPayload(NamedTuple):
     image: np.ndarray | None = None
-    image_sequence: Sequence[np.ndarray] | None = None
+    image_sequence: Sequence[tuple[np.ndarray, MDAEvent]] | None = None

@@ -190,8 +190,8 @@ class MDARunner:
             # but we might not want to do this for sequences for performance reasons.s
             if (imgs := getattr(output, "image_sequence", None)) is not None:
                 with contextlib.suppress(EmitLoopError):
-                    for img in imgs:
-                        self._events.frameReady.emit(img, event)
+                    for img, sub_event in imgs:
+                        self._events.frameReady.emit(img, sub_event)
 
             teardown_event(event)
 
