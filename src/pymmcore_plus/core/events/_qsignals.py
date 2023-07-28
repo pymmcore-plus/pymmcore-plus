@@ -43,7 +43,7 @@ class QCoreSignaler(QObject):
     # can't use _DevicePropertyEventMixin due to metaclass conflict
     def __init__(self) -> None:
         super().__init__()
-        self._prop_callbacks: PropKeyDict = {}
+        self.property_callbacks: PropKeyDict = {}
 
     def devicePropertyChanged(
         self, device: str, property: Optional[str] = None

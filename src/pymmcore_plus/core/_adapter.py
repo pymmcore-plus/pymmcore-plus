@@ -3,9 +3,10 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, NamedTuple
 
 from pymmcore_plus.core._constants import DeviceType
-from pymmcore_plus.core._device import Device
 
 if TYPE_CHECKING:
+    from pymmcore_plus.core._device import Device
+
     from ._mmcore_plus import CMMCorePlus
 
 

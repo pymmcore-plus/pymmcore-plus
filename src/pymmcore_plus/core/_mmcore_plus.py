@@ -27,9 +27,10 @@ from typing import (
 import pymmcore
 from psygnal import SignalInstance
 
-from .._logger import current_logfile, logger
-from .._util import find_micromanager, print_tabular_data
-from ..mda import MDAEngine, MDARunner, PMDAEngine
+from pymmcore_plus._logger import current_logfile, logger
+from pymmcore_plus._util import find_micromanager, print_tabular_data
+from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
+
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
@@ -692,7 +693,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`.*
 
-        It offers a convenient way to iterate over availabe device adaptor libraries,
+        It offers a convenient way to iterate over available device adaptor libraries,
         optionally filtering adapter library name. It can also yield
         [`Adapter`][pymmcore_plus.DeviceAdapter] objects if `as_object` is `True` (the
         default)
@@ -964,7 +965,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         >>> exposure.upperLimit()
         10000.0
 
-        get/set propery values easily:
+        get/set property values easily:
 
         >>> exposure.value
         10.0
@@ -1052,10 +1053,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         ----------
         group_name : str
             Configuration group name to get a config group object for.
+        allow_missing : bool
+            If `False` and the `ConfigGroup` does not exist, a `KeyError` will be
+            raised. By default False.
 
-        Examples
-        --------
 
+        Returns
+        -------
+        ConfigGroup
+            [`ConfigGroup`][pymmcore_plus.ConfigGroup] object bound to `group_name`
+            on this core.
         """
         group = ConfigGroup(group_name, mmcore=self)
         if not allow_missing and not group.exists():
@@ -1453,12 +1460,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         return img
 
     @overload
-    def getImage(self, *, fix: bool = True) -> np.ndarray:
+    def getImage(self, *, fix: bool = True) -> np.ndarray:  # noqa: D418
         """Return the internal image buffer."""
 
     @overload
-    def getImage(self, numChannel: int, *, fix: bool = True) -> np.ndarray:
-        """Return the internal image buffer for a given Camera Channel"""
+    def getImage(self, numChannel: int, *, fix: bool = True) -> np.ndarray:  # noqa
+        """Return the internal image buffer for a given Camera Channel."""
 
     def getImage(
         self, numChannel: int | None = None, *, fix: bool = True
@@ -2003,7 +2010,7 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
                 getattr(self._emitter, sig_name).emit(*args)
             except Exception as e:
                 logger.error(
-                    f"Exception occured in MMCorePlus callback {sig_name!r}: {e}"
+                    f"Exception occurred in MMCorePlus callback {sig_name!r}: {e}"
                 )
 
         return reemit

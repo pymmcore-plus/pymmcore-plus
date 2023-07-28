@@ -50,7 +50,7 @@ pure python/C environments**.
     ecosystem, including the GUI and plugins. A disadvantage, however, is that it requires a
     Java runtime environment and cross-process communication and data sharing. If you are
     looking to control a microscope via python without any need for Java, `pymmcore(-plus)` will
-    help, and much of the critical GUI components have been re-implented in `pymmcore-widgets`
+    help, and much of the critical GUI components have been re-implemented in `pymmcore-widgets`
     and `napari-micromanager`.
 
     ![micro-manager ecosystem components](images/components.png){ loading=lazy }

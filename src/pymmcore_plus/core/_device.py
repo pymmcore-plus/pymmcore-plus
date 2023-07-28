@@ -153,7 +153,7 @@ class Device:
     def __repr__(self) -> str:
         if self.isLoaded():
             n = len(self.propertyNames())
-            props = f'{n} propertie{"s" if n>1 else ""}'
+            props = f'{n} {"properties" if n>1 else "property"}'
             lib = f"({self.library()}::{self.name()}) "
         else:
             props = "NOT LOADED"

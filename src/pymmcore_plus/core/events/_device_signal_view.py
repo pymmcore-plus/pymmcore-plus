@@ -1,7 +1,7 @@
 from typing import TYPE_CHECKING, Optional
 
 if TYPE_CHECKING:
-    from .. import CMMCorePlus
+    from pymmcore_plus.core import CMMCorePlus
 
 from ._prop_event_mixin import _C
 

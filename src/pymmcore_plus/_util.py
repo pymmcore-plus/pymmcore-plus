@@ -11,7 +11,7 @@ from typing import TYPE_CHECKING, Literal, overload
 import appdirs
 
 if TYPE_CHECKING:
-    from typing import TYPE_CHECKING, Any, Callable, TypeVar
+    from typing import Any, Callable, TypeVar
 
     from typing_extensions import ParamSpec
 
@@ -245,8 +245,8 @@ def print_tabular_data(data: dict[str, list[str]], sort: str | None = None) -> N
 
     print(fmt.format(*data.keys()))
 
-    dashs = ["-" * w for w in col_widths]
-    print(fmt.format(*dashs))
+    dashes = ["-" * w for w in col_widths]
+    print(fmt.format(*dashes))
 
     for row in _sorted_rows(data, sort=sort):
         print(fmt.format(*(str(x) for x in row)))

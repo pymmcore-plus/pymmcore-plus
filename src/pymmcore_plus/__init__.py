@@ -1,6 +1,8 @@
+from importlib.metadata import PackageNotFoundError, version
+
 try:
-    from ._version import version as __version__
-except ImportError:
+    __version__ = version("pymmcore-plus")
+except PackageNotFoundError:
     __version__ = "unknown"
 
 

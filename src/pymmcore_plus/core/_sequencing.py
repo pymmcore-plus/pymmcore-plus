@@ -19,12 +19,12 @@ class SequencedEvent(MDAEvent):
     calculate sequences for x, y, z, and exposure based on an a sequence of events.
     """
 
-    events: Tuple[MDAEvent, ...]  # noqa: UP
+    events: Tuple[MDAEvent, ...]  # noqa: UP006
 
-    exposure_sequence: Tuple[float, ...]  # noqa: UP
-    x_sequence: Tuple[float, ...]  # noqa: UP
-    y_sequence: Tuple[float, ...]  # noqa: UP
-    z_sequence: Tuple[float, ...]  # noqa: UP
+    exposure_sequence: Tuple[float, ...]  # noqa: UP006
+    x_sequence: Tuple[float, ...]  # noqa: UP006
+    y_sequence: Tuple[float, ...]  # noqa: UP006
+    z_sequence: Tuple[float, ...]  # noqa: UP006
 
     # technically this is more like a field, but it requires a core instance
     # to getConfigData for channels, so we leave it as a method.

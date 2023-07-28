@@ -51,7 +51,7 @@ class _PropertySignal:
         def _wrapper(dev: str, prop: str, new_value: Any) -> None:
             cb = denormalize_slot(slot)
             if cb is None:
-                self._events._prop_callbacks.pop(key, None)
+                self._events.property_callbacks.pop(key, None)
                 return
             if dev == self._device:
                 if self._property:
@@ -60,14 +60,14 @@ class _PropertySignal:
                 else:
                     cb(prop, new_value)
 
-        self._events._prop_callbacks[key] = _wrapper
+        self._events.property_callbacks[key] = _wrapper
         self._events.propertyChanged.connect(_wrapper)
         return callback
 
     def disconnect(self, callback: Callable) -> None:
         """Disconnect `callback` from this device and/or property."""
         key = (self._device, self._property, normalize_slot(callback))
-        cb = self._events._prop_callbacks.pop(key, None)
+        cb = self._events.property_callbacks.pop(key, None)
         if cb is None:
             raise ValueError("callback not connected")
         self._events.propertyChanged.disconnect(cb)
@@ -77,7 +77,8 @@ class _PropertySignal:
 
 
 class _DevicePropertyEventMixin(PCoreSignaler):
-    _prop_callbacks: ClassVar[PropKeyDict] = {}
+    # dict used above by _PropertySignal
+    property_callbacks: ClassVar[PropKeyDict] = {}
 
     def devicePropertyChanged(
         self, device: str, property: str | None = None

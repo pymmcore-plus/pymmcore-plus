@@ -5,11 +5,11 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
 from useq import AxesBasedAF, MDAEvent, MDASequence
 
 if TYPE_CHECKING:
+    from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
     from pytestqt.qtbot import QtBot
 
@@ -150,7 +150,7 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
     )
 
     core.setZPosition(200)
-    af_event = list(mda.iter_events())[0]
+    af_event = next(iter(mda.iter_events()))
     core.mda.engine.setup_event(af_event)
     core.mda.engine.exec_event(af_event)
 
