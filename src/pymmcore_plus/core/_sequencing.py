@@ -244,7 +244,7 @@ def can_sequence_events(
                 return _nope(f"'{dev}-{prop}' {max_len=} < {cur_length=}")
 
     # Z
-    if e1.z_pos and e2.z_pos and (e1.z_pos != e2.z_pos):
+    if (e1.z_pos or e2.z_pos) and (e1.z_pos != e2.z_pos):
         focus_dev = core.getFocusDevice()
         if not core.isStageSequenceable(focus_dev):
             return _nope(f"Focus device {focus_dev!r} is not sequenceable")
@@ -253,8 +253,8 @@ def can_sequence_events(
             return _nope(f"Focus device {focus_dev!r} {max_len=} < {cur_length=}")
 
     # XY
-    if (e1.x_pos and e2.x_pos and (e1.x_pos != e2.x_pos)) or (
-        e1.y_pos and e2.y_pos and (e1.y_pos != e2.y_pos)
+    if ((e1.x_pos or e2.x_pos) and (e1.x_pos != e2.x_pos)) or (
+        (e1.y_pos or e2.y_pos) and (e1.y_pos != e2.y_pos)
     ):
         stage = core.getXYStageDevice()
         if not core.isXYStageSequenceable(stage):

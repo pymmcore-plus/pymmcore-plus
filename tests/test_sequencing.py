@@ -51,6 +51,15 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     assert core_mock.setXYPosition.call_args_list == expected_pos
 
 
+def test_sequenced_mda_with_zero_values() -> None:
+    # just testing a bug I found where if z, x, or y are 0, they accidentally
+    # get sequenced
+    mda = useq.MDASequence(z_plan=useq.ZRangeAround(range=3.0, step=0.5))
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    core.mda.run(mda)
+
+
 def test_fully_sequenceable_core():
     mda = useq.MDASequence(
         stage_positions=[(0, 0, 0), (1, 1, 1)],
