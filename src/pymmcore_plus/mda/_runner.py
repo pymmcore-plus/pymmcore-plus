@@ -34,8 +34,8 @@ class GeneratorMDASequence(MDASequence):
         warnings.warn(self.MSG, stacklevel=2)
         yield from []
 
-    def __len__(self) -> int:
-        raise TypeError("GeneratorMDASequence has no len()")
+    def __str__(self) -> str:
+        return "GeneratorMDASequence()"
 
 
 class MDARunner:

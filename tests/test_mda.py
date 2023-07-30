@@ -162,20 +162,23 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
 def test_set_mda_fov(core: CMMCorePlus, qtbot: QtBot):
     """Test that the fov size is updated."""
     mda = MDASequence(
-        channels=[
-            {"config": "FITC", "exposure": 3},
-        ],
-        stage_positions=(
-            {"sequence": {"grid_plan": {"rows": 2, "columns": 1}}},
-            {"sequence": {"grid_plan": {"rows": 1, "columns": 1}}},
-        ),
+        channels=["FITC"],
+        stage_positions=({"sequence": {"grid_plan": {"rows": 1, "columns": 1}}},),
+        grid_plan={"rows": 1, "columns": 1},
     )
 
-    core.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
+    global_grid = mda.grid_plan
+    sub_grid = mda.stage_positions[0].sequence.grid_plan  # type: ignore
+    assert global_grid and sub_grid
 
-    mock_mda = cast(MDASequence, MagicMock(wraps=mda))
-    core.mda.engine.setup_sequence(mock_mda)
-    mock_mda.set_fov_size.assert_called_once_with((256, 256))
+    assert global_grid.fov_width == global_grid.fov_height is None
+    assert sub_grid.fov_width == sub_grid.fov_height is None
+
+    core.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
+    core.mda.engine.setup_sequence(mda)  # type: ignore
+
+    assert global_grid.fov_width == global_grid.fov_height == 256
+    assert sub_grid.fov_width == sub_grid.fov_height == 256
 
 
 def event_generator() -> Iterator[MDAEvent]:
