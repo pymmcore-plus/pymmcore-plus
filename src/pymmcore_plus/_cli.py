@@ -207,7 +207,11 @@ def run(
     from useq import MDASequence
 
     # load from file if provided...
-    mda = {} if useq is None else MDASequence.from_file(useq).dict()
+    if useq is None:
+        mda = {}
+    else:
+        _mda = MDASequence.from_file(useq)
+        mda = _mda.model_dump() if hasattr(_mda, "model_dump") else _mda.dict()
 
     # Any command line arguments take precedence over useq file
     # note that useq-schema itself will handle any conflicts between z plans
@@ -263,7 +267,7 @@ def run(
 
     if dry_run:
         print(":eyes: [bold green]Would run\n")
-        print(_mda.dict())
+        print(_mda.model_dump() if hasattr(_mda, "model_dump") else _mda.dict())
         raise typer.Exit(0)
 
     core = pymmcore_plus.CMMCorePlus.instance()

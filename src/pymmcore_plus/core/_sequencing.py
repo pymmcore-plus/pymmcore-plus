@@ -79,6 +79,7 @@ class SequencedEvent(MDAEvent):
                 f"{len(x_seq)=}, {len(y_seq)=}"
             )
 
+        e0 = _events[0]
         return cls(
             events=_events,
             exposure_sequence=(
@@ -88,7 +89,7 @@ class SequencedEvent(MDAEvent):
             y_sequence=y_seq,
             z_sequence=data["z_pos"] if len(set(data["z_pos"])) > 1 else (),
             # use the first event to provide all other values like min_start_time, etc.
-            **_events[0].dict(),
+            **(e0.model_dump() if hasattr(e0, "model_dump") else e0.dict()),
         )
 
 

@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from pymmcore_plus.mda.events import MDASignaler
-from useq import AxesBasedAF, MDAEvent, MDASequence
+from useq import MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
@@ -99,13 +99,16 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
         assert not core.mda._canceled
 
 
-AFPlan = AxesBasedAF(autofocus_device_name="Z", autofocus_motor_offset=25, axes=("p",))
+# using a dict here instead of a useq.AxesBasedAF to force MDASequence to
+# create a new instance.  This is because the AFPlan remembers the last axis
+# it saw.  (it's kind of a bug that should be fixed in useq)
+AFPlan = {"autofocus_device_name": "Z", "autofocus_motor_offset": 25, "axes": ("p",)}
 
 
-def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
-    mda = MDASequence(stage_positions=[{"z": 50}], autofocus_plan=AFPlan)
+def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus) -> None:
+    mda = MDASequence(stage_positions=[{"z": 0}], autofocus_plan=AFPlan)
     with qtbot.waitSignal(core.mda.events.sequenceFinished):
-        core.run_mda(mda)
+        core.mda.run(mda)
 
     engine = cast("MDAEngine", core.mda._engine)
     # the 50 here is because mock_full_focus shifts the z position by 50
