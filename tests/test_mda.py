@@ -6,11 +6,12 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from pymmcore_plus.mda.events import MDASignaler
-from useq import MDAEvent, MDASequence
+from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
+    from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
 
 
@@ -214,3 +215,34 @@ def test_mda_iterable_of_events(
 
     assert start_mock.call_count == 1
     assert frame_mock.call_count == 2
+
+
+DEVICE_ERRORS: dict[str, list[str]] = {
+    "XY": ["No XY stage device found. Cannot set XY position"],
+    "Z": ["No Z stage device found. Cannot set Z position"],
+    "Autofocus": ["No autofocus device found. Cannot execute autofocus"],
+    "Camera": [
+        "Failed to set exposure.",
+        "Failed to snap image. Camera not loaded or initialized",
+    ],
+    "Dichroic": ['No device with label "Dichroic"'],
+}
+
+
+@pytest.mark.parametrize("device", DEVICE_ERRORS)
+def test_mda_no_device(device: str, core: CMMCorePlus, caplog: LogCaptureFixture):
+    core.unloadDevice(device)
+
+    if device == "Autofocus":
+        event = MDAEvent(
+            action=HardwareAutofocus(
+                autofocus_device_name="Z", autofocus_motor_offset=10
+            )
+        )
+    else:
+        event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
+    core.mda.engine.setup_event(event)  # type: ignore
+    core.mda.engine.exec_event(event)  # type: ignore
+
+    for e in DEVICE_ERRORS[device]:
+        assert e in caplog.text
