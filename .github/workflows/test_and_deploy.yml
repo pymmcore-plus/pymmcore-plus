@@ -92,7 +92,7 @@ jobs:
         run: mmcore install
 
       - name: Run pymmcore-widgets tests
-        run: python -m pytest -v --color=yes -W ignore
+        run: python -m pytest -v --color=yes -W default
         working-directory: pymmcore-widgets
 
   test-napari-micro:
@@ -130,7 +130,7 @@ jobs:
         run: mmcore install
 
       - name: Run napari-micromanager tests
-        run: python -m pytest -v --color=yes -W ignore
+        run: python -m pytest -v --color=yes -W default
         working-directory: napari-micromanager
 
   deploy:
