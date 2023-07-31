@@ -173,15 +173,9 @@ def test_set_mda_fov(core: CMMCorePlus, qtbot: QtBot):
 
     core.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
 
-    assert mda._fov_size == (1, 1)
-    assert mda.stage_positions[0].sequence._fov_size == (1, 1)
-    assert mda.stage_positions[1].sequence._fov_size == (1, 1)
-
-    core.mda.engine.setup_sequence(mda)
-
-    assert mda._fov_size == (256, 256)
-    assert mda.stage_positions[0].sequence._fov_size == (256, 256)
-    assert mda.stage_positions[1].sequence._fov_size == (256, 256)
+    mock_mda = cast(MDASequence, MagicMock(wraps=mda))
+    core.mda.engine.setup_sequence(mock_mda)
+    mock_mda.set_fov_size.assert_called_once_with((256, 256))
 
 
 def event_generator() -> Iterator[MDAEvent]:
