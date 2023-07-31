@@ -5,15 +5,13 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+from pymmcore_plus.mda.events import MDASignaler
 from useq import AxesBasedAF, MDAEvent, MDASequence
 
-from pymmcore_plus.mda.events import MDASignaler
-
 if TYPE_CHECKING:
-    from pytestqt.qtbot import QtBot
-
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
+    from pytestqt.qtbot import QtBot
 
 
 def test_mda_waiting(core: CMMCorePlus):
