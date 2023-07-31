@@ -45,6 +45,11 @@ class MDAEngine(FullPMDAEngine):
         # map of {position_index: z_correction}
         self._z_correction: dict[int | None, float] = {}
 
+        # This is used to determine whether we need to re-enable autoshutter after
+        # the sequence is done (assuming a event.keep_shutter_open was requested)
+        # Note: getAutoShutter() is True when no config is loaded at all
+        self._autoshutter_was_set: bool = self._mmc.getAutoShutter()
+
     @property
     def mmcore(self) -> CMMCorePlus:
         """The `CMMCorePlus` instance to use for hardware control."""
@@ -208,7 +213,8 @@ class MDAEngine(FullPMDAEngine):
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
-        # if keep_shutter_open wasn't requested, close the shutter
+        # autoshutter was set at the beginning of the sequence, and this event
+        # doesn't want to leave the shutter open.  Re-enable autoshutter.
         if not event.keep_shutter_open and self._autoshutter_was_set:
             self._mmc.setAutoShutter(True)
 
