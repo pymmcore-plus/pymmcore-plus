@@ -9,7 +9,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._sequencing import SequencedEvent
 
-from ._protocol import PMDAEngine
+from ._protocol import FullPMDAEngine
 
 if TYPE_CHECKING:
     import numpy as np
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pymmcore_plus.core import CMMCorePlus
 
 
-class MDAEngine(PMDAEngine):
+class MDAEngine(FullPMDAEngine):
     """The default MDAengine that ships with pymmcore-plus.
 
     This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
@@ -45,6 +45,11 @@ class MDAEngine(PMDAEngine):
         # map of {position_index: z_correction}
         self._z_correction: dict[int | None, float] = {}
 
+        # This is used to determine whether we need to re-enable autoshutter after
+        # the sequence is done (assuming a event.keep_shutter_open was requested)
+        # Note: getAutoShutter() is True when no config is loaded at all
+        self._autoshutter_was_set: bool = self._mmc.getAutoShutter()
+
     @property
     def mmcore(self) -> CMMCorePlus:
         """The `CMMCorePlus` instance to use for hardware control."""
@@ -65,6 +70,8 @@ class MDAEngine(PMDAEngine):
 
         if px_size := self._mmc.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
+
+        self._autoshutter_was_set = self._mmc.getAutoShutter()
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()
@@ -156,6 +163,9 @@ class MDAEngine(PMDAEngine):
         `setup_event`, which *is* part of the protocol), but it is made public
         in case a user wants to subclass this engine and override this method.
         """
+        if event.keep_shutter_open:
+            ...
+
         if event.x_pos is not None or event.y_pos is not None:
             self._set_event_position(event)
         if event.z_pos is not None:
@@ -172,6 +182,19 @@ class MDAEngine(PMDAEngine):
             except Exception as e:
                 logger.warning("Failed to set exposure. {}", e)
 
+        if (
+            # (if autoshutter wasn't set at the beginning of the sequence
+            # then it never matters...)
+            self._autoshutter_was_set
+            # if we want to leave the shutter open after this event, and autoshutter
+            # is currently enabled...
+            and event.keep_shutter_open
+            and self._mmc.getAutoShutter()
+        ):
+            # we have to disable autoshutter and open the shutter
+            self._mmc.setAutoShutter(False)
+            self._mmc.setShutterOpen(True)
+
     def exec_single_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute a single (non-triggered) event and return the image data.
 
@@ -184,7 +207,16 @@ class MDAEngine(PMDAEngine):
         except Exception as e:
             logger.warning("Failed to snap image. {}", e)
             return None
+        if not event.keep_shutter_open:
+            self._mmc.setShutterOpen(False)
         return EventPayload(image=self._mmc.getImage())
+
+    def teardown_event(self, event: MDAEvent) -> None:
+        """Teardown state of system (hardware, etc.) after `event`."""
+        # autoshutter was set at the beginning of the sequence, and this event
+        # doesn't want to leave the shutter open.  Re-enable autoshutter.
+        if not event.keep_shutter_open and self._autoshutter_was_set:
+            self._mmc.setAutoShutter(True)
 
     # ===================== Sequenced Events =====================
 
