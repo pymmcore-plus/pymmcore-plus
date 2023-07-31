@@ -6,11 +6,12 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from pymmcore_plus.mda.events import MDASignaler
-from useq import MDAEvent, MDASequence
+from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
+    from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
 
 
@@ -216,37 +217,32 @@ def test_mda_iterable_of_events(
     assert frame_mock.call_count == 2
 
 
-def test_mda_no_stages(
-    core: CMMCorePlus, qtbot: QtBot, caplog: pytest.LogCaptureFixture
-) -> None:
-    core.unloadDevice("XY")  # same as core.setProperty("Core", "XYStage", "")
-    core.unloadDevice("Z")  # same as core.setProperty("Core", "Focus", "")
-    assert not core.getXYStageDevice()
-    assert not core.getFocusDevice()
-
-    mda = MDASequence(stage_positions=[(10, 20, 30)])
-
-    event = next(iter(mda.iter_events()))
-    # without checking for available stage devicies, we get a RuntimeError. So if this
-    # test fails, it's because the check fails.
-    core.mda.engine.setup_event(event)
-
-    assert "No XY stage device found. Cannot set XY position" in caplog.text
-    assert "No Z stage device found. Cannot set Z position" in caplog.text
+DEVICE_ERRORS: dict[str, list[str]] = {
+    "XY": ["No XY stage device found. Cannot set XY position"],
+    "Z": ["No Z stage device found. Cannot set Z position"],
+    "Autofocus": ["No autofocus device found. Cannot execute autofocus"],
+    "Camera": [
+        "Failed to set exposure.",
+        "Failed to snap image. Camera not loaded or initialized",
+    ],
+    "Dichroic": ['No device with label "Dichroic"'],
+}
 
 
-def test_mda_no_autofocus(
-    core: CMMCorePlus, qtbot: QtBot, caplog: pytest.LogCaptureFixture
-) -> None:
-    core.unloadDevice("Autofocus")  # same as core.setProperty("Core", "AutoFocus", "")
-    assert not core.getAutoFocusDevice()
+@pytest.mark.parametrize("device", DEVICE_ERRORS)
+def test_mda_no_device(device: str, core: CMMCorePlus, caplog: LogCaptureFixture):
+    core.unloadDevice(device)
 
-    mda = MDASequence(stage_positions=[(10, 20, 30)], autofocus_plan=AFPlan)
+    if device == "Autofocus":
+        event = MDAEvent(
+            action=HardwareAutofocus(
+                autofocus_device_name="Z", autofocus_motor_offset=10
+            )
+        )
+    else:
+        event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
+    core.mda.engine.setup_event(event)  # type: ignore
+    core.mda.engine.exec_event(event)  # type: ignore
 
-    event = next(iter(mda.iter_events()))
-    core.mda.engine.setup_event(event)
-    # without checking for available autofocus devicies, we get a RuntimeError. So if
-    # this test fails, it's because the check fails.
-    core.mda.engine.exec_event(event)
-
-    assert "No autofocus device found. Cannot execute autofocus" in caplog.text
+    for e in DEVICE_ERRORS[device]:
+        assert e in caplog.text

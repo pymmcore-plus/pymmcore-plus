@@ -95,7 +95,7 @@ class MDAEngine(PMDAEngine):
     def exec_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute an individual event and return the image data."""
         action = getattr(event, "action", None)
-        if isinstance(action, HardwareAutofocus) and event.z_pos is not None:
+        if isinstance(action, HardwareAutofocus):
             # skip if no autofocus device is found
             if not self._mmc.getAutoFocusDevice():
                 logger.warning("No autofocus device found. Cannot execute autofocus.")
@@ -159,9 +159,15 @@ class MDAEngine(PMDAEngine):
             self._set_event_z(event)
 
         if event.channel is not None:
-            self._mmc.setConfig(event.channel.group, event.channel.config)
+            try:
+                self._mmc.setConfig(event.channel.group, event.channel.config)
+            except Exception as e:
+                logger.warning("Failed to set channel. {}", e)
         if event.exposure is not None:
-            self._mmc.setExposure(event.exposure)
+            try:
+                self._mmc.setExposure(event.exposure)
+            except Exception as e:
+                logger.warning("Failed to set exposure. {}", e)
 
     def exec_single_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute a single (non-triggered) event and return the image data.
@@ -170,7 +176,11 @@ class MDAEngine(PMDAEngine):
         `exec_event`, which *is* part of the protocol), but it is made public
         in case a user wants to subclass this engine and override this method.
         """
-        self._mmc.snapImage()
+        try:
+            self._mmc.snapImage()
+        except Exception as e:
+            logger.warning("Failed to snap image. {}", e)
+            return None
         return EventPayload(image=self._mmc.getImage())
 
     # ===================== Sequenced Events =====================
@@ -298,6 +308,7 @@ class MDAEngine(PMDAEngine):
         if not self._mmc.getXYStageDevice():
             logger.warning("No XY stage device found. Cannot set XY position.")
             return
+
         x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
         y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
         self._mmc.setXYPosition(x, y)
@@ -307,6 +318,7 @@ class MDAEngine(PMDAEngine):
         if not self._mmc.getFocusDevice():
             logger.warning("No Z stage device found. Cannot set Z position.")
             return
+
         p_idx = event.index.get("p", None)
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self._mmc.setZPosition(cast("float", event.z_pos) + correction)
