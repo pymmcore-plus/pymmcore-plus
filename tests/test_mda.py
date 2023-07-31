@@ -5,6 +5,7 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+import useq
 from pymmcore_plus.mda.events import MDASignaler
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
@@ -246,3 +247,51 @@ def test_mda_no_device(device: str, core: CMMCorePlus, caplog: LogCaptureFixture
 
     for e in DEVICE_ERRORS[device]:
         assert e in caplog.text
+
+
+def test_keep_shutter_open(core: CMMCorePlus) -> None:
+    # a 2-position sequence, where one position has a little time burst
+    # and the other doesn't.  There is a z plan but we're only keeing shutter across
+    # time.  The reason we use z is to do a little burst at each z, at one position
+    # but not the other one (because only one position has time_plan)
+    mda = MDASequence(
+        axis_order="zpt",
+        stage_positions=[
+            (0, 0),
+            useq.Position(
+                sequence=MDASequence(
+                    time_plan=useq.TIntervalLoops(interval=0.1, loops=3)
+                )
+            ),
+        ],
+        z_plan=useq.ZRangeAround(range=2, step=1),
+        keep_shutter_open_across="t",
+    )
+
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any, event: MDAEvent) -> None:
+        assert core.getShutterOpen() == event.keep_shutter_open
+        # autoshutter will always be on only at position 0 (no time plan)
+        assert core.getAutoShutter() == (event.index["p"] == 0)
+
+    core.setAutoShutter(True)
+    core.mda.run(mda)
+
+    # It should look like this:
+    # event,                                                   open, auto_shut
+    # index={'p': 0, 'z': 0},                                  False, True)
+    # index={'p': 1, 'z': 0, 't': 0}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 0, 't': 1}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 0, 't': 2},                          False, False)
+    # index={'p': 0, 'z': 1},                                  False, True)
+    # index={'p': 1, 'z': 1, 't': 0}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 1, 't': 1}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 1, 't': 2},                          False, False)
+    # index={'p': 0, 'z': 2},                                  False, True)
+    # index={'p': 1, 'z': 2, 't': 0}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 2, 't': 1}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 2, 't': 2},                          False, False)
+    # index={'p': 0, 'z': 3},                                  False, True)
+    # index={'p': 1, 'z': 3, 't': 0}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 3, 't': 1}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 3, 't': 2},                          False, False)
