@@ -5,13 +5,15 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
-from pymmcore_plus.mda.events import MDASignaler
 from useq import AxesBasedAF, MDAEvent, MDASequence
 
+from pymmcore_plus.mda.events import MDASignaler
+
 if TYPE_CHECKING:
+    from pytestqt.qtbot import QtBot
+
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
-    from pytestqt.qtbot import QtBot
 
 
 def test_mda_waiting(core: CMMCorePlus):
@@ -214,3 +216,34 @@ def test_mda_iterable_of_events(
 
     assert start_mock.call_count == 1
     assert frame_mock.call_count == 2
+
+
+def test_mda_no_stages(core: CMMCorePlus, qtbot: QtBot) -> None:
+    core.unloadDevice("XY")  # same as core.setProperty("Core", "XYStage", "")
+    core.unloadDevice("Z")  # same as core.setProperty("Core", "Focus", "")
+    assert not core.getXYStageDevice()
+    assert not core.getFocusDevice()
+
+    mda = MDASequence(stage_positions=[(10, 20, 30)])
+
+    event = next(iter(mda.iter_events()))
+    # without checking for available stage devicies, we get a RuntimeError. So if this
+    # test fails, it's because the check fails.
+    core.mda.engine.setup_event(event)
+
+    # TODO: assert message in logger
+
+
+def test_mda_no_autofocus(core: CMMCorePlus, qtbot: QtBot) -> None:
+    core.unloadDevice("Autofocus")  # same as core.setProperty("Core", "AutoFocus", "")
+    assert not core.getAutoFocusDevice()
+
+    mda = MDASequence(stage_positions=[(10, 20, 30)], autofocus_plan=AFPlan)
+
+    event = next(iter(mda.iter_events()))
+    core.mda.engine.setup_event(event)
+    # without checking for available autofocus devicies, we get a RuntimeError. So if
+    # this test fails, it's because the check fails.
+    core.mda.engine.exec_event(event)
+
+    # TODO: assert message in logger
