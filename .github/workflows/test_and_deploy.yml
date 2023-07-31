@@ -28,10 +28,10 @@ jobs:
         python-version: ["3.8", "3.9", "3.10", "3.11"]
         pydantic: [""]
         include:
-          - platform: ubuntu-latest
+          - platform: windows-latest
             python-version: "3.8"
             pydantic: "'pydantic<2'"
-          - platform: ubuntu-latest
+          - platform: windows-latest
             python-version: "3.11"
             pydantic: "'pydantic<2'"
 
