@@ -25,7 +25,10 @@ jobs:
         pydantic: [""]
         include:
           - platform: ubuntu-latest
-            python-version: ["3.8", "3.11"]
+            python-version: "3.8"
+            pydantic: ["pydantic<2"]
+          - platform: ubuntu-latest
+            python-version: "3.11"
             pydantic: ["pydantic<2"]
 
     steps:
