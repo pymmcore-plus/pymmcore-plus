@@ -53,7 +53,7 @@ class MDARunner:
 
     def __init__(self) -> None:
         self._engine: PMDAEngine | None = None
-        self._events = _get_auto_MDA_callback_class()()
+        self._signals = _get_auto_MDA_callback_class()()
         self._running = False
         self._paused = False
         self._paused_time: float = 0
@@ -90,7 +90,7 @@ class MDARunner:
         See [`PMDASignaler`][pymmcore_plus.mda.PMDASignaler] for details on the
         signals that are available to connect to.
         """
-        return self._events
+        return self._signals
 
     def is_running(self) -> bool:
         """Return True if an acquistion is currently underway.
@@ -139,7 +139,7 @@ class MDARunner:
         """
         if self.is_running():
             self._paused = not self._paused
-            self._events.sequencePauseToggled.emit(self._paused)
+            self._signals.sequencePauseToggled.emit(self._paused)
 
     def run(self, events: Iterable[MDAEvent]) -> None:
         """Run the multi-dimensional acquistion defined by `sequence`.
@@ -184,14 +184,14 @@ class MDARunner:
 
             if (img := getattr(output, "image", None)) is not None:
                 with contextlib.suppress(EmitLoopError):
-                    self._events.frameReady.emit(img, event)
+                    self._signals.frameReady.emit(img, event)
 
             # FIXME: this is here to make tests pass with sequenced events for now,
             # but we might not want to do this for sequences for performance reasons.s
             if (imgs := getattr(output, "image_sequence", None)) is not None:
                 with contextlib.suppress(EmitLoopError):
                     for img, sub_event in imgs:
-                        self._events.frameReady.emit(img, sub_event)
+                        self._signals.frameReady.emit(img, sub_event)
 
             teardown_event(event)
 
@@ -214,7 +214,7 @@ class MDARunner:
         self._engine.setup_sequence(sequence)
         logger.info("MDA Started: {}", sequence)
 
-        self._events.sequenceStarted.emit(sequence)
+        self._signals.sequenceStarted.emit(sequence)
         self._reset_timer()
         return self._engine
 
@@ -237,7 +237,7 @@ class MDARunner:
         """
         if self._canceled:
             logger.warning("MDA Canceled: {}", self._sequence)
-            self._events.sequenceCanceled.emit(self._sequence)
+            self._signals.sequenceCanceled.emit(self._sequence)
             self._canceled = False
             return True
         return False
@@ -305,4 +305,4 @@ class MDARunner:
             self._engine.teardown_sequence(sequence)  # type: ignore
 
         logger.info("MDA Finished: {}", sequence)
-        self._events.sequenceFinished.emit(sequence)
+        self._signals.sequenceFinished.emit(sequence)

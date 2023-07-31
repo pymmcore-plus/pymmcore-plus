@@ -132,14 +132,14 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     stage_mock = MagicMock()
     exp_mock = MagicMock()
 
-    core.mda._events.frameReady.connect(fr_mock)
-    core.mda._events.sequenceStarted.connect(ss_mock)
-    core.mda._events.sequenceFinished.connect(sf_mock)
+    core.mda._signals.frameReady.connect(fr_mock)
+    core.mda._signals.sequenceStarted.connect(ss_mock)
+    core.mda._signals.sequenceFinished.connect(sf_mock)
     core.events.XYStagePositionChanged.connect(xystage_mock)
     core.events.stagePositionChanged.connect(stage_mock)
     core.events.exposureChanged.connect(exp_mock)
 
-    with qtbot.waitSignal(core.mda._events.sequenceFinished):
+    with qtbot.waitSignal(core.mda._signals.sequenceFinished):
         core.run_mda(mda)
     assert fr_mock.call_count == len(list(mda))
     for event, _call in zip(mda, fr_mock.call_args_list):
@@ -178,14 +178,14 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
     sf_mock = MagicMock()
     ss_mock = MagicMock()
 
-    core.mda._events.sequenceStarted.connect(ss_mock)
-    core.mda._events.sequencePauseToggled.connect(pause_mock)
-    core.mda._events.sequenceCanceled.connect(cancel_mock)
-    core.mda._events.sequenceFinished.connect(sf_mock)
+    core.mda._signals.sequenceStarted.connect(ss_mock)
+    core.mda._signals.sequencePauseToggled.connect(pause_mock)
+    core.mda._signals.sequenceCanceled.connect(cancel_mock)
+    core.mda._signals.sequenceFinished.connect(sf_mock)
 
     _fcount = 0
 
-    @core.mda._events.frameReady.connect
+    @core.mda._signals.frameReady.connect
     def _onframe(frame, event):
         nonlocal _fcount
         _fcount += 1
@@ -197,7 +197,7 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
         elif _fcount == 2:
             core.mda.cancel()
 
-    with qtbot.waitSignal(core.mda._events.sequenceFinished):
+    with qtbot.waitSignal(core.mda._signals.sequenceFinished):
         core.run_mda(mda)
 
     ss_mock.assert_called_once_with(mda)
@@ -448,7 +448,7 @@ def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
     assert got_lock
     got_lock = False
 
-    core.mda._events.frameReady.connect(cb)
+    core.mda._signals.frameReady.connect(cb)
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
         stage_positions=[(1, 1, 1)],
@@ -456,7 +456,7 @@ def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
         channels=[{"config": "DAPI", "exposure": 1}],
     )
 
-    with qtbot.waitSignal(core.mda._events.sequenceFinished):
+    with qtbot.waitSignal(core.mda._signals.sequenceFinished):
         core.run_mda(mda)
     assert got_lock
 

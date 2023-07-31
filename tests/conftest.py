@@ -18,10 +18,10 @@ def core(request):
     core = pymmcore_plus.CMMCorePlus()
     if request.param == "psygnal":
         core._events = CMMCoreSignaler()
-        core.mda._events = MDASignaler()
+        core.mda._signals = MDASignaler()
     else:
         core._events = QCoreSignaler()
-        core.mda._events = QMDASignaler()
+        core.mda._signals = QMDASignaler()
     core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(core.events)
     core.registerCallback(core._callback_relay)
     if not core.getDeviceAdapterSearchPaths():
