@@ -16,22 +16,22 @@ from .events import PMDASignaler, _get_auto_MDA_callback_class
 if TYPE_CHECKING:
     from useq import MDAEvent
 
+MSG = (
+    "This sequence is a placeholder for a generator of events with unknown "
+    "length & shape. Iterating over it has no effect."
+)
+
 
 class GeneratorMDASequence(MDASequence):
-    MSG = (
-        "This sequence is a placeholder for a generator of events with unknown "
-        "length & shape. Iterating over it has no effect."
-    )
-
     axis_order: str = ""
 
     @property
     def sizes(self) -> dict[str, int]:
-        warnings.warn(self.MSG, stacklevel=2)
+        warnings.warn(MSG, stacklevel=2)
         return {}
 
     def iter_axis(self, axis: str) -> Iterator:
-        warnings.warn(self.MSG, stacklevel=2)
+        warnings.warn(MSG, stacklevel=2)
         yield from []
 
     def __str__(self) -> str:

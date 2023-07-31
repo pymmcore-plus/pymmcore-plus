@@ -224,21 +224,19 @@ def run(
         ("absolute", z_absolute),
     )
     if z_plan := {k: v for k, v in _zmap if v not in (None, [])}:
-        field = MDASequence.__fields__["z_plan"]
-        if field.validate(z_plan, {}, loc="")[0]:
+        try:
             # the field is valid on its own. overwrite:
-            mda["z_plan"] = z_plan
-        else:
+            mda["z_plan"] = MDASequence(z_plan=z_plan).z_plan
+        except Exception:
             # the field is not valid on its own. update existing:
             mda.setdefault("z_plan", {}).update(z_plan)
 
     _tmap = (("interval", t_interval), ("duration", t_duration), ("loops", t_loops))
     if time_plan := {k: v for k, v in _tmap if v is not None}:
-        field = MDASequence.__fields__["time_plan"]
-        if field.validate(time_plan, {}, loc="")[0]:
+        try:
             # the field is valid on its own. overwrite:
-            mda["time_plan"] = time_plan
-        else:
+            mda["time_plan"] = MDASequence(time_plan=time_plan).time_plan
+        except Exception:
             # the field is not valid on its own. update existing:
             mda.setdefault("time_plan", {}).update(time_plan)
 

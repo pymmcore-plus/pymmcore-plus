@@ -3,7 +3,6 @@ from __future__ import annotations
 from itertools import product
 from typing import TYPE_CHECKING, Literal, Sequence, Tuple, overload
 
-from pydantic import root_validator
 from useq import MDAEvent
 
 from pymmcore_plus.core._constants import DeviceType
@@ -72,24 +71,25 @@ class SequencedEvent(MDAEvent):
             # the only problem might occur if some are None and some are not
             data[attr].append(getattr(event, attr))
 
+        x_seq = data["x_pos"] if len(set(data["x_pos"])) > 1 else ()
+        y_seq = data["y_pos"] if len(set(data["y_pos"])) > 1 else ()
+        if len(x_seq) != len(y_seq):
+            raise ValueError(
+                "X and Y sequences must be the same length: "
+                f"{len(x_seq)=}, {len(y_seq)=}"
+            )
+
         return cls(
             events=_events,
             exposure_sequence=(
                 data["exposure"] if len(set(data["exposure"])) > 1 else ()
             ),
-            x_sequence=data["x_pos"] if len(set(data["x_pos"])) > 1 else (),
-            y_sequence=data["y_pos"] if len(set(data["y_pos"])) > 1 else (),
+            x_sequence=x_seq,
+            y_sequence=y_seq,
             z_sequence=data["z_pos"] if len(set(data["z_pos"])) > 1 else (),
             # use the first event to provide all other values like min_start_time, etc.
             **_events[0].dict(),
         )
-
-    @root_validator()
-    @classmethod
-    def _validate_root(cls, value: dict) -> dict:
-        if len(value.get("x_sequence", ())) != len(value.get("y_sequence", ())):
-            raise ValueError("x_sequence and y_sequence must be the same length")
-        return value
 
 
 def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str], int]:
