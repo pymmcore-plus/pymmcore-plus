@@ -26,11 +26,11 @@ class GeneratorMDASequence(MDASequence):
     axis_order: str = ""
 
     @property
-    def sizes(self) -> dict[str, int]:
+    def sizes(self) -> dict[str, int]:  # pragma: no cover
         warnings.warn(MSG, stacklevel=2)
         return {}
 
-    def iter_axis(self, axis: str) -> Iterator:
+    def iter_axis(self, axis: str) -> Iterator:  # pragma: no cover
         warnings.warn(MSG, stacklevel=2)
         yield from []
 

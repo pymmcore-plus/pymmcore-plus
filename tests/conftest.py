@@ -42,7 +42,6 @@ def caplog(caplog: LogCaptureFixture):
 @pytest.fixture
 def mock_fullfocus(core: pymmcore_plus.CMMCorePlus):
     def _fullfocus():
-        print(">>>>>>>>>>>>>>>>>>>>>>>>")
         core.setZPosition(core.getZPosition() + 50)
 
     with patch.object(core, "fullFocus", _fullfocus):

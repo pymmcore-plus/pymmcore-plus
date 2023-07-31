@@ -73,7 +73,7 @@ class SequencedEvent(MDAEvent):
 
         x_seq = data["x_pos"] if len(set(data["x_pos"])) > 1 else ()
         y_seq = data["y_pos"] if len(set(data["y_pos"])) > 1 else ()
-        if len(x_seq) != len(y_seq):
+        if len(x_seq) != len(y_seq):  # pragma: no cover
             raise ValueError(
                 "X and Y sequences must be the same length: "
                 f"{len(x_seq)=}, {len(y_seq)=}"
