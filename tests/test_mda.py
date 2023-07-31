@@ -216,7 +216,9 @@ def test_mda_iterable_of_events(
     assert frame_mock.call_count == 2
 
 
-def test_mda_no_stages(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_mda_no_stages(
+    core: CMMCorePlus, qtbot: QtBot, caplog: pytest.LogCaptureFixture
+) -> None:
     core.unloadDevice("XY")  # same as core.setProperty("Core", "XYStage", "")
     core.unloadDevice("Z")  # same as core.setProperty("Core", "Focus", "")
     assert not core.getXYStageDevice()
@@ -229,10 +231,13 @@ def test_mda_no_stages(core: CMMCorePlus, qtbot: QtBot) -> None:
     # test fails, it's because the check fails.
     core.mda.engine.setup_event(event)
 
-    # TODO: assert message in logger
+    assert "No XY stage device found. Cannot set XY position" in caplog.text
+    assert "No Z stage device found. Cannot set Z position" in caplog.text
 
 
-def test_mda_no_autofocus(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_mda_no_autofocus(
+    core: CMMCorePlus, qtbot: QtBot, caplog: pytest.LogCaptureFixture
+) -> None:
     core.unloadDevice("Autofocus")  # same as core.setProperty("Core", "AutoFocus", "")
     assert not core.getAutoFocusDevice()
 
@@ -244,4 +249,4 @@ def test_mda_no_autofocus(core: CMMCorePlus, qtbot: QtBot) -> None:
     # this test fails, it's because the check fails.
     core.mda.engine.exec_event(event)
 
-    # TODO: assert message in logger
+    assert "No autofocus device found. Cannot execute autofocus" in caplog.text
