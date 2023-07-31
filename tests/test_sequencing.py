@@ -61,6 +61,7 @@ def test_sequenced_mda_with_zero_values() -> None:
     mda = useq.MDASequence(z_plan=useq.ZRangeAround(range=3.0, step=0.5))
     core = CMMCorePlus()
     core.loadSystemConfiguration()
+    core.mda.engine.use_hardware_sequencing = True
     core.mda.run(mda)
 
 
@@ -88,7 +89,7 @@ def test_fully_sequenceable_core():
     core_mock.getFocusDevice.return_value = FOCUS
     core_mock.getPixelSizeUm.return_value = None
 
-    engine = MDAEngine(mmc=core_mock)
+    engine = MDAEngine(mmc=core_mock, use_hardware_sequencing=True)
 
     combined_events = list(engine.event_iterator(mda))
     assert len(combined_events) == 1
@@ -117,4 +118,5 @@ def test_sequenced_circular_buffer(core: CMMCorePlus):
         channels=["DAPI"],
         time_plan=useq.TIntervalLoops(interval=0, loops=max_imgs * 2),
     )
+    core.mda.engine.use_hardware_sequencing = True
     core.mda.run(mda)

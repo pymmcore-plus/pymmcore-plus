@@ -16,6 +16,8 @@ from .events import PMDASignaler, _get_auto_MDA_callback_class
 if TYPE_CHECKING:
     from useq import MDAEvent
 
+    from ._engine import MDAEngine
+
 MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
     "length & shape. Iterating over it has no effect."
@@ -78,10 +80,14 @@ class MDARunner:
         old_engine, self._engine = self._engine, engine
         return old_engine
 
+    # NOTE:
+    # this return annotation is a lie, since the user can set it to their own engine.
+    # but in MOST cases, this is the engine that will be used by default, so it's
+    # convenient for IDEs to point to this rather than the abstract protocol.
     @property
-    def engine(self) -> PMDAEngine | None:
+    def engine(self) -> MDAEngine | None:
         """The [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] that is currently being used."""  # noqa: E501
-        return self._engine
+        return self._engine  # type: ignore
 
     @property
     def events(self) -> PMDASignaler:
