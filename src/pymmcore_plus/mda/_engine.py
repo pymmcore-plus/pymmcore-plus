@@ -92,6 +92,11 @@ class MDAEngine(PMDAEngine):
         """Execute an individual event and return the image data."""
         action = getattr(event, "action", None)
         if isinstance(action, HardwareAutofocus) and event.z_pos is not None:
+            # skip if no autofocus device is found
+            if not self._mmc.getAutoFocusDevice():
+                logger.warning("No autofocus device found. Cannot execute autofocus.")
+                return None
+
             try:
                 # execute hardware autofocus
                 new_correction = self._execute_autofocus(action)
@@ -285,11 +290,19 @@ class MDAEngine(PMDAEngine):
         return _perform_full_focus(self._mmc.getZPosition())
 
     def _set_event_position(self, event: MDAEvent) -> None:
+        # skip if no XY stage device is found
+        if not self._mmc.getXYStageDevice():
+            logger.warning("No XY stage device found. Cannot set XY position.")
+            return
         x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
         y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
         self._mmc.setXYPosition(x, y)
 
     def _set_event_z(self, event: MDAEvent) -> None:
+        # skip if no Z stage device is found
+        if not self._mmc.getFocusDevice():
+            logger.warning("No Z stage device found. Cannot set Z position.")
+            return
         p_idx = event.index.get("p", None)
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self._mmc.setZPosition(cast("float", event.z_pos) + correction)
