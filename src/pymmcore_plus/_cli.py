@@ -207,7 +207,7 @@ def run(
     from useq import MDASequence
 
     # load from file if provided...
-    mda = {} if useq is None else MDASequence.parse_file(useq).dict()
+    mda = {} if useq is None else MDASequence.from_file(useq).dict()
 
     # Any command line arguments take precedence over useq file
     # note that useq-schema itself will handle any conflicts between z plans
