@@ -60,19 +60,23 @@ class MDAEngine(PMDAEngine):
 
             self._mmc = CMMCorePlus.instance()
 
-        # set sequence fov size for grid plans
-        if hasattr(sequence, "set_fov_size"):
-            if px := self._mmc.getPixelSizeUm():
-                _, _, width, height = self._mmc.getROI()
+        if px_size := self._mmc.getPixelSizeUm():
+            self._update_grid_fov_sizes(px_size, sequence)
 
-                # set fov to main sequence
-                sequence.set_fov_size((width * px, height * px))
+    def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
+        *_, x_size, y_size = self._mmc.getROI()
+        fov_width = x_size * px_size
+        fov_height = y_size * px_size
 
-                # set fov to any stage positions sequences
-                if sequence.stage_positions is not None:
-                    for p in sequence.stage_positions:
-                        if p.sequence is not None:
-                            p.sequence.set_fov_size((width * px, height * px))
+        if sequence.grid_plan:
+            sequence.grid_plan.fov_width = fov_width
+            sequence.grid_plan.fov_height = fov_height
+
+        # set fov to any stage positions sequences
+        for p in sequence.stage_positions:
+            if p.sequence and p.sequence.grid_plan:
+                p.sequence.grid_plan.fov_height = fov_height
+                p.sequence.grid_plan.fov_width = fov_width
 
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.

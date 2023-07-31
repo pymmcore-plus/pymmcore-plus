@@ -6,7 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from pymmcore_plus.mda.events import MDASignaler
-from useq import AxesBasedAF, MDAEvent, MDASequence
+from useq import MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
@@ -99,13 +99,16 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
         assert not core.mda._canceled
 
 
-AFPlan = AxesBasedAF(autofocus_device_name="Z", autofocus_motor_offset=25, axes=("p",))
+# using a dict here instead of a useq.AxesBasedAF to force MDASequence to
+# create a new instance.  This is because the AFPlan remembers the last axis
+# it saw.  (it's kind of a bug that should be fixed in useq)
+AFPlan = {"autofocus_device_name": "Z", "autofocus_motor_offset": 25, "axes": ("p",)}
 
 
-def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
-    mda = MDASequence(stage_positions=[{"z": 50}], autofocus_plan=AFPlan)
+def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus) -> None:
+    mda = MDASequence(stage_positions=[{"z": 0}], autofocus_plan=AFPlan)
     with qtbot.waitSignal(core.mda.events.sequenceFinished):
-        core.run_mda(mda)
+        core.mda.run(mda)
 
     engine = cast("MDAEngine", core.mda._engine)
     # the 50 here is because mock_full_focus shifts the z position by 50
@@ -162,20 +165,23 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
 def test_set_mda_fov(core: CMMCorePlus, qtbot: QtBot):
     """Test that the fov size is updated."""
     mda = MDASequence(
-        channels=[
-            {"config": "FITC", "exposure": 3},
-        ],
-        stage_positions=(
-            {"sequence": {"grid_plan": {"rows": 2, "columns": 1}}},
-            {"sequence": {"grid_plan": {"rows": 1, "columns": 1}}},
-        ),
+        channels=["FITC"],
+        stage_positions=({"sequence": {"grid_plan": {"rows": 1, "columns": 1}}},),
+        grid_plan={"rows": 1, "columns": 1},
     )
 
-    core.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
+    global_grid = mda.grid_plan
+    sub_grid = mda.stage_positions[0].sequence.grid_plan  # type: ignore
+    assert global_grid and sub_grid
 
-    mock_mda = cast(MDASequence, MagicMock(wraps=mda))
-    core.mda.engine.setup_sequence(mock_mda)
-    mock_mda.set_fov_size.assert_called_once_with((256, 256))
+    assert global_grid.fov_width == global_grid.fov_height is None
+    assert sub_grid.fov_width == sub_grid.fov_height is None
+
+    core.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
+    core.mda.engine.setup_sequence(mda)  # type: ignore
+
+    assert global_grid.fov_width == global_grid.fov_height == 256
+    assert sub_grid.fov_width == sub_grid.fov_height == 256
 
 
 def event_generator() -> Iterator[MDAEvent]:
