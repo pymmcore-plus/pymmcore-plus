@@ -163,18 +163,22 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
         cmd.append(str(useq_file))
 
         for field_name, val in args.items():
-            field = MDASequence.__fields__[field_name]
+            try:
+                valid_field = getattr(MDASequence(**{field_name: val}), field_name)
+            except TypeError:
+                valid_field = None
             # when the args are a complete field on their own
             # it will replace the whole field
-            if isinstance(val, str) or field.validate(val, {}, loc="")[0]:
+            if isinstance(val, str) or valid_field:
                 seq = seq.replace(**{field_name: val})
             # otherwise it updates the existing
             else:
-                sub_field = cast(dict, seq.dict()[field_name])
+                _data = seq.model_dump() if hasattr(seq, "model_dump") else seq.dict()
+                sub_field = cast(dict, _data[field_name])
                 sub_field.update(**val)
-                newval = field.validate(sub_field, {}, loc="")[0]
+                newval = getattr(MDASequence(**{field_name: sub_field}), field_name)
                 seq = seq.replace(**{field_name: newval})
-        expected = seq.copy()
+        expected = seq.model_copy() if hasattr(seq, "model_copy") else seq.copy()
     else:
         expected = MDASequence(**args)
 
