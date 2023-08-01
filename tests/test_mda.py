@@ -5,12 +5,14 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
+import useq
 from pymmcore_plus.mda.events import MDASignaler
-from useq import AxesBasedAF, MDAEvent, MDASequence
+from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
+    from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
 
 
@@ -99,13 +101,16 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
         assert not core.mda._canceled
 
 
-AFPlan = AxesBasedAF(autofocus_device_name="Z", autofocus_motor_offset=25, axes=("p",))
+# using a dict here instead of a useq.AxesBasedAF to force MDASequence to
+# create a new instance.  This is because the AFPlan remembers the last axis
+# it saw.  (it's kind of a bug that should be fixed in useq)
+AFPlan = {"autofocus_device_name": "Z", "autofocus_motor_offset": 25, "axes": ("p",)}
 
 
-def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus):
-    mda = MDASequence(stage_positions=[{"z": 50}], autofocus_plan=AFPlan)
+def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus) -> None:
+    mda = MDASequence(stage_positions=[{"z": 0}], autofocus_plan=AFPlan)
     with qtbot.waitSignal(core.mda.events.sequenceFinished):
-        core.run_mda(mda)
+        core.mda.run(mda)
 
     engine = cast("MDAEngine", core.mda._engine)
     # the 50 here is because mock_full_focus shifts the z position by 50
@@ -162,26 +167,23 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
 def test_set_mda_fov(core: CMMCorePlus, qtbot: QtBot):
     """Test that the fov size is updated."""
     mda = MDASequence(
-        channels=[
-            {"config": "FITC", "exposure": 3},
-        ],
-        stage_positions=(
-            {"sequence": {"grid_plan": {"rows": 2, "columns": 1}}},
-            {"sequence": {"grid_plan": {"rows": 1, "columns": 1}}},
-        ),
+        channels=["FITC"],
+        stage_positions=({"sequence": {"grid_plan": {"rows": 1, "columns": 1}}},),
+        grid_plan={"rows": 1, "columns": 1},
     )
 
+    global_grid = mda.grid_plan
+    sub_grid = mda.stage_positions[0].sequence.grid_plan  # type: ignore
+    assert global_grid and sub_grid
+
+    assert global_grid.fov_width == global_grid.fov_height is None
+    assert sub_grid.fov_width == sub_grid.fov_height is None
+
     core.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
+    core.mda.engine.setup_sequence(mda)  # type: ignore
 
-    assert mda._fov_size == (1, 1)
-    assert mda.stage_positions[0].sequence._fov_size == (1, 1)
-    assert mda.stage_positions[1].sequence._fov_size == (1, 1)
-
-    core.mda.engine.setup_sequence(mda)
-
-    assert mda._fov_size == (256, 256)
-    assert mda.stage_positions[0].sequence._fov_size == (256, 256)
-    assert mda.stage_positions[1].sequence._fov_size == (256, 256)
+    assert global_grid.fov_width == global_grid.fov_height == 256
+    assert sub_grid.fov_width == sub_grid.fov_height == 256
 
 
 def event_generator() -> Iterator[MDAEvent]:
@@ -214,3 +216,82 @@ def test_mda_iterable_of_events(
 
     assert start_mock.call_count == 1
     assert frame_mock.call_count == 2
+
+
+DEVICE_ERRORS: dict[str, list[str]] = {
+    "XY": ["No XY stage device found. Cannot set XY position"],
+    "Z": ["No Z stage device found. Cannot set Z position"],
+    "Autofocus": ["No autofocus device found. Cannot execute autofocus"],
+    "Camera": [
+        "Failed to set exposure.",
+        "Failed to snap image. Camera not loaded or initialized",
+    ],
+    "Dichroic": ['No device with label "Dichroic"'],
+}
+
+
+@pytest.mark.parametrize("device", DEVICE_ERRORS)
+def test_mda_no_device(device: str, core: CMMCorePlus, caplog: LogCaptureFixture):
+    core.unloadDevice(device)
+
+    if device == "Autofocus":
+        event = MDAEvent(
+            action=HardwareAutofocus(
+                autofocus_device_name="Z", autofocus_motor_offset=10
+            )
+        )
+    else:
+        event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
+    core.mda.engine.setup_event(event)  # type: ignore
+    core.mda.engine.exec_event(event)  # type: ignore
+
+    for e in DEVICE_ERRORS[device]:
+        assert e in caplog.text
+
+
+def test_keep_shutter_open(core: CMMCorePlus) -> None:
+    # a 2-position sequence, where one position has a little time burst
+    # and the other doesn't.  There is a z plan but we're only keeing shutter across
+    # time.  The reason we use z is to do a little burst at each z, at one position
+    # but not the other one (because only one position has time_plan)
+    mda = MDASequence(
+        axis_order="zpt",
+        stage_positions=[
+            (0, 0),
+            useq.Position(
+                sequence=MDASequence(
+                    time_plan=useq.TIntervalLoops(interval=0.1, loops=3)
+                )
+            ),
+        ],
+        z_plan=useq.ZRangeAround(range=2, step=1),
+        keep_shutter_open_across="t",
+    )
+
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any, event: MDAEvent) -> None:
+        assert core.getShutterOpen() == event.keep_shutter_open
+        # autoshutter will always be on only at position 0 (no time plan)
+        assert core.getAutoShutter() == (event.index["p"] == 0)
+
+    core.setAutoShutter(True)
+    core.mda.run(mda)
+
+    # It should look like this:
+    # event,                                                   open, auto_shut
+    # index={'p': 0, 'z': 0},                                  False, True)
+    # index={'p': 1, 'z': 0, 't': 0}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 0, 't': 1}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 0, 't': 2},                          False, False)
+    # index={'p': 0, 'z': 1},                                  False, True)
+    # index={'p': 1, 'z': 1, 't': 0}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 1, 't': 1}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 1, 't': 2},                          False, False)
+    # index={'p': 0, 'z': 2},                                  False, True)
+    # index={'p': 1, 'z': 2, 't': 0}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 2, 't': 1}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 2, 't': 2},                          False, False)
+    # index={'p': 0, 'z': 3},                                  False, True)
+    # index={'p': 1, 'z': 3, 't': 0}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 3, 't': 1}, keep_shutter_open=True), True, False)
+    # index={'p': 1, 'z': 3, 't': 2},                          False, False)

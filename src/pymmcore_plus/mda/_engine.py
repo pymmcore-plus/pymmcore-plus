@@ -9,7 +9,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._sequencing import SequencedEvent
 
-from ._protocol import PMDAEngine
+from ._protocol import FullPMDAEngine
 
 if TYPE_CHECKING:
     import numpy as np
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pymmcore_plus.core import CMMCorePlus
 
 
-class MDAEngine(PMDAEngine):
+class MDAEngine(FullPMDAEngine):
     """The default MDAengine that ships with pymmcore-plus.
 
     This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
@@ -32,15 +32,23 @@ class MDAEngine(PMDAEngine):
         attempt to combine MDAEvents into a single `SequencedEvent` if
         [`core.canSequenceEvents()`][pymmcore_plus.CMMCorePlus.canSequenceEvents]
         reports that the events can be sequenced. This can be set after instantiation.
+        By default, this is `False`, in order to avoid unexpected behavior, particularly
+        in testing and demo scenarios.  But in many "real world" scenarios, this can be
+        set to `True` to improve performance.
     """
 
-    def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = True) -> None:
+    def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = False) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
 
         # used for one_shot autofocus to store the z correction for each position index.
         # map of {position_index: z_correction}
         self._z_correction: dict[int | None, float] = {}
+
+        # This is used to determine whether we need to re-enable autoshutter after
+        # the sequence is done (assuming a event.keep_shutter_open was requested)
+        # Note: getAutoShutter() is True when no config is loaded at all
+        self._autoshutter_was_set: bool = self._mmc.getAutoShutter()
 
     @property
     def mmcore(self) -> CMMCorePlus:
@@ -60,19 +68,25 @@ class MDAEngine(PMDAEngine):
 
             self._mmc = CMMCorePlus.instance()
 
-        # set sequence fov size for grid plans
-        if hasattr(sequence, "set_fov_size"):
-            if px := self._mmc.getPixelSizeUm():
-                _, _, width, height = self._mmc.getROI()
+        if px_size := self._mmc.getPixelSizeUm():
+            self._update_grid_fov_sizes(px_size, sequence)
 
-                # set fov to main sequence
-                sequence.set_fov_size((width * px, height * px))
+        self._autoshutter_was_set = self._mmc.getAutoShutter()
 
-                # set fov to any stage positions sequences
-                if sequence.stage_positions is not None:
-                    for p in sequence.stage_positions:
-                        if p.sequence is not None:
-                            p.sequence.set_fov_size((width * px, height * px))
+    def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
+        *_, x_size, y_size = self._mmc.getROI()
+        fov_width = x_size * px_size
+        fov_height = y_size * px_size
+
+        if sequence.grid_plan:
+            sequence.grid_plan.fov_width = fov_width
+            sequence.grid_plan.fov_height = fov_height
+
+        # set fov to any stage positions sequences
+        for p in sequence.stage_positions:
+            if p.sequence and p.sequence.grid_plan:
+                p.sequence.grid_plan.fov_height = fov_height
+                p.sequence.grid_plan.fov_width = fov_width
 
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
@@ -91,7 +105,12 @@ class MDAEngine(PMDAEngine):
     def exec_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute an individual event and return the image data."""
         action = getattr(event, "action", None)
-        if isinstance(action, HardwareAutofocus) and event.z_pos is not None:
+        if isinstance(action, HardwareAutofocus):
+            # skip if no autofocus device is found
+            if not self._mmc.getAutoFocusDevice():
+                logger.warning("No autofocus device found. Cannot execute autofocus.")
+                return None
+
             try:
                 # execute hardware autofocus
                 new_correction = self._execute_autofocus(action)
@@ -144,15 +163,37 @@ class MDAEngine(PMDAEngine):
         `setup_event`, which *is* part of the protocol), but it is made public
         in case a user wants to subclass this engine and override this method.
         """
+        if event.keep_shutter_open:
+            ...
+
         if event.x_pos is not None or event.y_pos is not None:
             self._set_event_position(event)
         if event.z_pos is not None:
             self._set_event_z(event)
 
         if event.channel is not None:
-            self._mmc.setConfig(event.channel.group, event.channel.config)
+            try:
+                self._mmc.setConfig(event.channel.group, event.channel.config)
+            except Exception as e:
+                logger.warning("Failed to set channel. {}", e)
         if event.exposure is not None:
-            self._mmc.setExposure(event.exposure)
+            try:
+                self._mmc.setExposure(event.exposure)
+            except Exception as e:
+                logger.warning("Failed to set exposure. {}", e)
+
+        if (
+            # (if autoshutter wasn't set at the beginning of the sequence
+            # then it never matters...)
+            self._autoshutter_was_set
+            # if we want to leave the shutter open after this event, and autoshutter
+            # is currently enabled...
+            and event.keep_shutter_open
+            and self._mmc.getAutoShutter()
+        ):
+            # we have to disable autoshutter and open the shutter
+            self._mmc.setAutoShutter(False)
+            self._mmc.setShutterOpen(True)
 
     def exec_single_event(self, event: MDAEvent) -> EventPayload | None:
         """Execute a single (non-triggered) event and return the image data.
@@ -161,8 +202,21 @@ class MDAEngine(PMDAEngine):
         `exec_event`, which *is* part of the protocol), but it is made public
         in case a user wants to subclass this engine and override this method.
         """
-        self._mmc.snapImage()
+        try:
+            self._mmc.snapImage()
+        except Exception as e:
+            logger.warning("Failed to snap image. {}", e)
+            return None
+        if not event.keep_shutter_open:
+            self._mmc.setShutterOpen(False)
         return EventPayload(image=self._mmc.getImage())
+
+    def teardown_event(self, event: MDAEvent) -> None:
+        """Teardown state of system (hardware, etc.) after `event`."""
+        # autoshutter was set at the beginning of the sequence, and this event
+        # doesn't want to leave the shutter open.  Re-enable autoshutter.
+        if not event.keep_shutter_open and self._autoshutter_was_set:
+            self._mmc.setAutoShutter(True)
 
     # ===================== Sequenced Events =====================
 
@@ -285,11 +339,21 @@ class MDAEngine(PMDAEngine):
         return _perform_full_focus(self._mmc.getZPosition())
 
     def _set_event_position(self, event: MDAEvent) -> None:
+        # skip if no XY stage device is found
+        if not self._mmc.getXYStageDevice():
+            logger.warning("No XY stage device found. Cannot set XY position.")
+            return
+
         x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
         y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
         self._mmc.setXYPosition(x, y)
 
     def _set_event_z(self, event: MDAEvent) -> None:
+        # skip if no Z stage device is found
+        if not self._mmc.getFocusDevice():
+            logger.warning("No Z stage device found. Cannot set Z position.")
+            return
+
         p_idx = event.index.get("p", None)
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self._mmc.setZPosition(cast("float", event.z_pos) + correction)

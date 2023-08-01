@@ -16,26 +16,28 @@ from .events import PMDASignaler, _get_auto_MDA_callback_class
 if TYPE_CHECKING:
     from useq import MDAEvent
 
+    from ._engine import MDAEngine
+
+MSG = (
+    "This sequence is a placeholder for a generator of events with unknown "
+    "length & shape. Iterating over it has no effect."
+)
+
 
 class GeneratorMDASequence(MDASequence):
-    MSG = (
-        "This sequence is a placeholder for a generator of events with unknown "
-        "length & shape. Iterating over it has no effect."
-    )
-
     axis_order: str = ""
 
     @property
-    def sizes(self) -> dict[str, int]:
-        warnings.warn(self.MSG, stacklevel=2)
+    def sizes(self) -> dict[str, int]:  # pragma: no cover
+        warnings.warn(MSG, stacklevel=2)
         return {}
 
-    def iter_axis(self, axis: str) -> Iterator:
-        warnings.warn(self.MSG, stacklevel=2)
+    def iter_axis(self, axis: str) -> Iterator:  # pragma: no cover
+        warnings.warn(MSG, stacklevel=2)
         yield from []
 
-    def __len__(self) -> int:
-        raise TypeError("GeneratorMDASequence has no len()")
+    def __str__(self) -> str:
+        return "GeneratorMDASequence()"
 
 
 class MDARunner:
@@ -53,7 +55,7 @@ class MDARunner:
 
     def __init__(self) -> None:
         self._engine: PMDAEngine | None = None
-        self._events = _get_auto_MDA_callback_class()()
+        self._signals = _get_auto_MDA_callback_class()()
         self._running = False
         self._paused = False
         self._paused_time: float = 0
@@ -78,10 +80,14 @@ class MDARunner:
         old_engine, self._engine = self._engine, engine
         return old_engine
 
+    # NOTE:
+    # this return annotation is a lie, since the user can set it to their own engine.
+    # but in MOST cases, this is the engine that will be used by default, so it's
+    # convenient for IDEs to point to this rather than the abstract protocol.
     @property
-    def engine(self) -> PMDAEngine | None:
+    def engine(self) -> MDAEngine | None:
         """The [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] that is currently being used."""  # noqa: E501
-        return self._engine
+        return self._engine  # type: ignore
 
     @property
     def events(self) -> PMDASignaler:
@@ -90,7 +96,7 @@ class MDARunner:
         See [`PMDASignaler`][pymmcore_plus.mda.PMDASignaler] for details on the
         signals that are available to connect to.
         """
-        return self._events
+        return self._signals
 
     def is_running(self) -> bool:
         """Return True if an acquistion is currently underway.
@@ -139,7 +145,7 @@ class MDARunner:
         """
         if self.is_running():
             self._paused = not self._paused
-            self._events.sequencePauseToggled.emit(self._paused)
+            self._signals.sequencePauseToggled.emit(self._paused)
 
     def run(self, events: Iterable[MDAEvent]) -> None:
         """Run the multi-dimensional acquistion defined by `sequence`.
@@ -184,14 +190,14 @@ class MDARunner:
 
             if (img := getattr(output, "image", None)) is not None:
                 with contextlib.suppress(EmitLoopError):
-                    self._events.frameReady.emit(img, event)
+                    self._signals.frameReady.emit(img, event)
 
             # FIXME: this is here to make tests pass with sequenced events for now,
             # but we might not want to do this for sequences for performance reasons.s
             if (imgs := getattr(output, "image_sequence", None)) is not None:
                 with contextlib.suppress(EmitLoopError):
                     for img, sub_event in imgs:
-                        self._events.frameReady.emit(img, sub_event)
+                        self._signals.frameReady.emit(img, sub_event)
 
             teardown_event(event)
 
@@ -214,7 +220,7 @@ class MDARunner:
         self._engine.setup_sequence(sequence)
         logger.info("MDA Started: {}", sequence)
 
-        self._events.sequenceStarted.emit(sequence)
+        self._signals.sequenceStarted.emit(sequence)
         self._reset_timer()
         return self._engine
 
@@ -237,7 +243,7 @@ class MDARunner:
         """
         if self._canceled:
             logger.warning("MDA Canceled: {}", self._sequence)
-            self._events.sequenceCanceled.emit(self._sequence)
+            self._signals.sequenceCanceled.emit(self._sequence)
             self._canceled = False
             return True
         return False
@@ -305,4 +311,4 @@ class MDARunner:
             self._engine.teardown_sequence(sequence)  # type: ignore
 
         logger.info("MDA Finished: {}", sequence)
-        self._events.sequenceFinished.emit(sequence)
+        self._signals.sequenceFinished.emit(sequence)

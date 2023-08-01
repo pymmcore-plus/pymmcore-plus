@@ -207,7 +207,11 @@ def run(
     from useq import MDASequence
 
     # load from file if provided...
-    mda = {} if useq is None else MDASequence.parse_file(useq).dict()
+    if useq is None:
+        mda = {}
+    else:
+        _mda = MDASequence.from_file(useq)
+        mda = _mda.model_dump() if hasattr(_mda, "model_dump") else _mda.dict()
 
     # Any command line arguments take precedence over useq file
     # note that useq-schema itself will handle any conflicts between z plans
@@ -224,21 +228,19 @@ def run(
         ("absolute", z_absolute),
     )
     if z_plan := {k: v for k, v in _zmap if v not in (None, [])}:
-        field = MDASequence.__fields__["z_plan"]
-        if field.validate(z_plan, {}, loc="")[0]:
+        try:
             # the field is valid on its own. overwrite:
-            mda["z_plan"] = z_plan
-        else:
+            mda["z_plan"] = MDASequence(z_plan=z_plan).z_plan
+        except Exception:
             # the field is not valid on its own. update existing:
             mda.setdefault("z_plan", {}).update(z_plan)
 
     _tmap = (("interval", t_interval), ("duration", t_duration), ("loops", t_loops))
     if time_plan := {k: v for k, v in _tmap if v is not None}:
-        field = MDASequence.__fields__["time_plan"]
-        if field.validate(time_plan, {}, loc="")[0]:
+        try:
             # the field is valid on its own. overwrite:
-            mda["time_plan"] = time_plan
-        else:
+            mda["time_plan"] = MDASequence(time_plan=time_plan).time_plan
+        except Exception:
             # the field is not valid on its own. update existing:
             mda.setdefault("time_plan", {}).update(time_plan)
 
@@ -265,7 +267,7 @@ def run(
 
     if dry_run:
         print(":eyes: [bold green]Would run\n")
-        print(_mda.dict())
+        print(_mda.model_dump() if hasattr(_mda, "model_dump") else _mda.dict())
         raise typer.Exit(0)
 
     core = pymmcore_plus.CMMCorePlus.instance()
