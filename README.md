@@ -79,6 +79,7 @@ Java in the loop.
 ### Install
 
 from pip
+
 ```sh
 pip install pymmcore-plus
 
@@ -94,16 +95,19 @@ conda install -c conda-forge pymmcore-plus
 ```
 
 dev version from github
+
 ```sh
 pip install 'pymmcore-plus[cli] @ git+https://github.com/pymmcore-plus/pymmcore-plus'
 ```
 
-Usually, you'll then want to install the device adapters (though
-you can also download these manually from [micro-manager.org](https://micro-manager.org/Micro-Manager_Nightly_Builds)):
+Usually, you'll then want to install the device adapters. Assuming you've
+installed with `pip install "pymmcore-plus[cli]"`, you can run:
 
 ```sh
 mmcore install
 ```
+
+(you can also download these manually from [micro-manager.org](https://micro-manager.org/Micro-Manager_Nightly_Builds))
 
 _See [installation documentation ](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details._
 

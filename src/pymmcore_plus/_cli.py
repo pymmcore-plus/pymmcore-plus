@@ -13,8 +13,8 @@ try:
     from rich import print
 except ImportError:  # pragma: no cover
     raise ImportError(
-        "please install with `pip install pymmcore-plus[cli]` to use the pymmcore-plus"
-        " command line interface."
+        'Please install with `pip install "pymmcore-plus[cli]"` to use the '
+        "pymmcore-plus command line interface."
     ) from None
 
 import pymmcore_plus
