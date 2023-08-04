@@ -8,8 +8,14 @@ from contextlib import suppress
 from pathlib import Path
 from typing import List, Optional, Union, cast
 
-import typer
-from rich import print
+try:
+    import typer
+    from rich import print
+except ImportError:  # pragma: no cover
+    raise ImportError(
+        "please install with `pip install pymmcore-plus[cli]` to use the pymmcore-plus"
+        " command line interface."
+    ) from None
 
 import pymmcore_plus
 from pymmcore_plus._logger import configure_logging

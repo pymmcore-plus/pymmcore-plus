@@ -11,9 +11,14 @@ from typing import TYPE_CHECKING, Any, Callable, cast
 from unittest.mock import patch
 
 import pytest
+
+try:
+    from pymmcore_plus._cli import app
+    from typer.testing import CliRunner
+except ImportError:
+    pytest.skip("cli extras not available", allow_module_level=True)
+
 from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, install
-from pymmcore_plus._cli import app
-from typer.testing import CliRunner
 from useq import MDASequence
 
 if TYPE_CHECKING:
