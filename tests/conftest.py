@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import patch
 
 import pymmcore_plus
@@ -8,9 +7,6 @@ import pytest
 from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler, QMDASignaler
-
-if TYPE_CHECKING:
-    from _pytest.logging import LogCaptureFixture
 
 
 @pytest.fixture(params=["QSignal", "psygnal"], scope="function")
@@ -31,15 +27,6 @@ def core(request):
 
 
 @pytest.fixture
-def caplog(caplog: LogCaptureFixture):
-    handler_id = logger.add(caplog.handler, format="{message}")
-    try:
-        yield caplog
-    finally:
-        logger.remove(handler_id)
-
-
-@pytest.fixture
 def mock_fullfocus(core: pymmcore_plus.CMMCorePlus):
     def _fullfocus():
         core.setZPosition(core.getZPosition() + 50)
@@ -55,6 +42,15 @@ def mock_fullfocus_failure(core: pymmcore_plus.CMMCorePlus):
 
     with patch.object(core, "fullFocus", _fullfocus):
         yield
+
+
+@pytest.fixture
+def caplog(caplog: pytest.LogCaptureFixture):
+    logger.addHandler(caplog.handler)
+    try:
+        yield caplog
+    finally:
+        logger.removeHandler(caplog.handler)
 
 
 def pytest_collection_modifyitems(session, config, items: list[pytest.Function]):

@@ -84,7 +84,7 @@ def _list() -> None:
 @app.command()
 def find() -> None:
     """Show the location of Micro-Manager in use by pymmcore-plus."""
-    configure_logging(strerr_level="CRITICAL")
+    configure_logging(stderr_level="CRITICAL")
 
     found = None
     with suppress(Exception):
