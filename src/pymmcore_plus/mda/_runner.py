@@ -183,7 +183,7 @@ class MDARunner:
             if self._wait_until_event(event) or not self._running:
                 break
 
-            logger.info(event)
+            logger.info("%s", event)
             engine.setup_event(event)
 
             output = engine.exec_event(event)
@@ -218,7 +218,7 @@ class MDARunner:
         self._sequence = sequence
 
         self._engine.setup_sequence(sequence)
-        logger.info("MDA Started: {}", sequence)
+        logger.info("MDA Started: %s", sequence)
 
         self._signals.sequenceStarted.emit(sequence)
         self._reset_timer()
@@ -242,7 +242,7 @@ class MDARunner:
             Whether the MDA has been canceled.
         """
         if self._canceled:
-            logger.warning("MDA Canceled: {}", self._sequence)
+            logger.warning("MDA Canceled: %s", self._sequence)
             self._signals.sequenceCanceled.emit(self._sequence)
             self._canceled = False
             return True
@@ -310,5 +310,5 @@ class MDARunner:
         if hasattr(self._engine, "teardown_sequence"):
             self._engine.teardown_sequence(sequence)  # type: ignore
 
-        logger.info("MDA Finished: {}", sequence)
+        logger.info("MDA Finished: %s", sequence)
         self._signals.sequenceFinished.emit(sequence)

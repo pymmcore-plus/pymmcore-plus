@@ -115,7 +115,7 @@ class MDAEngine(FullPMDAEngine):
                 # execute hardware autofocus
                 new_correction = self._execute_autofocus(action)
             except RuntimeError as e:
-                logger.warning("Hardware autofocus failed. {}", e)
+                logger.warning("Hardware autofocus failed. %s", e)
             else:
                 # store correction for this position index
                 p_idx = event.index.get("p", None)
@@ -175,12 +175,12 @@ class MDAEngine(FullPMDAEngine):
             try:
                 self._mmc.setConfig(event.channel.group, event.channel.config)
             except Exception as e:
-                logger.warning("Failed to set channel. {}", e)
+                logger.warning("Failed to set channel. %s", e)
         if event.exposure is not None:
             try:
                 self._mmc.setExposure(event.exposure)
             except Exception as e:
-                logger.warning("Failed to set exposure. {}", e)
+                logger.warning("Failed to set exposure. %s", e)
 
         if (
             # (if autoshutter wasn't set at the beginning of the sequence
@@ -205,7 +205,7 @@ class MDAEngine(FullPMDAEngine):
         try:
             self._mmc.snapImage()
         except Exception as e:
-            logger.warning("Failed to snap image. {}", e)
+            logger.warning("Failed to snap image. %s", e)
             return None
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
@@ -306,7 +306,7 @@ class MDAEngine(FullPMDAEngine):
         if len(images) != n_events:
             logger.warning(
                 "Unexpected number of images returned from sequence. "
-                "Expected {}, got {}",
+                "Expected %s, got %s",
                 n_events,
                 len(images),
             )

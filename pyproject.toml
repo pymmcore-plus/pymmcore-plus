@@ -35,7 +35,6 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "appdirs",
-    "loguru >=0.5.0",
     "numpy",
     "psygnal >=0.4.2",
     "pymmcore >=10.1.1.70.4",

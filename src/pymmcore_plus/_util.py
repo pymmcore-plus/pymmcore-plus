@@ -78,7 +78,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     env_path = os.getenv("MICROMANAGER_PATH")
     if env_path and os.path.isdir(env_path):
         if return_first:
-            logger.debug(f"using MM path from env var: {env_path}")
+            logger.debug("using MM path from env var: %s", env_path)
             return env_path
         full_list.append(env_path)
 
@@ -86,7 +86,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     user_install = sorted(USER_DATA_MM_PATH.glob("Micro-Manager*"), reverse=True)
     if user_install:
         if return_first:
-            logger.debug(f"using MM path from user install: {user_install[0]}")
+            logger.debug("using MM path from user install: %s", user_install[0])
             return str(user_install[0])
         full_list.extend([str(x) for x in user_install])
 
@@ -95,7 +95,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     local_install = list(PYMMCORE_PLUS_PATH.glob(f"**/Micro-Manager*{sfx}"))
     if local_install:
         if return_first:
-            logger.debug(f"using MM path from local install: {local_install[0]}")
+            logger.debug("using MM path from local install: %s", local_install[0])
             return str(local_install[0])
         full_list.extend([str(x) for x in local_install])
 
@@ -112,9 +112,9 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     pth = next(app_path.glob("[m,M]icro-[m,M]anager*"), None)
     if return_first:
         if pth is None:
-            logger.error(f"could not find micromanager directory in {app_path}")
+            logger.error("could not find micromanager directory in %s", app_path)
             return None
-        logger.debug(f"using MM path found in applications: {pth}")
+        logger.debug("using MM path found in applications: %s", pth)
         return str(pth)
     if pth is not None:
         full_list.append(str(pth))
