@@ -7,22 +7,15 @@ import warnings
 from contextlib import contextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar, Iterator
+from typing import ClassVar, Iterator
 
 __all__ = ["logger"]
 
-if TYPE_CHECKING:
-    from typing_extensions import Literal
 
-    LogLvlStr = Literal["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    LogLvlInt = Literal[0, 10, 20, 30, 40, 50]
-
-
-DEFAULT_LOG_LEVEL: LogLvlStr = os.getenv("PYMM_LOG_LEVEL", "INFO").upper()  # type: ignore  # noqa: E501
-
-logging.basicConfig(level=DEFAULT_LOG_LEVEL)
 logger = logging.getLogger("pymmcore-plus")
 
+
+DEFAULT_LOG_LEVEL: str = os.getenv("PYMM_LOG_LEVEL", "INFO").upper()
 if any(x.endswith("pytest") for x in sys.argv):
     LOG_FILE = None
 elif "PYMM_LOG_FILE" in os.environ:
@@ -37,7 +30,7 @@ else:
 
 
 class CustomFormatter(logging.Formatter):
-    dark_grey = "\x1b[38;5;242m"
+    dark_grey = "\x1b[38;5;240m"
     grey = "\x1b[38;20m"
     yellow = "\x1b[33;20m"
     red = "\x1b[31;20m"
@@ -61,10 +54,16 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
+_FILE_FORMMATTER = logging.Formatter(
+    "%(asctime)s.%(msecs)03d    tid0x%(thread)x [%(levelname)s,%(name)s] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
+)
+
+
 def configure_logging(
     file: str | Path | None = LOG_FILE,
-    stderr_level: LogLvlStr | LogLvlInt = DEFAULT_LOG_LEVEL,
-    file_level: LogLvlStr | LogLvlInt = "DEBUG",
+    stderr_level: int | str = DEFAULT_LOG_LEVEL,
+    file_level: int | str = logging.DEBUG,
     log_to_stderr: bool = True,
     file_rotation: int = 40,
     file_retention: int = 20,
@@ -110,7 +109,9 @@ def configure_logging(
     file_retention : int
         Maximum number of log files to retain, by default `20`
     """
-    formatter = CustomFormatter()
+    # logging.basicConfig(level=logging.DEBUG)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
 
     for handler in logger.handlers:
         logger.removeHandler(handler)
@@ -119,7 +120,7 @@ def configure_logging(
     if log_to_stderr and sys.stderr:
         stderr_handler = logging.StreamHandler(sys.stderr)
         stderr_handler.setLevel(stderr_level)
-        stderr_handler.setFormatter(formatter)
+        stderr_handler.setFormatter(CustomFormatter())
         logger.addHandler(stderr_handler)
 
     # automatically log to file
@@ -132,11 +133,11 @@ def configure_logging(
             log_file, maxBytes=file_rotation * 1_000_000, backupCount=file_retention
         )
         file_handler.setLevel(file_level)
-        file_handler.setFormatter(formatter)
+        file_handler.setFormatter(_FILE_FORMMATTER)
         logger.addHandler(file_handler)
 
 
-def set_log_level(level: LogLvlStr | LogLvlInt = DEFAULT_LOG_LEVEL) -> None:
+def set_log_level(level: int | str = DEFAULT_LOG_LEVEL) -> None:
     warnings.warn(
         "set_log_level is deprecated. Use configure_logging instead.",
         FutureWarning,
