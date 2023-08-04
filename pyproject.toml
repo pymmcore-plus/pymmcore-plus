@@ -54,7 +54,15 @@ docs = [
     "mkdocstrings-python ==1.1.2",
     # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
-testing = ["PyQt6", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
+testing = [
+    "PyQt6",
+    "pytest",
+    "pytest-cov",
+    "pytest-qt",
+    "qtpy",
+    "typer",
+    "rich",
+]
 dev = [
     "black",
     "ipython",
