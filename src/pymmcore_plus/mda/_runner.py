@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import contextlib
 import time
 import warnings
 from typing import TYPE_CHECKING, Iterable, Iterator
 
-from psygnal import EmitLoopError
 from useq import MDASequence
 
-from pymmcore_plus._logger import logger
+from pymmcore_plus._logger import exceptions_logged, logger
 
 from ._protocol import PMDAEngine
 from .events import PMDASignaler, _get_auto_MDA_callback_class
@@ -167,7 +165,7 @@ class MDARunner:
             self._run(engine, events)
         except Exception as e:
             error = e
-        with contextlib.suppress(Exception):
+        with exceptions_logged():
             self._finish_run(sequence)
         if error is not None:
             raise error
@@ -189,13 +187,13 @@ class MDARunner:
             output = engine.exec_event(event)
 
             if (img := getattr(output, "image", None)) is not None:
-                with contextlib.suppress(EmitLoopError):
+                with exceptions_logged():
                     self._signals.frameReady.emit(img, event)
 
             # FIXME: this is here to make tests pass with sequenced events for now,
             # but we might not want to do this for sequences for performance reasons.s
             if (imgs := getattr(output, "image_sequence", None)) is not None:
-                with contextlib.suppress(EmitLoopError):
+                with exceptions_logged():
                     for img, sub_event in imgs:
                         self._signals.frameReady.emit(img, sub_event)
 

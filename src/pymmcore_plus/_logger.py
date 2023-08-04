@@ -4,9 +4,10 @@ import logging
 import os
 import sys
 import warnings
+from contextlib import contextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, ClassVar, Iterator
 
 __all__ = ["logger"]
 
@@ -150,6 +151,15 @@ def current_logfile(logger: logging.Logger) -> Path | None:
         if isinstance(handler, RotatingFileHandler):
             return Path(handler.baseFilename)
     return None
+
+
+@contextmanager
+def exceptions_logged() -> Iterator[None]:
+    """Context manager to log exceptions."""
+    try:
+        yield
+    except Exception as e:
+        logger.error(e)
 
 
 configure_logging()
