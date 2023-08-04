@@ -16,11 +16,11 @@ if TYPE_CHECKING:
     LogLvlStr = Literal["NOTSET", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
     LogLvlInt = Literal[0, 10, 20, 30, 40, 50]
 
-logging.basicConfig(level=logging.NOTSET)  # Initialize the basic configuration
-logger = logging.getLogger("pymmcore-plus")
-
 
 DEFAULT_LOG_LEVEL: LogLvlStr = os.getenv("PYMM_LOG_LEVEL", "INFO").upper()  # type: ignore  # noqa: E501
+
+logging.basicConfig(level=DEFAULT_LOG_LEVEL)
+logger = logging.getLogger("pymmcore-plus")
 
 if any(x.endswith("pytest") for x in sys.argv):
     LOG_FILE = None
@@ -43,7 +43,7 @@ class CustomFormatter(logging.Formatter):
     bold_red = "\x1b[31;1m"
     reset = "\x1b[0m"
     _format: str = (
-        "%(asctime)s - %(name)s - %(levelname)s - %(message)s (%(filename)s:%(lineno)d)"
+        "%(asctime)s - %(name)s - %(levelname)s - (%(filename)s:%(lineno)d) %(message)s"
     )
 
     FORMATS: ClassVar[dict[int, str]] = {
