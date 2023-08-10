@@ -6,6 +6,10 @@
 
 ```bash
 pip install pymmcore-plus
+
+# or, add the [cli] extra if you wish to use the `mmcore` command line tool:
+
+pip install "pymmcore-plus[cli]"
 ```
 
 ... as well as conda:
@@ -22,31 +26,32 @@ provided by
 [mmCoreAndDevices](https://github.com/micro-manager/mmCoreAndDevices#mmcoreanddevices).
 There are two ways to do this:
 
-1. **Use the `pymmcore_plus.install` module**
+1. **Use the `mmcore` command line tool**
 
-    This library provides a quick way to install the latest version of
-    micro-manager:
+    If you've installed with `pip install "pymmcore-plus[cli]"`,
+   this library provides a quick way to install the latest version of
+   micro-manager:
 
-    ```bash
-    mmcore install
-    ```
+   ```bash
+   mmcore install
+   ```
 
-    This will download the latest release of micro-manager and place it in the
-    pymmcore-plus folder.  If you would like to modify the location of the
-    installation, or the release of micro-manager to install, you can use the
-    `--dest` and `--release` flags respectively.
+   This will download the latest release of micro-manager and place it in the
+   pymmcore-plus folder. If you would like to modify the location of the
+   installation, or the release of micro-manager to install, you can use the
+   `--dest` and `--release` flags respectively.
 
-    For more information, run:
+   For more information, run:
 
-    ```bash
-    mmcore install --help
-    ```
+   ```bash
+   mmcore install --help
+   ```
 
 2. **Download manually from micro-manager.org**
 
-    Go to the [micro-manager
-    downloads](https://micro-manager.org/Micro-Manager_Nightly_Builds) page and
-    download the latest release for your Operating System.
+   Go to the [micro-manager
+   downloads](https://micro-manager.org/Micro-Manager_Nightly_Builds) page and
+   download the latest release for your Operating System.
 
 !!! danger "Critical"
 
@@ -79,7 +84,6 @@ There are two ways to do this:
     ```shell
     python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
     ```
-
 
 ### On Linux
 

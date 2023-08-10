@@ -46,7 +46,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[testing]
+          pip install -e .[testing,cli]
       
       - name: Downgrade pydantic
         if: ${{ matrix.pydantic }}
@@ -86,7 +86,7 @@ jobs:
         working-directory: pymmcore-widgets
 
       - name: Install core
-        run: python -m pip install -e .[testing] -U
+        run: python -m pip install -e .[testing,cli] -U
 
       - name: Install Micro-Manager
         run: mmcore install
@@ -124,7 +124,7 @@ jobs:
         run: |
           python -m pip install -U pip
           python -m pip install -e ./napari-micromanager[testing]
-          python -m pip install -e ./pymmcore-plus[testing]
+          python -m pip install -e ./pymmcore-plus[testing,cli]
 
       - name: Install Micro-Manager
         run: mmcore install
