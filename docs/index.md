@@ -63,12 +63,17 @@ Install with `pip` or `conda`:
 
 ```bash
 pip install pymmcore-plus
+
+# OR, to include the `mmcore` command line tool
+pip install "pymmcore-plus[cli]"
+
 # OR
 conda install -c conda-forge pymmcore-plus
 ```
 
 You will also need the micro-manager device adapters on your system.
-To get them quickly, you can run:
+To get them quickly, assuming you have installed with `pymmcore-plus[cli]`,
+you can run:
 
 ```bash
 mmcore install
