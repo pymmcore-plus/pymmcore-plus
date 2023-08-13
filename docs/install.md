@@ -29,29 +29,29 @@ There are two ways to do this:
 1. **Use the `mmcore` command line tool**
 
     If you've installed with `pip install "pymmcore-plus[cli]"`,
-   this library provides a quick way to install the latest version of
-   micro-manager:
+    this library provides a quick way to install the latest version of
+    micro-manager:
 
-   ```bash
-   mmcore install
-   ```
+    ```bash
+    mmcore install
+    ```
 
-   This will download the latest release of micro-manager and place it in the
-   pymmcore-plus folder. If you would like to modify the location of the
-   installation, or the release of micro-manager to install, you can use the
-   `--dest` and `--release` flags respectively.
+    This will download the latest release of micro-manager and place it in the
+    pymmcore-plus folder. If you would like to modify the location of the
+    installation, or the release of micro-manager to install, you can use the
+    `--dest` and `--release` flags respectively.
 
-   For more information, run:
+    For more information, run:
 
-   ```bash
-   mmcore install --help
-   ```
+    ```bash
+    mmcore install --help
+    ```
 
 2. **Download manually from micro-manager.org**
 
-   Go to the [micro-manager
-   downloads](https://micro-manager.org/Micro-Manager_Nightly_Builds) page and
-   download the latest release for your Operating System.
+    Go to the [micro-manager
+    downloads](https://micro-manager.org/Micro-Manager_Nightly_Builds) page and
+    download the latest release for your Operating System.
 
 !!! danger "Critical"
 
@@ -82,6 +82,12 @@ There are two ways to do this:
     can run:
 
     ```shell
+    mmcore find
+    ```
+
+    or... if you didn't install with the `cli` extra:
+
+    ```shell
     python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
     ```
 
@@ -90,4 +96,6 @@ There are two ways to do this:
 On a linux based system the easiest approach is to just install the C++ core of
 micromanager,
 [mmCoreAndDevices](https://github.com/micro-manager/mmCoreAndDevices#mmcoreanddevices).
-To do that follow the build instructions in the `mmCoreAndDevices` README.
+To do that follow the [build
+instructions](https://github.com/micro-manager/micro-manager/blob/main/doc/how-to-build.md#building-on-unix)
+in the micro-manager repo.
