@@ -21,9 +21,8 @@ environments**.
   [CMMCorePlus
   documentation](https://pymmcore-plus.github.io/pymmcore-plus/api/cmmcoreplus/)
   for details.
-- `CMMCorePlus` includes a `run_mda` method (name may change) "acquisition
-  engine" that drives micro-manager for conventional multi-dimensional
-  experiments. It accepts an
+- `pymmcore-plus` includes an [acquisition engine](https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_engine/) 
+  that drives micro-manager for conventional multi-dimensional experiments. It accepts an
   [MDASequence](https://pymmcore-plus.github.io/useq-schema/schema/sequence/)
   from [useq-schema](https://pymmcore-plus.github.io/useq-schema/) for
   experiment design/declaration.
