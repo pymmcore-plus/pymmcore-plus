@@ -19,7 +19,7 @@ nav:
       - Guides:
           - guides/mda_engine.md
           - guides/custom_engine.md
-          - guides/conditional_events.md
+          - guides/event_driven_acquisition.md
           - guides/logging.md
       - Examples:
           - examples/mda.md
@@ -46,6 +46,7 @@ theme:
     - content.tabs.link
     - navigation.tabs
     - content.code.annotate
+    - navigation.footer  # next/previous links in footer
   icon:
     logo: fontawesome/solid/microscope
     repo: fontawesome/brands/github

@@ -7,11 +7,11 @@
     If you haven't already done so, please read the [Acquisition
     Engine](./mda_engine.md) guide first.
 
-Sometimes, you may not know the exact sequence of events you want to execute
+You may not always know the exact sequence of events that you want to execute
 ahead of time. For example, you may want to start acquiring images at a certain
 frequency, but then take a burst of images at a faster frame rate or in a
-specific region of interest when a specific (possibly rare) event occurs.
-This is sometimes referred to as **event-driven acquisition**, or "smart-microscopy".
+specific region of interest when a specific (possibly rare) event occurs. This
+is sometimes referred to as **event-driven acquisition**, or "smart-microscopy".
 
 !!! info "In publications"
 
@@ -47,45 +47,54 @@ class MDARunner:
     def run(self, events: Iterable[useq.MDAEvent]) -> None: ...
 ```
 
-:eyes: **The `run` method expects only an _iterable_ of `useq.MDAEvent`
+:eyes: **The `run` method expects an _iterable_ of `useq.MDAEvent`
 objects.** :eyes:
 
 !!! question "Iterable"
 
-    An [`Iterable`][collections.abc.Iterable] is any
-    object that implements an `__iter__()` method that returns an
-    [iterator object](https://docs.python.org/3/library/stdtypes.html#iterator-types).
-    This includes sequences of known length, like `list`, `tuple`, but also many other types of objects, such as
-    [generators](https://docs.python.org/3/library/stdtypes.html#generator-types), [`deque`][collections.deque], and more.
-    Other types such as [`Queue`][queue.Queue] can easily be converted to an
-    iterator as well, as we'll see below.
+    An [`Iterable`][collections.abc.Iterable] is any object that implements an
+    `__iter__()` method that returns an [iterator
+    object](https://docs.python.org/3/library/stdtypes.html#iterator-types). This
+    includes sequences of known length, like `list`, `tuple`, but also many other
+    types of objects, such as
+    [generators](https://docs.python.org/3/library/stdtypes.html#generator-types),
+    [`deque`][collections.deque], and more. Other types such as
+    [`Queue`][queue.Queue] can easily be converted to an iterator as well, as we'll
+    see below.
 
-Let's look at a few types of iterables that can be used to implement conditional
-event sequences.
+## Useful Iterables
+
+Many python objects are iterable. Let's look at a few types of iterables that
+can be used to implement event-driven acquisition in pymmcore-plus.
 
 ### Generators
 
-[Generator functions](https://docs.python.org/3/glossary.html#index-19)
-are functions that contain `yield` statements. When called, they return a
-[generator iterator](https://docs.python.org/3/glossary.html#term-generator-iterator)
-that can be used to iterate over the values yielded by the generator function.
-That sounds a bit confusing, but it's actually quite simple:
+[Generator functions](https://docs.python.org/3/glossary.html#index-19) are
+functions that contain `yield` statements. When called, they return a [generator
+iterator](https://docs.python.org/3/glossary.html#term-generator-iterator) that
+can be used to iterate over the values yielded by the generator function. 
 
-```python
-from typing import Iterator
+!!! question "Say what?"
 
-# a generator function, which contains "yield" statements
-def my_generator_func() -> Iterator[int]:
-    yield 1
-    yield 2
+    That
+    may sound a bit confusing, but it's actually quite simple.  It just means that
+    you can use the output of a generator function in a for loop:
 
-# calling the function returns an "iterator"
-gen_iterator = my_generator_func()
+    ```python
+    from typing import Iterator
 
-# which we can iterate over (e.g. in a for loop)
-for value in gen_iterator:
-    print(value)  # prints 1, then 2
-```
+    # a generator function, which contains "yield" statements
+    def my_generator_func() -> Iterator[int]:
+        yield 1
+        yield 2
+
+    # calling the function returns an iterator
+    gen_iterator = my_generator_func()
+
+    # which we can iterate over (e.g. in a for loop)
+    for value in gen_iterator:
+        print(value)  # prints 1, then 2
+    ```
 
 Let's create a generator that yields `useq.MDAEvent`
 objects, but simulate a "burst" of events when a certain condition is met:
@@ -128,7 +137,7 @@ def my_events() -> Iterator[useq.MDAEvent]:
    field in MDAEvent, but this demonstrates that the generator
    can also control the timing of events.
 
-??? example "example output"
+??? example "example output of `list(my_events())`"
 
     We can use the `list()` function to iterate over the generator
     and collect the yielded events:
@@ -178,8 +187,8 @@ Python's [`Queue`][queue.Queue] class is useful for managing and synchronizing
 data between multiple threads or processes. It ensures orderly execution and
 prevents race conditions. Generally, a Queue is passed between threads or
 processes, and one thread or process
-[puts](https://docs.python.org/3/library/queue.html#queue.Queue.put) data into
-the queue, while another thread or process
+[puts](https://docs.python.org/3/library/queue.html#queue.Queue.put) data (such
+as an `MDAEvent` to execute) into the queue, while another thread or process
 [gets](https://docs.python.org/3/library/queue.html#queue.Queue.get) data out of
 the queue.
 
@@ -214,10 +223,10 @@ version of the builtin [`iter()`][iter] function:
     1. :tophat: Thanks [Kyle Douglass](https://github.com/kmdouglass) for discovering
     this handy, if obscure, second argument to `iter()`!
 
-We can use this `iter(queue.get, sentinel)` pattern to create an iterable that
-can be passed to the `run_mda()` method.  The acquisition engine will then execute
-events as they get `put` into the queue, until the stop `sentinel` is placed into
-the queue and the iterator is exhausted.
+We can use this `iter(queue.get, sentinel)` pattern to create a queue-backed
+iterable that can be passed to the `run_mda()` method. The acquisition engine
+will then execute events as they get `put` into the queue, until the stop
+sentinel is encountered.
 
 ```python
 from queue import Queue
@@ -229,7 +238,7 @@ core.loadSystemConfiguration()
 
 q = Queue()                    # create the queue
 STOP = object()                # any object can serve as the sentinel
-q_iterator = iter(q.get, STOP) # create the iterable queue
+q_iterator = iter(q.get, STOP) # create the queue-backed iterable
 
 # start the acquisition in a separate thread
 core.run_mda(q_iterator)
@@ -248,8 +257,6 @@ q.put(MDAEvent(index={'t': 1}, exposure=40))
 q.put(STOP)
 ```
 
-
-
 ??? example "More complete event-driven acquisition example"
 
     The following example is modified from
@@ -261,104 +268,21 @@ q.put(STOP)
     Controller object then decides whether to continue or stop the acquisition
     (by placing the `STOP_EVENT` sentinel in the queue).
 
-    ```python
-    """Simple simulator demonstrating event-driven acquisitions with pymmcore-plus."""
-    import random
-    import time
-    from queue import Queue
-
-    import numpy as np
-    from pymmcore_plus import CMMCorePlus
-    from useq import MDAEvent
-
-
-    class Analyzer:
-        """Analyzes images and returns a dict of results."""
-
-        def run(self, data) -> dict:
-            # Fake analysis; randomly return a dict with a value of None 10% of the time
-            if random.random() < 0.1:
-                return {"result": "STOP"}
-            else:
-                return {"result": random.random()}
-
-
-    class Controller:
-        STOP_EVENT = object()
-
-        def __init__(self, analyzer: Analyzer, mmc: CMMCorePlus, queue: Queue):
-            self._analyzer = analyzer  # analyzer of images
-            self._queue = queue        # queue of MDAEvents
-            self._results: dict = {}   # results of analysis
-
-            self._mmc = mmc
-            mmc.mda.events.frameReady.connect(self._on_frame_ready)
-
-        def _on_frame_ready(self, img: np.ndarray, event: MDAEvent) -> None:
-            # Analyze the image
-            self._results = self._analyzer.run(img)
-
-        def run(self) -> None:
-            # convert the queue to an iterable
-            queue_sequence = iter(self._queue.get, self.STOP_EVENT)
-
-            # Start the acquisition (run_mda is non-blocking)
-            self._mmc.run_mda(queue_sequence)
-
-            # Queue the first image acquisition
-            self._queue.put(MDAEvent(exposure=10))
-
-            # loop until the analyzer returns "STOP"
-            while True:
-                # get the last results from the analyzer
-                result = self._results.pop("result", None)
-
-                # Decide what to do. This is the key part of the reactive loop.
-                if result == "STOP":
-                    # Do nothing and return
-                    print("Analyzer returned no results. Stopping...")
-                    self._queue.put(self.STOP_EVENT)
-                    break
-                elif result:
-                    # Adjust the exposure time based on the results and continue
-                    print("Analyzer returned results. Continuing...")
-                    next_event = MDAEvent(exposure=10 * result)
-                    self._queue.put(next_event)
-                else:
-                    # No results yet, wait a bit and check again
-                    time.sleep(0.1)
-
-
-    def main():
-        # Setup the MM Core
-        mmc = CMMCorePlus()
-        mmc.loadSystemConfiguration()
-
-        # create the Queue that will hold the MDAEvents
-        q = Queue()
-
-        # Setup the controller and analyzer
-        analyzer = Analyzer()
-        controller = Controller(analyzer, mmc, q)
-
-        # Start the acquisition
-        controller.run()
-
-
-    if __name__ == "__main__":
-        main()
-
+    ```python linenums="1" title="event_driven_acquisition.py"
+    --8<-- "examples/event_driven_acquisition.py"
     ```
 
 ### MDASequence
 
 It's worth noting that the [`MDASequence`][useq.MDASequence] class is itself an
 `Iterable[MDAEvent]`. It implements an `__iter__` method that yields the events
-in the sequence. It is a deterministic sequence, so it wouldn't be used on its
-own to implement conditional event sequences, but it can be used in conjunction
-with other iterables to implement more complex sequences.
+in the sequence, and it can be passed directly to the `run_mda()` method as we
+saw in the [Acquisition engine guide](mda_engine.md#running-an-mda-sequence). It
+is a _deterministic_ sequence, so it wouldn't be used on its own to implement
+conditional event sequences; it can, however, be used in conjunction with other
+iterables to implement more complex sequences.
 
-Take for example this simple sequence:
+Take this simple sequence as an example:
 
 ```python
 my_sequence = useq.MDASequence(
@@ -381,4 +305,12 @@ def my_events() -> Iterator[useq.MDAEvent]:
             ...
 ```
 
-In the Queue
+In the `Queue` example above, we could `put` the events in the sequence into the
+queue:
+
+```python
+# ... we can put events into the queue
+# according to whatever logic we want:
+for event in my_sequence:
+    q.put(event)
+```

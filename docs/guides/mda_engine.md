@@ -435,7 +435,6 @@ ways to store array data to disk in Python, including:
 - [numpy](https://numpy.org/doc/stable/reference/generated/numpy.save.html)
 - [xarray](http://xarray.pydata.org/en/stable/io.html)
 - [aicsimageio](https://github.com/AllenCellModeling/aicsimageio)
-- [netCDF4](https://github.com/Unidata/netcdf4-python)
 
 You will, however, want to know how to connect callbacks to the
 [`frameReady`][pymmcore_plus.mda.PMDASignaler.frameReady] event, so that you can
@@ -449,7 +448,7 @@ import useq
 mmc = CMMCorePlus.instance()
 mmc.loadSystemConfiguration()
 
-@mmc.mda.events.frameReady.connect
+@mmc.mda.events.frameReady.connect # (1)!
 def on_frame(image: np.ndarray, event: useq.MDAEvent):
     # do what you want with the data
     print(
@@ -465,9 +464,11 @@ mda_sequence = useq.MDASequence(
 mmc.run_mda(mda_sequence)
 ```
 
-See [docs for additional
-events](http://127.0.0.1:8000/pymmcore-plus/api/events/#pymmcore_plus.mda.events.PMDASignaler)
-you may also wish to connect to.
+1. The `frameReady` signal accepts a callback with up to two arguments:
+   the image data as a numpy array, and the `MDAEvent` that triggered the callback
+
+See also [additional events you may also wish to connect
+to](http://127.0.0.1:8000/pymmcore-plus/api/events/#pymmcore_plus.mda.events.PMDASignaler)
 
 ## Cancelling or Pausing
 
@@ -600,4 +601,5 @@ multi-dimensional acquisition sequences in pymmcore-plus, you may want to
 take a look at some more advanced features:
 
 - [customizing the acquisition engine](custom_engine.md)
-- using generators and Queues to create non-deterministic sequences
+- [creating non-deterministic sequences for event-driven
+  acquisition](event_driven_acquisition.md)

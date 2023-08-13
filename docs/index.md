@@ -79,7 +79,7 @@ you can run:
 mmcore install
 ```
 
-> *See [install](install) for more details.*
+> *See [install](install.md) for more details.*
 
 ### Usage
 
@@ -117,10 +117,10 @@ the additional features of `CMMCorePlus`.
 While you can easily use `pymmcore-plus` from a script or IPython/Jupyter you can
 also use it in combination with the [napari](https://napari.org/) based gui
 [napari-micromanager](https://github.com/pymmcore-plus/napari-micromanager#napari-micromanager).
-See [using with napari-micromanager](examples/napari-micromanager) for an
+See [using with napari-micromanager](examples/napari-micromanager.md) for an
 example of how to use them together.
 
 ## Contributing
 
 We welcome contributions to `pymmcore-plus` and related libraries.  Please see
-[contributing](contributing) for more information.
+[contributing](contributing.md) for more information.

@@ -21,13 +21,13 @@ engine include:
 - Handling user-specific [`MDAEvent.metadata`][useq.MDAEvent] values.
 - Intercepting and modifying the event sequence<sup>\*</sup>.
 
-  !!! info "<sup>\*</sup>Note"
+    !!! info "<sup>\*</sup>Note"
 
         If *all* you want to is to modify the event sequence (e.g. to add
         additional events in a non-deterministic way) but you don't need to
         modify the behavior of the acquisition engine itself, you likely
         don't need to customize the acquisition engine. See the guide on
-        [Conditional Event Sequences](./conditional_events.md) for details.
+        [Event-Driven Acquisition](event_driven_acquisition.md) for details.
 
 ## The `MDARunner` and `MDAEngine`
 
