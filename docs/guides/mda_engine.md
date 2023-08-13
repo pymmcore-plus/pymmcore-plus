@@ -1,13 +1,12 @@
 # The Acquisition Engine
 
-One of the key features of the pymmcore-plus is the python acquisition engine.
-This allows you to define and execute a sequence of events (without relying on
-Java). The sequence may be a typical multi-dimensional acquisition (MDA), such
-as a z-stack across multiple channels, stage positions, and time points, or it
-can be any custom sequence of events that you define. It needn't even be a
-sequence of known length: you can define an iterable or a [`queue.Queue`][] of
-events that reacts to the results of previous events, for event-driven "smart"
-microscopy.
+One of the key features of pymmcore-plus is the acquisition engine. This allows
+you to define and execute a sequence of events. The sequence may be a typical
+multi-dimensional acquisition (MDA), such as a z-stack across multiple channels,
+stage positions, and time points; or it can be any custom sequence of events
+that you define. It needn't even be a sequence of known length: you can define
+an iterable or a [`queue.Queue`][] of events that reacts to the results of
+previous events, for event-driven "smart" microscopy.
 
 The built-in acquisition engine will support many standard use-cases, but you
 can also subclass and customize it, allowing arbitrary python code to be
@@ -19,9 +18,10 @@ adapters), data analysis, or other logic into the experiment.
 
 To execute a sequence, you must:
 
-1. Create a [`CMMCorePlus`][pymmcore_plus.CMMCorePlus] instance (and probably load a
-   configuration file)
-2. Pass an iterable of [`useq.MDAEvent`][] objects to the [`run_mda()`][pymmcore_plus.CMMCorePlus.run_mda] method.
+1. Create a [`CMMCorePlus`][pymmcore_plus.CMMCorePlus] instance (and probably
+   load a configuration file)
+2. Pass an iterable of [`useq.MDAEvent`][] objects to the
+   [`run_mda()`][pymmcore_plus.CMMCorePlus.run_mda] method.
 
 ```python
 from pymmcore_plus import CMMCorePlus
@@ -148,7 +148,7 @@ little tedious. And you'd be right! That's why we have the
 
 For most standard multi-dimensional experiments, you will want to use
 [`useq.MDASequence`][] to construct your sequence of events. It allows you to
-declare a plan for each axis in your experiment (channels, time, z, etc...)
+declare a "plan" for each axis in your experiment (channels, time, z, etc...)
 along with the order in which the axes should be iterated.
 
 See the [useq-schema documentation](https://pymmcore-plus.github.io/useq-schema/schema/sequence/)
@@ -599,5 +599,5 @@ Now that you have a basic understanding of how to create and run
 multi-dimensional acquisition sequences in pymmcore-plus, you may want to
 take a look at some more advanced features:
 
+- [customizing the acquisition engine](custom_engine.md)
 - using generators and Queues to create non-deterministic sequences
-- customizing the acquisition engine

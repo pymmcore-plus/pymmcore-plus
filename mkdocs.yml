@@ -17,8 +17,10 @@ nav:
       - index.md
       - install.md
       - Guides:
-          - guides/logging.md
           - guides/mda_engine.md
+          - guides/custom_engine.md
+          - guides/conditional_events.md
+          - guides/logging.md
       - Examples:
           - examples/mda.md
           - examples/integration-with-qt.md
