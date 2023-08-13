@@ -1,13 +1,13 @@
 # The Acquisition Engine
 
-One of the key features of the pymmcore-plus is the addition of pure python
-acquisition engine. This allows you to define and execute a sequence
-of events. The sequence may be a typical multi-dimensional acquisition (MDA),
-such as a z-stack across multiple channels, stage positions, and time points,
-or it can be any custom sequence of events that you define. It needn't
-even be a sequence of known length: you can define an iterable or a
-[`queue.Queue`][] of events that reacts to the results of previous events,
-for event-driven "smart" microscopy.
+One of the key features of the pymmcore-plus is the python acquisition engine.
+This allows you to define and execute a sequence of events (without relying on
+Java). The sequence may be a typical multi-dimensional acquisition (MDA), such
+as a z-stack across multiple channels, stage positions, and time points, or it
+can be any custom sequence of events that you define. It needn't even be a
+sequence of known length: you can define an iterable or a [`queue.Queue`][] of
+events that reacts to the results of previous events, for event-driven "smart"
+microscopy.
 
 The built-in acquisition engine will support many standard use-cases, but you
 can also subclass and customize it, allowing arbitrary python code to be
@@ -417,6 +417,70 @@ mda_sequence = useq.MDASequence(
 
 # Run it!
 mmc.run_mda(mda_sequence)
+```
+
+## Handling acquired data
+
+You will almost certainly want to _do_ something with the
+data that is collected during an MDA :joy:. `pymmcore-plus`
+is relatively agnostic about how acquired data is handled.
+There are currently no built-in methods for saving data to
+disk in any particular format.
+
+This is partially because there are so many good existing
+ways to store array data to disk in Python, including:
+
+- [zarr](https://zarr.readthedocs.io/en/stable/)
+- [tifffile](https://github.com/cgohlke/tifffile)
+- [numpy](https://numpy.org/doc/stable/reference/generated/numpy.save.html)
+- [xarray](http://xarray.pydata.org/en/stable/io.html)
+- [aicsimageio](https://github.com/AllenCellModeling/aicsimageio)
+- [netCDF4](https://github.com/Unidata/netcdf4-python)
+
+You will, however, want to know how to connect callbacks to the
+[`frameReady`][pymmcore_plus.mda.PMDASignaler.frameReady] event, so that you can
+handle incoming data as it is acquired:
+
+```python
+from pymmcore_plus import CMMCorePlus
+import numpy as np
+import useq
+
+mmc = CMMCorePlus.instance()
+mmc.loadSystemConfiguration()
+
+@mmc.mda.events.frameReady.connect
+def on_frame(image: np.ndarray, event: useq.MDAEvent):
+    # do what you want with the data
+    print(
+        f"received frame: {image.shape}, {image.dtype} "
+        f"@ index {event.index}, z={event.z_pos}"
+    )
+
+mda_sequence = useq.MDASequence(
+    time_plan={"interval": 0.5, "loops": 10},
+    z_plan={"range": 4, "step": 0.5},
+)
+
+mmc.run_mda(mda_sequence)
+```
+
+See [docs for additional
+events](http://127.0.0.1:8000/pymmcore-plus/api/events/#pymmcore_plus.mda.events.PMDASignaler)
+you may also wish to connect to.
+
+## Cancelling or Pausing
+
+You can pause or cancel the mda with the
+[`CMMCorePlus.mda.toggle_pause`][pymmcore_plus.mda._runner.MDARunner.toggle_pause]
+or [`CMMCorePlus.mda.cancel`][pymmcore_plus.mda._runner.MDARunner.cancel]
+methods.
+
+```python
+mmc.mda.toggle_pause()  # pauses the mda
+mmc.mda.toggle_pause()  # resumes the mda
+
+mmc.mda.cancel()  # cancels the mda
 ```
 
 ## Serializing MDA sequences
