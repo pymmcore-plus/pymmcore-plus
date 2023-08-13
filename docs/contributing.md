@@ -25,14 +25,14 @@ git clone <your fork>
 cd pymmcore-plus
 mamba create -n pymm-dev -c conda-forge python
 conda activate pymm-dev
-pip install -e ".[testing, docs]"
+pip install -e ".[testing,docs]"
 pip install pre-commit
 pre-commit install
 ```
 
 The `-e .` flag installs `pymmcore_plus`in ["editable"
 mode](https://pip.pypa.io/en/stable/cli/pip_install/#editable-installs) and
-`[testing, docs]` installs the optional dependencies you need for developing
+`[testing,docs]` installs the optional dependencies you need for developing
 `pymmcore-plus`.
 
 !!! note
