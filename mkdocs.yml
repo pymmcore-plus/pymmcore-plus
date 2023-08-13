@@ -14,26 +14,27 @@ watch:
 
 nav:
   - pymmcore-plus:
-    - index.md
-    - install.md
-    - Guides:
-      - guides/logging.md
-    - Examples:
-      - examples/mda.md
-      - examples/integration-with-qt.md
-      - examples/context-set.md
-      - examples/napari-micromanager.md
-      - examples/following_changes_in_core.md
-    - API:
-      - api/cmmcoreplus.md
-      - api/mda.md
-      - api/events.md
-      - api/device.md
-      - api/configuration.md
-      - api/constants.md
-      - Metadata: api/metadata.md
-      - Utilities: api/utils.md
-    - contributing.md
+      - index.md
+      - install.md
+      - Guides:
+          - guides/logging.md
+          - guides/mda_engine.md
+      - Examples:
+          - examples/mda.md
+          - examples/integration-with-qt.md
+          - examples/context-set.md
+          - examples/napari-micromanager.md
+          - examples/following_changes_in_core.md
+      - API:
+          - api/cmmcoreplus.md
+          - api/mda.md
+          - api/events.md
+          - api/device.md
+          - api/configuration.md
+          - api/constants.md
+          - Metadata: api/metadata.md
+          - Utilities: api/utils.md
+      - contributing.md
   - useq-schema: /useq-schema/
   - pymmcore-widgets: /pymmcore-widgets/
 
@@ -67,18 +68,19 @@ theme:
 
 markdown_extensions:
   - tables
-  - pymdownx.snippets  # lets you include code snippets from other files
+  - pymdownx.snippets # lets you include code snippets from other files
   - toc:
       permalink: "#"
   - admonition
   - pymdownx.highlight
   - pymdownx.extra
+  - pymdownx.details
+  - pymdownx.superfences
   - pymdownx.emoji:
       emoji_index: !!python/name:materialx.emoji.twemoji
       emoji_generator: !!python/name:materialx.emoji.to_svg
   - pymdownx.tabbed:
       alternate_style: true
-
 
 hooks:
   - docs/_hooks.py
@@ -105,22 +107,22 @@ plugins:
             ## Members options:
             # members: [] # default is None
             # members_order: 'source' # default is 'alphabetical'
-            filters: ['^[^_]'] # list of filters to filter objects by name
+            filters: ["^[^_]"] # list of filters to filter objects by name
             # group_by_category: false # default is true
             # show_submodules: true # default is false
 
             ## Docstrings options:
-            docstring_style: 'numpy'
+            docstring_style: "numpy"
             # docstring_options: {}  # griffe.docstrings options
             # docstring_section_style: 'list'  # default is 'table' (or spacy)
-            line_length: 50  # default is 60
+            line_length: 50 # default is 60
             # merge_init_into_class: true  # default is false
-            show_if_no_docstring: true  # default is false
+            show_if_no_docstring: true # default is false
 
             ## Signatures/annotations options:
             # show_signature: false  # default is true
             show_signature_annotations: true # default is false
-            annotations_path: 'source' # default is 'brief'
+            annotations_path: "source" # default is 'brief'
             # separate_signature: true # default is false
 
             show_bases: false # default is true
