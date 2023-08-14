@@ -74,7 +74,7 @@ provides a python API to control the C++ core directly, without the need for
 Java in the loop.
 
 See [migrating from
-pycromanager](https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_pycromanager_migrationengine/)
+pycromanager](https://pymmcore-plus.github.io/pymmcore-plus/guides/pycromanager_migration/)
 for details.
 
 ## Quickstart
