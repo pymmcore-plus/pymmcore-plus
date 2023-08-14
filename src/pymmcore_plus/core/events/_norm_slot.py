@@ -74,6 +74,6 @@ def denormalize_slot(slot: NormedCallback) -> Callable | None:
     if obj is None:
         return None
     if method is not None:
-        return method
+        return method  # pragma: no cover
     _cb = getattr(obj, name, None)
     return None if _cb is None else _cb

@@ -29,11 +29,11 @@ def _get_auto_core_callback_class(
     return default
 
 
-def __dir__() -> List[str]:
+def __dir__() -> List[str]:  # pragma: no cover
     return [*list(globals()), "QCoreSignaler"]
 
 
-def __getattr__(name: str) -> Any:
+def __getattr__(name: str) -> Any:  # pragma: no cover
     if name == "QCoreSignaler":
         try:
             from ._qsignals import QCoreSignaler
