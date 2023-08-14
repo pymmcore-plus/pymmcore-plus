@@ -9,7 +9,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._sequencing import SequencedEvent
 
-from ._protocol import FullPMDAEngine
+from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
     import numpy as np
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pymmcore_plus.core import CMMCorePlus
 
 
-class MDAEngine(FullPMDAEngine):
+class MDAEngine(PMDAEngine):
     """The default MDAengine that ships with pymmcore-plus.
 
     This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
