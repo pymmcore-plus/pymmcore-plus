@@ -11,9 +11,9 @@ It works by communicating with micro-manager running in another process
 via a ZMQ socket. Commands are serialized and sent to the Java process, which
 in turn controls the native C++ micro-manager core via MMCoreJ.
 
-This has the advantage of being able to use all existing Java-based
-micro-manager plugins and libraries. But the design also comes with
-some limitations:
+This has the advantage of being able to use the mature MMStudio ecosystem, and
+all existing Java-based micro-manager plugins and libraries. But the design also
+comes with some limitations:
 
 - it requires Java be installed and running, which makes installation and
   startup more complicated.
@@ -56,7 +56,7 @@ We would like to see time invested in a
 leveraging the recently developed [acquire
 project](https://github.com/acquire-project/acquire-python).
 
-!!! warning "Reasons **not** to migrate"
+!!! warning "Reasons *not* to migrate"
 
     If the majority of your acquisition/analysis code is written in python,
     or if you'd like to remove Java and inter-process communication from your
@@ -337,6 +337,8 @@ core calls will be significantly faster, because they don't need to
 be sent back and forth over a ZMQ socket.
 
 !!! tip "Speed comparison"
+
+    (with `pycromanager` v0.28.1 and `pymmcore-plus` v0.8.0)
 
     ```python
     In [1]: from pycromanager import Core
