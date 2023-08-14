@@ -16,4 +16,4 @@ class PMDASignaler(Protocol):
     sequenceFinished: PSignal
     """Emits `(sequence: MDASequence)` when an acquisition sequence is finished."""
     frameReady: PSignal
-    """Emits `(image: np.ndarray, event: MDAEvent)` after an image is acquired during an acquisition sequence."""  # noqa: E501
+    """Emits `(img, MDAEvent, metadata)` after an image is acquired during an acquisition sequence."""  # noqa: E501

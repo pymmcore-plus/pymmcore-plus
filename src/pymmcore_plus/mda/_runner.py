@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Iterable, Iterator
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Sequence
 
 from useq import MDASequence
 
@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from useq import MDAEvent
 
     from ._engine import MDAEngine
+    from ._protocol import PDataHandler, PImagePayload
 
 MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
@@ -145,7 +146,12 @@ class MDARunner:
             self._paused = not self._paused
             self._signals.sequencePauseToggled.emit(self._paused)
 
-    def run(self, events: Iterable[MDAEvent]) -> None:
+    def run(
+        self,
+        events: Iterable[MDAEvent],
+        *,
+        handlers: PDataHandler | Sequence[PDataHandler] = (),
+    ) -> None:
         """Run the multi-dimensional acquistion defined by `sequence`.
 
         Most users should not use this directly as it will block further
@@ -157,20 +163,45 @@ class MDARunner:
         ----------
         events : Iterable[MDAEvent]
             An iterable of `useq.MDAEvents` objects to execute.
+        handlers : PDataHandler | Sequence[PDataHandler], optional
+            A single or sequence of `PDataHandler` objects to use to receive and
+            process data from the acquisition.  These could be used to save or otherwise
+            process the data as it is acquired.
+            A handler is any object that has a `start`, `put`, and `finish` method.
+                - `start` will be called before the acquisition starts
+                - `put` will be called for each image acquired with three arguments:
+                  (image: numpy.ndarray, event: MDAEvent, metadata: dict)
+                - `finish` will be called after the acquisition finishes
         """
+        _handlers = list(handlers) if isinstance(handlers, Sequence) else [handlers]
+        for handler in _handlers:
+            _assert_handler(handler)
+
+        data_callbacks = [h.put for h in _handlers] + [self._signals.frameReady.emit]
+
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
         try:
             engine = self._prepare_to_run(sequence)
-            self._run(engine, events)
+            for handler in _handlers:
+                handler.start()
+            self._run(engine, events, data_callbacks)
         except Exception as e:
             error = e
         with exceptions_logged():
             self._finish_run(sequence)
+            for handler in _handlers:
+                handler.finish()
+
         if error is not None:
             raise error
 
-    def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
+    def _run(
+        self,
+        engine: PMDAEngine,
+        events: Iterable[MDAEvent],
+        data_callbacks: Sequence[Callable[[PImagePayload], Any]],
+    ) -> None:
         """Main execution of events, inside the try/except block of `run`."""
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
         event_iterator = getattr(engine, "event_iterator", iter)
@@ -184,18 +215,11 @@ class MDARunner:
             logger.info("%s", event)
             engine.setup_event(event)
 
-            output = engine.exec_event(event)
-
-            if (img := getattr(output, "image", None)) is not None:
-                with exceptions_logged():
-                    self._signals.frameReady.emit(img, event)
-
-            # FIXME: this is here to make tests pass with sequenced events for now,
-            # but we might not want to do this for sequences for performance reasons.s
-            if (imgs := getattr(output, "image_sequence", None)) is not None:
-                with exceptions_logged():
-                    for img, sub_event in imgs:
-                        self._signals.frameReady.emit(img, sub_event)
+            output = engine.exec_event(event) or ()  # in case output is None
+            for payload in output:
+                for cb in data_callbacks:
+                    with exceptions_logged():
+                        cb(*payload)
 
             teardown_event(event)
 
@@ -310,3 +334,12 @@ class MDARunner:
 
         logger.info("MDA Finished: %s", sequence)
         self._signals.sequenceFinished.emit(sequence)
+
+
+def _assert_handler(handler: Any) -> None:
+    if (
+        not hasattr(handler, "start")
+        or not hasattr(handler, "finish")
+        or not hasattr(handler, "put")
+    ):
+        raise TypeError("Handler must have start, finish, and put methods.")

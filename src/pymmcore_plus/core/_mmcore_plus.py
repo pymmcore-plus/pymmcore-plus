@@ -17,6 +17,7 @@ from typing import (
     Callable,
     Iterable,
     Iterator,
+    NamedTuple,
     Pattern,
     Sequence,
     TypeVar,
@@ -109,6 +110,10 @@ STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)
 UNNAMED_PRESET = "NewPreset"
+
+class TaggedImage(NamedTuple):
+    pix: np.ndarray
+    tags: dict[str, Any]
 
 
 @contextmanager
@@ -1432,6 +1437,13 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = img.view(dtype=f"u{img.dtype.itemsize//4}")
             img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
+
+    def getTaggedImage(self, channel_index: int = 0) -> TaggedImage:
+        return self._createTaggedImage(self.getImage(channel_index), {})
+
+    def _createTaggedImage(self, img: np.ndarray, md: dict) -> TaggedImage:
+        tags = md
+        config = 
 
     def snap(self, numChannel: int | None = None, *, fix: bool = True) -> np.ndarray:
         """Snap and return an image.

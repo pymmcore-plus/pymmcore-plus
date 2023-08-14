@@ -12,9 +12,11 @@ from pymmcore_plus.core._sequencing import SequencedEvent
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
-    import numpy as np
+    from numpy.typing import NDArray
 
     from pymmcore_plus.core import CMMCorePlus
+
+    from ._protocol import PImagePayload
 
 
 class MDAEngine(PMDAEngine):
@@ -102,14 +104,14 @@ class MDAEngine(PMDAEngine):
             self.setup_single_event(event)
         self._mmc.waitForSystem()
 
-    def exec_event(self, event: MDAEvent) -> EventPayload | None:
+    def exec_event(self, event: MDAEvent) -> Sequence[PImagePayload]:
         """Execute an individual event and return the image data."""
         action = getattr(event, "action", None)
         if isinstance(action, HardwareAutofocus):
             # skip if no autofocus device is found
             if not self._mmc.getAutoFocusDevice():
                 logger.warning("No autofocus device found. Cannot execute autofocus.")
-                return None
+                return ()
 
             try:
                 # execute hardware autofocus
@@ -120,7 +122,7 @@ class MDAEngine(PMDAEngine):
                 # store correction for this position index
                 p_idx = event.index.get("p", None)
                 self._z_correction[p_idx] = new_correction
-            return None
+            return ()
 
         if isinstance(event, SequencedEvent):
             return self.exec_sequenced_event(event)
@@ -195,7 +197,7 @@ class MDAEngine(PMDAEngine):
             self._mmc.setAutoShutter(False)
             self._mmc.setShutterOpen(True)
 
-    def exec_single_event(self, event: MDAEvent) -> EventPayload | None:
+    def exec_single_event(self, event: MDAEvent) -> Sequence[PImagePayload]:
         """Execute a single (non-triggered) event and return the image data.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -206,10 +208,10 @@ class MDAEngine(PMDAEngine):
             self._mmc.snapImage()
         except Exception as e:
             logger.warning("Failed to snap image. %s", e)
-            return None
+            return ()
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
-        return EventPayload(image=self._mmc.getImage())
+        return ((self._mmc.getImage(), event, {}),)
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
@@ -271,7 +273,7 @@ class MDAEngine(PMDAEngine):
         elif event.channel is not None:
             core.setConfig(event.channel.group, event.channel.config)
 
-    def exec_sequenced_event(self, event: SequencedEvent) -> EventPayload:
+    def exec_sequenced_event(self, event: SequencedEvent) -> Sequence[PImagePayload]:
         """Execute a sequenced (triggered) event and return the image data.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -314,8 +316,7 @@ class MDAEngine(PMDAEngine):
                 n_events,
                 len(images),
             )
-
-        return EventPayload(image_sequence=tuple(zip(images, event.events)))
+        return tuple(ImagePayload(img, e, {}) for img, e in zip(images, event.events))
 
     # ===================== EXTRA =====================
 
@@ -363,6 +364,7 @@ class MDAEngine(PMDAEngine):
         self._mmc.setZPosition(cast("float", event.z_pos) + correction)
 
 
-class EventPayload(NamedTuple):
-    image: np.ndarray | None = None
-    image_sequence: Sequence[tuple[np.ndarray, MDAEvent]] | None = None
+class ImagePayload(NamedTuple):
+    image: NDArray
+    event: MDAEvent
+    metadata: dict
