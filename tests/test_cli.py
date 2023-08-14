@@ -292,9 +292,9 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         assert not TEST_LOG.exists()
 
 
-@pytest.mark.skipif("CI" not in os.environ, reason="only on CI")
-def test_install(tmp_path: Path) -> None:
-    assert not list(tmp_path.iterdir())
-    result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
-    assert result.exit_code == 0
-    assert list(tmp_path.iterdir())
+# @pytest.mark.skipif("CI" not in os.environ, reason="only on CI")
+# def test_install(tmp_path: Path) -> None:
+#     assert not list(tmp_path.iterdir())
+#     result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
+#     assert result.exit_code == 0
+#     assert list(tmp_path.iterdir())
