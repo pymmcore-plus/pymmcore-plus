@@ -84,8 +84,9 @@ class](https://pycro-manager.readthedocs.io/en/latest/acq_overview.html)
 executes a sequence of acquisition events. The equivalent in `pymmcore-plus` is
 the `CMMCorePlus.run_mda` method.
 
-:exclamation: Note that saving to disk is not currently
-handled by `run_mda` itself, and must be implemented separately
+> :exclamation: **Note**: saving to disk is not currently
+handled by `run_mda` itself, and must be implemented separately.  So there
+is no equivalent of `directory` and `name` arguments.
 
 !!! note "pycromanager"
 
@@ -118,8 +119,17 @@ handled by `run_mda` itself, and must be implemented separately
 
     ... where `events` is any iterable of [`useq.MDAEvent`][] objects.
 
-Just [as in pycromanager](https://pycro-manager.readthedocs.io/en/latest/acq_overview.html#hardware-sequencing), the `pymmcore-plus` supports hardware sequencing, but
-you must [enable it explicitly](mda_engine.md#hardware-triggered-sequences).
+Just [as in
+pycromanager](https://pycro-manager.readthedocs.io/en/latest/acq_overview.html#hardware-sequencing),
+the `pymmcore-plus` supports [hardware
+sequencing](https://micro-manager.org/Hardware-based_Synchronization_in_Micro-Manager),
+but you must [enable it explicitly](mda_engine.md#hardware-triggered-sequences).
+
+```python
+core = CMMCorePlus()
+# enable hardware triggering
+core.mda.engine.use_hardware_sequencing = True
+```
 
 ### `multi_d_acquisition_events` &rarr; `useq.MDASequence`
 

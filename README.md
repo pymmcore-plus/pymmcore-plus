@@ -73,6 +73,10 @@ Micro-manager application (which in turn controls the C++ core), `pymmcore-plus`
 provides a python API to control the C++ core directly, without the need for
 Java in the loop.
 
+See [migrating from
+pycromanager](https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_pycromanager_migrationengine/)
+for details.
+
 ## Quickstart
 
 ### Install
