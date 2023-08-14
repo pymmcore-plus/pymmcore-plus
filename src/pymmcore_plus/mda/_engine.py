@@ -9,7 +9,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._sequencing import SequencedEvent
 
-from ._protocol import FullPMDAEngine
+from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
     import numpy as np
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pymmcore_plus.core import CMMCorePlus
 
 
-class MDAEngine(FullPMDAEngine):
+class MDAEngine(PMDAEngine):
     """The default MDAengine that ships with pymmcore-plus.
 
     This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
@@ -63,7 +63,7 @@ class MDAEngine(FullPMDAEngine):
         (currently, this does nothing but get the global `CMMCorePlus` singleton
         if one has not already been provided).
         """
-        if not self._mmc:
+        if not self._mmc:  # pragma: no cover
             from pymmcore_plus.core import CMMCorePlus
 
             self._mmc = CMMCorePlus.instance()
@@ -218,6 +218,10 @@ class MDAEngine(FullPMDAEngine):
         if not event.keep_shutter_open and self._autoshutter_was_set:
             self._mmc.setAutoShutter(True)
 
+    def teardown_sequence(self, sequence: MDASequence) -> None:
+        """Perform any teardown required after the sequence has been executed."""
+        pass
+
     # ===================== Sequenced Events =====================
 
     def setup_sequenced_event(self, event: SequencedEvent) -> None:
@@ -297,7 +301,7 @@ class MDAEngine(FullPMDAEngine):
             else:
                 time.sleep(0.001)
 
-        if self._mmc.isBufferOverflowed():
+        if self._mmc.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
 
         while self._mmc.getRemainingImageCount():

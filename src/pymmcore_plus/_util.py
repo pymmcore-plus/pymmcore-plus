@@ -126,7 +126,7 @@ def _qt_app_is_running() -> bool:
         if modname in sys.modules:
             QtWidgets = importlib.import_module(".QtWidgets", modname)
             return QtWidgets.QApplication.instance() is not None
-    return False
+    return False  # pragma: no cover
 
 
 @overload
@@ -291,7 +291,7 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
     if sort is not None:
         try:
             sort_idx = [x.lower() for x in data].index(sort.lower())
-        except ValueError:
+        except ValueError:  # pragma: no cover
             raise ValueError(
                 f"invalid sort column: {sort!r}. Must be one of {list(data)}"
             ) from None

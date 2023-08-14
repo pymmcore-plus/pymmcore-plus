@@ -208,6 +208,7 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
 
 def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
     orig_engine = core.mda.engine
+    assert orig_engine and orig_engine.mmcore is core
 
     registered_mock = MagicMock()
     core.events.mdaEngineRegistered.connect(registered_mock)

@@ -52,7 +52,9 @@ class PMDAEngine(Protocol):
         # TODO: nail down a spec for the return object.
 
     def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
-        """Optional wrapper on the event iterator.
+        """Wrapper on the event iterator.
+
+        **Optional.**
 
         This can be used to wrap the event iterator to perform any event merging
         (e.g. if the engine supports HardwareSequencing) or event modification.
@@ -61,14 +63,11 @@ class PMDAEngine(Protocol):
         Be careful when using this method.  It is powerful and can result in unexpected
         event iteration if used incorrectly.
         """
-        yield from events
-
-
-class FullPMDAEngine(PMDAEngine):
-    """Optional methods that a PMDAEngine MAY implement."""
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`.
+
+        **Optional.**
 
         If the engine provides this function, it will be called after
         `exec_event` to perform any cleanup or teardown required after
@@ -77,6 +76,8 @@ class FullPMDAEngine(PMDAEngine):
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed.
+
+        **Optional.**
 
         If the engine provides this function, it will be called after the
         last event in the sequence has been executed.
