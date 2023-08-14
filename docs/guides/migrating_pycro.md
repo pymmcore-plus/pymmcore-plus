@@ -126,8 +126,7 @@ you must [enable it explicitly](mda_engine.md#hardware-triggered-sequences).
 In `pycromanager`, the
 [`multi_d_acquisition_events`](https://pycro-manager.readthedocs.io/en/latest/apis.html#pycromanager.multi_d_acquisition_events)
 function is used to generate event `dicts` for a typical multi-dimensional
-acquisition. In `pymmcore-plus`, the [`useq.MDASequence`][] class from the
-`useq-schema` library accomplishes a similar goal.
+acquisition. 
 
 !!! note "pycromanager"
 
@@ -145,6 +144,9 @@ acquisition. In `pymmcore-plus`, the [`useq.MDASequence`][] class from the
         order="tcz",
     )
     ```
+
+In `pymmcore-plus`, the [`useq.MDASequence`][] class from the `useq-schema`
+library accomplishes a similar goal.
 
 !!! note "pymmcore-plus"
 
@@ -164,10 +166,10 @@ acquisition. In `pymmcore-plus`, the [`useq.MDASequence`][] class from the
        can use
        `channels=[{"group": "Channel", "config": "DAPI"},  ...]`
 
-    `MDASequence` has *many* additional features and ways to express an MDA, including
-    nested, position-specific sequences, channel-based time or Z-stack skipping, and more.
-    See the [useq-schema docs](https://pymmcore-plus.github.io/useq-schema/schema/sequence/)
-    for more details.
+`MDASequence` has *many* additional features and ways to express an MDA, including
+nested, position-specific sequences, channel-based time or Z-stack skipping, and more.
+See the [useq-schema docs](https://pymmcore-plus.github.io/useq-schema/schema/sequence/)
+for more details.
 
 ### Acquisition-hooks &rarr; `useq.MDAHooks`
 
