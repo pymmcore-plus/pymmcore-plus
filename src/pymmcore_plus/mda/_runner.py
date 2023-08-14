@@ -68,7 +68,7 @@ class MDARunner:
         if not isinstance(engine, PMDAEngine):
             raise TypeError("Engine does not conform to the Engine protocol.")
 
-        if self.is_running():
+        if self.is_running():  # pragma: no cover
             raise RuntimeError(
                 "Cannot register a new engine when the current engine is running "
                 "an acquistion. Please cancel the current engine's acquistion "
@@ -207,7 +207,7 @@ class MDARunner:
         sequence : MDASequence
             The sequence of events to run.
         """
-        if not self._engine:
+        if not self._engine:  # pragma: no cover
             raise RuntimeError("No MDAEngine set.")
 
         self._running = True
@@ -260,7 +260,7 @@ class MDARunner:
             Whether the MDA was cancelled while waiting.
         """
         if not self.is_running():
-            return False
+            return False  # pragma: no cover
         if self._check_canceled():
             return True
         while self.is_paused() and not self._canceled:

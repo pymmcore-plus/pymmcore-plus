@@ -30,11 +30,11 @@ def _get_auto_MDA_callback_class(
     return default
 
 
-def __dir__() -> list[str]:
+def __dir__() -> list[str]:  # pragma: no cover
     return [*list(globals()), "QMDASignaler"]
 
 
-def __getattr__(name: str) -> object:
+def __getattr__(name: str) -> object:  # pragma: no cover
     if name == "QMDASignaler":
         try:
             from ._qsignals import QMDASignaler

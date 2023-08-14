@@ -51,20 +51,8 @@ class PMDAEngine(Protocol):
         """
         # TODO: nail down a spec for the return object.
 
-    def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
-        """Optional wrapper on the event iterator.
 
-        This can be used to wrap the event iterator to perform any event merging
-        (e.g. if the engine supports HardwareSequencing) or event modification.
-        The default implementation is just `iter(events)`.
-
-        Be careful when using this method.  It is powerful and can result in unexpected
-        event iteration if used incorrectly.
-        """
-        yield from events
-
-
-class FullPMDAEngine(PMDAEngine):
+class FullPMDAEngine(PMDAEngine, Protocol):
     """Optional methods that a PMDAEngine MAY implement."""
 
     def teardown_event(self, event: MDAEvent) -> None:
@@ -80,4 +68,15 @@ class FullPMDAEngine(PMDAEngine):
 
         If the engine provides this function, it will be called after the
         last event in the sequence has been executed.
+        """
+
+    def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
+        """Optional wrapper on the event iterator.
+
+        This can be used to wrap the event iterator to perform any event merging
+        (e.g. if the engine supports HardwareSequencing) or event modification.
+        The default implementation is just `iter(events)`.
+
+        Be careful when using this method.  It is powerful and can result in unexpected
+        event iteration if used incorrectly.
         """

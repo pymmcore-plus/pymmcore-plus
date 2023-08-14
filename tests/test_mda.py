@@ -295,3 +295,82 @@ def test_keep_shutter_open(core: CMMCorePlus) -> None:
     # index={'p': 1, 'z': 3, 't': 0}, keep_shutter_open=True), True, False)
     # index={'p': 1, 'z': 3, 't': 1}, keep_shutter_open=True), True, False)
     # index={'p': 1, 'z': 3, 't': 2},                          False, False)
+
+
+def test_engine_protocol(core: CMMCorePlus) -> None:
+    mock1 = Mock()
+    mock2 = Mock()
+    mock3 = Mock()
+    mock4 = Mock()
+    mock5 = Mock()
+    mock6 = Mock()
+
+    class MyEngine:
+        def setup_sequence(self, mda: MDASequence) -> None:
+            mock1(mda)
+
+        def setup_event(self, event: MDAEvent) -> None:
+            mock2(event)
+
+        def exec_event(self, event: MDAEvent) -> None:
+            mock3(event)
+
+        def teardown_event(self, event: MDAEvent) -> None:
+            mock4(event)
+
+        def teardown_sequence(self, mda: MDASequence) -> None:
+            mock5(mda)
+
+        def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
+            mock6(events)
+            return iter(events)
+
+    core.mda.set_engine(MyEngine())
+
+    event = MDAEvent()
+    core.mda.run([event])
+
+    mock1.assert_called_once()
+    mock2.assert_called_once_with(event)
+    mock3.assert_called_once_with(event)
+    mock4.assert_called_once_with(event)
+    mock5.assert_called_once()
+    mock6.assert_called_once_with([event])
+
+    with pytest.raises(TypeError, match="does not conform"):
+        core.mda.set_engine(object())  # type: ignore
+
+
+def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
+    engine = MagicMock(wraps=core.mda.engine)
+    core.mda.set_engine(engine)
+    event1 = MDAEvent()
+    with qtbot.waitSignal(core.mda.events.sequenceStarted):
+        core.run_mda([event1, MDAEvent(min_start_time=10)])
+    with qtbot.waitSignal(core.mda.events.sequenceCanceled):
+        time.sleep(0.1)
+        core.mda.cancel()
+
+    engine.setup_sequence.assert_called_once()
+    engine.setup_event.assert_called_once_with(event1)  # not twice
+
+
+def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
+    engine = MagicMock(wraps=core.mda.engine)
+    core.mda.set_engine(engine)
+    with qtbot.waitSignal(core.mda.events.frameReady):
+        thread = core.run_mda([MDAEvent(), MDAEvent(min_start_time=2)])
+    engine.setup_event.assert_called_once()  # not twice
+
+    with qtbot.waitSignal(core.mda.events.sequencePauseToggled):
+        core.mda.toggle_pause()
+    time.sleep(1)
+    with qtbot.waitSignal(core.mda.events.sequencePauseToggled):
+        core.mda.toggle_pause()
+
+    assert core.mda._paused_time > 0
+
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        thread.join()
+    assert engine.setup_event.call_count == 2
+    engine.teardown_sequence.assert_called_once()
