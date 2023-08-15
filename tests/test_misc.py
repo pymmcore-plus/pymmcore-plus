@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 from unittest.mock import Mock, call
 
 import pytest
-from pymmcore_plus._util import listener_connected, retry
+from pymmcore_plus._util import listeners_connected, retry
 from useq import MDASequence
 
 if TYPE_CHECKING:
@@ -50,10 +50,7 @@ def test_listener_connected(qtbot: QtBot) -> None:
     listener = Listener()
 
     assert len(emitter.signalName) == 0
-    with listener_connected(
-        emitter,
-        listener,
-    ):
+    with listeners_connected(emitter, listener):
         emitter.signalName.emit(42)
         assert len(emitter.signalName) == 1
 

@@ -13,6 +13,6 @@ class MDASignaler:
     frameReady = Signal(np.ndarray, MDAEvent)  # after each event in the sequence
 
     def listeners(self, *listeners: object) -> ContextManager:
-        from pymmcore_plus._util import listener_connected
+        from pymmcore_plus._util import listeners_connected
 
-        return listener_connected(self, *listeners)
+        return listeners_connected(self, *listeners)

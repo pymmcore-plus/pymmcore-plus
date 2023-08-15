@@ -302,11 +302,11 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
 
 
 @contextmanager
-def listener_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
+def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
     """Context manager for listening to signals.
 
-    This provides a way for a `listener` to temporarily connect to signals on an
-    `emitter`. Any methods on `listener` that match signals on `emitter` will be
+    This provides a way for one or more `listener` to temporarily connect to signals on
+    an `emitter`. Any methods on `listener` that match signals on `emitter` will be
     connected, then disconnected when the context exits (see example below).
 
     Parameters
@@ -335,7 +335,7 @@ def listener_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
     emitter = Emitter()
     listener = Listener()
 
-    with listener_connected(listener, emitter):
+    with listeners_connected(emitter, listener):
         emitter.signalName.emit(42)  # prints 42
     ```
     """
