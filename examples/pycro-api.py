@@ -8,6 +8,7 @@ from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import MDAEngine
 from useq import MDAEvent
 
+# These types represent what the pycro-manager API expects.
 if TYPE_CHECKING:
     from collections import deque
     from typing import TypeAlias
@@ -32,7 +33,13 @@ if TYPE_CHECKING:
 
 
 class Acquisition:
-    """Pycro-Manager -> pymmcore-plus adaptor."""
+    """Pycro-Manager -> pymmcore-plus adaptor.
+
+    This doesn't re-implement file saving, but it gives you an example of how
+    pycromanager hooks would be converted to pymmcore-plus.
+
+    See `__main__` below for example usage.
+    """
 
     def __init__(
         self,
@@ -54,11 +61,13 @@ class Acquisition:
         self._engine = self._engine_cls(self._core)
         self._core.mda.set_engine(self._engine)
 
+        # see https://pymmcore-plus.github.io/pymmcore-plus/guides/event_driven_acquisition/
         iter_queue = iter(self._event_queue.get, None)
-        # type error because of conversion between MDAEvent and pycromanager dict.
-        # we do the conversion below in the engine
         self._thread = self._core.run_mda(iter_queue)  # type: ignore
+        # type error because of conversion between MDAEvent and pycromanager dict.
+        # we do the conversion below in the PycroEngine class.
 
+        # we can use `mda.events.frameReady` for the image_process hooks
         self._image_process_fn = image_process_fn
         if image_process_fn is not None:
             sig = inspect.signature(image_process_fn)
@@ -67,24 +76,9 @@ class Acquisition:
             elif len(sig.parameters) == 3:
                 self._core.mda.events.frameReady.connect(self._call_img_hook_3arg)
             else:
-                raise ValueError(f"Invalid signature for image processing hook: {sig}")
+                raise ValueError(f"Invalid image processing hook: {sig}")
 
-    def _call_img_hook_2arg(self, img: NDArray, event: MDAEvent) -> None:
-        hook = cast("ImgMetaHook", self._image_process_fn)
-        hook(img, {})  # todo: meta
-
-    def _call_img_hook_3arg(self, img: NDArray, event: MDAEvent) -> None:
-        hook = cast("ImgMetaQueueHook", self._image_process_fn)
-        hook(img, {}, self._event_queue)  # todo: meta
-
-    def __enter__(self) -> Acquisition:
-        return self
-
-    def __exit__(self, *args: Any) -> None:
-        self.mark_finished()
-        self.await_completion()
-
-    def acquire(self, event_or_events: PycroEvent | list[PycroEvent] | None) -> None:
+    def acquire(self, event_or_events: PycroEvent | list[PycroEvent]) -> None:
         if isinstance(event_or_events, list):
             for event in event_or_events:
                 self._event_queue.put(event)
@@ -101,8 +95,26 @@ class Acquisition:
     def mark_finished(self) -> None:
         self._event_queue.put(None)
 
+    def _call_img_hook_2arg(self, img: NDArray, event: MDAEvent) -> None:
+        """Call a 2-argument image processing hook."""
+        hook = cast("ImgMetaHook", self._image_process_fn)
+        hook(img, {})  # todo: meta
 
-# note, we don't need to check signature every time...
+    def _call_img_hook_3arg(self, img: NDArray, event: MDAEvent) -> None:
+        """Call a 3-argument image processing hook."""
+        hook = cast("ImgMetaQueueHook", self._image_process_fn)
+        hook(img, {}, self._event_queue)  # todo: meta
+
+    def __enter__(self) -> Acquisition:
+        return self
+
+    def __exit__(self, *args: Any) -> None:
+        self.mark_finished()
+        self.await_completion()
+
+
+# note, this could be improved:
+# we don't need to check signature every time...
 def _call_acq_hook(
     hook: AcquisitionHook | None, event: PycroEvent, queue: EventQueue
 ) -> PycroEvent | None:
@@ -118,8 +130,8 @@ def _call_acq_hook(
         raise ValueError(f"Invalid signature for acquisition hook: {sig}")
 
 
-PYCRO_KEY = "pycro_event"
-SKIP = "pycro_skip"
+PYCRO_KEY = "pycro_event"  # where we store the pycro event in the mda event
+SKIP = "pycro_skip"  # if we should skip this event
 
 
 def _build_engine(
@@ -129,6 +141,8 @@ def _build_engine(
     post_hardware_hook_fn: AcquisitionHook | None = None,
     post_camera_hook_fn: AcquisitionHook | None = None,
 ) -> type[MDAEngine]:
+    """Convert pycromanager hooks to a pymmcore-plus style MDAEngine subclass."""
+
     class PycroEngine(MDAEngine):
         def setup_event(self, event: MDAEvent) -> None:
             pyc_event = event.metadata[PYCRO_KEY]
@@ -164,8 +178,8 @@ def _build_engine(
 
 
 def _pycro_to_mda_event(pycro_event: PycroEvent) -> MDAEvent:
-    # TODO: convert between pycromanager event dict and MDAEvents
-    # this will not work until that is done...
+    # This is rough estimation... ideally, useq-schema would be used directly,
+    # and the need to convert pycro-manager events to MDAEvents would be eliminated.
 
     # TODO: convert row/col to useq grid plan
     index = {
@@ -193,6 +207,7 @@ def _pycro_to_mda_event(pycro_event: PycroEvent) -> MDAEvent:
     )
 
 
+# Example usage:
 if __name__ == "__main__":
     from pycromanager import multi_d_acquisition_events
 
@@ -200,6 +215,8 @@ if __name__ == "__main__":
     core.loadSystemConfiguration()
 
     with Acquisition() as acq:
+        # the pymmcore-plus equivalent here is to use MDASequence
+        # https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_engine/
         events = multi_d_acquisition_events(
             num_time_points=4,
             time_interval_s=2,
