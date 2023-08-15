@@ -1,3 +1,5 @@
+from typing import ContextManager
+
 import numpy as np
 from psygnal import Signal
 from useq import MDAEvent, MDASequence
@@ -9,3 +11,8 @@ class MDASignaler:
     sequenceCanceled = Signal(MDASequence)  # when mda is canceled
     sequenceFinished = Signal(MDASequence)  # when mda is done (whether canceled or not)
     frameReady = Signal(np.ndarray, MDAEvent)  # after each event in the sequence
+
+    def listeners(self, *listeners: object) -> ContextManager:
+        from pymmcore_plus._util import listener_connected
+
+        return listener_connected(self, *listeners)

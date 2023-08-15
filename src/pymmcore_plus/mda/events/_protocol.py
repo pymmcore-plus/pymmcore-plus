@@ -1,4 +1,4 @@
-from typing import Protocol, runtime_checkable
+from typing import ContextManager, Protocol, runtime_checkable
 
 from pymmcore_plus.core.events._protocol import PSignal
 
@@ -17,3 +17,10 @@ class PMDASignaler(Protocol):
     """Emits `(sequence: MDASequence)` when an acquisition sequence is finished."""
     frameReady: PSignal
     """Emits `(image: np.ndarray, event: MDAEvent)` after an image is acquired during an acquisition sequence."""  # noqa: E501
+
+    def listeners(self, *listeners: object) -> ContextManager:
+        """Context manager to connect a listener to all signals emitted by this object.
+
+        Any methods on `listener` that match the names of the signals emitted
+        by this object will be connected to those signals.
+        """
