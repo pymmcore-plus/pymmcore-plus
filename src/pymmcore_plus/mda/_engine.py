@@ -15,6 +15,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from pymmcore_plus.core import CMMCorePlus
+    from pymmcore_plus.core._mmcore_plus import TaggedImage
 
     from ._protocol import PImagePayload
 
@@ -211,7 +212,7 @@ class MDAEngine(PMDAEngine):
             return ()
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
-        return ((self._mmc.getImage(), event, {}),)
+        return ((self._mmc.getImage(), event, self._mmc.getTags()),)
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
@@ -294,12 +295,10 @@ class MDAEngine(PMDAEngine):
         )
 
         # block until the sequence is done, popping images in the meantime
-        images = []
+        images: list[TaggedImage] = []
         while self._mmc.isSequenceRunning():
             if self._mmc.getRemainingImageCount():
-                # TODO: pop with Metadata
-                # see https://github.com/pymmcore-plus/pymmcore-plus/issues/220
-                images.append(self._mmc.popNextImage())
+                images.append(self._mmc.popNextTaggedImage())
             else:
                 time.sleep(0.001)
 
@@ -307,7 +306,7 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while self._mmc.getRemainingImageCount():
-            images.append(self._mmc.popNextImage())
+            images.append(self._mmc.popNextTaggedImage())
 
         if len(images) != n_events:
             logger.warning(
@@ -316,7 +315,10 @@ class MDAEngine(PMDAEngine):
                 n_events,
                 len(images),
             )
-        return tuple(ImagePayload(img, e, {}) for img, e in zip(images, event.events))
+
+        return tuple(
+            ImagePayload(img.pix, e, img.tags) for img, e in zip(images, event.events)
+        )
 
     # ===================== EXTRA =====================
 

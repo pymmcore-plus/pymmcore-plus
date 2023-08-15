@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Protocol, Sequence, Union, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, Sequence, runtime_checkable
 
 if TYPE_CHECKING:
     from typing import Iterable, Iterator
@@ -9,9 +9,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from useq import MDAEvent, MDASequence
 
-    PImagePayload = Union[
-        tuple[NDArray], tuple[NDArray, MDAEvent], tuple[NDArray, MDAEvent, dict]
-    ]
+    PImagePayload = tuple[NDArray, MDAEvent, dict]
 
 
 # NOTE: This whole thing could potentially go in useq-schema
@@ -87,14 +85,3 @@ class PMDAEngine(Protocol):
         If the engine provides this function, it will be called after the
         last event in the sequence has been executed.
         """
-
-
-class PDataHandler(Protocol):
-    def start(self) -> None:
-        ...
-
-    def put(self, payload: PImagePayload) -> None:
-        ...
-
-    def finish(self) -> None:
-        ...
