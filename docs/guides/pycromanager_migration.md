@@ -3,6 +3,12 @@
 This page summarizes some of the differences between `pycromanager` and
 `pymmcore-plus`, and provides some guidance for migrating from one to the other.
 
+!!! info "See also..."
+
+    The [pycromanager-like API example](../examples/pycro-manager-api.md) as
+    an educational example of how a pycro-manager Aquistion class would be
+    re-implemented on pymmcore-plus.
+ 
 ## Pycro-manager
 
 [Pycro-manager](https://github.com/micro-manager/pycro-manager) is a python
