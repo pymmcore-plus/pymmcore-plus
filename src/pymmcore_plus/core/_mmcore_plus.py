@@ -1447,7 +1447,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         similar to MMCoreJ.getTaggedImage().
         """
         img = self.getImage(channel_index)
-        return self._createTaggedImage(img, None, channel_index)
+        return TaggedImage(img, self.getTags(None, channel_index))
 
     def popNextTaggedImage(self, channel_index: int = 0) -> TaggedImage:
         """Return popNextImageAndMD as named tuple with metadata.
@@ -1456,14 +1456,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         similar to MMCoreJ.popNextTaggedImage().
         """
         img, meta = self.popNextImageAndMD(channel_index, 0)
-        return self._createTaggedImage(img, meta, channel_index)
-
-    def _createTaggedImage(
-        self,
-        img: np.ndarray,
-        meta: Metadata | None = None,
-        channel_index: int | None = None,
-    ) -> TaggedImage:
         return TaggedImage(img, self.getTags(meta, channel_index))
 
     # this matches the MMCoreJ implementation ... which we may or may not want to do?
