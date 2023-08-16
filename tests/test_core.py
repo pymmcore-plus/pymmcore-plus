@@ -526,7 +526,7 @@ def test_save_config(core: CMMCorePlus, tmp_path: Path) -> None:
     assert "r10x" in core.getAvailablePixelSizeConfigs()
 
     test_cfg = str(tmp_path / "test.cfg")
-    core.saveSystemConfiguration(test_cfg, "Objective")
+    core.saveSystemConfiguration(test_cfg)
 
     core.loadSystemConfiguration()
     assert "r10x" not in core.getAvailablePixelSizeConfigs()

@@ -1728,28 +1728,29 @@ class CMMCorePlus(pymmcore.CMMCore):
             super().setFocusDevice(focusLabel)
             self.events.propertyChanged.emit("Core", "Focus", focusLabel)
 
-    def saveSystemConfiguration(
-        self, filename: str, objective_device: str | None = None
-    ) -> None:
+    def saveSystemConfiguration(self, filename: str) -> None:
         """Saves the current system configuration to a text file.
 
         **Why Override?** To also save pixel size configurations.
         """
         super().saveSystemConfiguration(filename)
         px_configs = self.getAvailablePixelSizeConfigs()
-        if not px_configs or objective_device is None:
+        if not px_configs:
             return
         # saveSystemConfiguration does not save the pixel size config so here
         # we add to the saved file also any pixel size config.
         with open(filename, "a") as f:
             f.write("# PixelSize settings")
             for px_config in px_configs:
-                data = self.getPixelSizeConfigData(px_config)
-                obj = data.dict()[objective_device]["Label"]
+                data = self.getPixelSizeConfigData(px_config).dict()
+                obj_device = next(iter(data.keys()))
+                obj_label = data[obj_device].get("Label")
+                if obj_label is None:
+                    continue
                 px_size = self.getPixelSizeUmByID(px_config)
                 px_affine = self.getPixelSizeAffineByID(px_config)
                 cfg = (
-                    f"\nConfigPixelSize,{px_config},Objective,Label,{obj}\n"
+                    f"\nConfigPixelSize,{px_config},{obj_device},Label,{obj_label}\n"
                     f"PixelSize_um,{px_config},{px_size}\n"
                     f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}"
                 )
