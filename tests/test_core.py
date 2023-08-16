@@ -10,6 +10,10 @@ import psygnal
 import pymmcore
 import pytest
 from pymmcore import CMMCore, PropertySetting
+from qtpy.QtCore import QObject
+from qtpy.QtCore import SignalInstance as QSignalInstance
+from useq import MDASequence
+
 from pymmcore_plus import (
     CMMCorePlus,
     Configuration,
@@ -20,9 +24,6 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
-from qtpy.QtCore import QObject
-from qtpy.QtCore import SignalInstance as QSignalInstance
-from useq import MDASequence
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -525,7 +526,7 @@ def test_save_config(core: CMMCorePlus, tmp_path: Path) -> None:
     assert "r10x" in core.getAvailablePixelSizeConfigs()
 
     test_cfg = str(tmp_path / "test.cfg")
-    core.saveSystemConfiguration(test_cfg)
+    core.saveSystemConfiguration(test_cfg, "Objective")
 
     core.loadSystemConfiguration()
     assert "r10x" not in core.getAvailablePixelSizeConfigs()
