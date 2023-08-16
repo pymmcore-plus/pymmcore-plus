@@ -10,10 +10,6 @@ import psygnal
 import pymmcore
 import pytest
 from pymmcore import CMMCore, PropertySetting
-from qtpy.QtCore import QObject
-from qtpy.QtCore import SignalInstance as QSignalInstance
-from useq import MDASequence
-
 from pymmcore_plus import (
     CMMCorePlus,
     Configuration,
@@ -24,6 +20,9 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
+from qtpy.QtCore import QObject
+from qtpy.QtCore import SignalInstance as QSignalInstance
+from useq import MDASequence
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
