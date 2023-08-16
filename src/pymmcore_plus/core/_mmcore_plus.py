@@ -42,6 +42,8 @@ from ._sequencing import can_sequence_events
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
+    from io import TextIOBase
+
     import numpy as np
     from typing_extensions import Literal, TypedDict
     from useq import MDAEvent
@@ -1734,27 +1736,32 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To also save pixel size configurations.
         """
         super().saveSystemConfiguration(filename)
-        px_configs = self.getAvailablePixelSizeConfigs()
-        if not px_configs:
-            return
         # saveSystemConfiguration does not save the pixel size config so here
         # we add to the saved file also any pixel size config.
         with open(filename, "a") as f:
-            f.write("# PixelSize settings")
-            for px_config in px_configs:
-                data = self.getPixelSizeConfigData(px_config).dict()
-                obj_device = next(iter(data.keys()))
-                obj_label = data[obj_device].get("Label")
-                if obj_label is None:
-                    continue
-                px_size = self.getPixelSizeUmByID(px_config)
-                px_affine = self.getPixelSizeAffineByID(px_config)
-                cfg = (
-                    f"\nConfigPixelSize,{px_config},{obj_device},Label,{obj_label}\n"
-                    f"PixelSize_um,{px_config},{px_size}\n"
-                    f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}"
+            self._save_pixel_configurations(f)
+
+    def _save_pixel_configurations(self, f: TextIOBase) -> None:
+        px_configs = self.getAvailablePixelSizeConfigs()
+        if not px_configs:
+            return
+        cfg = ["# PixelSize settings"]
+        for px_config in px_configs:
+            data = self.getPixelSizeConfigData(px_config).dict()
+            for device, prop in data.items():
+                cfg.extend(
+                    f"ConfigPixelSize,{px_config},{device},{k},{v}"
+                    for k, v in prop.items()
                 )
-                f.write(cfg)
+            px_size = self.getPixelSizeUmByID(px_config)
+            px_affine = self.getPixelSizeAffineByID(px_config)
+            cfg.extend(
+                (
+                    f"PixelSize_um,{px_config},{px_size}",
+                    f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}",
+                )
+            )
+        f.write("\n".join(cfg))
 
     def describe(self, sort: str | None = None) -> None:
         """Print information table with the current configuration.
