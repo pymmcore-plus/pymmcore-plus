@@ -1739,24 +1739,24 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._save_pixel_configurations(filename)
 
     def _save_pixel_configurations(self, filename: str) -> None:
+        px_configs = self.getAvailablePixelSizeConfigs()
+        if not px_configs:
+            return
+        cfg = ["# PixelSize settings"]
+        for px_config in px_configs:
+            cfg.extend(
+                f"ConfigPixelSize,{px_config},{device},{prop},{val}"
+                for device, prop, val in self.getPixelSizeConfigData(px_config)
+            )
+            px_size = self.getPixelSizeUmByID(px_config)
+            px_affine = self.getPixelSizeAffineByID(px_config)
+            cfg.extend(
+                (
+                    f"PixelSize_um,{px_config},{px_size}",
+                    f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}",
+                )
+            )
         with open(filename, "a") as f:
-            px_configs = self.getAvailablePixelSizeConfigs()
-            if not px_configs:
-                return
-            cfg = ["# PixelSize settings"]
-            for px_config in px_configs:
-                cfg.extend(
-                    f"ConfigPixelSize,{px_config},{device},{prop},{val}"
-                    for device, prop, val in self.getPixelSizeConfigData(px_config)
-                )
-                px_size = self.getPixelSizeUmByID(px_config)
-                px_affine = self.getPixelSizeAffineByID(px_config)
-                cfg.extend(
-                    (
-                        f"PixelSize_um,{px_config},{px_size}",
-                        f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}",
-                    )
-                )
             f.write("\n".join(cfg))
 
     def describe(self, sort: str | None = None) -> None:
