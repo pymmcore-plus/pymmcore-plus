@@ -1750,7 +1750,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             cfg.extend(
                 f"ConfigPixelSize,{px_config},{device},{prop},{val}"
                 for device, prop, val in self.getPixelSizeConfigData(px_config)
-                )
+            )
             px_size = self.getPixelSizeUmByID(px_config)
             px_affine = self.getPixelSizeAffineByID(px_config)
             cfg.extend(
