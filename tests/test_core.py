@@ -522,6 +522,7 @@ def test_save_config(core: CMMCorePlus, tmp_path: Path) -> None:
     assert "Res10x" not in core.getAvailablePixelSizeConfigs()
 
     core.definePixelSizeConfig("r10x", "Objective", "Label", "Nikon 10X S Fluor")
+    core.definePixelSizeConfig("r10x", "Core", "XYStage", "XY")
     core.setPixelSizeUm("r10x", 2)
     assert "r10x" in core.getAvailablePixelSizeConfigs()
 
@@ -532,6 +533,12 @@ def test_save_config(core: CMMCorePlus, tmp_path: Path) -> None:
     assert "r10x" not in core.getAvailablePixelSizeConfigs()
     core.loadSystemConfiguration(test_cfg)
     assert "r10x" in core.getAvailablePixelSizeConfigs()
+
+    items = list(core.getPixelSizeConfigData("r10x"))
+    assert items == [
+        ("Objective", "Label", "Nikon 10X S Fluor"),
+        ("Core", "XYStage", "XY"),
+    ]
 
 
 @pytest.mark.parametrize("use_rich", [True, False])

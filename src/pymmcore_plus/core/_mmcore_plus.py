@@ -1734,24 +1734,30 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To also save pixel size configurations.
         """
         super().saveSystemConfiguration(filename)
+        # saveSystemConfiguration does not save the pixel size config so here
+        # we add to the saved file also any pixel size config.
+        self._save_pixel_configurations(filename)
+
+    def _save_pixel_configurations(self, filename: str) -> None:
         px_configs = self.getAvailablePixelSizeConfigs()
         if not px_configs:
             return
-        # saveSystemConfiguration does not save the pixel size config so here
-        # we add to the saved file also any pixel size config.
-        with open(filename, "a") as f:
-            f.write("# PixelSize settings")
-            for px_config in px_configs:
-                data = self.getPixelSizeConfigData(px_config)
-                obj = data.dict()["Objective"]["Label"]
-                px_size = self.getPixelSizeUmByID(px_config)
-                px_affine = self.getPixelSizeAffineByID(px_config)
-                cfg = (
-                    f"\nConfigPixelSize,{px_config},Objective,Label,{obj}\n"
-                    f"PixelSize_um,{px_config},{px_size}\n"
-                    f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}"
+        cfg = ["# PixelSize settings"]
+        for px_config in px_configs:
+            cfg.extend(
+                f"ConfigPixelSize,{px_config},{device},{prop},{val}"
+                for device, prop, val in self.getPixelSizeConfigData(px_config)
+            )
+            px_size = self.getPixelSizeUmByID(px_config)
+            px_affine = self.getPixelSizeAffineByID(px_config)
+            cfg.extend(
+                (
+                    f"PixelSize_um,{px_config},{px_size}",
+                    f"PixelSizeAffine,{px_config},{','.join(map(str, px_affine))}",
                 )
-                f.write(cfg)
+            )
+        with open(filename, "a") as f:
+            f.write("\n".join(cfg))
 
     def describe(self, sort: str | None = None) -> None:
         """Print information table with the current configuration.
