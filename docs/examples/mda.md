@@ -1,6 +1,11 @@
 # Multidimensional Acquisition
 
-`pymmcore-plus` includes a basic  Multi-dimensional Acquisition (`mda`) engine
+!!! note
+
+    There is much more extensive documentation on the MDA acquisition engine
+    in the [Acquisition Engine guide](../guides/mda_engine.md)
+
+`pymmcore-plus` includes a basic Multi-dimensional Acquisition (`mda`) engine
 [`CMMCorePlus.run_mda`][pymmcore_plus.CMMCorePlus.run_mda] that accepts
 experimental sequences defined using
 [useq-schema](https://github.com/pymmcore-plus/useq-schema).
@@ -10,22 +15,23 @@ experimental sequences defined using
 ```
 
 <!-- These comments correspond to the (1), (2) annotations in run_mda.py. -->
+
 1. `pymmcore-plus` uses
    [`useq-schema`](https://pymmcore-plus.github.io/useq-schema/) to define
-   experimental sequences.  You can either construct a [`useq.MDASequence`][]
+   experimental sequences. You can either construct a [`useq.MDASequence`][]
    object manually, or
-   [from a YAML/JSON file](useq-schema/#serialization-and-deserialization).
+   [from a YAML/JSON file](https://pymmcore-plus.github.io/useq-schema/#serialization-and-deserialization).
 2. Access global singleton:
    [`CMMCorePlus.instance`][pymmcore_plus.CMMCorePlus.instance]
 3. See
    [`CMMCorePlus.loadSystemConfiguration`][pymmcore_plus.CMMCorePlus.loadSystemConfiguration]
 4. For info on all of the signals available to connect to, see the
-    [MDA Events API][pymmcore_plus.mda.events.PMDASignaler]
+   [MDA Events API][pymmcore_plus.mda.events.PMDASignaler]
 5. To avoid blocking further execution,
-    [`run_mda`][pymmcore_plus.CMMCorePlus.run_mda] runs on a new thread.
-    (`run_mda` returns a reference to the thread in case you want to do
-    something with it, such as wait for it to finish with
-    [threading.Thread.join][])
+   [`run_mda`][pymmcore_plus.CMMCorePlus.run_mda] runs on a new thread.
+   (`run_mda` returns a reference to the thread in case you want to do
+   something with it, such as wait for it to finish with
+   [threading.Thread.join][])
 
 ## Cancelling or Pausing
 

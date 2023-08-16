@@ -11,9 +11,14 @@ from typing import TYPE_CHECKING, Any, Callable, cast
 from unittest.mock import patch
 
 import pytest
+
+try:
+    from pymmcore_plus._cli import app
+    from typer.testing import CliRunner
+except ImportError:
+    pytest.skip("cli extras not available", allow_module_level=True)
+
 from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, install
-from pymmcore_plus._cli import app
-from typer.testing import CliRunner
 from useq import MDASequence
 
 if TYPE_CHECKING:
@@ -285,3 +290,11 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # this is also not clearing the file on windows... perhaps due to
         # in-use file?
         assert not TEST_LOG.exists()
+
+
+# @pytest.mark.skipif("CI" not in os.environ, reason="only on CI")
+# def test_install(tmp_path: Path) -> None:
+#     assert not list(tmp_path.iterdir())
+#     result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
+#     assert result.exit_code == 0
+#     assert list(tmp_path.iterdir())

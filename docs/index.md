@@ -63,18 +63,23 @@ Install with `pip` or `conda`:
 
 ```bash
 pip install pymmcore-plus
+
+# OR, to include the `mmcore` command line tool
+pip install "pymmcore-plus[cli]"
+
 # OR
 conda install -c conda-forge pymmcore-plus
 ```
 
 You will also need the micro-manager device adapters on your system.
-To get them quickly, you can run:
+To get them quickly, assuming you have installed with `pymmcore-plus[cli]`,
+you can run:
 
 ```bash
 mmcore install
 ```
 
-> *See [install](install) for more details.*
+> *See [install](install.md) for more details.*
 
 ### Usage
 
@@ -112,10 +117,10 @@ the additional features of `CMMCorePlus`.
 While you can easily use `pymmcore-plus` from a script or IPython/Jupyter you can
 also use it in combination with the [napari](https://napari.org/) based gui
 [napari-micromanager](https://github.com/pymmcore-plus/napari-micromanager#napari-micromanager).
-See [using with napari-micromanager](examples/napari-micromanager) for an
+See [using with napari-micromanager](examples/napari-micromanager.md) for an
 example of how to use them together.
 
 ## Contributing
 
 We welcome contributions to `pymmcore-plus` and related libraries.  Please see
-[contributing](contributing) for more information.
+[contributing](contributing.md) for more information.

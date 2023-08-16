@@ -8,8 +8,14 @@ from contextlib import suppress
 from pathlib import Path
 from typing import List, Optional, Union, cast
 
-import typer
-from rich import print
+try:
+    import typer
+    from rich import print
+except ImportError:  # pragma: no cover
+    raise ImportError(
+        'Please install with `pip install "pymmcore-plus[cli]"` to use the '
+        "pymmcore-plus command line interface."
+    ) from None
 
 import pymmcore_plus
 from pymmcore_plus._logger import configure_logging
@@ -84,7 +90,7 @@ def _list() -> None:
 @app.command()
 def find() -> None:
     """Show the location of Micro-Manager in use by pymmcore-plus."""
-    configure_logging(strerr_level="CRITICAL")
+    configure_logging(stderr_level="CRITICAL")
 
     found = None
     with suppress(Exception):

@@ -177,7 +177,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         if logfile := current_logfile(logger):
             self.setPrimaryLogFile(str(logfile))
-            logger.debug("Initialized core {}", self)
+            logger.debug("Initialized core %s", self)
 
         self._mm_path = mm_path or find_micromanager()
         if not adapter_paths and self._mm_path:
@@ -282,7 +282,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if p not in env_path:
                 env_path = p + os.pathsep + env_path
         os.environ["PATH"] = env_path
-        logger.debug(f"setting adapter search paths: {paths}")
+        logger.debug("setting adapter search paths: %s", paths)
         super().setDeviceAdapterSearchPaths(paths)
 
     def loadDevice(self, label: str, moduleName: str, deviceName: str) -> None:
@@ -1917,7 +1917,7 @@ class CMMCorePlus(pymmcore.CMMCore):
                     orig_values[name] = getattr(self, f"get{name}")()
                     getattr(self, f"set{name}")(v)
                 except AttributeError:
-                    logger.warning(f"{name} is not a valid property, skipping.")
+                    logger.warning("%s is not a valid property, skipping.", name)
             yield
         finally:
             for k, v in orig_values.items():
@@ -2020,7 +2020,7 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
                 getattr(self._emitter, sig_name).emit(*args)
             except Exception as e:
                 logger.error(
-                    f"Exception occurred in MMCorePlus callback {sig_name!r}: {e}"
+                    "Exception occurred in MMCorePlus callback %r: %s", sig_name, e
                 )
 
         return reemit

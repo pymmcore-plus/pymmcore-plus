@@ -1,14 +1,12 @@
 from __future__ import annotations
 
-import contextlib
 import time
 import warnings
 from typing import TYPE_CHECKING, Iterable, Iterator
 
-from psygnal import EmitLoopError
 from useq import MDASequence
 
-from pymmcore_plus._logger import logger
+from pymmcore_plus._logger import exceptions_logged, logger
 
 from ._protocol import PMDAEngine
 from .events import PMDASignaler, _get_auto_MDA_callback_class
@@ -70,7 +68,7 @@ class MDARunner:
         if not isinstance(engine, PMDAEngine):
             raise TypeError("Engine does not conform to the Engine protocol.")
 
-        if self.is_running():
+        if self.is_running():  # pragma: no cover
             raise RuntimeError(
                 "Cannot register a new engine when the current engine is running "
                 "an acquistion. Please cancel the current engine's acquistion "
@@ -167,7 +165,7 @@ class MDARunner:
             self._run(engine, events)
         except Exception as e:
             error = e
-        with contextlib.suppress(Exception):
+        with exceptions_logged():
             self._finish_run(sequence)
         if error is not None:
             raise error
@@ -183,19 +181,19 @@ class MDARunner:
             if self._wait_until_event(event) or not self._running:
                 break
 
-            logger.info(event)
+            logger.info("%s", event)
             engine.setup_event(event)
 
             output = engine.exec_event(event)
 
             if (img := getattr(output, "image", None)) is not None:
-                with contextlib.suppress(EmitLoopError):
+                with exceptions_logged():
                     self._signals.frameReady.emit(img, event)
 
             # FIXME: this is here to make tests pass with sequenced events for now,
             # but we might not want to do this for sequences for performance reasons.s
             if (imgs := getattr(output, "image_sequence", None)) is not None:
-                with contextlib.suppress(EmitLoopError):
+                with exceptions_logged():
                     for img, sub_event in imgs:
                         self._signals.frameReady.emit(img, sub_event)
 
@@ -209,7 +207,7 @@ class MDARunner:
         sequence : MDASequence
             The sequence of events to run.
         """
-        if not self._engine:
+        if not self._engine:  # pragma: no cover
             raise RuntimeError("No MDAEngine set.")
 
         self._running = True
@@ -218,7 +216,7 @@ class MDARunner:
         self._sequence = sequence
 
         self._engine.setup_sequence(sequence)
-        logger.info("MDA Started: {}", sequence)
+        logger.info("MDA Started: %s", sequence)
 
         self._signals.sequenceStarted.emit(sequence)
         self._reset_timer()
@@ -242,7 +240,7 @@ class MDARunner:
             Whether the MDA has been canceled.
         """
         if self._canceled:
-            logger.warning("MDA Canceled: {}", self._sequence)
+            logger.warning("MDA Canceled: %s", self._sequence)
             self._signals.sequenceCanceled.emit(self._sequence)
             self._canceled = False
             return True
@@ -262,7 +260,7 @@ class MDARunner:
             Whether the MDA was cancelled while waiting.
         """
         if not self.is_running():
-            return False
+            return False  # pragma: no cover
         if self._check_canceled():
             return True
         while self.is_paused() and not self._canceled:
@@ -310,5 +308,5 @@ class MDARunner:
         if hasattr(self._engine, "teardown_sequence"):
             self._engine.teardown_sequence(sequence)  # type: ignore
 
-        logger.info("MDA Finished: {}", sequence)
+        logger.info("MDA Finished: %s", sequence)
         self._signals.sequenceFinished.emit(sequence)

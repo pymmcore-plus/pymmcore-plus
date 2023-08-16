@@ -9,7 +9,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._sequencing import SequencedEvent
 
-from ._protocol import FullPMDAEngine
+from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
     import numpy as np
@@ -17,7 +17,7 @@ if TYPE_CHECKING:
     from pymmcore_plus.core import CMMCorePlus
 
 
-class MDAEngine(FullPMDAEngine):
+class MDAEngine(PMDAEngine):
     """The default MDAengine that ships with pymmcore-plus.
 
     This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
@@ -63,7 +63,7 @@ class MDAEngine(FullPMDAEngine):
         (currently, this does nothing but get the global `CMMCorePlus` singleton
         if one has not already been provided).
         """
-        if not self._mmc:
+        if not self._mmc:  # pragma: no cover
             from pymmcore_plus.core import CMMCorePlus
 
             self._mmc = CMMCorePlus.instance()
@@ -115,7 +115,7 @@ class MDAEngine(FullPMDAEngine):
                 # execute hardware autofocus
                 new_correction = self._execute_autofocus(action)
             except RuntimeError as e:
-                logger.warning("Hardware autofocus failed. {}", e)
+                logger.warning("Hardware autofocus failed. %s", e)
             else:
                 # store correction for this position index
                 p_idx = event.index.get("p", None)
@@ -175,12 +175,12 @@ class MDAEngine(FullPMDAEngine):
             try:
                 self._mmc.setConfig(event.channel.group, event.channel.config)
             except Exception as e:
-                logger.warning("Failed to set channel. {}", e)
+                logger.warning("Failed to set channel. %s", e)
         if event.exposure is not None:
             try:
                 self._mmc.setExposure(event.exposure)
             except Exception as e:
-                logger.warning("Failed to set exposure. {}", e)
+                logger.warning("Failed to set exposure. %s", e)
 
         if (
             # (if autoshutter wasn't set at the beginning of the sequence
@@ -205,7 +205,7 @@ class MDAEngine(FullPMDAEngine):
         try:
             self._mmc.snapImage()
         except Exception as e:
-            logger.warning("Failed to snap image. {}", e)
+            logger.warning("Failed to snap image. %s", e)
             return None
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
@@ -217,6 +217,10 @@ class MDAEngine(FullPMDAEngine):
         # doesn't want to leave the shutter open.  Re-enable autoshutter.
         if not event.keep_shutter_open and self._autoshutter_was_set:
             self._mmc.setAutoShutter(True)
+
+    def teardown_sequence(self, sequence: MDASequence) -> None:
+        """Perform any teardown required after the sequence has been executed."""
+        pass
 
     # ===================== Sequenced Events =====================
 
@@ -297,7 +301,7 @@ class MDAEngine(FullPMDAEngine):
             else:
                 time.sleep(0.001)
 
-        if self._mmc.isBufferOverflowed():
+        if self._mmc.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
 
         while self._mmc.getRemainingImageCount():
@@ -306,7 +310,7 @@ class MDAEngine(FullPMDAEngine):
         if len(images) != n_events:
             logger.warning(
                 "Unexpected number of images returned from sequence. "
-                "Expected {}, got {}",
+                "Expected %s, got %s",
                 n_events,
                 len(images),
             )

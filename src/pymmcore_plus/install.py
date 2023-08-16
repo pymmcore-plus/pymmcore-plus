@@ -14,7 +14,15 @@ from typing import Iterator
 from urllib.request import urlopen, urlretrieve
 
 import typer
-from rich import print, progress
+
+try:
+    from rich import print, progress
+except ImportError:  # pragma: no cover
+    raise ImportError(
+        "please install with `pip install pymmcore-plus[cli]` to use the pymmcore-plus "
+        "command line tools."
+    ) from None
+
 
 from pymmcore_plus._util import USER_DATA_MM_PATH
 

@@ -6,6 +6,10 @@
 
 ```bash
 pip install pymmcore-plus
+
+# or, add the [cli] extra if you wish to use the `mmcore` command line tool:
+
+pip install "pymmcore-plus[cli]"
 ```
 
 ... as well as conda:
@@ -22,9 +26,10 @@ provided by
 [mmCoreAndDevices](https://github.com/micro-manager/mmCoreAndDevices#mmcoreanddevices).
 There are two ways to do this:
 
-1. **Use the `pymmcore_plus.install` module**
+1. **Use the `mmcore` command line tool**
 
-    This library provides a quick way to install the latest version of
+    If you've installed with `pip install "pymmcore-plus[cli]"`,
+    this library provides a quick way to install the latest version of
     micro-manager:
 
     ```bash
@@ -32,7 +37,7 @@ There are two ways to do this:
     ```
 
     This will download the latest release of micro-manager and place it in the
-    pymmcore-plus folder.  If you would like to modify the location of the
+    pymmcore-plus folder. If you would like to modify the location of the
     installation, or the release of micro-manager to install, you can use the
     `--dest` and `--release` flags respectively.
 
@@ -77,13 +82,20 @@ There are two ways to do this:
     can run:
 
     ```shell
-    python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
+    mmcore find
     ```
 
+    or... if you didn't install with the `cli` extra:
+
+    ```shell
+    python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
+    ```
 
 ### On Linux
 
 On a linux based system the easiest approach is to just install the C++ core of
 micromanager,
 [mmCoreAndDevices](https://github.com/micro-manager/mmCoreAndDevices#mmcoreanddevices).
-To do that follow the build instructions in the `mmCoreAndDevices` README.
+To do that follow the [build
+instructions](https://github.com/micro-manager/micro-manager/blob/main/doc/how-to-build.md#building-on-unix)
+in the micro-manager repo.
