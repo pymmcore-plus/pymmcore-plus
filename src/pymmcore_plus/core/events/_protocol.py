@@ -10,13 +10,13 @@ class PSignalInstance(Protocol):
     """
 
     def connect(self, slot: Callable) -> Any:
-        ...
+        """Connect slot to this signal."""
 
     def disconnect(self, slot: Callable) -> Any:
-        ...
+        """Disconnect slot from this signal."""
 
     def emit(self, *args: Any) -> Any:
-        ...
+        """Emits the signal with the given arguments."""
 
 
 @runtime_checkable
@@ -24,7 +24,7 @@ class PSignalDescriptor(Protocol):
     """Descriptor that returns a signal instance."""
 
     def __get__(self, instance: Optional[Any], owner: Any) -> PSignalInstance:
-        ...
+        """Returns the signal instance for this descriptor."""
 
 
 PSignal = Union[PSignalDescriptor, PSignalInstance]

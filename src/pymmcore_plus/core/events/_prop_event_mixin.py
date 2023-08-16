@@ -69,7 +69,7 @@ class _PropertySignal:
         key = (self._device, self._property, normalize_slot(callback))
         cb = self._events.property_callbacks.pop(key, None)
         if cb is None:
-            raise ValueError("callback not connected")
+            raise ValueError("callback not connected")  # pragma: no cover
         self._events.propertyChanged.disconnect(cb)
 
     def emit(self, *args: Any) -> Any:

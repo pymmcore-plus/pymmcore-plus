@@ -21,9 +21,8 @@ environments**.
   [CMMCorePlus
   documentation](https://pymmcore-plus.github.io/pymmcore-plus/api/cmmcoreplus/)
   for details.
-- `CMMCorePlus` includes a `run_mda` method (name may change) "acquisition
-  engine" that drives micro-manager for conventional multi-dimensional
-  experiments. It accepts an
+- `pymmcore-plus` includes an [acquisition engine](https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_engine/) 
+  that drives micro-manager for conventional multi-dimensional experiments. It accepts an
   [MDASequence](https://pymmcore-plus.github.io/useq-schema/schema/sequence/)
   from [useq-schema](https://pymmcore-plus.github.io/useq-schema/) for
   experiment design/declaration.
@@ -74,27 +73,44 @@ Micro-manager application (which in turn controls the C++ core), `pymmcore-plus`
 provides a python API to control the C++ core directly, without the need for
 Java in the loop.
 
+See [migrating from
+pycromanager](https://pymmcore-plus.github.io/pymmcore-plus/guides/pycromanager_migration/)
+for details.
+
 ## Quickstart
 
 ### Install
 
+from pip
+
 ```sh
-# from pip
 pip install pymmcore-plus
 
-# from conda
-conda install -c conda-forge pymmcore-plus
+# or, add the [cli] extra if you wish to use the `mmcore` command line tool:
 
-# or from source tree
-pip install git+https://github.com/pymmcore-plus/pymmcore-plus.git
+pip install "pymmcore-plus[cli]"
 ```
 
-Usually, you'll then want to install the device adapters (though
-you can also download these manually from [micro-manager.org](https://micro-manager.org/Micro-Manager_Nightly_Builds)):
+from conda
+
+```sh
+conda install -c conda-forge pymmcore-plus
+```
+
+dev version from github
+
+```sh
+pip install 'pymmcore-plus[cli] @ git+https://github.com/pymmcore-plus/pymmcore-plus'
+```
+
+Usually, you'll then want to install the device adapters. Assuming you've
+installed with `pip install "pymmcore-plus[cli]"`, you can run:
 
 ```sh
 mmcore install
 ```
+
+(you can also download these manually from [micro-manager.org](https://micro-manager.org/Micro-Manager_Nightly_Builds))
 
 _See [installation documentation ](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details._
 

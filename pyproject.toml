@@ -17,7 +17,7 @@ authors = [
     { name = "Ian Hunt-Isaak", email = "ianhuntisaak@gmail.com" },
 ]
 classifiers = [
-    "Development Status :: 3 - Alpha",
+    "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",
     "Intended Audience :: Science/Research",
     "License :: OSI Approved :: BSD License",
@@ -35,7 +35,6 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "appdirs",
-    "loguru >=0.5.0",
     "numpy",
     "psygnal >=0.4.2",
     "pymmcore >=10.1.1.70.4",
@@ -49,6 +48,7 @@ dependencies = [
 # extras
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
+cli = ["typer >=0.4.2", "rich >=10.2.0"]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material",
@@ -56,7 +56,15 @@ docs = [
     "mkdocstrings-python ==1.1.2",
     # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
-testing = ["PyQt6", "pytest", "pytest-cov", "pytest-qt", "qtpy"]
+testing = [
+    "PyQt6",
+    "pytest",
+    "pytest-cov",
+    "pytest-qt",
+    "qtpy",
+    "typer",
+    "rich",
+]
 dev = [
     "black",
     "ipython",
@@ -158,8 +166,11 @@ exclude_lines = [
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
 ]
+show_missing = true
+
 [tool.coverage.run]
 source = ['pymmcore_plus']
+omit = ["src/pymmcore_plus/_build.py"]
 
 # https://github.com/mgedmin/check-manifest#configuration
 [tool.check-manifest]

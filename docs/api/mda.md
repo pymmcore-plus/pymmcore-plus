@@ -5,7 +5,11 @@ The [`mda`][pymmcore_plus.CMMCorePlus.mda] attribute on the
 interface for running multi-dimensional microscopy experiments.
 
 ::: pymmcore_plus.mda.MDARunner
+    options:
+        show_source: true
 
 ::: pymmcore_plus.mda.PMDAEngine
 
 ::: pymmcore_plus.mda.MDAEngine
+    options:
+        show_source: true

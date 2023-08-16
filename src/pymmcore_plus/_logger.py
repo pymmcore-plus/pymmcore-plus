@@ -1,57 +1,21 @@
 from __future__ import annotations
 
-import atexit
-import contextlib
+import logging
 import os
 import sys
 import warnings
+from contextlib import contextmanager
+from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
-
-try:
-    from typing_extensions import deprecated
-except ImportError:
-
-    def deprecated(*args, **kwargs):  # type: ignore
-        def _decorator(func):  # type: ignore
-            return func
-
-        return _decorator
-
+from typing import ClassVar, Iterator
 
 __all__ = ["logger"]
 
-if TYPE_CHECKING:
-    from loguru import logger
-    from typing_extensions import Literal
 
-    LogLvlStr = Literal["TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
-    LogLvlInt = Literal[5, 10, 20, 30, 40, 50]
-else:
-    from loguru import __version__
-    from loguru._logger import Core, Logger
+logger = logging.getLogger("pymmcore-plus")
 
-    PATCHERS = {"patchers": []}
-    with contextlib.suppress(Exception):
-        if tuple(int(x) for x in __version__.split("."))[:2] < (0, 7):
-            PATCHERS = {"patcher": None}
 
-    # avoid using the global loguru logger in case other packages are using it.
-    logger = Logger(
-        core=Core(),
-        exception=None,
-        depth=0,
-        record=False,
-        lazy=False,
-        colors=False,
-        raw=False,
-        capture=True,
-        extra={},
-        **PATCHERS,
-    )
-
-DEFAULT_LOG_LEVEL: LogLvlStr = os.getenv("PYMM_LOG_LEVEL", "INFO").upper()  # type: ignore  # noqa: E501
-
+DEFAULT_LOG_LEVEL: str = os.getenv("PYMM_LOG_LEVEL", "INFO").upper()
 if any(x.endswith("pytest") for x in sys.argv):
     LOG_FILE = None
 elif "PYMM_LOG_FILE" in os.environ:
@@ -64,21 +28,44 @@ else:
 
     LOG_FILE = USER_DATA_DIR / "logs" / "pymmcore-plus.log"
 
-# this format helps to align the log messages with those from pymmcore
-LOGGER_FORMAT = (
-    "{time:YYYY-MM-DD HH:mm:ss.SSSSSS} | "
-    "<level>{level: <10}</level> | "
-    "<cyan>{name}</cyan>:<cyan>{function}</cyan>:<cyan>{line}</cyan> | "
-    "<level>{message}</level>"
+
+class CustomFormatter(logging.Formatter):
+    dark_grey = "\x1b[38;5;240m"
+    grey = "\x1b[38;20m"
+    yellow = "\x1b[33;20m"
+    red = "\x1b[31;20m"
+    bold_red = "\x1b[31;1m"
+    reset = "\x1b[0m"
+    _format: str = (
+        "%(asctime)s - %(name)s - %(levelname)s - (%(filename)s:%(lineno)d) %(message)s"
+    )
+
+    FORMATS: ClassVar[dict[int, str]] = {
+        logging.DEBUG: dark_grey + _format + reset,
+        logging.INFO: grey + _format + reset,
+        logging.WARNING: yellow + _format + reset,
+        logging.ERROR: red + _format + reset,
+        logging.CRITICAL: bold_red + _format + reset,
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt)
+        return formatter.format(record)
+
+
+_FILE_FORMMATTER = logging.Formatter(
+    "%(asctime)s.%(msecs)03d    tid0x%(thread)x [%(levelname)s,%(name)s] %(message)s",
+    datefmt="%Y-%m-%dT%H:%M:%S",
 )
 
 
 def configure_logging(
     file: str | Path | None = LOG_FILE,
-    strerr_level: LogLvlStr | LogLvlInt = DEFAULT_LOG_LEVEL,
-    file_level: LogLvlStr | LogLvlInt = "TRACE",
+    stderr_level: int | str = DEFAULT_LOG_LEVEL,
+    file_level: int | str = logging.DEBUG,
     log_to_stderr: bool = True,
-    file_rotation: str = "40MB",
+    file_rotation: int = 40,
     file_retention: int = 20,
 ) -> None:
     r"""Configure logging for pymmcore-plus.
@@ -108,7 +95,7 @@ def configure_logging(
         Mac OS X:   ~/Library/Application Support/pymmcore-plus/logs
         Unix:       ~/.local/share/pymmcore-plus/logs
         Win:        C:\Users\<username>\AppData\Local\pymmcore-plus\pymmcore-plus\logs
-    strerr_level : int | str
+    stderr_level : int | str
         Level for stderr logging.
         One of "TRACE", "DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL",
         or 5, 10, 20, 30, 40, or 50, respectively.
@@ -117,59 +104,63 @@ def configure_logging(
         Level for logging to file, by default `"TRACE"`
     log_to_stderr : bool
         Whether to log to stderr, by default True
-    file_rotation : str
-        When to rollover to the next log file, by default `"40MB"`
+    file_rotation : int
+        When to rollover to the next log file, in MegaBytes, by default `40`.
     file_retention : int
         Maximum number of log files to retain, by default `20`
     """
-    logger.remove()
+    # logging.basicConfig(level=logging.DEBUG)
+    root_logger = logging.getLogger()
+    root_logger.setLevel(logging.DEBUG)
+
+    for handler in logger.handlers:
+        logger.removeHandler(handler)
 
     # automatically log to stderr
     if log_to_stderr and sys.stderr:
-        logger.add(sys.stderr, level=strerr_level, backtrace=False)
+        stderr_handler = logging.StreamHandler(sys.stderr)
+        stderr_handler.setLevel(stderr_level)
+        stderr_handler.setFormatter(CustomFormatter())
+        logger.addHandler(stderr_handler)
 
     # automatically log to file
     if file:
         log_file = Path(file)
         log_file.parent.mkdir(parents=True, exist_ok=True)
-        logger.add(
-            log_file,
-            level=file_level,
-            format=LOGGER_FORMAT,
-            backtrace=False,
-            enqueue=True,
-            rotation=file_rotation,
-            retention=file_retention,
+
+        # Create a rotating file handler with a maximum file size and backup count.
+        file_handler = RotatingFileHandler(
+            log_file, maxBytes=file_rotation * 1_000_000, backupCount=file_retention
         )
+        file_handler.setLevel(file_level)
+        file_handler.setFormatter(_FILE_FORMMATTER)
+        logger.addHandler(file_handler)
 
 
-@deprecated("Use configure_logging instead.")
-def set_log_level(level: LogLvlStr | LogLvlInt = DEFAULT_LOG_LEVEL) -> None:
-    import warnings
-
+def set_log_level(level: int | str = DEFAULT_LOG_LEVEL) -> None:
     warnings.warn(
         "set_log_level is deprecated. Use configure_logging instead.",
         FutureWarning,
         stacklevel=1,
     )
-    configure_logging(strerr_level=level)
+    configure_logging(stderr_level=level)
 
 
-def current_logfile(logger: Any) -> Path | None:
-    """Hacky way to return the current log file."""
-    # sourcery skip: use-next
-    try:
-        for h in logger._core.handlers.values():  # noqa: SLF001
-            if hasattr(h, "_sink") and getattr(h._sink, "_path", None):  # noqa: SLF001
-                return Path(h._sink._path)  # noqa: SLF001
-    except AttributeError as e:  # pragma: no cover
-        warnings.warn(
-            f"Error determining current log file {e}. Please check loguru version.",
-            RuntimeWarning,
-            stacklevel=1,
-        )
+def current_logfile(logger: logging.Logger) -> Path | None:
+    """Return the first RotatingFileHandler's baseFilename."""
+    for handler in logger.handlers:
+        if isinstance(handler, RotatingFileHandler):
+            return Path(handler.baseFilename)
     return None
 
 
+@contextmanager
+def exceptions_logged() -> Iterator[None]:
+    """Context manager to log exceptions."""
+    try:
+        yield
+    except Exception as e:
+        logger.error(e)
+
+
 configure_logging()
-atexit.register(logger.remove)
