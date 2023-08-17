@@ -109,9 +109,15 @@ def _build_table() -> str:
         if name in plus.members:
             if docstring := plus.members[name].docstring:
                 doc = docstring.value.splitlines()[0]
+                if "deprecated" in docstring.value.lower():
+                    icon += ":prohibited:"
+                    doc = f"<span style='color:gray'>{doc}</span>"
         if not doc and name in core.members:
             if docstring := core.members[name].docstring:
                 doc = docstring.value.splitlines()[0]
+                if "deprecated" in docstring.value.lower():
+                    icon += ":prohibited:"
+                    doc = f"<span style='color:gray'>{doc}</span>"
 
         if name in plus_names:
             link = f"[`{name}`][pymmcore_plus.CMMCorePlus.{name}]"

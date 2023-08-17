@@ -15,8 +15,9 @@ table, the signatures of all methods are presented, broken into a
 method is implemented in `CMMCorePlus` or not).
 
 <small>
-:material-plus-thick:  *This method is overridden by `CMMCorePlus`.*
-:sparkles:  *This method only exists in `CMMCorePlus`.*
+:material-plus-thick:  *This method is overridden by `CMMCorePlus`.*  
+:sparkles:  *This method only exists in `CMMCorePlus`.*  
+:prohibited:  *This method is deprecated.*  
 </small>
 
 <!-- These are built dynamically in _hooks.py -->
