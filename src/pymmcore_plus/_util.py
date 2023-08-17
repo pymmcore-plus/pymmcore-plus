@@ -8,14 +8,14 @@ from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Iterator, Literal, TypeGuard, cast, overload
+from typing import TYPE_CHECKING, cast, overload
 
 import appdirs
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, TypeVar
+    from typing import Any, Callable, Iterator, Literal, TypeVar
 
-    from typing_extensions import ParamSpec
+    from typing_extensions import ParamSpec, TypeGuard
 
     from .core.events._protocol import PSignalInstance
 
