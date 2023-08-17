@@ -1,14 +1,12 @@
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
-from unittest.mock import Mock, call
+from unittest.mock import Mock
 
 import pytest
 from pymmcore_plus._util import listeners_connected, retry
-from useq import MDASequence
 
 if TYPE_CHECKING:
-    from pymmcore_plus import CMMCorePlus
     from pytestqt.qtbot import QtBot
 
 
@@ -56,26 +54,3 @@ def test_listener_connected(qtbot: QtBot) -> None:
 
     mock.assert_called_once_with(42)
     assert len(emitter.signalName) == 0
-
-
-def test_core_listener(core: CMMCorePlus):
-    mock = Mock()
-
-    class DataHandler:
-        def sequenceStarted(self, seq):
-            mock(seq)
-
-        def frameReady(self, img, event):
-            mock(event)
-
-        def sequenceFinished(self, seq):
-            mock(seq)
-
-    handler = DataHandler()
-    seq = MDASequence(time_plan={"interval": 0, "loops": 1})
-
-    with core.mda.events.listeners(handler):
-        core.mda.run(seq)
-
-    event1 = next(iter(seq))
-    mock.assert_has_calls([call(seq), call(event1), call(seq)])

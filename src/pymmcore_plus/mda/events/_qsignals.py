@@ -1,5 +1,3 @@
-from typing import ContextManager
-
 from qtpy.QtCore import QObject, Signal
 
 
@@ -9,8 +7,3 @@ class QMDASignaler(QObject):
     sequenceCanceled = Signal(object)  # when mda is canceled
     sequenceFinished = Signal(object)  # when mda is done (whether canceled or not)
     frameReady = Signal(object, object)  # after each event in the sequence
-
-    def listeners(self, *listeners: object) -> ContextManager:
-        from pymmcore_plus._util import listeners_connected
-
-        return listeners_connected(self, *listeners)

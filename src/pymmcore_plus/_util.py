@@ -8,7 +8,7 @@ from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Iterator, Literal, overload
+from typing import TYPE_CHECKING, Iterator, Literal, TypeGuard, cast, overload
 
 import appdirs
 
@@ -16,6 +16,8 @@ if TYPE_CHECKING:
     from typing import Any, Callable, TypeVar
 
     from typing_extensions import ParamSpec
+
+    from .core.events._protocol import PSignalInstance
 
     P = ParamSpec("P")
     R = TypeVar("R")
@@ -316,7 +318,7 @@ def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
         `QtCore.SignalInstance`).  Basically, anything with `connect` and `disconnect`
         methods.
     listeners : Any
-        Object(s) that has signal methods matching the signals on `emitter`.
+        Object(s) that has methods matching the name of signals on `emitter`.
 
     Examples
     --------
@@ -344,22 +346,24 @@ def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
 
     for listener in listeners:
         # get a list of common names:
-        common_names: set[str] = set(dir(emitter)).intersection(dir(listener))
+        common_attrs: set[str] = set(dir(emitter)).intersection(dir(listener))
 
-        for sig_name in common_names:
-            signal = getattr(emitter, sig_name)
-            if (  # minimal protocol shared by psygnal and Qt that we need here.
-                hasattr(signal, "connect")
-                and callable(signal.connect)
-                and hasattr(signal, "disconnect")
-            ):
-                slot = getattr(listener, sig_name, None)
-                if callable(slot):
-                    tokens[sig_name].add(signal.connect(slot))
+        for attr_name in common_attrs:
+            if _is_signal_instance(signal := getattr(emitter, attr_name)):
+                if callable(slot := getattr(listener, attr_name)):
+                    tokens[attr_name].add(signal.connect(slot))
 
     try:
         yield
     finally:
-        for sig_name, token_set in tokens.items():
+        for attr_name, token_set in tokens.items():
             for token in token_set:
-                getattr(emitter, sig_name).disconnect(token)
+                sig = cast("PSignalInstance", getattr(emitter, attr_name))
+                sig.disconnect(token)
+
+
+def _is_signal_instance(obj: Any) -> TypeGuard[PSignalInstance]:
+    # minimal protocol shared by psygnal and Qt that we need here.
+    return (
+        hasattr(obj, "connect") and callable(obj.connect) and hasattr(obj, "disconnect")
+    )
