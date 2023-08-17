@@ -2,11 +2,14 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+from ._constants import DeviceType
 from ._property import DeviceProperty
 from .events._device_signal_view import _DevicePropValueSignal
 
 if TYPE_CHECKING:
-    from ._constants import DeviceDetectionStatus, DeviceType
+    from pymmcore_plus.core.events._protocol import PSignalInstance
+
+    from ._constants import DeviceDetectionStatus
     from ._mmcore_plus import CMMCorePlus, DeviceSchema
 
 
@@ -40,10 +43,42 @@ class Device:
     >>> device.schema()  # JSON schema of device properties
     """
 
-    def __init__(self, device_label: str, mmcore: CMMCorePlus) -> None:
-        self.label = device_label
-        self._mmc = mmcore
-        self.propertyChanged = _DevicePropValueSignal(device_label, None, mmcore)
+    UNASIGNED = "__UNASIGNED__"
+    propertyChanged: PSignalInstance
+
+    def __init__(
+        self,
+        device_label: str = UNASIGNED,
+        mmcore: CMMCorePlus | None = None,
+        adapter_name: str = "",
+        device_name: str = "",
+        type: DeviceType = DeviceType.UnknownType,
+        description: str = "",
+    ) -> None:
+        if mmcore is None:
+            from ._mmcore_plus import CMMCorePlus
+
+            self._mmc = CMMCorePlus.instance()
+        else:
+            self._mmc = mmcore
+
+        self._label = device_label
+        self._adapter_name = adapter_name
+        self._device_name = device_name
+        self._type = type
+        self._description = description
+        self.propertyChanged = _DevicePropValueSignal(device_label, None, self._mmc)
+
+    @property
+    def label(self) -> str:
+        """Return the assigned label of this device."""
+        return self._label
+
+    @label.setter
+    def label(self, value: str) -> None:
+        if self.isLoaded():
+            raise RuntimeError("Cannot change label of loaded device")
+        self._label = value
 
     @property
     def core(self) -> CMMCorePlus:
@@ -68,15 +103,15 @@ class Device:
 
     def description(self) -> str:
         """Return device description."""
-        return self._mmc.getDeviceDescription(self.label)
+        return self._description or self._mmc.getDeviceDescription(self.label)
 
     def library(self) -> str:
         """Return device library (aka module, device adapter) name."""
-        return self._mmc.getDeviceLibrary(self.label)
+        return self._adapter_name or self._mmc.getDeviceLibrary(self.label)
 
     def name(self) -> str:
-        """Return the device name (this is not the same as the device label)."""
-        return self._mmc.getDeviceName(self.label)
+        """Return the device name (this is not the same as the assigned label)."""
+        return self._device_name or self._mmc.getDeviceName(self.label)
 
     def propertyNames(self) -> tuple[str, ...]:
         """Return all property names supported by this device."""
@@ -97,19 +132,39 @@ class Device:
         """Initialize device."""
         return self._mmc.initializeDevice(self.label)
 
-    def load(self, adapter_name: str, device_name: str) -> None:
+    def load(
+        self,
+        adapter_name: str = "",
+        device_name: str = "",
+        device_label: str = "",
+    ) -> None:
         """Load device from the plugin library.
 
         Parameters
         ----------
         adapter_name : str
             The name of the device adapter module (short name, not full file name).
-            (This is what is returned by `Device.library()`)
+            (This is what is returned by `Device.library()`). Must be specified if
+            `adapter_name` was not provided to the `Device` constructor.
         device_name : str
             The name of the device. The name must correspond to one of the names
             recognized by the specific plugin library. (This is what is returned by
-            `Device.name()`)
+            `Device.name()`). Must be specified if `device_name` was not provided to
+            the `Device` constructor.
+        device_label : str
+            The name to assign to the device. If not specified, the device will be
+            assigned a default name: `adapter_name-device_name`, unless this Device
+            instance was initialized with a label.
         """
+        if not (adapter_name := adapter_name or self._adapter_name):
+            raise TypeError("Must specify adapter_name")
+        if not (device_name := device_name or self._device_name):
+            raise TypeError("Must specify device_name")
+        if device_label:
+            self.label = device_label
+        elif self.label == self.UNASIGNED:
+            self.label = f"{adapter_name}-{device_name}"
+
         self._mmc.loadDevice(self.label, adapter_name, device_name)
 
     def unload(self) -> None:
@@ -140,7 +195,7 @@ class Device:
 
     def type(self) -> DeviceType:
         """Return device type."""
-        return self._mmc.getDeviceType(self.label)
+        return self._type or self._mmc.getDeviceType(self.label)
 
     def schema(self) -> DeviceSchema:
         """Return dict in JSON-schema format for properties of `device_label`."""
