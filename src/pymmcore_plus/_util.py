@@ -3,17 +3,21 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+from collections import defaultdict
+from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, Literal, overload
+from typing import TYPE_CHECKING, cast, overload
 
 import appdirs
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, TypeVar
+    from typing import Any, Callable, Iterator, Literal, TypeVar
 
-    from typing_extensions import ParamSpec
+    from typing_extensions import ParamSpec, TypeGuard
+
+    from .core.events._protocol import PSignalInstance
 
     P = ParamSpec("P")
     R = TypeVar("R")
@@ -297,3 +301,69 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
             ) from None
         rows.sort(key=lambda x: x[sort_idx])
     return rows
+
+
+@contextmanager
+def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
+    """Context manager for listening to signals.
+
+    This provides a way for one or more `listener` to temporarily connect to signals on
+    an `emitter`. Any methods on `listener` that match signals on `emitter` will be
+    connected, then disconnected when the context exits (see example below).
+
+    Parameters
+    ----------
+    emitter : Any
+        An object that has signals (e.g. `psygnal.SignalInstance` or
+        `QtCore.SignalInstance`).  Basically, anything with `connect` and `disconnect`
+        methods.
+    listeners : Any
+        Object(s) that has methods matching the name of signals on `emitter`.
+
+    Examples
+    --------
+    ```python
+    from qtpy.QtCore import Signal
+    # OR
+    from psygnal import Signal
+
+    class Emitter:
+        signalName = Signal(int)
+
+    class Listener:
+        def signalName(self, value: int):
+            print(value)
+
+    emitter = Emitter()
+    listener = Listener()
+
+    with listeners_connected(emitter, listener):
+        emitter.signalName.emit(42)  # prints 42
+    ```
+    """
+    # mapping of signal name on emitter to a set of tokens to disconnect later.
+    tokens: defaultdict[str, set[Any]] = defaultdict(set)
+
+    for listener in listeners:
+        # get a list of common names:
+        common_attrs: set[str] = set(dir(emitter)).intersection(dir(listener))
+
+        for attr_name in common_attrs:
+            if _is_signal_instance(signal := getattr(emitter, attr_name)):
+                if callable(slot := getattr(listener, attr_name)):
+                    tokens[attr_name].add(signal.connect(slot))
+
+    try:
+        yield
+    finally:
+        for attr_name, token_set in tokens.items():
+            for token in token_set:
+                sig = cast("PSignalInstance", getattr(emitter, attr_name))
+                sig.disconnect(token)
+
+
+def _is_signal_instance(obj: Any) -> TypeGuard[PSignalInstance]:
+    # minimal protocol shared by psygnal and Qt that we need here.
+    return (
+        hasattr(obj, "connect") and callable(obj.connect) and hasattr(obj, "disconnect")
+    )
