@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 
 if TYPE_CHECKING:
     from pymmcore_plus.core import CMMCorePlus
@@ -21,6 +21,10 @@ class _DevicePropValueSignal:
     def disconnect(self, callback: _C) -> None:
         sig = self._mmc.events.devicePropertyChanged(self._dev, self._prop)
         return sig.disconnect(callback)  # type: ignore
+
+    def emit(self, *args: Any) -> Any:
+        """Emits the signal with the given arguments."""
+        self._mmc.events.devicePropertyChanged(self._dev, self._prop).emit(*args)
 
     def __call__(self, property: str) -> "_DevicePropValueSignal":
         return _DevicePropValueSignal(self._dev, property, self._mmc)
