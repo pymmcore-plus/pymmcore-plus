@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, Sequence, runtime_checkable
 
 if TYPE_CHECKING:
     from typing import Iterable, Iterator
 
+    from numpy.typing import NDArray
     from useq import MDAEvent, MDASequence
+
+    PImagePayload = tuple[NDArray, MDAEvent, dict]
 
 
 # NOTE: This whole thing could potentially go in useq-schema
@@ -37,7 +40,7 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    def exec_event(self, event: MDAEvent) -> object:
+    def exec_event(self, event: MDAEvent) -> Sequence[PImagePayload]:
         """Execute `event`.
 
         This method is called after `setup_event` and is responsible for

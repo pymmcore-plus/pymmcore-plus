@@ -6,4 +6,4 @@ class QMDASignaler(QObject):
     sequencePauseToggled = Signal(bool)  # when MDA is paused/unpaused
     sequenceCanceled = Signal(object)  # when mda is canceled
     sequenceFinished = Signal(object)  # when mda is done (whether canceled or not)
-    frameReady = Signal(object, object)  # after each event in the sequence
+    frameReady = Signal(object, object, dict)  # img, MDAEvent, metadata

@@ -8,4 +8,4 @@ class MDASignaler:
     sequencePauseToggled = Signal(bool)  # when MDA is paused/unpaused
     sequenceCanceled = Signal(MDASequence)  # when mda is canceled
     sequenceFinished = Signal(MDASequence)  # when mda is done (whether canceled or not)
-    frameReady = Signal(np.ndarray, MDAEvent)  # after each event in the sequence
+    frameReady = Signal(np.ndarray, MDAEvent, dict)  # img, MDAEvent, metadata

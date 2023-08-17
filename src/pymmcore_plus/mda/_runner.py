@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Iterable, Iterator
+from typing import TYPE_CHECKING, Any, Iterable, Iterator
 
 from useq import MDASequence
 
@@ -184,18 +184,15 @@ class MDARunner:
             logger.info("%s", event)
             engine.setup_event(event)
 
-            output = engine.exec_event(event)
+            output = engine.exec_event(event) or ()  # in case output is None
 
-            if (img := getattr(output, "image", None)) is not None:
+            for payload in output:
+                img, event, meta = payload
+                if "PerfCounter" in meta:
+                    meta["ElapsedTime-ms"] = (meta["PerfCounter"] - self._t0) * 1000
+                meta["Event"] = event
                 with exceptions_logged():
-                    self._signals.frameReady.emit(img, event)
-
-            # FIXME: this is here to make tests pass with sequenced events for now,
-            # but we might not want to do this for sequences for performance reasons.s
-            if (imgs := getattr(output, "image_sequence", None)) is not None:
-                with exceptions_logged():
-                    for img, sub_event in imgs:
-                        self._signals.frameReady.emit(img, sub_event)
+                    self._signals.frameReady.emit(img, event, meta)
 
             teardown_event(event)
 
@@ -310,3 +307,12 @@ class MDARunner:
 
         logger.info("MDA Finished: %s", sequence)
         self._signals.sequenceFinished.emit(sequence)
+
+
+def _assert_handler(handler: Any) -> None:
+    if (
+        not hasattr(handler, "start")
+        or not hasattr(handler, "finish")
+        or not hasattr(handler, "put")
+    ):
+        raise TypeError("Handler must have start, finish, and put methods.")
