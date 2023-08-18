@@ -4,7 +4,7 @@ import datetime
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
-from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, PropertyType
+from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword, PropertyType
 
 if TYPE_CHECKING:
     import builtins
@@ -17,6 +17,10 @@ UNDEFINED = "UNDEFINED"
 
 def _cfg_field(*args: Any) -> str:
     return CFGCommand.FieldDelimiters.join(map(str, args))
+
+
+def _prop_field(*args: Any) -> str:
+    return _cfg_field(CFGCommand.Property, *args)
 
 
 @dataclass
@@ -62,7 +66,7 @@ class PropertyItem:
 
     def to_cfg(self) -> str:
         """Return a config string for this property."""
-        return _cfg_field(CFGCommand.Property, self.device, self.name, self.value)
+        return _prop_field(self.device, self.name, self.value)
 
 
 @dataclass
@@ -193,10 +197,12 @@ class StateDevice(Device):
         super().update_from_core(core)
         self.labels = core.getStateLabels(self.name)
 
-    @property
-    def num_states(self) -> int:
-        """Return the number of states."""
-        return len(self.labels)
+    def labels_cfg(self) -> list[str]:
+        """Return a list of config strings for this device's labels."""
+        return [
+            _cfg_field(CFGCommand.Label, self.name, state, label)
+            for state, label in enumerate(self.labels)
+        ]
 
 
 @dataclass
@@ -219,7 +225,22 @@ class CoreDevice(Device):
     description = "Core device"
 
     def roles(self) -> list[str]:
-        """Return the roles of this device,"""
+        """Return the roles of this device."""
+        return [
+            _prop_field(Keyword.CoreDevice, field, prop.value)
+            for field in (
+                Keyword.CoreCamera,
+                Keyword.CoreShutter,
+                Keyword.CoreFocus,
+                Keyword.CoreAutoShutter,
+            )
+            if (prop := self.find_property(field))
+        ]
+
+
+@dataclass
+class ConfigGroup:
+    ...
 
 
 @dataclass
@@ -227,6 +248,7 @@ class Microscope:
     """Full model of a microscope."""
 
     devices: list[Device] = field(default_factory=list)
+    config_groups: dict[str, ConfigGroup] = field(default_factory=dict)
     available_devices: tuple[Device, ...] = field(default_factory=tuple)
     available_com_ports: tuple[Device, ...] = field(default_factory=tuple)
     assigned_com_ports: dict[str, Device] = field(default_factory=dict)
@@ -256,6 +278,15 @@ class Microscope:
         for device in self.devices:
             device.update_from_core(core)
         self.update_available_devies(core)
+
+    def load_core_configs(self, core: CMMCore) -> None:
+        self.config_groups.clear()
+        for group_name in core.getAvailableConfigGroups():
+            self.config_groups[group_name] = ConfigGroup(
+                name=group_name,
+                config_names=core.getAvailableConfigs(group_name),
+                current_config=core.getCurrentConfig(group_name),
+            )
 
     def update_available_devies(self, core: CMMCore) -> None:
         """Return a tuple of available Devices."""
@@ -292,9 +323,8 @@ class Microscope:
         hub_refs: list[str] = []
         delays: list[str] = []
         focus_directions: list[str] = []
-        roles: list[str] = []
+        labels = []
 
-        core = self.core
         # TODO: add in-use com-port settings
         for d in self.devices:
             if d.type == DeviceType.Core:
@@ -307,6 +337,11 @@ class Microscope:
                 delays.append(_cfg_field(CFGCommand.Delay, d.name, d.delay_ms))
             if isinstance(d, StageDevice):
                 focus_directions.append(d.focus_cfg())
+            if isinstance(d, StateDevice):
+                if d.labels:
+                    labels.append(f"# {d.name}")
+                    # NOTE: MMStudio reverses the order
+                    labels.extend(d.labels_cfg())
 
         return CFG_TEMPLATE.format(
             date=date,
@@ -316,11 +351,11 @@ class Microscope:
             hub_refs="\n".join(hub_refs),
             delays="\n".join(delays),
             focus_directions="\n".join(focus_directions),
-            roles="\n".join(roles),
-            camera_synced_devices="\n",
-            labels="\n",
-            config_presets="\n",
-            pixel_size_settings="\n",
+            roles="\n".join(self.core.roles()),
+            camera_synced_devices="",
+            labels="\n".join(labels),
+            config_presets="",
+            pixel_size_settings="",
         )
 
 
