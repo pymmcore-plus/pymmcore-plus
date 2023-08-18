@@ -1795,12 +1795,21 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().definePixelSizeConfig(*args, **kwargs)
         self.events.pixelSizeChanged.emit(0.0)
 
-    def getMultiROI(self) -> None:
+    def getMultiROI(  # type: ignore [override]
+        self, *_: Any
+    ) -> tuple[list[int], list[int], list[int], list[int]]:
         """Get multiple ROIs from the current camera device.
 
         Will fail if the camera does not support multiple ROIs. Will return empty
         vectors if multiple ROIs are not currently being used.
         """
+        if _:
+            warnings.warn(
+                "Unlike pymmcore, CMMCorePlus.getMultiROI does not require arguments."
+                "Arguments are ignored.",
+                stacklevel=2,
+            )
+
         xs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
         ys = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
         ws = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
