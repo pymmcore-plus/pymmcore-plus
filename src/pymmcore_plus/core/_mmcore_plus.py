@@ -1802,6 +1802,9 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         Will fail if the camera does not support multiple ROIs. Will return empty
         vectors if multiple ROIs are not currently being used.
+
+        **Why Override?** So that the user doesn't need to pass in four empty
+        pymmcore.UnsignedVector() objects.
         """
         if _:
             warnings.warn(
