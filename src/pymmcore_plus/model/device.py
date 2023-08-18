@@ -1,15 +1,22 @@
 from __future__ import annotations
 
+import datetime
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
-from pymmcore_plus import DeviceType, FocusDirection, PropertyType
+from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, PropertyType
 
 if TYPE_CHECKING:
     import builtins
 
     from pymmcore import CMMCore
     from typing_extensions import Self
+
+UNDEFINED = "UNDEFINED"
+
+
+def _cfg_field(*args: Any) -> str:
+    return CFGCommand.FieldDelimiters.join(map(str, args))
 
 
 @dataclass
@@ -21,7 +28,7 @@ class PropertyItem:
     value: str
     read_only: bool = False
     pre_init: bool = False
-    allowed: tuple[str, ...] = field(default_factory=set)
+    allowed: tuple[str, ...] = field(default_factory=tuple)
     has_limits: bool = False
     lower_limit: float = 0.0
     upper_limit: float = 0.0
@@ -49,12 +56,13 @@ class PropertyItem:
             has_limits=core.hasPropertyLimits(device_name, property_name),
             lower_limit=core.getPropertyLowerLimit(device_name, property_name),
             upper_limit=core.getPropertyUpperLimit(device_name, property_name),
-            type=core.getPropertyType(device_name, property_name),
-            device_type=core.getDeviceType(device_name),
+            type=PropertyType(core.getPropertyType(device_name, property_name)),
+            device_type=DeviceType(core.getDeviceType(device_name)),
         )
 
-
-UNDEFINED = "UNDEFINED"
+    def to_cfg(self) -> str:
+        """Return a config string for this property."""
+        return _cfg_field(CFGCommand.Property, self.device, self.name, self.value)
 
 
 @dataclass
@@ -69,34 +77,38 @@ class Device:
     properties: list[PropertyItem] = field(default_factory=list)
     delay_ms: float = 0.0
     uses_delay: bool = False
-    parent: HubDevice | None = None
+    parent_name: str | None = None
     initialized: bool = False
 
     @classmethod
-    def create_from_core(
-        cls, core: CMMCore, device_name: str, *, parent: HubDevice | None = None
-    ) -> Device:
+    def create_from_core(cls, core: CMMCore, device_name: str) -> Device:
         """Create a Device populated with current core values."""
         type_ = core.getDeviceType(device_name)
-        dev = cls._subcls(type_)(
+        dev = _dev_subcls(type_)(
             name=device_name,
             library=core.getDeviceLibrary(device_name),
             adapter_name=core.getDeviceName(device_name),
-            description=core.getDeviceDescription(device_name),
+            type=DeviceType(type_),
             delay_ms=core.getDeviceDelayMs(device_name),
-            parent=parent,
         )
         dev.update_from_core(core)  # let subclass update specific values
         return dev
 
     def update_from_core(self, core: CMMCore) -> None:
         """Update the Device with current core values."""
+        if DeviceType(core.getDeviceType(self.name)) != self.type:
+            raise ValueError("Device Type mismatch")
         self.properties = [
             PropertyItem.create_from_core(core, self.name, prop_name)
             for prop_name in core.getDevicePropertyNames(self.name)
         ]
-        self.type = DeviceType(core.getDeviceType(self.name))
+        self.description = core.getDeviceDescription(self.name)
         self.uses_delay = core.usesDeviceDelay(self.name)
+        self.parent_name = core.getParentLabel(self.name)
+
+        # NOTE: from MMStudio: do not load the delay value from the hardware
+        # we will always use settings defined in the config file
+        # self.delay_ms = core.getDeviceDelayMs(self.name)
 
     @staticmethod
     def library_contents(core: CMMCore, library_name: str) -> tuple[Device, ...]:
@@ -122,6 +134,10 @@ class Device:
     def pre_init_props(self) -> list[PropertyItem]:
         """Return a list of pre-init properties."""
         return [p for p in self.properties if p.pre_init]
+
+    def to_cfg(self) -> str:
+        """Return a config string for this device."""
+        return _cfg_field(CFGCommand.Device, self.name, self.library, self.adapter_name)
 
 
 # could use __new__ ... but it's not really necessary
@@ -158,6 +174,11 @@ class StageDevice(Device):
         """Update the StateDevice with current core values."""
         super().update_from_core(core)
         self.focus_direction = FocusDirection(core.getFocusDirection(self.name))
+
+    def focus_cfg(self) -> str:
+        return _cfg_field(
+            CFGCommand.FocusDirection, self.name, self.focus_direction.value
+        )
 
 
 @dataclass
@@ -197,6 +218,9 @@ class CoreDevice(Device):
     type: DeviceType = DeviceType.Core
     description = "Core device"
 
+    def roles(self) -> list[str]:
+        """Return the roles of this device,"""
+
 
 @dataclass
 class Microscope:
@@ -204,12 +228,13 @@ class Microscope:
 
     devices: list[Device] = field(default_factory=list)
     available_devices: tuple[Device, ...] = field(default_factory=tuple)
-
+    available_com_ports: tuple[Device, ...] = field(default_factory=tuple)
+    assigned_com_ports: dict[str, Device] = field(default_factory=dict)
     config_file: str = ""
 
     def __post_init__(self) -> None:
         """Validate the Microscope."""
-        if all(x.type != DeviceType.Core for x in self.devices):
+        if not any(isinstance(x, CoreDevice) for x in self.devices):
             self.devices.append(
                 CoreDevice(name="Core", library="", adapter_name="MMCore")
             )
@@ -230,18 +255,114 @@ class Microscope:
         """Update the Microscope with current core values."""
         for device in self.devices:
             device.update_from_core(core)
-        if not self.available_devices:
-            self.update_available_devies(core)
+        self.update_available_devies(core)
 
     def update_available_devies(self, core: CMMCore) -> None:
         """Return a tuple of available Devices."""
         devs: list[Device] = []
+        com_ports: list[Device] = []
         for lib_name in core.getDeviceAdapterNames():
             # should we be excluding serial ports here? like MMStudio?
-            devs.extend(Device.library_contents(core, lib_name))
+            for dev in Device.library_contents(core, lib_name):
+                if dev.type == DeviceType.Serial:
+                    com_ports.append(dev)
+                else:
+                    devs.append(dev)
         self.available_devices = tuple(devs)
+        self.available_com_ports = tuple(com_ports)
 
     @property
-    def hub_devices(self) -> tuple[HubDevice, ...]:
+    def core(self) -> CoreDevice:
+        """Return the CoreDevice."""
+        return next(d for d in self.devices if isinstance(d, CoreDevice))
+
+    @property
+    def hubs(self) -> tuple[HubDevice, ...]:
         """Return a tuple of HubDevices."""
         return tuple(d for d in self.available_devices if isinstance(d, HubDevice))
+
+    def save(self, path: str) -> None:
+        """Save the Microscope to a file."""
+        # Fri Aug 18 07:16:46 EDT 2023
+        now = datetime.datetime.now(datetime.timezone.utc)
+        date = now.astimezone().strftime("%a %b %d %H:%M:%S %Z %Y")
+
+        devices: list[str] = []
+        pre_init_settings: list[str] = []
+        hub_refs: list[str] = []
+        delays: list[str] = []
+        focus_directions: list[str] = []
+        roles: list[str] = []
+
+        core = self.core
+        # TODO: add in-use com-port settings
+        for d in self.devices:
+            if d.type == DeviceType.Core:
+                continue
+            devices.append(d.to_cfg())
+            pre_init_settings.extend(p.to_cfg() for p in d.properties if p.pre_init)
+            if d.parent_name:
+                hub_refs.append(_cfg_field(CFGCommand.ParentID, d.name, d.parent_name))
+            if d.delay_ms:
+                delays.append(_cfg_field(CFGCommand.Delay, d.name, d.delay_ms))
+            if isinstance(d, StageDevice):
+                focus_directions.append(d.focus_cfg())
+
+        return CFG_TEMPLATE.format(
+            date=date,
+            devices="\n".join(devices),
+            pre_init_settings="\n".join(pre_init_settings),
+            pre_init_com_settings="\n",
+            hub_refs="\n".join(hub_refs),
+            delays="\n".join(delays),
+            focus_directions="\n".join(focus_directions),
+            roles="\n".join(roles),
+            camera_synced_devices="\n",
+            labels="\n",
+            config_presets="\n",
+            pixel_size_settings="\n",
+        )
+
+
+CFG_TEMPLATE = """
+# Generated by pymmcore-plus on {date}
+
+# Reset
+Property,Core,Initialize,0
+
+# Devices
+{devices}
+
+# Pre-init settings for devices
+{pre_init_settings}
+
+# Pre-init settings for COM ports
+{pre_init_com_settings}
+
+# Hub (parent) references
+{hub_refs}
+
+# Initialize
+Property,Core,Initialize,1
+
+# Delays
+{delays}
+
+# Focus directions
+{focus_directions}
+
+# Roles
+{roles}
+
+# Camera-synchronized devices
+{camera_synced_devices}
+
+# Labels
+{labels}
+
+# Configuration presets
+{config_presets}
+
+# PixelSize settings
+{pixel_size_settings}
+"""
