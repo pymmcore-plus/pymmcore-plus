@@ -1807,7 +1807,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         pymmcore.UnsignedVector() objects.
         """
         if _:
-            warnings.warn(
+            warnings.warn(  # pragma: no cover
                 "Unlike pymmcore, CMMCorePlus.getMultiROI does not require arguments."
                 "Arguments are ignored.",
                 stacklevel=2,
