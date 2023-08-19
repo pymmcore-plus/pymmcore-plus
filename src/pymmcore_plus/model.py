@@ -3,7 +3,16 @@ from __future__ import annotations
 import datetime
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, Iterator, NamedTuple
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    ClassVar,
+    Generic,
+    Iterator,
+    NamedTuple,
+    TypeVar,
+)
 
 from pymmcore_plus import (
     CFGCommand,
@@ -18,7 +27,7 @@ from ._util import no_stdout
 
 if TYPE_CHECKING:
     import builtins
-    from typing import TypeVar
+    from typing import Final
 
     from pymmcore import CMMCore
     from typing_extensions import Self
@@ -26,7 +35,6 @@ if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
 
     D = TypeVar("D", bound="Device")
-    ConfigPresetType = TypeVar("ConfigPresetType", bound="ConfigPreset")
 
 __all__ = [
     "ConfigGroup",
@@ -42,16 +50,14 @@ __all__ = [
     "StateDevice",
 ]
 
-UNDEFINED = "UNDEFINED"
-DEFAULT_AFFINE = (1, 0, 0, 0, 1, 0)
+UNDEFINED: Final = "UNDEFINED"
+DEFAULT_AFFINE: Final = (1, 0, 0, 0, 1, 0)
+PIXEL_SIZE_GROUP: Final = "PixelSizeGroup"
 
 
 def _cfg_field(*args: Any) -> str:
+    """Return a config string for the given args."""
     return CFGCommand.FieldDelimiters.join(map(str, args))
-
-
-def _prop_field(*args: Any) -> str:
-    return _cfg_field(CFGCommand.Property, *args)
 
 
 @dataclass
@@ -98,7 +104,7 @@ class PropertyItem:
 
     def to_cfg(self) -> str:
         """Return a config string for this property."""
-        return _prop_field(self.device, self.name, self.value)
+        return _cfg_field(CFGCommand.Property, self.device, self.name, self.value)
 
 
 @dataclass
@@ -341,6 +347,9 @@ class PixelSizePreset(ConfigPreset):
     affine_transform: tuple[float, ...] = DEFAULT_AFFINE
 
 
+ConfigPresetType = TypeVar("ConfigPresetType", bound="ConfigPreset")
+
+
 @dataclass
 class ConfigGroup(Generic[ConfigPresetType]):
     """ConfigGroup model."""
@@ -364,7 +373,7 @@ class ConfigGroup(Generic[ConfigPresetType]):
 class PixelSizeGroup(ConfigGroup[PixelSizePreset]):
     """Model of the pixel size group."""
 
-    name: str = "PixelSizeGroup"
+    name: str = PIXEL_SIZE_GROUP
     presets: dict[str, PixelSizePreset] = field(default_factory=dict)
 
     @classmethod
@@ -405,8 +414,8 @@ class Microscope:
 
     devices: list[Device] = field(default_factory=list)
     config_groups: dict[str, ConfigGroup] = field(default_factory=dict)
-    pixel_size_group: PixelSizeGroup = field(default_factory=PixelSizeGroup)
     # config_groups: dict[str, dict[str, list[tuple]]] = field(default_factory=dict)
+    pixel_size_group: PixelSizeGroup = field(default_factory=PixelSizeGroup)
     available_devices: tuple[Device, ...] = field(default_factory=tuple)
     available_com_ports: tuple[Device, ...] = field(default_factory=tuple)
     assigned_com_ports: dict[str, Device] = field(default_factory=dict)
@@ -697,6 +706,7 @@ class Microscope:
             raise ValueError(f"{direction} is not a valid FocusDirection") from None
 
     # Consider moving all of the to/from config file logic to a ConfigFile class
+    # perhaps with a Command/Strategy pattern
     _CMD_MAP: ClassVar[dict[CFGCommand, Callable[..., None]]] = {
         CFGCommand.Device: _cmd_device,
         CFGCommand.Property: _cmd_property,
