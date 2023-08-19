@@ -1,8 +1,9 @@
 """Logic for reading and writing MMCore config files."""
+from __future__ import annotations
+
 import datetime
-import io
 import warnings
-from typing import Any, Callable, ClassVar, Iterable
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Iterable
 
 from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword
 from pymmcore_plus.model import (
@@ -16,6 +17,9 @@ from pymmcore_plus.model import (
     StageDevice,
     StateDevice,
 )
+
+if TYPE_CHECKING:
+    import io
 
 __all__ = ["load_from_string", "dump"]
 
@@ -156,7 +160,7 @@ CONFIG_SECTIONS: dict[str, Callable[[Microscope], Iterable[str]]] = {
 
 class Command:
     command: ClassVar[CFGCommand]
-    _SUBS: ClassVar[dict[CFGCommand, type["Command"]]] = {}
+    _SUBS: ClassVar[dict[CFGCommand, type[Command]]] = {}
 
     def __init_subclass__(cls) -> None:
         cls._SUBS[cls.command] = cls
