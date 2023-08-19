@@ -562,3 +562,9 @@ def test_describe(
 
     core.describe(sort="Type")
     assert "Core" in capsys.readouterr().out
+
+
+def test_multi_roi(core: CMMCorePlus) -> None:
+    roi = ([0, 0], [10, 10], [20, 20], [30, 30])
+    core.setMultiROI(*roi)
+    assert core.getMultiROI() == roi
