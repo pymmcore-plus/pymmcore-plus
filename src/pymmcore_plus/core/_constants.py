@@ -8,6 +8,7 @@ import pymmcore
 # however, we also risk AttributeErrors in the future.
 # we could do this dynamically, but then we lose IDE type hints
 
+
 class Keyword(str, Enum):
     Name = pymmcore.g_Keyword_Name
     Description = pymmcore.g_Keyword_Description
@@ -99,7 +100,7 @@ class CFGCommand(str, Enum):
         return str(self.value)
 
 
-class CFGGRoup(str, Enum):
+class CFGGroup(str, Enum):
     System = pymmcore.g_CFGGroup_System
     System_Startup = pymmcore.g_CFGGroup_System_Startup
     System_Shutdown = pymmcore.g_CFGGroup_System_Shutdown

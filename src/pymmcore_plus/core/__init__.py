@@ -1,7 +1,7 @@
 __all__ = [
     "ActionType",
     "CFGCommand",
-    "CFGGRoup",
+    "CFGGroup",
     "CMMCorePlus",
     "ConfigGroup",
     "Configuration",
@@ -24,7 +24,7 @@ from ._config_group import ConfigGroup
 from ._constants import (
     ActionType,
     CFGCommand,
-    CFGGRoup,
+    CFGGroup,
     DeviceDetectionStatus,
     DeviceNotification,
     DeviceType,

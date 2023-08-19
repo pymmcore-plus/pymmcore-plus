@@ -10,7 +10,7 @@ from ._logger import configure_logging
 from ._util import find_micromanager
 from .core import (
     CFGCommand,
-    CFGGRoup,
+    CFGGroup,
     CMMCorePlus,
     ConfigGroup,
     Configuration,
@@ -33,7 +33,7 @@ __all__ = [
     "__version__",
     "ActionType",
     "CFGCommand",
-    "CFGGRoup",
+    "CFGGroup",
     "CMMCorePlus",
     "CMMCoreSignaler",
     "ConfigGroup",
