@@ -428,6 +428,7 @@ class Microscope:
     available_devices: tuple[Device, ...] = field(default_factory=tuple)
     available_com_ports: tuple[Device, ...] = field(default_factory=tuple)
     assigned_com_ports: dict[str, Device] = field(default_factory=dict)
+    bad_libraries: set[str] = field(default_factory=set)
     config_file: str = ""
 
     def __post_init__(self) -> None:
@@ -505,11 +506,19 @@ class Microscope:
 
     def update_available_devices(self, core: CMMCore) -> None:
         """Return a tuple of available Devices."""
+        self.bad_libraries.clear()
         devs: list[Device] = []
         com_ports: list[Device] = []
+
         for lib_name in core.getDeviceAdapterNames():
             # should we be excluding serial ports here? like MMStudio?
-            for dev in Device.library_contents(core, lib_name):
+            try:
+                contents = Device.library_contents(core, lib_name)
+            except RuntimeError:
+                self.bad_libraries.add(lib_name)
+                continue
+
+            for dev in contents:
                 if dev.type == DeviceType.Serial:
                     com_ports.append(dev)
                 else:
