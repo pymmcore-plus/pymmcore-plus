@@ -165,7 +165,7 @@ class Device:
     def library_contents(core: CMMCore, library_name: str) -> tuple[Device, ...]:
         """Return a tuple of Devices in the given library."""
         with no_stdout():
-            devs = core.getAvailableDevices(library_name)
+            devs = core.getAvailableDevices(library_name)  # this could raise
         types = core.getAvailableDeviceTypes(library_name)
         descriptions = core.getAvailableDeviceDescriptions(library_name)
         return tuple(
