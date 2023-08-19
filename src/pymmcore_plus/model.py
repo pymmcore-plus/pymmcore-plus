@@ -253,6 +253,7 @@ class SerialDevice(Device):
 
     def __post_init__(self) -> None:
         """Validate the SerialDevice."""
+        # can't put this as field default because of dataclass limitations
         if self.name == UNDEFINED:
             self.name = self.adapter_name
 
@@ -366,6 +367,16 @@ class Microscope:
             for preset in presets:
                 cg.presets.setdefault(preset, ConfigPreset(name=preset))
 
+    @property
+    def core(self) -> CoreDevice:
+        """Return the CoreDevice."""
+        return next(d for d in self.devices if isinstance(d, CoreDevice))
+
+    @property
+    def hubs(self) -> tuple[HubDevice, ...]:
+        """Return a tuple of HubDevices."""
+        return tuple(d for d in self.available_devices if isinstance(d, HubDevice))
+
     def reset(self) -> None:
         """Reset the Microscope to its initial state."""
         defaults = Microscope()
@@ -441,16 +452,6 @@ class Microscope:
                     devs.append(dev)
         self.available_devices = tuple(devs)
         self.available_com_ports = tuple(com_ports)
-
-    @property
-    def core(self) -> CoreDevice:
-        """Return the CoreDevice."""
-        return next(d for d in self.devices if isinstance(d, CoreDevice))
-
-    @property
-    def hubs(self) -> tuple[HubDevice, ...]:
-        """Return a tuple of HubDevices."""
-        return tuple(d for d in self.available_devices if isinstance(d, HubDevice))
 
     def save(self, path: str | Path) -> None:
         """Save model as a micro-manager config file."""
