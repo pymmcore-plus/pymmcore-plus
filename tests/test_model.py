@@ -62,9 +62,7 @@ def test_load_errors() -> None:
 
     with pytest.raises(ValueError, match="Invalid command name"):
         model.load_from_string("NotACommand,1,2,3,4")
-    with pytest.raises(ValueError, match="Cannot process command"):
-        model.load_from_string("Equipment,1,2,3,4")
-    with pytest.raises(ValueError, match="takes from 3 to 4 positional arguments"):
+    with pytest.raises(ValueError, match="Expected 3 or 4 arguments, got 6"):
         model.load_from_string("Property,A,B,C,D,E")
     with pytest.raises(ValueError, match="not an integer"):
         model.load_from_string("Property,Core,Initialize,NotAnInt")
@@ -86,7 +84,7 @@ def test_load_errors() -> None:
         )
     with pytest.raises(ValueError, match="'Res10x' not found"):
         model.load_from_string("PixelSizeAffine,Res10x,1.0,0.0,0.0,0.0,1.1,0.0")
-    with pytest.raises(ValueError, match="Expected 6 values for affine transform"):
+    with pytest.raises(ValueError, match="Expected 8 arguments, got 5"):
         model.load_from_string(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
@@ -114,3 +112,7 @@ def test_load_errors() -> None:
             FocusDirection,Z,9
             """
         )
+
+    # for now
+    with pytest.warns(RuntimeWarning, match="not implemented"):
+        model.load_from_string("Equipment,1,2,3,4")
