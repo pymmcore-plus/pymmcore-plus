@@ -1,3 +1,12 @@
+"""In-memory models of MMCore devices and settings.
+
+The purpose of this module is to have a model of a microscope that is
+disconnected from the core instance. It can be loaded from or applied to
+a core instance, but it is an independent representation of the state of
+the microscope.  This is useful for saving and loading microscope settings
+and for constructing a config GUI without having to interact with and update
+the core instance.
+"""
 from __future__ import annotations
 
 import datetime
