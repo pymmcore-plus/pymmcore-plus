@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,8 @@ def test_model_from_core(core: CMMCorePlus) -> None:
     model = Microscope.create_from_core(core)
     assert model.devices
     assert model.hubs
+    if os.name == "nt":
+        assert model.bad_libraries
 
     model2 = Microscope()
     model2.update_from_core(core)
