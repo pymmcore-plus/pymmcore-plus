@@ -453,13 +453,6 @@ class Microscope:
         self.available_devices = tuple(devs)
         self.available_com_ports = tuple(com_ports)
 
-    def save(self, path: str | Path) -> None:
-        """Save model as a micro-manager config file."""
-        from ._config import dump
-
-        with open(path, "w") as fh:
-            dump(self, fh)
-
     def load(self, path: str | Path) -> None:
         """Save model as a micro-manager config file."""
         path = Path(path).expanduser().resolve()
@@ -471,3 +464,10 @@ class Microscope:
         from ._config import load_from_string
 
         load_from_string(text, self)
+
+    def save(self, path: str | Path) -> None:
+        """Save model as a micro-manager config file."""
+        from ._config import dump
+
+        with open(path, "w") as fh:
+            dump(self, fh)

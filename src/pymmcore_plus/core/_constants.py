@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from enum import Enum, IntEnum
-from typing import Any
 
 import pymmcore
 
@@ -99,29 +98,6 @@ class CFGCommand(str, Enum):
 
     def __str__(self) -> str:
         return str(self.value)
-
-    def serialize(self, *args: Any) -> str:
-        return CFGCommand.FieldDelimiters.join(map(str, (self, *args)))
-
-    def expected_args(self) -> set[int]:
-        # these numbers INCLUDE the command itself
-        # e.g. Property,Core,Initialize,1 => 4 args
-        map_: dict[CFGCommand, set[int]] = {
-            CFGCommand.Device: {4},
-            CFGCommand.Label: {4},
-            CFGCommand.Property: {3, 4},
-            CFGCommand.ConfigGroup: {5, 6},
-            CFGCommand.Delay: {3},
-            CFGCommand.ImageSynchro: {2},
-            CFGCommand.ConfigPixelSize: {5},
-            CFGCommand.PixelSize_um: {3},
-            CFGCommand.PixelSizeAffine: {8},
-            CFGCommand.ParentID: {3},
-            CFGCommand.FocusDirection: {3},
-            CFGCommand.Configuration: {5},  # (Obsolete)
-            CFGCommand.Equipment: {4},  # (for deprecated PropertyBlocks)
-        }
-        return map_.get(self, set())
 
 
 class CFGGroup(str, Enum):

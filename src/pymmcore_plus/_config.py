@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import datetime
 import warnings
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Iterable
+from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence
 
 from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword
 from pymmcore_plus.model import (
@@ -20,6 +20,9 @@ from pymmcore_plus.model import (
 
 if TYPE_CHECKING:
     import io
+    from typing import TypeAlias
+
+    Executor: TypeAlias = Callable[[Microscope, Sequence[str]], None]
 
 __all__ = ["load_from_string", "dump"]
 
@@ -34,7 +37,7 @@ def load_from_string(text: str, scope: Microscope | None = None) -> Microscope:
         if not line or line.startswith("#"):
             continue
 
-        Command.apply(line, scope)
+        run_command(line, scope)
     return scope
 
 
@@ -49,13 +52,13 @@ def dump(scope: Microscope, str_io: io.TextIOBase) -> None:
 # ------------------ Serialization ------------------
 
 
-def _cfg_field(*args: Any) -> str:
+def _serialize(*args: Any) -> str:
     """Return a config string for the given args."""
     return CFGCommand.FieldDelimiters.join(map(str, args))
 
 
-RESET = _cfg_field(CFGCommand.Property, Keyword.CoreDevice, Keyword.CoreInitialize, 0)
-INIT = _cfg_field(CFGCommand.Property, Keyword.CoreDevice, Keyword.CoreInitialize, 1)
+RESET = _serialize(CFGCommand.Property, Keyword.CoreDevice, Keyword.CoreInitialize, 0)
+INIT = _serialize(CFGCommand.Property, Keyword.CoreDevice, Keyword.CoreInitialize, 1)
 
 
 def yield_date(scope: Microscope) -> Iterable[str]:
@@ -67,32 +70,32 @@ def yield_date(scope: Microscope) -> Iterable[str]:
 def iter_devices(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
         if d.type != DeviceType.Core:
-            yield CFGCommand.Device.serialize(d.name, d.library, d.adapter_name)
+            yield _serialize(CFGCommand.Device, d.name, d.library, d.adapter_name)
 
 
 def iter_pre_init_props(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
         if d.type != DeviceType.Core:
             for p in d.pre_init_props():
-                yield CFGCommand.Property.serialize(p.device, p.name, p.value)
+                yield _serialize(CFGCommand.Property, p.device, p.name, p.value)
 
 
 def iter_hub_refs(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
         if d.type != DeviceType.Core and d.parent_name:
-            yield CFGCommand.ParentID.serialize(d.name, d.parent_name)
+            yield _serialize(CFGCommand.ParentID, d.name, d.parent_name)
 
 
 def iter_delays(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
         if d.type != DeviceType.Core and d.delay_ms:
-            yield CFGCommand.Delay.serialize(d.name, d.delay_ms)
+            yield _serialize(CFGCommand.Delay, d.name, d.delay_ms)
 
 
 def iter_focus_directions(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
         if isinstance(d, StageDevice):
-            yield CFGCommand.FocusDirection.serialize(d.name, d.focus_direction.value)
+            yield _serialize(CFGCommand.FocusDirection, d.name, d.focus_direction.value)
 
 
 def iter_roles(scope: Microscope) -> Iterable[str]:
@@ -103,7 +106,7 @@ def iter_roles(scope: Microscope) -> Iterable[str]:
         Keyword.CoreAutoShutter,
     ):
         if p := scope.core.find_property(field):
-            yield CFGCommand.Property.serialize(p.device, p.name, p.value)
+            yield _serialize(CFGCommand.Property, p.device, p.name, p.value)
 
 
 def iter_labels(scope: Microscope) -> Iterable[str]:
@@ -111,7 +114,7 @@ def iter_labels(scope: Microscope) -> Iterable[str]:
         if isinstance(d, StateDevice) and d.labels:
             yield f"# {d.name}"
             for state, label in d.labels.items():
-                yield CFGCommand.Label.serialize(d.name, state, label)
+                yield _serialize(CFGCommand.Label, d.name, state, label)
 
 
 def iter_config_presets(scope: Microscope) -> Iterable[str]:
@@ -120,7 +123,7 @@ def iter_config_presets(scope: Microscope) -> Iterable[str]:
         for preset in group.presets.values():
             yield f"# Preset: {preset.name}"
             for s in preset.settings:
-                yield CFGCommand.ConfigGroup.serialize(group.name, preset.name, *s)
+                yield _serialize(CFGCommand.ConfigGroup, group.name, preset.name, *s)
 
 
 def iter_pixel_size_presets(scope: Microscope) -> Iterable[str]:
@@ -128,10 +131,10 @@ def iter_pixel_size_presets(scope: Microscope) -> Iterable[str]:
     for p in pixels.presets.values():
         yield f"# Resolution preset: {p.name}"
         for setting in p.settings:
-            yield CFGCommand.ConfigPixelSize.serialize(p.name, *setting)
-        yield CFGCommand.PixelSize_um.serialize(p.name, p.pixel_size_um)
+            yield _serialize(CFGCommand.ConfigPixelSize, p.name, *setting)
+        yield _serialize(CFGCommand.PixelSize_um, p.name, p.pixel_size_um)
         if p.affine_transform != DEFAULT_AFFINE:
-            yield CFGCommand.PixelSizeAffine.serialize(p.name, *p.affine_transform)
+            yield _serialize(CFGCommand.PixelSizeAffine, p.name, *p.affine_transform)
 
 
 # Order will determine the order of the sections in the file
@@ -158,218 +161,161 @@ CONFIG_SECTIONS: dict[str, Callable[[Microscope], Iterable[str]]] = {
 # could just use a map of command name to function
 
 
-class Command:
-    command: ClassVar[CFGCommand]
-    _SUBS: ClassVar[dict[CFGCommand, type[Command]]] = {}
+def run_command(line: str, scope: Microscope) -> None:
+    """Apply a line of a config file to a scope model instance."""
+    try:
+        cmd_name, *args = line.split(CFGCommand.FieldDelimiters)
+    except ValueError:
+        raise ValueError(f"Invalid config line: {line!r}") from None
 
-    def __init_subclass__(cls) -> None:
-        cls._SUBS[cls.command] = cls
+    try:
+        command = CFGCommand(cmd_name)
+    except ValueError as exc:
+        raise ValueError(f"Invalid command name: {cmd_name!r}") from exc
 
-    @staticmethod
-    def exec(scope: Microscope, *args: Any) -> None:
-        """Load the command into the config."""
-        raise NotImplementedError
+    if command not in COMMAND_EXECUTORS:
+        warnings.warn(
+            f"Command {cmd_name!r} not implemented", RuntimeWarning, stacklevel=2
+        )
+        return
 
-    @classmethod
-    def apply(cls, line: str, scope: Microscope) -> None:
-        """Apply a line of a config file to a scope model instance."""
+    exec_cmd, expected_n_args = COMMAND_EXECUTORS[command]
+
+    if (nargs := len(args) + 1) not in expected_n_args:
+        exp_str = " or ".join(map(str, expected_n_args))
+        raise ValueError(
+            f"Invalid configuration line encountered for command {cmd_name}. "
+            f"Expected {exp_str} arguments, got {nargs}: {line!r}"
+        )
+
+    try:
+        exec_cmd(scope, args)
+    except Exception as exc:
+        raise ValueError(f"Error executing command {line!r}: {exc}") from exc
+
+
+def _exec_Device(scope: Microscope, args: Sequence[str]) -> None:
+    """Load a device from the available devices."""
+    # TODO: add description from available devices
+    name, library, adapter_name = args
+    dev = Device(name=name, library=library, adapter_name=adapter_name)
+    scope.devices.append(dev)
+
+
+def _exec_Property(scope: Microscope, args: Sequence[str]) -> None:
+    device_name, prop_name, *_value = args
+    value = _value[0] if _value else ""
+    if device_name == Keyword.CoreDevice and prop_name == Keyword.CoreInitialize:
         try:
-            cmd_name, *args = line.split(CFGCommand.FieldDelimiters)
-        except ValueError:
-            raise ValueError(f"Invalid config line: {line!r}") from None
-
-        try:
-            command = CFGCommand(cmd_name)
-        except ValueError as exc:
-            raise ValueError(f"Invalid command name: {cmd_name!r}") from exc
-
-        try:
-            SubCommand = cls._SUBS[command]
-        except KeyError:
-            warnings.warn(
-                f"Command {cmd_name!r} not implemented", RuntimeWarning, stacklevel=2
-            )
-            return
-
-        nargs = len(args) + 1  # +1 for the command itself
-        if nargs not in (exp := SubCommand.command.expected_args()):
-            exp_str = " or ".join(str(n) for n in exp)
-            raise ValueError(
-                f"Invalid configuration line encountered for command {cmd_name}. "
-                f"Expected {exp_str} arguments, got {nargs}: {line!r}"
-            )
-
-        try:
-            SubCommand.exec(scope, *args)
-        except Exception as exc:
-            raise ValueError(f"Error executing command {line!r}: {exc}") from exc
-
-
-class DeviceCommand(Command):
-    command = CFGCommand.Device
-
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope, name: str, library: str, adapter_name: str
-    ) -> None:
-        """Load a device from the available devices."""
-        # TODO: add description from available devices
-        dev = Device(name=name, library=library, adapter_name=adapter_name)
-        scope.devices.append(dev)
-
-
-class PropertyCommand(Command):
-    command = CFGCommand.Property
-
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope, device_name: str, prop_name: str, value: str = ""
-    ) -> None:
-        if device_name == Keyword.CoreDevice and prop_name == Keyword.CoreInitialize:
-            try:
-                scope.initialized = bool(int(value))
-            except (ValueError, TypeError):
-                raise ValueError(f"Value {value!r} is not an integer") from None
-            return
-
-        dev = scope.find_device(device_name)
-        prop = dev.set_default_prop(prop_name, value, pre_init=not scope.initialized)
-        prop.value = value
-
-
-class LabelCommand(Command):
-    command = CFGCommand.Label
-
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope, device_name: str, state: str, label: str
-    ) -> None:
-        dev = scope.find_device(device_name)
-        if not isinstance(dev, StateDevice):
-            scope.devices[scope.devices.index(dev)] = dev = StateDevice.from_device(dev)
-
-        try:
-            state_int = int(state)
+            scope.initialized = bool(int(value))
         except (ValueError, TypeError):
-            raise ValueError(f"State {state} is not an integer") from None
-        dev.labels[state_int] = label
+            raise ValueError(f"Value {value!r} is not an integer") from None
+        return
+
+    dev = scope.find_device(device_name)
+    prop = dev.set_default_prop(prop_name, value, pre_init=not scope.initialized)
+    prop.value = value
 
 
-class ConfigGroupCommand(Command):
-    command = CFGCommand.ConfigGroup
+def _exec_Label(scope: Microscope, args: Sequence[str]) -> None:
+    device_name, state, label = args
+    dev = scope.find_device(device_name)
+    if not isinstance(dev, StateDevice):
+        scope.devices[scope.devices.index(dev)] = dev = StateDevice.from_device(dev)
 
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope,
-        group_name: str,
-        preset_name: str,
-        device_name: str,
-        prop_name: str,
-        value: str = "",
-    ) -> None:
-        cg = scope.config_groups.setdefault(group_name, ConfigGroup(name=group_name))
-        preset = cg.presets.setdefault(preset_name, ConfigPreset(name=preset_name))
-        preset.settings.append(Setting(device_name, prop_name, value))
+    try:
+        state_int = int(state)
+    except (ValueError, TypeError):
+        raise ValueError(f"State {state} is not an integer") from None
+    dev.labels[state_int] = label
 
 
-class ConfigPixelSizeCommand(Command):
-    command = CFGCommand.ConfigPixelSize
-
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope,
-        preset_name: str,
-        device_name: str,
-        prop_name: str,
-        value: str = "",
-    ) -> None:
-        # NOTE: this is quite similar to _cmd_config_group... maybe refactor?
-        cg = scope.pixel_size_group
-        preset = cg.presets.setdefault(preset_name, PixelSizePreset(name=preset_name))
-        preset.settings.append(Setting(device_name, prop_name, value))
+def _exec_ConfigGroup(scope: Microscope, args: Sequence[str]) -> None:
+    group_name, preset_name, device_name, prop_name, value = args
+    cg = scope.config_groups.setdefault(group_name, ConfigGroup(name=group_name))
+    preset = cg.presets.setdefault(preset_name, ConfigPreset(name=preset_name))
+    preset.settings.append(Setting(device_name, prop_name, value))
 
 
-class PixelSize_umCommand(Command):
-    command = CFGCommand.PixelSize_um
-
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope, preset_name: str, value: str
-    ) -> None:
-        try:
-            preset = scope.pixel_size_group.presets[preset_name]
-        except KeyError:
-            raise ValueError(f"Pixel size preset {preset_name!r} not found") from None
-
-        try:
-            preset.pixel_size_um = float(value)
-        except ValueError as exc:
-            raise ValueError(f"Invalid pixel size: {value}. Expected a float.") from exc
+def _exec_ConfigPixelSize(scope: Microscope, args: Sequence[str]) -> None:
+    # NOTE: this is quite similar to _cmd_config_group... maybe refactor?
+    preset_name, device_name, prop_name, value = args
+    cg = scope.pixel_size_group
+    preset = cg.presets.setdefault(preset_name, PixelSizePreset(name=preset_name))
+    preset.settings.append(Setting(device_name, prop_name, value))
 
 
-class PixelSizeAffineCommand(Command):
-    command = CFGCommand.PixelSizeAffine
+def _exec_PixelSize_um(scope: Microscope, args: Sequence[str]) -> None:
+    preset_name, value = args
+    try:
+        preset = scope.pixel_size_group.presets[preset_name]
+    except KeyError:
+        raise ValueError(f"Pixel size preset {preset_name!r} not found") from None
 
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope, preset_name: str, *tform: float
-    ) -> None:
-        try:
-            preset = scope.pixel_size_group.presets[preset_name]
-        except KeyError:
-            raise ValueError(f"Pixel size preset {preset_name!r} not found") from None
-
-        # TODO: I think zero args is also a valid value for the affine transform
-        if len(tform) != 6:
-            raise ValueError(
-                f"Expected 6 values for affine transform, got {len(tform)}"
-            )
-
-        try:
-            preset.affine_transform = tuple(float(v) for v in tform)
-        except ValueError as exc:
-            raise ValueError(
-                f"Invalid affine transform: {tform!r}. Expected 6 floats."
-            ) from exc
+    try:
+        preset.pixel_size_um = float(value)
+    except ValueError as exc:
+        raise ValueError(f"Invalid pixel size: {value}. Expected a float.") from exc
 
 
-class ParentIDCommand(Command):
-    command = CFGCommand.ParentID
+def _exec_PixelSizeAffine(scope: Microscope, args: Sequence[str]) -> None:
+    preset_name, *tform = args
+    try:
+        preset = scope.pixel_size_group.presets[preset_name]
+    except KeyError:
+        raise ValueError(f"Pixel size preset {preset_name!r} not found") from None
 
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope, device_name: str, parent_name: str
-    ) -> None:
-        dev = scope.find_device(device_name)
-        dev.parent_name = parent_name
+    # TODO: I think zero args is also a valid value for the affine transform
+    if len(tform) != 6:
+        raise ValueError(f"Expected 6 values for affine transform, got {len(tform)}")
 
-
-class DelayCommand(Command):
-    command = CFGCommand.Delay
-
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope, device_name: str, delay_ms: str
-    ) -> None:
-        dev = scope.find_device(device_name)
-        try:
-            dev.delay_ms = float(delay_ms)
-        except ValueError as exc:
-            raise ValueError(f"Invalid delay: {delay_ms!r}. Expected a float.") from exc
+    try:
+        preset.affine_transform = tuple(float(v) for v in tform)
+    except ValueError as exc:
+        raise ValueError(
+            f"Invalid affine transform: {tform!r}. Expected 6 floats."
+        ) from exc
 
 
-class FocusDirectionCommand(Command):
-    command = CFGCommand.FocusDirection
+def _exec_ParentID(scope: Microscope, args: Sequence[str]) -> None:
+    device_name, parent_name = args
+    dev = scope.find_device(device_name)
+    dev.parent_name = parent_name
 
-    @staticmethod
-    def exec(  # type: ignore[override]
-        scope: Microscope, device_name: str, direction: str
-    ) -> None:
-        dev = scope.find_device(device_name)
-        if not isinstance(dev, StageDevice):
-            scope.devices[scope.devices.index(dev)] = dev = StageDevice.from_device(dev)
 
-        try:
-            dev.focus_direction = FocusDirection(int(direction))
-        except (ValueError, TypeError):
-            raise ValueError(f"{direction} is not a valid FocusDirection") from None
+def _exec_Delay(scope: Microscope, args: Sequence[str]) -> None:
+    device_name, delay_ms = args
+    dev = scope.find_device(device_name)
+    try:
+        dev.delay_ms = float(delay_ms)
+    except ValueError as exc:
+        raise ValueError(f"Invalid delay: {delay_ms!r}. Expected a float.") from exc
+
+
+def _exec_FocusDirection(scope: Microscope, args: Sequence[str]) -> None:
+    device_name, direction = args
+    dev = scope.find_device(device_name)
+    if not isinstance(dev, StageDevice):
+        scope.devices[scope.devices.index(dev)] = dev = StageDevice.from_device(dev)
+
+    try:
+        dev.focus_direction = FocusDirection(int(direction))
+    except (ValueError, TypeError):
+        raise ValueError(f"{direction} is not a valid FocusDirection") from None
+
+
+# expected_nargs INCLUDES the command itself
+# e.g. Property,Core,Initialize,1 => 4 args
+#                         command -> (executor, expected_n_args)
+COMMAND_EXECUTORS: dict[CFGCommand, tuple[Executor, set[int]]] = {
+    CFGCommand.Device: (_exec_Device, {4}),
+    CFGCommand.Label: (_exec_Label, {4}),
+    CFGCommand.Property: (_exec_Property, {3, 4}),
+    CFGCommand.ConfigGroup: (_exec_ConfigGroup, {5, 6}),
+    CFGCommand.Delay: (_exec_Delay, {3}),
+    CFGCommand.ConfigPixelSize: (_exec_ConfigPixelSize, {5}),
+    CFGCommand.PixelSize_um: (_exec_PixelSize_um, {3}),
+    CFGCommand.PixelSizeAffine: (_exec_PixelSizeAffine, {8}),
+    CFGCommand.ParentID: (_exec_ParentID, {3}),
+    CFGCommand.FocusDirection: (_exec_FocusDirection, {3}),
+}
