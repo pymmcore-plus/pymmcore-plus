@@ -11,6 +11,7 @@ from pymmcore_plus.model import (
     ConfigGroup,
     ConfigPreset,
     Device,
+    HubDevice,
     Microscope,
     PixelSizePreset,
     Setting,
@@ -221,6 +222,7 @@ def _exec_Label(scope: Microscope, args: Sequence[str]) -> None:
     device_name, state, label = args
     dev = scope.find_device(device_name)
     if not isinstance(dev, StateDevice):
+        # promote
         scope.devices[scope.devices.index(dev)] = dev = StateDevice.from_device(dev)
 
     try:
@@ -281,6 +283,17 @@ def _exec_ParentID(scope: Microscope, args: Sequence[str]) -> None:
     device_name, parent_name = args
     dev = scope.find_device(device_name)
     dev.parent_name = parent_name
+    try:
+        hub = scope.find_device(parent_name)
+    except ValueError:
+        warnings.warn(
+            f"Parent hub {parent_name!r} not found for device {device_name!r}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    else:
+        if not isinstance(hub, HubDevice):  # promote
+            scope.devices[scope.devices.index(hub)] = HubDevice.from_device(hub)
 
 
 def _exec_Delay(scope: Microscope, args: Sequence[str]) -> None:
@@ -296,6 +309,7 @@ def _exec_FocusDirection(scope: Microscope, args: Sequence[str]) -> None:
     device_name, direction = args
     dev = scope.find_device(device_name)
     if not isinstance(dev, StageDevice):
+        # promote
         scope.devices[scope.devices.index(dev)] = dev = StageDevice.from_device(dev)
 
     try:
