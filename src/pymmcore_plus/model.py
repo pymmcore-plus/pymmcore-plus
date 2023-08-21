@@ -186,6 +186,7 @@ class Device(CoreLinked):
     children: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self, from_core: CMMCorePlus | None) -> None:
+        """Change UNDEFINED serial device names."""
         super().__post_init__(from_core)
 
         # give serial devives their adapter name
@@ -260,6 +261,16 @@ class Device(CoreLinked):
             "",
         )
 
+    def rename_in_core(self, new_name: str, core: CMMCorePlus | None = None) -> None:
+        """Unload the device, rename it, and reload it in core."""
+        core = _ensure_core(core or self.core)
+        with suppress(RuntimeError):
+            core.unloadDevice(self.name)
+        self.initialized = False
+        core.loadDevice(new_name, self.library, self.adapter_name)
+        self.name = new_name
+        core.setParentLabel(new_name, self.parent_name)
+
     def load_in_core(
         self, core: CMMCorePlus | None = None, reload: bool = False
     ) -> None:
@@ -316,15 +327,15 @@ class Device(CoreLinked):
         yield from (p for p in self.properties if p.use_in_setup)
 
     def __rich_repr__(self) -> Iterable[tuple[str, Any]]:
-        # make AvailableDevices look a little less verbose
+        """Make AvailableDevices look a little less verbose."""
         if self.name == UNDEFINED:
             yield ("library", self.library)
             yield ("adapter_name", self.adapter_name)
             yield ("description", self.description)
             yield ("device_type", self.device_type.name)
         else:
-            for field in fields(self):
-                yield (field.name, getattr(self, field.name))
+            for _field in fields(self):
+                yield (_field.name, getattr(self, _field.name))
 
 
 class Setting(NamedTuple):
@@ -440,6 +451,7 @@ class Microscope(CoreLinked):
         update_properties: bool = True,
         remove_stale_properties: bool = True,
     ) -> None:
+        """Update this object's values from the core."""
         core = _ensure_core(core or self.core)
         # update devices
         if update_devices:
@@ -521,7 +533,7 @@ class Microscope(CoreLinked):
                     if prop.pre_init:
                         core.setProperty(device.name, prop.name, prop.value)
                 core.initializeDevice(device.name)
-                device.load_data_from_hardware(core)
+                device.update_from_core(core)
             except Exception as e:
                 on_fail(device, e)
 
@@ -552,7 +564,7 @@ class Microscope(CoreLinked):
             except Exception as e:
                 on_fail(d, e)
 
-    def load_model(self, core: CMMCorePlus):
+    def load_model(self, core: CMMCorePlus) -> None:
         """Apply the model to the core instance."""
         # load all com ports
         for port_dev in self.available_com_ports:
@@ -572,11 +584,11 @@ class Microscope(CoreLinked):
                         self.assigned_com_ports[port_dev.name] = port_dev
 
         for dev in (*self.devices, *self.available_com_ports):
-            self._load_device_data_from_core(core, dev)
+            dev.update_from_core(core)
 
         self._remove_duplicate_ports()
 
-    def _remove_duplicate_ports(self):
+    def _remove_duplicate_ports(self) -> None:
         # remove devices with names corresponding to available com ports
         avail = list(self.available_com_ports)
         for i, port_dev in enumerate(avail):
@@ -604,27 +616,6 @@ class Microscope(CoreLinked):
         self.devices.remove(device)
         if device.port and all(dev.port != device.port for dev in self.devices):
             self.assigned_com_ports.pop(device.port, None)
-
-    def _load_device_data_from_core(self, core: CMMCorePlus, device: Device) -> Device:
-        """Update model data from core.
-
-        This won't ADD devices to the model, only update their data.
-        It will check device type with model, promote if necessary.
-        This will raise an error if a device is in the model but not in the core.
-        """
-        core_type = DeviceType(core.getDeviceType(device.name))
-        SubCls = Device.subclass_for(core_type)
-        if not isinstance(device, SubCls):  # promote device if necessary
-            promoted = SubCls.from_device(device)
-            with suppress(ValueError):  # try replace device in list
-                idx = self.devices.index(device)
-                self.devices[idx] = promoted
-            return promoted
-        elif device.device_type != core_type:  # or just change the type
-            device.device_type = core_type
-
-        device.load_data_from_hardware(core)
-        return device
 
     def load_configs_from_core(self, core: CMMCorePlus) -> None:
         """Populate the config_groups with current core values."""
