@@ -261,6 +261,12 @@ class Device(CoreLinked):
             "",
         )
 
+    def rename(self, new_name: str) -> None:
+        """Rename the device, and rename device_name in properties."""
+        self.name = new_name
+        for prop in self.properties:
+            prop.device_name = new_name
+
     def rename_in_core(self, new_name: str, core: CMMCorePlus | None = None) -> None:
         """Unload the device, rename it, and reload it in core."""
         core = _ensure_core(core or self.core)
@@ -268,7 +274,7 @@ class Device(CoreLinked):
             core.unloadDevice(self.name)
         self.initialized = False
         core.loadDevice(new_name, self.library, self.adapter_name)
-        self.name = new_name
+        self.rename(new_name)
         core.setParentLabel(new_name, self.parent_name)
 
     def load_in_core(
