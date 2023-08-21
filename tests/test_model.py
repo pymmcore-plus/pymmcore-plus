@@ -18,9 +18,9 @@ def test_model_create() -> None:
 
 
 def test_model_from_core(core: CMMCorePlus) -> None:
-    model = Microscope.create_from_core(core)
+    model = Microscope(from_core=core)
     assert model.devices
-    assert model.hubs
+    assert model.hub_devices
     if os.name == "nt":
         assert model.bad_libraries
 

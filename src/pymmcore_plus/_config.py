@@ -11,12 +11,9 @@ from pymmcore_plus.model import (
     ConfigGroup,
     ConfigPreset,
     Device,
-    HubDevice,
     Microscope,
     PixelSizePreset,
     Setting,
-    StageDevice,
-    StateDevice,
 )
 
 if TYPE_CHECKING:
@@ -70,32 +67,32 @@ def yield_date(scope: Microscope) -> Iterable[str]:
 
 def iter_devices(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if d.type != DeviceType.Core:
+        if d.device_type != DeviceType.Core:
             yield _serialize(CFGCommand.Device, d.name, d.library, d.adapter_name)
 
 
 def iter_pre_init_props(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if d.type != DeviceType.Core:
+        if d.device_type != DeviceType.Core:
             for p in d.pre_init_props():
-                yield _serialize(CFGCommand.Property, p.device, p.name, p.value)
+                yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
 
 
 def iter_hub_refs(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if d.type != DeviceType.Core and d.parent_name:
+        if d.device_type != DeviceType.Core and d.parent_name:
             yield _serialize(CFGCommand.ParentID, d.name, d.parent_name)
 
 
 def iter_delays(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if d.type != DeviceType.Core and d.delay_ms:
+        if d.device_type != DeviceType.Core and d.delay_ms:
             yield _serialize(CFGCommand.Delay, d.name, d.delay_ms)
 
 
 def iter_focus_directions(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if isinstance(d, StageDevice):
+        if d.device_type == DeviceType.Stage:
             yield _serialize(CFGCommand.FocusDirection, d.name, d.focus_direction.value)
 
 
@@ -106,13 +103,13 @@ def iter_roles(scope: Microscope) -> Iterable[str]:
         Keyword.CoreFocus,
         Keyword.CoreAutoShutter,
     ):
-        if p := scope.core.find_property(field):
-            yield _serialize(CFGCommand.Property, p.device, p.name, p.value)
+        if p := scope.core_device.find_property(field):
+            yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
 
 
 def iter_labels(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if isinstance(d, StateDevice) and d.labels:
+        if d.device_type == DeviceType.State and d.labels:
             yield f"# {d.name}"
             for state, label in d.labels.items():
                 yield _serialize(CFGCommand.Label, d.name, state, label)
@@ -214,17 +211,14 @@ def _exec_Property(scope: Microscope, args: Sequence[str]) -> None:
         return
 
     dev = scope.find_device(device_name)
-    prop = dev.set_default_prop(prop_name, value, pre_init=not scope.initialized)
+    prop = dev.set_prop_default(prop_name, value, pre_init=not scope.initialized)
     prop.value = value
 
 
 def _exec_Label(scope: Microscope, args: Sequence[str]) -> None:
     device_name, state, label = args
     dev = scope.find_device(device_name)
-    if not isinstance(dev, StateDevice):
-        # promote
-        scope.devices[scope.devices.index(dev)] = dev = StateDevice.from_device(dev)
-
+    dev.device_type = DeviceType.State
     try:
         state_int = int(state)
     except (ValueError, TypeError):
@@ -283,17 +277,15 @@ def _exec_ParentID(scope: Microscope, args: Sequence[str]) -> None:
     device_name, parent_name = args
     dev = scope.find_device(device_name)
     dev.parent_name = parent_name
+    dev.device_type = DeviceType.Hub
     try:
-        hub = scope.find_device(parent_name)
+        scope.find_device(parent_name)
     except ValueError:
         warnings.warn(
             f"Parent hub {parent_name!r} not found for device {device_name!r}",
             RuntimeWarning,
             stacklevel=2,
         )
-    else:
-        if not isinstance(hub, HubDevice):  # promote
-            scope.devices[scope.devices.index(hub)] = HubDevice.from_device(hub)
 
 
 def _exec_Delay(scope: Microscope, args: Sequence[str]) -> None:
@@ -308,10 +300,7 @@ def _exec_Delay(scope: Microscope, args: Sequence[str]) -> None:
 def _exec_FocusDirection(scope: Microscope, args: Sequence[str]) -> None:
     device_name, direction = args
     dev = scope.find_device(device_name)
-    if not isinstance(dev, StageDevice):
-        # promote
-        scope.devices[scope.devices.index(dev)] = dev = StageDevice.from_device(dev)
-
+    dev.device_type = DeviceType.Stage
     try:
         dev.focus_direction = FocusDirection(int(direction))
     except (ValueError, TypeError):

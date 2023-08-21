@@ -9,22 +9,21 @@ the core instance.
 """
 from __future__ import annotations
 
-import os
+import logging
 from contextlib import suppress
-from dataclasses import dataclass, field, fields
+from dataclasses import InitVar, dataclass, field, fields
 from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
+    Container,
     Generic,
+    Iterable,
     Iterator,
     NamedTuple,
-    Type,
     TypeVar,
 )
-
-from pymmcore import CMMCore
 
 from pymmcore_plus import (
     CFGGroup,
@@ -38,89 +37,220 @@ from pymmcore_plus import (
 from ._util import no_stdout
 
 if TYPE_CHECKING:
-    import builtins
     from typing import Final
-
-    from typing_extensions import Self
 
     D = TypeVar("D", bound="Device")
 
-__all__ = [
-    "ConfigGroup",
-    "ConfigPreset",
-    "CoreDevice",
-    "Device",
-    "HubDevice",
-    "Microscope",
-    "PropertyItem",
-    "SerialDevice",
-    "Setting",
-    "StageDevice",
-    "StateDevice",
-]
+__all__ = ["ConfigGroup", "ConfigPreset", "Device", "Microscope", "Property", "Setting"]
 
+logger = logging.getLogger(__name__)
 UNDEFINED: Final = "UNDEFINED"
 DEFAULT_AFFINE: Final = (1, 0, 0, 0, 1, 0)
 PIXEL_SIZE_GROUP: Final = "PixelSizeGroup"
+PROP_GETTERS: Final[dict[str, Callable[[CMMCorePlus, str, str], Any]]] = {
+    "value": CMMCorePlus.getProperty,
+    "read_only": CMMCorePlus.isPropertyReadOnly,
+    "pre_init": CMMCorePlus.isPropertyPreInit,
+    "allowed": CMMCorePlus.getAllowedPropertyValues,
+    "has_limits": CMMCorePlus.hasPropertyLimits,
+    "lower_limit": CMMCorePlus.getPropertyLowerLimit,
+    "upper_limit": CMMCorePlus.getPropertyUpperLimit,
+    "property_type": CMMCorePlus.getPropertyType,
+}
+DEVICE_GETTERS: Final[dict[str, Callable[[CMMCorePlus, str], Any]]] = {
+    "is_busy": CMMCorePlus.deviceBusy,
+    "delay_ms": CMMCorePlus.getDeviceDelayMs,
+    "uses_delay": CMMCorePlus.usesDeviceDelay,
+    "description": CMMCorePlus.getDeviceDescription,
+    "library": CMMCorePlus.getDeviceLibrary,
+    "adapter_name": CMMCorePlus.getDeviceName,
+    "property_names": CMMCorePlus.getDevicePropertyNames,
+    "device_type": CMMCorePlus.getDeviceType,
+}
+SYS_CONFIGS: list[tuple[str, tuple[str, ...]]] = [
+    (CFGGroup.System.value, (CFGGroup.System_Startup.value,)),
+    (Keyword.Channel.value, ()),
+]
+
+
+def _noop(*_: Any, **__: Any) -> None:
+    pass
+
+
+def _ensure_core(core: CMMCorePlus | None) -> CMMCorePlus:
+    if isinstance(core, CMMCorePlus):
+        return core
+    # TODO: give better error message with name/signature of caller
+    raise TypeError(
+        "No core is associated with this object, you must pass a core instance"
+    )
 
 
 @dataclass
-class PropertyItem:
+class CoreLinked:
+    """Class that may have a connection to a core object."""
+
+    from_core: InitVar[CMMCorePlus | None] = field(default=None, kw_only=True)
+
+    def __post_init__(self, from_core: CMMCorePlus | None) -> None:
+        """Post-init hook to fetch values from the core, if available."""
+        self._core: CMMCorePlus | None = from_core
+        if isinstance(from_core, CMMCorePlus):
+            self.update_from_core()
+
+    @property
+    def core(self) -> CMMCorePlus | None:
+        """A core instance associated with this object, if any.
+
+        This core will be used to fetch/update values from/to the core.
+        """
+        return self._core
+
+    def update_from_core(
+        self, core: CMMCorePlus | None = None, *, exclude: Container[str] = ()
+    ) -> None:
+        """Update this object's values from the core."""
+        return
+
+
+@dataclass
+class Property(CoreLinked):
     """Model of a device property."""
 
-    device: str
+    device_name: str
     name: str
-    value: str
+    value: str = ""
     read_only: bool = False
     pre_init: bool = False
     allowed: tuple[str, ...] = field(default_factory=tuple)
     has_limits: bool = False
     lower_limit: float = 0.0
     upper_limit: float = 0.0
-    type: PropertyType = PropertyType.Undef
+    property_type: PropertyType = PropertyType.Undef
     device_type: DeviceType = DeviceType.Unknown
     use_in_setup: bool = False  # setupProperties_
 
-    @classmethod
-    def create_from_core(
-        cls,
-        core: CMMCore,
-        device_name: str,
-        property_name: str,
-        from_cache: bool = False,
-    ) -> Self:
-        """Create a DeviceProperty populated with current core values."""
-        getValue = core.getPropertyFromCache if from_cache else core.getProperty
-        return cls(
-            device=device_name,
-            name=property_name,
-            value=getValue(device_name, property_name),
-            read_only=core.isPropertyReadOnly(device_name, property_name),
-            pre_init=core.isPropertyPreInit(device_name, property_name),
-            # sort these?
-            allowed=tuple(core.getAllowedPropertyValues(device_name, property_name)),
-            has_limits=core.hasPropertyLimits(device_name, property_name),
-            lower_limit=core.getPropertyLowerLimit(device_name, property_name),
-            upper_limit=core.getPropertyUpperLimit(device_name, property_name),
-            type=PropertyType(core.getPropertyType(device_name, property_name)),
-            device_type=DeviceType(core.getDeviceType(device_name)),
-        )
+    def update_from_core(
+        self, core: CMMCorePlus | None = None, *, exclude: Container[str] = ()
+    ) -> None:
+        """Fetch the current value of this property from the core."""
+        core = _ensure_core(core or self.core)
+        try:
+            self.device_type = core.getDeviceType(self.device_name)
+        except RuntimeError as e:
+            logger.warning(f"Cannot update property {self.name} from core: {e}")
+            return
+
+        field_names = {f.name for f in fields(self)}
+        for field_name, getter in PROP_GETTERS.items():
+            if field_name in field_names:
+                with suppress(RuntimeError):
+                    val = getter(core, self.device_name, self.name)
+                    setattr(self, field_name, val)
+
+    def apply_to_core(self, core: CMMCorePlus | None = None) -> None:
+        """Apply this object's values to the core."""
+        core = _ensure_core(core or self.core)
+        core.setProperty(self.device_name, self.name, self.value)
 
 
 @dataclass
-class Device:
+class Device(CoreLinked):
     """Model of a device."""
 
-    name: str
-    library: str
-    adapter_name: str
+    name: str = UNDEFINED
+    library: str = ""
+    adapter_name: str = ""
     description: str = ""
-    type: DeviceType = DeviceType.Any  # perhaps UnknownType?
-    properties: list[PropertyItem] = field(default_factory=list)
+    device_type: DeviceType = DeviceType.Any  # perhaps UnknownType?
+    properties: list[Property] = field(default_factory=list)
     delay_ms: float = 0.0
     uses_delay: bool = False
     parent_name: str = ""
     initialized: bool = False
+
+    # NOTE: I began by using device subclasses for these, but it becomes very difficult
+    # when you need to "promote" a device to a different type. For example, if you are
+    # loading a config file, and the only information you have is the device name, you
+    # won't know what type of device it is until later. While you can theoretically
+    # promote the class at that point, it gets very messy.  The following attributes
+    # are used to store data specific to certain device types.
+
+    # StateDevice only
+    labels: dict[int, str] = field(default_factory=dict)
+
+    # StageDevice only
+    focus_direction: FocusDirection = FocusDirection.Unknown
+
+    # HubDevice only
+    children: tuple[str, ...] = field(default_factory=tuple)
+
+    def __post_init__(self, from_core: CMMCorePlus | None) -> None:
+        super().__post_init__(from_core)
+
+        # give serial devives their adapter name
+        if self.name == UNDEFINED and self.device_type != DeviceType.Serial:
+            self.name = self.adapter_name
+
+    def update_from_core(
+        self,
+        core: CMMCorePlus | None = None,
+        *,
+        exclude: Container[str] = ("delay_ms",),
+        update_properties: bool = True,
+        remove_stale_properties: bool = True,
+    ) -> None:
+        """Fetch the current value of this property from the core."""
+        # NOTE: from MMStudio: do not load the delay value from the hardware
+        # we will always use settings defined in the config file
+        # self.delay_ms = core.getDeviceDelayMs(self.name)
+        core = _ensure_core(core or self.core)
+        if self.name not in core.getLoadedDevices():
+            return
+
+        # update device fields
+        field_names = {f.name for f in fields(self)}
+        for field_name, getter in DEVICE_GETTERS.items():
+            if field_name in field_names and field_name not in exclude:
+                with suppress(RuntimeError):
+                    val = getter(core, self.name)
+                    setattr(self, field_name, val)
+
+        # update properties
+        if update_properties:
+            prop_names: set[str] = set()
+            core_names = core.getDevicePropertyNames(self.name)
+
+            # update existing properties
+            for prop in list(self.properties):
+                prop_names.add(prop.name)
+                prop.update_from_core(core, exclude=exclude)
+
+                # remove stale properties
+                if remove_stale_properties and prop.name not in core_names:
+                    self.properties.remove(prop)
+
+            # add new ones
+            for name in core_names:
+                if name not in prop_names:
+                    self.properties.append(
+                        Property(device_name=self.name, name=name, from_core=core)
+                    )
+
+        # handle device-type specific stuff
+        if self.device_type == DeviceType.State:
+            with suppress(RuntimeError):
+                # may fail if not initialized, etc...
+                self.labels = dict(enumerate(core.getStateLabels(self.name)))
+
+        if self.device_type == DeviceType.Stage:
+            with suppress(RuntimeError):
+                self.focus_direction = FocusDirection(core.getFocusDirection(self.name))
+
+        if self.device_type == DeviceType.Hub:
+            if self.initialized and not self.children:
+                with suppress(RuntimeError):
+                    self.children = tuple(core.getInstalledDevices(self.name))
 
     @property
     def port(self) -> str:
@@ -130,193 +260,71 @@ class Device:
             "",
         )
 
-    def load_in_core(self, core: CMMCore, reload: bool = False) -> None:
+    def load_in_core(
+        self, core: CMMCorePlus | None = None, reload: bool = False
+    ) -> None:
         """Load the device in core."""
+        core = _ensure_core(core or self.core)
         if reload:
             with suppress(RuntimeError):
                 core.unloadDevice(self.name)
             self.initialized = False
         core.loadDevice(self.name, self.library, self.adapter_name)
 
-    @classmethod
-    def create_from_core(cls, core: CMMCore, device_name: str) -> Device:
-        """Create a Device populated with current core values."""
-        type_ = core.getDeviceType(device_name)
-        dev = cls.subclass_for(type_)(
-            name=device_name,
-            library=core.getDeviceLibrary(device_name),
-            adapter_name=core.getDeviceName(device_name),
-            type=DeviceType(type_),
-            delay_ms=core.getDeviceDelayMs(device_name),
-        )
-        print(">> loading data from hardware", dev)
-        dev.load_data_from_hardware(core)  # let subclass update specific values
-        return dev
+    def initialize_in_core(self, core: CMMCorePlus | None = None) -> None:
+        """Initialize the device in core."""
+        _ensure_core(core or self.core).initializeDevice(self.name)
+        self.initialized = True
 
     @staticmethod
-    def subclass_for(type: DeviceType | int) -> builtins.type[Device]:
-        """Return the subclass for the given device type."""
-        # could use __new__ ... but it's not really necessary
-        return {
-            DeviceType.Hub: HubDevice,
-            DeviceType.Stage: StageDevice,
-            DeviceType.State: StateDevice,
-            DeviceType.Serial: SerialDevice,
-            DeviceType.Core: CoreDevice,
-        }.get(DeviceType(type), Device)
-
-    def load_data_from_hardware(self, core: CMMCore) -> None:
-        """Update the Device data with current core values."""
-        if DeviceType(core.getDeviceType(self.name)) != self.type:
-            # TODO:
-            # we'd like to be able to promote to a proper subclass here
-            # we might get here if we've loaded a device from a config file
-            # and then connected to a core instance that has more information
-            raise ValueError("Device Type mismatch")  # pragma: no cover
-        self.properties = [
-            PropertyItem.create_from_core(core, self.name, prop_name)
-            for prop_name in core.getDevicePropertyNames(self.name)
-        ]
-        self.description = core.getDeviceDescription(self.name)
-        self.uses_delay = core.usesDeviceDelay(self.name)
-        self.parent_name = core.getParentLabel(self.name)
-
-        # NOTE: from MMStudio: do not load the delay value from the hardware
-        # we will always use settings defined in the config file
-        # self.delay_ms = core.getDeviceDelayMs(self.name)
-
-    @staticmethod
-    def library_contents(core: CMMCore, library_name: str) -> tuple[Device, ...]:
+    def library_contents(core: CMMCorePlus, library_name: str) -> tuple[Device, ...]:
         """Return a tuple of Devices in the given library."""
         with no_stdout():
             devs = core.getAvailableDevices(library_name)  # this could raise
         types = core.getAvailableDeviceTypes(library_name)
         descriptions = core.getAvailableDeviceDescriptions(library_name)
         return tuple(
-            Device.subclass_for(dev_type)(
-                name=UNDEFINED,
+            Device(
                 library=library_name,
                 adapter_name=dev_name,
                 description=desc,
-                type=DeviceType(dev_type),
+                device_type=DeviceType(dev_type),
             )
             for dev_name, dev_type, desc in zip(devs, types, descriptions)
         )
 
-    def find_property(self, prop_name: str) -> PropertyItem | None:
+    def find_property(self, prop_name: str) -> Property | None:
         """Find a property by name."""
         return next((p for p in self.properties if p.name == prop_name), None)
 
-    def set_default_prop(
+    def set_prop_default(
         self, prop_name: str, value: str = "", **kwargs: Any
-    ) -> PropertyItem:
+    ) -> Property:
         """Works similar to `dict.set_default`. Add property if it doesn't exist."""
         if not (prop := self.find_property(prop_name)):
-            prop = PropertyItem(self.name, str(prop_name), value, **kwargs)
+            prop = Property(self.name, str(prop_name), value, **kwargs)
+            # set core?
             self.properties.append(prop)
         return prop
 
-    def pre_init_props(self) -> Iterator[PropertyItem]:
+    def pre_init_props(self) -> Iterator[Property]:
         """Return a list of pre-init properties."""
         yield from (p for p in self.properties if p.pre_init)
 
-    def setup_props(self) -> Iterator[PropertyItem]:
+    def setup_props(self) -> Iterator[Property]:
         """Return a list of properties to be used in setup."""
         yield from (p for p in self.properties if p.use_in_setup)
 
-    @classmethod
-    def from_device(cls: Type[D], dev: Device) -> D:
-        """For subclasses to promote a Device."""
-        return cls(
-            name=dev.name,
-            library=dev.library,
-            adapter_name=dev.adapter_name,
-            description=dev.description,
-            delay_ms=dev.delay_ms,
-            properties=dev.properties,
-            uses_delay=dev.uses_delay,
-            parent_name=dev.parent_name,
-        )
-
-
-@dataclass
-class HubDevice(Device):
-    """Model of a hub device.""."""
-
-    children: tuple[str, ...] = field(default_factory=tuple)
-    type: DeviceType = DeviceType.Hub
-
-    def load_data_from_hardware(self, core: CMMCore) -> None:
-        """Update the HubDevice with current core values."""
-        super().load_data_from_hardware(core)
-        if self.initialized and not self.children:
-            with suppress(RuntimeError):
-                self.children = tuple(core.getInstalledDevices(self.name))
-
-
-@dataclass
-class StageDevice(Device):
-    """Model of a stage device."""
-
-    focus_direction: FocusDirection = FocusDirection.Unknown
-    type: DeviceType = DeviceType.Stage
-
-    def load_data_from_hardware(self, core: CMMCore) -> None:
-        """Update the StateDevice with current core values."""
-        super().load_data_from_hardware(core)
-        self.focus_direction = FocusDirection(core.getFocusDirection(self.name))
-
-
-@dataclass
-class StateDevice(Device):
-    """Model of a state device."""
-
-    # map of state index to label
-    labels: dict[int, str] = field(default_factory=dict)
-    type: DeviceType = DeviceType.State
-
-    def load_data_from_hardware(self, core: CMMCore) -> None:
-        """Update the StateDevice with current core values."""
-        super().load_data_from_hardware(core)
-        with suppress(RuntimeError):
-            # may fail if not initialized, etc...
-            self.labels = dict(enumerate(core.getStateLabels(self.name)))
-
-    def device_state_labels(self, core: CMMCore) -> None:
-        """Load the device in core."""
-        for state, label in self.labels.items():
-            core.defineStateLabel(self.name, state, label)
-
-
-@dataclass
-class SerialDevice(Device):
-    """Model of the core device."""
-
-    type: DeviceType = DeviceType.Serial
-
-    def __post_init__(self) -> None:
-        """Validate the SerialDevice."""
-        # can't put this as field default because of dataclass limitations
+    def __rich_repr__(self) -> Iterable[tuple[str, Any]]:
+        # make AvailableDevices look a little less verbose
         if self.name == UNDEFINED:
-            self.name = self.adapter_name
-
-
-@dataclass
-class CoreDevice(Device):
-    """Model of the core device."""
-
-    name: str = Keyword.CoreDevice.value
-    library: str = ""
-    adapter_name: str = "MMCore"
-    type: DeviceType = DeviceType.Core
-    description = "Core device"
-
-    def __post_init__(self) -> None:
-        """Add core properties if they don't exist."""
-        self.set_default_prop(Keyword.CoreCamera, use_in_setup=True)
-        self.set_default_prop(Keyword.CoreShutter, use_in_setup=True)
-        self.set_default_prop(Keyword.CoreFocus, use_in_setup=True)
-        self.set_default_prop(Keyword.CoreAutoShutter, "1", use_in_setup=True)
+            yield ("library", self.library)
+            yield ("adapter_name", self.adapter_name)
+            yield ("description", self.description)
+            yield ("device_type", self.device_type.name)
+        else:
+            for field in fields(self):
+                yield (field.name, getattr(self, field.name))
 
 
 class Setting(NamedTuple):
@@ -378,7 +386,7 @@ class PixelSizeGroup(ConfigGroup[PixelSizePreset]):
 
 
 @dataclass
-class Microscope:
+class Microscope(CoreLinked):
     """Full model of a microscope."""
 
     devices: list[Device] = field(default_factory=list)
@@ -392,36 +400,87 @@ class Microscope:
     config_file: str = ""
     initialized: bool = False
 
-    def __post_init__(self) -> None:
+    def __post_init__(self, from_core: CMMCorePlus | None) -> None:
         """Validate and initialized the Microscope."""
-        # Used during load_from_file to check whether the init step has been run
+        if from_core is None and self.config_file and Path(self.config_file).is_file():
+            self.load(self.config_file)
 
         # ensure core device exists:
-        if not any(isinstance(d, CoreDevice) for d in self.devices):
-            self.devices.append(CoreDevice())
+        for dev in self.devices:
+            if dev.device_type == DeviceType.Core:
+                core_dev = dev
+        else:
+            core_dev = Device(
+                name=Keyword.CoreDevice.value,
+                adapter_name=Keyword.CoreDevice.value,
+                device_type=DeviceType.Core,
+                description=f"{Keyword.CoreDevice.value} device",
+            )
+            self.devices.append(core_dev)
+        core_dev.set_prop_default(Keyword.CoreCamera, use_in_setup=True)
+        core_dev.set_prop_default(Keyword.CoreShutter, use_in_setup=True)
+        core_dev.set_prop_default(Keyword.CoreFocus, use_in_setup=True)
+        core_dev.set_prop_default(Keyword.CoreAutoShutter, "1", use_in_setup=True)
 
-        # ensure system configs:
-        sys_cfgs: list[tuple[str, tuple[str, ...]]] = [
-            (str(CFGGroup.System), (CFGGroup.System_Startup.value,)),
-            (str(Keyword.Channel), ()),
-        ]
-        for cfg_grp, presets in sys_cfgs:
-            cg = self.config_groups.setdefault(cfg_grp, ConfigGroup(name=cfg_grp))
+        # ensure system configs exist:
+        for cfg_grp, presets in SYS_CONFIGS:
+            cg = self.config_groups.setdefault(str(cfg_grp), ConfigGroup(name=cfg_grp))
             for preset in presets:
-                cg.presets.setdefault(preset, ConfigPreset(name=preset))
+                cg.presets.setdefault(str(preset), ConfigPreset(name=preset))
+
+        super().__post_init__(from_core)
+
+    def update_from_core(
+        self,
+        core: CMMCorePlus | None = None,
+        *,
+        exclude: Container[str] = ("delay_ms",),
+        update_devices: bool = True,
+        remove_stale_devices: bool = True,
+        update_properties: bool = True,
+        remove_stale_properties: bool = True,
+    ) -> None:
+        core = _ensure_core(core or self.core)
+        # update devices
+        if update_devices:
+            our_device_names: set[str] = set()
+            core_devices = core.getLoadedDevices()
+            # update existing devices
+            for dev in list(self.devices):
+                our_device_names.add(dev.name)
+                dev.update_from_core(
+                    core,
+                    exclude=exclude,
+                    update_properties=update_properties,
+                    remove_stale_properties=remove_stale_properties,
+                )
+                # remove stale devices
+                if remove_stale_devices and dev.name not in core_devices:
+                    self.devices.remove(dev)
+
+            # add new devices
+            for name in core_devices:
+                if name not in our_device_names:
+                    self.devices.append(Device(name, from_core=core))
+
+        self.load_available_device_list(core)
+        self.load_configs_from_core(core)
+        self.load_pixel_sizes_from_core(core)
 
     @property
-    def core(self) -> CoreDevice:
+    def core_device(self) -> Device:
         """Return the CoreDevice."""
-        return next(d for d in self.devices if isinstance(d, CoreDevice))
+        return next(d for d in self.devices if d.device_type == DeviceType.Core)
 
     @property
-    def hubs(self) -> tuple[HubDevice, ...]:
+    def hub_devices(self) -> tuple[Device, ...]:
         """Return a tuple of HubDevices."""
-        return tuple(d for d in self.available_devices if isinstance(d, HubDevice))
+        return tuple(
+            d for d in self.available_devices if d.device_type == DeviceType.Hub
+        )
 
     def reset(self) -> None:
-        """Reset the Microscope to its initial state."""
+        """Reset the Microscope to an empty state."""
         defaults = Microscope()
         for f in fields(self):
             setattr(self, f.name, getattr(defaults, f.name))
@@ -449,9 +508,7 @@ class Microscope:
     def initialize_model(
         self,
         core: CMMCorePlus,
-        on_fail: Callable[
-            [Device | PropertyItem, BaseException], None
-        ] = lambda d, e: None,
+        on_fail: Callable[[Device | Property, BaseException], None] = _noop,
     ) -> None:
         """Attempt to initialize all devices in the model.
 
@@ -478,18 +535,19 @@ class Microscope:
                         on_fail(prop, e)
 
         # initialize hubs first
-        for d in sorted(self.devices, key=lambda d: d.type != DeviceType.Hub):
-            if d.initialized or d.type == DeviceType.Core:
+        for d in sorted(self.devices, key=lambda d: d.device_type != DeviceType.Hub):
+            if d.initialized or d.device_type == DeviceType.Core:
                 continue
             if d.parent_name:
                 core.setParentLabel(d.name, d.parent_name)
             try:
                 core.initializeDevice(d.name)
 
-                if isinstance(d, StateDevice):
-                    d.device_state_labels(core)  # must be done after initialization
+                if d.device_type == DeviceType.State:
+                    for state, label in d.labels.items():
+                        core.defineStateLabel(d.name, state, label)
 
-                d.load_data_from_hardware(core)
+                d.update_from_core(core)
                 d.initialized = True
             except Exception as e:
                 on_fail(d, e)
@@ -502,7 +560,7 @@ class Microscope:
 
         # load devices
         for dev in self.devices:
-            if dev.type != DeviceType.Core:
+            if dev.device_type != DeviceType.Core:
                 dev.load_in_core(core)
                 core.setParentLabel(dev.name, dev.parent_name)
 
@@ -533,7 +591,7 @@ class Microscope:
 
         # remove differently named com ports from device lists
         for dev in list(self.devices):
-            if dev.type == DeviceType.SerialDevice:
+            if dev.device_type == DeviceType.SerialDevice:
                 self.remove_device(dev)
 
     def remove_device(self, device: Device | str) -> None:
@@ -546,32 +604,6 @@ class Microscope:
         self.devices.remove(device)
         if device.port and all(dev.port != device.port for dev in self.devices):
             self.assigned_com_ports.pop(device.port, None)
-
-    @classmethod
-    def create(cls, core_or_config: CMMCorePlus | str | Path) -> Microscope:
-        """Create a Microscope populated with current core values."""
-        # create from core instance
-        if isinstance(core_or_config, CMMCore):
-            if not isinstance(core_or_config, CMMCorePlus):
-                raise TypeError("core must be an instance of CMMCorePlus")
-            obj = cls(
-                devices=[
-                    Device.create_from_core(core_or_config, device_name)
-                    for device_name in core_or_config.getLoadedDevices()
-                    if device_name != Keyword.CoreDevice
-                ]
-            )
-            obj.load_available_device_list(core_or_config)
-            obj.load_configs_from_core(core_or_config)
-            obj.load_pixel_sizes_from_core(core_or_config)
-        elif os.path.isfile(core_or_config):
-            obj = cls()
-            obj.load(core_or_config)
-        else:
-            raise TypeError(
-                "Arg must be an instance of CMMCorePlus or a path to a config file"
-            )
-        return obj
 
     def _load_device_data_from_core(self, core: CMMCorePlus, device: Device) -> Device:
         """Update model data from core.
@@ -588,8 +620,8 @@ class Microscope:
                 idx = self.devices.index(device)
                 self.devices[idx] = promoted
             return promoted
-        elif device.type != core_type:  # or just change the type
-            device.type = core_type
+        elif device.device_type != core_type:  # or just change the type
+            device.device_type = core_type
 
         device.load_data_from_hardware(core)
         return device
@@ -615,7 +647,7 @@ class Microscope:
         """Load the pixel sizes from the core."""
         self.pixel_size_group = PixelSizeGroup.create_from_core(core)
 
-    def load_available_device_list(self, core: CMMCore) -> None:
+    def load_available_device_list(self, core: CMMCorePlus) -> None:
         """Return a tuple of available Devices."""
         self.bad_libraries.clear()
         devs: list[Device] = []
@@ -630,7 +662,7 @@ class Microscope:
                 continue
 
             for dev in contents:
-                if dev.type == DeviceType.Serial:
+                if dev.device_type == DeviceType.Serial:
                     com_ports.append(dev)
                 else:
                     devs.append(dev)
