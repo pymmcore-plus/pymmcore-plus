@@ -190,7 +190,7 @@ class Device(CoreLinked):
         super().__post_init__(from_core)
 
         # give serial devives their adapter name
-        if self.name == UNDEFINED and self.device_type != DeviceType.Serial:
+        if self.name == UNDEFINED and self.device_type == DeviceType.Serial:
             self.name = self.adapter_name
 
     def update_from_core(
@@ -306,6 +306,7 @@ class Device(CoreLinked):
                 adapter_name=dev_name,
                 description=desc,
                 device_type=DeviceType(dev_type),
+                from_core=core,
             )
             for dev_name, dev_type, desc in zip(devs, types, descriptions)
         )
