@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import logging
 import sys
+import time
 from contextlib import suppress
 from dataclasses import InitVar, dataclass, field, fields
 from pathlib import Path
@@ -50,15 +51,18 @@ logger = logging.getLogger(__name__)
 UNDEFINED: Final = "UNDEFINED"
 DEFAULT_AFFINE: Final = (1, 0, 0, 0, 1, 0)
 PIXEL_SIZE_GROUP: Final = "PixelSizeGroup"
+PORT_SLEEP: float = 0.1  # TODO: look into this.  MMStudio uses 1 in a few places.
 PROP_GETTERS: Final[dict[str, Callable[[CMMCorePlus, str, str], Any]]] = {
     "value": CMMCorePlus.getProperty,
-    "read_only": CMMCorePlus.isPropertyReadOnly,
-    "pre_init": CMMCorePlus.isPropertyPreInit,
-    "allowed": CMMCorePlus.getAllowedPropertyValues,
+    "is_read_only": CMMCorePlus.isPropertyReadOnly,
+    "is_pre_init": CMMCorePlus.isPropertyPreInit,
+    "allowed_values": CMMCorePlus.getAllowedPropertyValues,
     "has_limits": CMMCorePlus.hasPropertyLimits,
     "lower_limit": CMMCorePlus.getPropertyLowerLimit,
     "upper_limit": CMMCorePlus.getPropertyUpperLimit,
     "property_type": CMMCorePlus.getPropertyType,
+    "is_sequenceable": CMMCorePlus.isPropertySequenceable,
+    "sequence_max_length": CMMCorePlus.getPropertySequenceMaxLength,
 }
 DEVICE_GETTERS: Final[dict[str, Callable[[CMMCorePlus, str], Any]]] = {
     "is_busy": CMMCorePlus.deviceBusy,
@@ -93,6 +97,8 @@ def _ensure_core(core: CMMCorePlus | None) -> CMMCorePlus:
 class CoreLinked:
     """Class that may have a connection to a core object."""
 
+    # NOTE: still not sure about this pattern...
+    # alternative is .create_from_core() classmethod
     if sys.version_info >= (3, 10):  # rather than **KW_ONLY for typing reasons
         from_core: InitVar[CMMCorePlus | None] = field(default=None, kw_only=True)
     else:
@@ -118,6 +124,18 @@ class CoreLinked:
         """Update this object's values from the core."""
         return
 
+    def __rich_repr__(
+        self, *, exclude: Container[str] = (), defaults: bool = False
+    ) -> Iterable[tuple[str, Any]]:
+        """Make AvailableDevices look a little less verbose."""
+        for f in fields(self):
+            if f.name in exclude or f.repr is False:
+                continue
+            val = getattr(self, f.name)
+            default = f.default_factory() if callable(f.default_factory) else f.default
+            if defaults or val != default:
+                yield f.name, val
+
 
 @dataclass
 class Property(CoreLinked):
@@ -126,14 +144,18 @@ class Property(CoreLinked):
     device_name: str
     name: str
     value: str = ""
-    read_only: bool = False
-    pre_init: bool = False
-    allowed: tuple[str, ...] = field(default_factory=tuple)
+    is_read_only: bool = False
+    is_pre_init: bool = False
+    allowed_values: tuple[str, ...] = field(default_factory=tuple)
     has_limits: bool = False
     lower_limit: float = 0.0
     upper_limit: float = 0.0
     property_type: PropertyType = PropertyType.Undef
-    device_type: DeviceType = DeviceType.Unknown
+    device_type: DeviceType = field(default=DeviceType.Unknown, repr=False)
+
+    is_sequenceable: bool = False
+    sequence_max_length: int = 0
+
     use_in_setup: bool = False  # setupProperties_
 
     def update_from_core(
@@ -158,6 +180,14 @@ class Property(CoreLinked):
         """Apply this object's values to the core."""
         core = _ensure_core(core or self.core)
         core.setProperty(self.device_name, self.name, self.value)
+
+    def __rich_repr__(self) -> Iterable[tuple[str, Any]]:
+        exclude: set[str] = set()
+        if not self.has_limits:
+            exclude.update(("lower_limit", "upper_limit"))
+        else:
+            exclude.add("has_limits")
+        yield from super().__rich_repr__(exclude=exclude)
 
 
 @dataclass
@@ -284,20 +314,46 @@ class Device(CoreLinked):
         core.setParentLabel(new_name, self.parent_name)
 
     def load_in_core(
-        self, core: CMMCorePlus | None = None, reload: bool = False
+        self,
+        core: CMMCorePlus | None = None,
+        *,
+        reload: bool = False,
+        set_pre_init_props: bool | None = None,  # None = reload
     ) -> None:
         """Load the device in core."""
         core = _ensure_core(core or self.core)
         if reload:
             with suppress(RuntimeError):
                 core.unloadDevice(self.name)
+                if self.device_type == DeviceType.Serial:
+                    time.sleep(PORT_SLEEP)
             self.initialized = False
-        core.loadDevice(self.name, self.library, self.adapter_name)
 
-    def initialize_in_core(self, core: CMMCorePlus | None = None) -> None:
+        core.loadDevice(self.name, self.library, self.adapter_name)
+        if set_pre_init_props or (set_pre_init_props is None and reload):
+            for prop in self.properties:
+                if prop.is_pre_init:
+                    prop.apply_to_core(core)
+
+    def initialize_in_core(
+        self,
+        core: CMMCorePlus | None = None,
+        *,
+        reload: bool = False,
+        update: bool = True,
+    ) -> None:
         """Initialize the device in core."""
-        _ensure_core(core or self.core).initializeDevice(self.name)
+        core = _ensure_core(core or self.core)
+        if reload:
+            self.load_in_core(core, reload=reload)
+
+        core.initializeDevice(self.name)
         self.initialized = True
+        if self.device_type == DeviceType.Serial:
+            time.sleep(PORT_SLEEP)
+
+        if update:
+            self.update_from_core(core)
 
     @staticmethod
     def library_contents(core: CMMCorePlus, library_name: str) -> tuple[Device, ...]:
@@ -333,7 +389,7 @@ class Device(CoreLinked):
 
     def pre_init_props(self) -> Iterator[Property]:
         """Return a list of pre-init properties."""
-        yield from (p for p in self.properties if p.pre_init)
+        yield from (p for p in self.properties if p.is_pre_init)
 
     def setup_props(self) -> Iterator[Property]:
         """Return a list of properties to be used in setup."""
@@ -341,14 +397,17 @@ class Device(CoreLinked):
 
     def __rich_repr__(self) -> Iterable[tuple[str, Any]]:
         """Make AvailableDevices look a little less verbose."""
+        exclude = set()
         if self.name == UNDEFINED:
-            yield ("library", self.library)
-            yield ("adapter_name", self.adapter_name)
-            yield ("description", self.description)
-            yield ("device_type", self.device_type.name)
-        else:
-            for _field in fields(self):
-                yield (_field.name, getattr(self, _field.name))
+            exclude.add("name")
+        if not self.device_type == DeviceType.State:
+            exclude.add("labels")
+        if not self.device_type == DeviceType.Stage:
+            exclude.add("focus_direction")
+        if not self.device_type == DeviceType.Hub:
+            exclude.add("children")
+
+        yield from super().__rich_repr__(exclude=exclude)
 
 
 class Setting(NamedTuple):
@@ -417,10 +476,10 @@ class Microscope(CoreLinked):
     config_groups: dict[str, ConfigGroup] = field(default_factory=dict)
     # config_groups: dict[str, dict[str, list[tuple]]] = field(default_factory=dict)
     pixel_size_group: PixelSizeGroup = field(default_factory=PixelSizeGroup)
-    available_devices: tuple[Device, ...] = field(default_factory=tuple)
+    available_devices: tuple[Device, ...] = field(default_factory=tuple, repr=False)
     available_com_ports: tuple[Device, ...] = field(default_factory=tuple)
     assigned_com_ports: dict[str, Device] = field(default_factory=dict)
-    bad_libraries: set[str] = field(default_factory=set)
+    bad_libraries: set[str] = field(default_factory=set, repr=False)
     config_file: str = ""
     initialized: bool = False
 
@@ -543,7 +602,7 @@ class Microscope(CoreLinked):
         for device in self.assigned_com_ports.values():
             try:
                 for prop in device.properties:
-                    if prop.pre_init:
+                    if prop.is_pre_init:
                         core.setProperty(device.name, prop.name, prop.value)
                 core.initializeDevice(device.name)
                 device.update_from_core(core)
@@ -553,7 +612,7 @@ class Microscope(CoreLinked):
         # apply pre-init properties
         for dev in self.devices:
             for prop in dev.setup_props():
-                if prop.pre_init:
+                if prop.is_pre_init:
                     try:
                         core.setProperty(dev.name, prop.name, prop.value)
                     except Exception as e:

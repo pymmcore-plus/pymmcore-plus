@@ -163,6 +163,8 @@ class PropertyType(IntEnum):
     def to_json(self) -> str:
         return {0: "null", 1: "string", 2: "number", 3: "integer"}[self]
 
+    def __repr__(self) -> str:
+        return getattr(self.to_python(), "__name__", "None")
 
 class ActionType(IntEnum):
     NoAction = pymmcore.NoAction
