@@ -158,6 +158,15 @@ class Property(CoreLinked):
 
     use_in_setup: bool = False  # setupProperties_
 
+    @property
+    def is_port(self) -> bool:
+        """Return True if this is a Port property.
+
+        This is a "special" name in many places in MMCore/MMStudio. It implies that the
+        value of this property is the name of a specific SerialDevice adapter_name.
+        """
+        return self.name == Keyword.Port
+
     def update_from_core(
         self, core: CMMCorePlus | None = None, *, exclude: Container[str] = ()
     ) -> None:
@@ -292,10 +301,7 @@ class Device(CoreLinked):
     @property
     def port(self) -> str:
         """Return the port of the device, if it has one."""
-        return next(
-            (prop.value for prop in self.properties if prop.name == Keyword.Port),
-            "",
-        )
+        return next((prop.value for prop in self.properties if prop.is_port), "")
 
     def rename(self, new_name: str) -> None:
         """Rename the device, and rename device_name in properties."""
