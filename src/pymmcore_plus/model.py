@@ -7,9 +7,11 @@ the microscope.  This is useful for saving and loading microscope settings
 and for constructing a config GUI without having to interact with and update
 the core instance.
 """
+
 from __future__ import annotations
 
 import logging
+import sys
 from contextlib import suppress
 from dataclasses import InitVar, dataclass, field, fields
 from pathlib import Path
@@ -44,6 +46,7 @@ if TYPE_CHECKING:
 __all__ = ["ConfigGroup", "ConfigPreset", "Device", "Microscope", "Property", "Setting"]
 
 logger = logging.getLogger(__name__)
+
 UNDEFINED: Final = "UNDEFINED"
 DEFAULT_AFFINE: Final = (1, 0, 0, 0, 1, 0)
 PIXEL_SIZE_GROUP: Final = "PixelSizeGroup"
@@ -90,7 +93,10 @@ def _ensure_core(core: CMMCorePlus | None) -> CMMCorePlus:
 class CoreLinked:
     """Class that may have a connection to a core object."""
 
-    from_core: InitVar[CMMCorePlus | None] = field(default=None, kw_only=True)
+    if sys.version_info >= (3, 10):  # rather than **KW_ONLY for typing reasons
+        from_core: InitVar[CMMCorePlus | None] = field(default=None, kw_only=True)
+    else:
+        from_core: InitVar[CMMCorePlus | None] = None
 
     def __post_init__(self, from_core: CMMCorePlus | None) -> None:
         """Post-init hook to fetch values from the core, if available."""
