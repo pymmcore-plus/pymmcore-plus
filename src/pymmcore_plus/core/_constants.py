@@ -166,6 +166,7 @@ class PropertyType(IntEnum):
     def __repr__(self) -> str:
         return getattr(self.to_python(), "__name__", "None")
 
+
 class ActionType(IntEnum):
     NoAction = pymmcore.NoAction
     BeforeGet = pymmcore.BeforeGet
