@@ -211,7 +211,7 @@ def _exec_Property(scope: Microscope, args: Sequence[str]) -> None:
         return
 
     dev = scope.find_device(device_name)
-    prop = dev.set_prop_default(prop_name, value, pre_init=not scope.initialized)
+    prop = dev.set_prop_default(prop_name, value, is_pre_init=not scope.initialized)
     prop.value = value
 
 
