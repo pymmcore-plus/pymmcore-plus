@@ -6,15 +6,11 @@ import warnings
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence
 
 from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword
-from pymmcore_plus.model import (
-    DEFAULT_AFFINE,
-    ConfigGroup,
-    ConfigPreset,
-    Device,
-    Microscope,
-    PixelSizePreset,
-    Setting,
-)
+
+from ._config_group import ConfigGroup, ConfigPreset, Setting
+from ._device import Device
+from ._microscope import Microscope
+from ._pixel_size_config import DEFAULT_AFFINE, PixelSizePreset
 
 if TYPE_CHECKING:
     import io
@@ -72,16 +68,19 @@ def iter_devices(scope: Microscope) -> Iterable[str]:
 
 
 def iter_pre_init_props(scope: Microscope) -> Iterable[str]:
-    for d in scope.devices:
-        if d.device_type != DeviceType.Core:
-            for p in d.pre_init_props():
-                yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
+    for dev in scope.devices:
+        if dev.device_type != DeviceType.Core:
+            for p in dev.properties:
+                if p.is_pre_init:
+                    yield _serialize(
+                        CFGCommand.Property, p.device_name, p.name, p.value
+                    )
 
 
 def iter_hub_refs(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if d.device_type != DeviceType.Core and d.parent_name:
-            yield _serialize(CFGCommand.ParentID, d.name, d.parent_name)
+        if d.device_type != DeviceType.Core and d.parent_label:
+            yield _serialize(CFGCommand.ParentID, d.name, d.parent_label)
 
 
 def iter_delays(scope: Microscope) -> Iterable[str]:
@@ -96,22 +95,27 @@ def iter_focus_directions(scope: Microscope) -> Iterable[str]:
             yield _serialize(CFGCommand.FocusDirection, d.name, d.focus_direction.value)
 
 
+ROLES = {
+    Keyword.CoreCamera,
+    Keyword.CoreShutter,
+    Keyword.CoreFocus,
+    Keyword.CoreAutoShutter,
+}
+
+
 def iter_roles(scope: Microscope) -> Iterable[str]:
-    for field in (
-        Keyword.CoreCamera,
-        Keyword.CoreShutter,
-        Keyword.CoreFocus,
-        Keyword.CoreAutoShutter,
-    ):
-        if p := scope.core_device.find_property(field):
-            yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
+    core_dev = next(iter(scope.filter_devices(device_type=DeviceType.Core)), None)
+    if core_dev is not None:
+        for p in core_dev.properties:
+            if p.name in ROLES:
+                yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
 
 
 def iter_labels(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
         if d.device_type == DeviceType.State and d.labels:
             yield f"# {d.name}"
-            for state, label in d.labels.items():
+            for state, label in enumerate(d.labels):
                 yield _serialize(CFGCommand.Label, d.name, state, label)
 
 
@@ -125,14 +129,14 @@ def iter_config_presets(scope: Microscope) -> Iterable[str]:
 
 
 def iter_pixel_size_presets(scope: Microscope) -> Iterable[str]:
-    pixels = scope.pixel_size_group
+    pixels = scope.pixel_size_configs
     for p in pixels.presets.values():
         yield f"# Resolution preset: {p.name}"
         for setting in p.settings:
             yield _serialize(CFGCommand.ConfigPixelSize, p.name, *setting)
         yield _serialize(CFGCommand.PixelSize_um, p.name, p.pixel_size_um)
-        if p.affine_transform != DEFAULT_AFFINE:
-            yield _serialize(CFGCommand.PixelSizeAffine, p.name, *p.affine_transform)
+        if p.affine != DEFAULT_AFFINE:
+            yield _serialize(CFGCommand.PixelSizeAffine, p.name, *p.affine)
 
 
 # Order will determine the order of the sections in the file
@@ -210,20 +214,28 @@ def _exec_Property(scope: Microscope, args: Sequence[str]) -> None:
             raise ValueError(f"Value {value!r} is not an integer") from None
         return
 
-    dev = scope.find_device(device_name)
-    prop = dev.set_prop_default(prop_name, value, pre_init=not scope.initialized)
+    dev = next(iter(scope.filter_devices(name=device_name)))
+    prop = dev.set_prop_default(prop_name, value, is_pre_init=not scope.initialized)
     prop.value = value
 
 
 def _exec_Label(scope: Microscope, args: Sequence[str]) -> None:
     device_name, state, label = args
-    dev = scope.find_device(device_name)
+    dev = next(iter(scope.filter_devices(name=device_name)))
     dev.device_type = DeviceType.State
     try:
         state_int = int(state)
     except (ValueError, TypeError):
         raise ValueError(f"State {state} is not an integer") from None
-    dev.labels[state_int] = label
+
+    lst = list(dev.labels)
+    current_length = len(dev.labels)
+
+    # Expand the list with new strings if needed
+    if state_int > current_length:
+        lst.extend(f"State-{i}" for i in range(current_length, state_int + 1))
+    lst[state_int] = label
+    dev.labels = tuple(lst)
 
 
 def _exec_ConfigGroup(scope: Microscope, args: Sequence[str]) -> None:
@@ -236,7 +248,7 @@ def _exec_ConfigGroup(scope: Microscope, args: Sequence[str]) -> None:
 def _exec_ConfigPixelSize(scope: Microscope, args: Sequence[str]) -> None:
     # NOTE: this is quite similar to _cmd_config_group... maybe refactor?
     preset_name, device_name, prop_name, value = args
-    cg = scope.pixel_size_group
+    cg = scope.pixel_size_configs
     preset = cg.presets.setdefault(preset_name, PixelSizePreset(name=preset_name))
     preset.settings.append(Setting(device_name, prop_name, value))
 
@@ -244,7 +256,7 @@ def _exec_ConfigPixelSize(scope: Microscope, args: Sequence[str]) -> None:
 def _exec_PixelSize_um(scope: Microscope, args: Sequence[str]) -> None:
     preset_name, value = args
     try:
-        preset = scope.pixel_size_group.presets[preset_name]
+        preset = scope.pixel_size_configs.presets[preset_name]
     except KeyError:
         raise ValueError(f"Pixel size preset {preset_name!r} not found") from None
 
@@ -257,7 +269,7 @@ def _exec_PixelSize_um(scope: Microscope, args: Sequence[str]) -> None:
 def _exec_PixelSizeAffine(scope: Microscope, args: Sequence[str]) -> None:
     preset_name, *tform = args
     try:
-        preset = scope.pixel_size_group.presets[preset_name]
+        preset = scope.pixel_size_configs.presets[preset_name]
     except KeyError:
         raise ValueError(f"Pixel size preset {preset_name!r} not found") from None
 
@@ -266,7 +278,7 @@ def _exec_PixelSizeAffine(scope: Microscope, args: Sequence[str]) -> None:
         raise ValueError(f"Expected 6 values for affine transform, got {len(tform)}")
 
     try:
-        preset.affine_transform = tuple(float(v) for v in tform)
+        preset.affine = tuple(float(v) for v in tform)  # type: ignore
     except ValueError as exc:
         raise ValueError(
             f"Invalid affine transform: {tform!r}. Expected 6 floats."
@@ -274,15 +286,15 @@ def _exec_PixelSizeAffine(scope: Microscope, args: Sequence[str]) -> None:
 
 
 def _exec_ParentID(scope: Microscope, args: Sequence[str]) -> None:
-    device_name, parent_name = args
-    dev = scope.find_device(device_name)
-    dev.parent_name = parent_name
+    device_name, parent_label = args
+    dev = next(iter(scope.filter_devices(name=device_name)))
+    dev.parent_label = parent_label
     dev.device_type = DeviceType.Hub
     try:
-        scope.find_device(parent_name)
+        next(iter(scope.filter_devices(name=parent_label)))
     except ValueError:
         warnings.warn(
-            f"Parent hub {parent_name!r} not found for device {device_name!r}",
+            f"Parent hub {parent_label!r} not found for device {device_name!r}",
             RuntimeWarning,
             stacklevel=2,
         )
@@ -290,7 +302,7 @@ def _exec_ParentID(scope: Microscope, args: Sequence[str]) -> None:
 
 def _exec_Delay(scope: Microscope, args: Sequence[str]) -> None:
     device_name, delay_ms = args
-    dev = scope.find_device(device_name)
+    dev = next(iter(scope.filter_devices(name=device_name)))
     try:
         dev.delay_ms = float(delay_ms)
     except ValueError as exc:
@@ -299,7 +311,7 @@ def _exec_Delay(scope: Microscope, args: Sequence[str]) -> None:
 
 def _exec_FocusDirection(scope: Microscope, args: Sequence[str]) -> None:
     device_name, direction = args
-    dev = scope.find_device(device_name)
+    dev = next(iter(scope.filter_devices(name=device_name)))
     dev.device_type = DeviceType.Stage
     try:
         dev.focus_direction = FocusDirection(int(direction))

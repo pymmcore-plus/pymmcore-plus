@@ -54,7 +54,8 @@ class CoreObject(Protocol):
         }
 
         for field_name, val in self.core_values(core, field_names, on_err):
-            setattr(self, field_name, val)
+            if field_name in field_names:
+                setattr(self, field_name, val)
 
     def core_values(
         self,
@@ -66,13 +67,12 @@ class CoreObject(Protocol):
             field_names = {f.name for f in fields(self)}
 
         args = self._core_args()
-        for field_name in field_names:
-            if field_name in self.CORE_GETTERS:
-                try:
-                    yield field_name, self.CORE_GETTERS[field_name](core, *args)
-                except RuntimeError as e:
-                    if callable(on_err):
-                        on_err(self, field_name, e)
+        for field_name, getter in self.CORE_GETTERS.items():
+            try:
+                yield field_name, getter(core, *args)
+            except RuntimeError as e:
+                if callable(on_err):
+                    on_err(self, field_name, e)
 
     def apply_to_core(
         self,

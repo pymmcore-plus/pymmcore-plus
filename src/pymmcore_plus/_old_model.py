@@ -746,13 +746,13 @@ class Microscope(CoreLinked):
 
     def load_from_string(self, text: str) -> None:
         """Load the Microscope from a string."""
-        from ._config import load_from_string
+        from ._old_config import load_from_string
 
         load_from_string(text, self)
 
     def save(self, path: str | Path) -> None:
         """Save model as a micro-manager config file."""
-        from ._config import dump
+        from ._old_config import dump
 
         with open(path, "w") as fh:
             dump(self, fh)

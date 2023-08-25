@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 from pymmcore_plus import CMMCorePlus, find_micromanager
-from pymmcore_plus.model import Microscope
+from pymmcore_plus._old_model import Microscope
 
 
 def test_model_create() -> None:
