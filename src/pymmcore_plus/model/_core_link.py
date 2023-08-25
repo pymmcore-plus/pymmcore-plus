@@ -30,7 +30,6 @@ class CoreObject(Protocol):
 
     __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
     CORE_GETTERS: ClassVar[dict[str, Callable]]
-    CORE_SETTERS: ClassVar[dict[str, Callable]]
 
     @classmethod
     def create_from_core(
@@ -74,6 +73,9 @@ class CoreObject(Protocol):
                 if callable(on_err):
                     on_err(self, field_name, e)
 
+    # consider removing and making abstract...
+    # there generally aren't enough setters to justify this
+    @abc.abstractmethod
     def apply_to_core(
         self,
         core: CMMCorePlus,
@@ -82,25 +84,26 @@ class CoreObject(Protocol):
         on_err: ErrCallback | None = None,
         then_update: bool = True,
     ) -> None:
-        field_names = {
-            f.name
-            for f in fields(self)
-            if f.name in self.CORE_SETTERS and f.name not in exclude
-        }
+        ...
+        # field_names = {
+        #     f.name
+        #     for f in fields(self)
+        #     if f.name in self.CORE_SETTERS and f.name not in exclude
+        # }
 
-        core_args = self._core_args()
+        # core_args = self._core_args()
 
-        for field_name in field_names:
-            try:
-                val = getattr(self, field_name)
-                self.CORE_SETTERS[field_name](core, *core_args, val)
-            except RuntimeError as e:
-                if callable(on_err):
-                    on_err(self, field_name, e)
+        # for field_name in field_names:
+        #     try:
+        #         val = getattr(self, field_name)
+        #         self.CORE_SETTERS[field_name](core, *core_args, val)
+        #     except RuntimeError as e:
+        #         if callable(on_err):
+        #             on_err(self, field_name, e)
 
-        # to prevent desynchronization in case of errors in setting
-        if then_update:
-            self.update_from_core(core)
+        # # to prevent desynchronization in case of errors in setting
+        # if then_update:
+        #     self.update_from_core(core)
 
     def __rich_repr__(
         self, *, exclude: Container[str] = (), defaults: bool = False

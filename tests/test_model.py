@@ -9,7 +9,8 @@ from pymmcore_plus.model import Microscope
 
 def test_model_create() -> None:
     model = Microscope()
-    assert model.devices
+    assert model.core_device
+    assert not model.devices
 
     assert not list(model.filter_devices("NotADevice"))
 

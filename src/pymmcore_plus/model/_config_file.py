@@ -25,7 +25,7 @@ def load_from_string(text: str, scope: Microscope | None = None) -> Microscope:
     """Load the Microscope from a string."""
     if scope is None:
         scope = Microscope()
-    scope.reset()
+    scope.reset()  # should this go here?
     for line in text.splitlines():
         line = line.strip()
         if not line or line.startswith("#"):
@@ -63,29 +63,25 @@ def yield_date(scope: Microscope) -> Iterable[str]:
 
 def iter_devices(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if d.device_type != DeviceType.Core:
-            yield _serialize(CFGCommand.Device, d.name, d.library, d.adapter_name)
+        yield _serialize(CFGCommand.Device, d.name, d.library, d.adapter_name)
 
 
 def iter_pre_init_props(scope: Microscope) -> Iterable[str]:
     for dev in scope.devices:
-        if dev.device_type != DeviceType.Core:
-            for p in dev.properties:
-                if p.is_pre_init:
-                    yield _serialize(
-                        CFGCommand.Property, p.device_name, p.name, p.value
-                    )
+        for p in dev.properties:
+            if p.is_pre_init:
+                yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
 
 
 def iter_hub_refs(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if d.device_type != DeviceType.Core and d.parent_label:
+        if d.parent_label:
             yield _serialize(CFGCommand.ParentID, d.name, d.parent_label)
 
 
 def iter_delays(scope: Microscope) -> Iterable[str]:
     for d in scope.devices:
-        if d.device_type != DeviceType.Core and d.delay_ms:
+        if d.delay_ms:
             yield _serialize(CFGCommand.Delay, d.name, d.delay_ms)
 
 
@@ -104,9 +100,8 @@ ROLES = {
 
 
 def iter_roles(scope: Microscope) -> Iterable[str]:
-    core_dev = next(iter(scope.filter_devices(device_type=DeviceType.Core)), None)
-    if core_dev is not None:
-        for p in core_dev.properties:
+    if scope.core_device is not None:
+        for p in scope.core_device.properties:
             if p.name in ROLES:
                 yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
 
@@ -232,7 +227,7 @@ def _exec_Label(scope: Microscope, args: Sequence[str]) -> None:
     current_length = len(dev.labels)
 
     # Expand the list with new strings if needed
-    if state_int > current_length:
+    if state_int >= current_length:
         lst.extend(f"State-{i}" for i in range(current_length, state_int + 1))
     lst[state_int] = label
     dev.labels = tuple(lst)

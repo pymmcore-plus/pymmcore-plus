@@ -4,7 +4,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Callable, Container, Iterable, TypeAlias
 
-from pymmcore_plus import CMMCorePlus, DeviceType, FocusDirection
+from pymmcore_plus import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus._util import no_stdout
 
 from ._core_link import CoreObject
@@ -43,10 +43,10 @@ HUB_DEVICE_GETTERS: dict[str, DeviceGetter] = {
     "children": CMMCorePlus.getInstalledDevices,
 }
 
-DEVICE_SETTERS: dict[str, DeviceSetter] = {
-    "delay_ms": CMMCorePlus.setDeviceDelayMs,
-    "parent_label": CMMCorePlus.setParentLabel,
-}
+# DEVICE_SETTERS: dict[str, DeviceSetter] = {
+#     "delay_ms": CMMCorePlus.setDeviceDelayMs,
+#     "parent_label": CMMCorePlus.setParentLabel,
+# }
 
 
 @dataclass
@@ -82,12 +82,61 @@ class Device(CoreObject):
     children: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
+        if self.device_type == DeviceType.Core:
+            raise ValueError(
+                "Cannot create a Device with type Core. Use CoreDevice instead"
+            )
+
+        # give Serial devices the same name as their adapter
+        if self.name == UNDEFINED and self.device_type == DeviceType.Serial:
+            self.name = self.adapter_name
+
         self.CORE_GETTERS = {
             DeviceType.StateDevice: STATE_DEVICE_GETTERS,
             DeviceType.StageDevice: STAGE_DEVICE_GETTERS,
             DeviceType.Hub: HUB_DEVICE_GETTERS,
         }.get(self.device_type, DEVICE_GETTERS)
-        self.CORE_SETTERS = DEVICE_SETTERS
+
+    def _find_property(self, prop_name: str) -> Property | None:
+        """Find a property by name."""
+        return next((p for p in self.properties if p.name == prop_name), None)
+
+    def set_property(self, prop_name: str, value: Any):
+        if not (prop := self._find_property(prop_name)):
+            raise ValueError(f"Device {self.name} has no property {prop_name!r}.")
+        prop.value = value
+
+    def set_prop_default(
+        self, prop_name: str, value: str = "", **kwargs: Any
+    ) -> Property:
+        """Works similar to `dict.set_default`. Add property if it doesn't exist."""
+        if not (prop := self._find_property(prop_name)):
+            prop = Property(self.name, str(prop_name), value, **kwargs)
+            self.properties.append(prop)
+        return prop
+
+    @property
+    def port(self) -> str | None:
+        """Returns the value of the first property named "Port".
+
+        Returns `None` if the device has no port property.
+        """
+        return next(
+            (prop.value for prop in self.properties if prop.name == Keyword.Port),
+            None,
+        )
+
+    @port.setter
+    def port(self, port: str) -> None:
+        """Set the value of the first property named "Port"."""
+        for prop in self.properties:
+            if prop.name == Keyword.Port:
+                prop.value = port
+                break
+        else:
+            raise ValueError(f"Device {self.name} has no port property.")
+
+    # ------------- Core-interacting methods -------------
 
     def _core_args(self) -> tuple[str]:
         """Args to pass to all CORE_GETTERS."""
@@ -125,6 +174,7 @@ class Device(CoreObject):
         self,
         core: CMMCorePlus,
         *,
+        apply_pre_init: bool = False,
         reload: bool = False,
         then_update: bool = True,
     ) -> None:
@@ -132,41 +182,56 @@ class Device(CoreObject):
         if reload:
             self.load(core, reload=reload)
 
+        if apply_pre_init:
+            # FIXME: Do we need to differentiate setup props?
+            for prop in self.properties:
+                if prop.is_pre_init:
+                    prop.apply_to_core(core, then_update=False)
+
         core.initializeDevice(self.name)
         self.initialized = True
+        self.apply_to_core(core, then_update=then_update)
+
+    def apply_to_core(
+        self,
+        core: CMMCorePlus,
+        *,
+        exclude: Container[str] = ("delay_ms",),
+        on_err: ErrCallback | None = None,
+        apply_properties: bool = False,
+        then_update: bool = True,
+    ) -> None:
+        try:
+            if "delay_ms" not in exclude:
+                core.setDeviceDelayMs(self.name, self.delay_ms)
+            if "parent_label" not in exclude:
+                core.setParentLabel(self.name, self.parent_label)
+            if "labels" not in exclude and self.device_type == DeviceType.State:
+                for state, label in enumerate(self.labels):
+                    core.defineStateLabel(self.name, state, label)
+            if (
+                "focus_direction" not in exclude
+                and self.device_type == DeviceType.Stage
+            ):
+                core.setFocusDirection(self.name, self.focus_direction)
+
+            # XXX: should we do this as well as parent_label above?
+            # if "children" not in exclude and self.device_type == DeviceType.Hub:
+            #     for child in self.children:
+            #         core.setParentLabel(child, self.name)
+
+        except RuntimeError as e:
+            if callable(on_err):
+                on_err(self, "delay_ms", e)
+
+        if apply_properties:
+            for prop in self.properties:
+                prop.apply_to_core(core, then_update=False)
 
         if then_update:
             self.update_from_core(core)
 
-    def _find_property(self, prop_name: str) -> Property | None:
-        """Find a property by name."""
-        return next((p for p in self.properties if p.name == prop_name), None)
-
-    def set_prop_default(
-        self, prop_name: str, value: str = "", **kwargs: Any
-    ) -> Property:
-        """Works similar to `dict.set_default`. Add property if it doesn't exist."""
-        if not (prop := self._find_property(prop_name)):
-            prop = Property(self.name, str(prop_name), value, **kwargs)
-            self.properties.append(prop)
-        return prop
-
-    # ------------- DeviceType specific methods -------------
-
-    def _assert_is(self, dev_type: DeviceType) -> None:
-        if self.device_type != dev_type:
-            raise ValueError(f"Device {self.name} is not a {dev_type.name!r}.")
-
-    def child_descriptions(self, core: CMMCorePlus) -> tuple[str, ...]:
-        self._assert_is(DeviceType.Hub)
-        return tuple(
-            core.getInstalledDeviceDescription(self.name, child)
-            for child in self.children
-        )
-
-    def loaded_peripherals(self, core: CMMCorePlus) -> tuple[str, ...]:
-        self._assert_is(DeviceType.Hub)
-        return tuple(core.getLoadedPeripheralDevices(self.name))
+        # TODO: should we be applying properties here as well?
 
     # def wait(self, core: CMMCorePlus) -> None:
     #     """Wait for device to finish."""
@@ -185,6 +250,23 @@ class Device(CoreObject):
     # def _on_core_change(self, dev: str, prop: str, new_val: str) -> None:
     #     if dev == self.name and prop == self.name:
     #         self.value = new_val
+
+    # ------------- DeviceType specific Core methods -------------
+
+    def _assert_is(self, dev_type: DeviceType) -> None:
+        if self.device_type != dev_type:
+            raise ValueError(f"Device {self.name} is not a {dev_type.name!r}.")
+
+    def child_descriptions(self, core: CMMCorePlus) -> tuple[str, ...]:
+        self._assert_is(DeviceType.Hub)
+        return tuple(
+            core.getInstalledDeviceDescription(self.name, child)
+            for child in self.children
+        )
+
+    def loaded_peripherals(self, core: CMMCorePlus) -> tuple[str, ...]:
+        self._assert_is(DeviceType.Hub)
+        return tuple(core.getLoadedPeripheralDevices(self.name))
 
 
 def iter_available_devices(core: CMMCorePlus) -> Iterable[Device]:
