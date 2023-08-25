@@ -105,7 +105,7 @@ class Microscope:
             self.update_pixel_sizes_from_core(core)
 
     def load_config(self, path_or_text: str | Path) -> None:
-        """Load model from a micro-manager config file."""
+        """Load model from a micro-manager config file or string."""
         from ._config_file import load_from_string
 
         if os.path.isfile(path_or_text):
@@ -166,3 +166,10 @@ class Microscope:
         for dev in self.devices:
             if all(getattr(dev, attr) == value for attr, value in criteria.items()):
                 yield dev
+
+    def save(self, path: str | Path) -> None:
+        """Save model as a micro-manager config file."""
+        from ._config_file import dump
+
+        with open(path, "w") as fh:
+            dump(self, fh)
