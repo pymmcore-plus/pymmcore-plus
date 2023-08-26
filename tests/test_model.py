@@ -11,11 +11,12 @@ def test_model_create() -> None:
     model = Microscope()
     assert model.core_device
     assert not model.devices
-
     assert not list(model.filter_devices("NotADevice"))
 
 
-def test_model_from_core(core: CMMCorePlus) -> None:
+def test_model_from_core() -> None:
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
     model = Microscope.create_from_core(core)
     assert model.devices
 
@@ -23,6 +24,14 @@ def test_model_from_core(core: CMMCorePlus) -> None:
     model2.update_from_core(core)
 
     assert model == model2
+
+
+def non_empty_lines(path: Path) -> list[str]:
+    return [
+        ln
+        for line in path.read_text().splitlines()
+        if (ln := line.strip()) and not ln.startswith("#")
+    ]
 
 
 @pytest.mark.parametrize(
@@ -42,14 +51,51 @@ def test_model_load_and_save(tmp_path: Path, input_: Path):
 
     # for now we only assert that the non-empty lines are the same
     # we don't assert order
-    def non_empty_lines(path: Path) -> set[str]:
-        return {
-            ln
-            for line in path.read_text().splitlines()
-            if (ln := line.strip()) and not ln.startswith("#")
-        }
+    assert set(non_empty_lines(input_)) == set(non_empty_lines(output))
 
-    assert non_empty_lines(input_) == non_empty_lines(output)
+
+def _assert_cfg_matches_core_save(
+    core: CMMCorePlus, model: Microscope, tmp_path: Path
+) -> None:
+    model_out = tmp_path / "model_out.cfg"
+    core_out = tmp_path / "core_out.cfg"
+
+    model.save(model_out)
+    core.saveSystemConfiguration(str(core_out))
+
+    # MMCore DOES write out default affine transforms... MMStudio doesn't and we don't
+    core_lines = [
+        x for x in non_empty_lines(core_out) if "1.0,0.0,0.0,0.0,1.0,0.0" not in x
+    ]
+    # MMCore doesn't write out AutoShutter prefs
+    model_lines = [
+        x
+        for x in non_empty_lines(model_out)
+        if not x.startswith("Property,Core,AutoShutter")
+    ]
+    assert core_lines == model_lines
+
+
+def test_model_save_like_core1(tmp_path: Path) -> None:
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    scope = Microscope.create_from_core(core)
+    _assert_cfg_matches_core_save(core, scope, tmp_path)
+
+
+def test_model_save_like_core2(tmp_path: Path) -> None:
+    core = CMMCorePlus()
+    scope = Microscope.create_from_core(core)
+    _assert_cfg_matches_core_save(core, scope, tmp_path)
+
+
+def test_model_save_like_core3(tmp_path: Path) -> None:
+    core = CMMCorePlus()
+    # empty configs
+    core.defineConfigGroup("TestGroup")
+    core.definePixelSizeConfig("PixConf")
+    scope = Microscope.create_from_core(core)
+    _assert_cfg_matches_core_save(core, scope, tmp_path)
 
 
 def test_load_errors() -> None:

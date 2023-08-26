@@ -46,12 +46,9 @@ class Property(CoreObject):
         "sequence_max_length": CMMCorePlus.getPropertySequenceMaxLength,
         "exists": CMMCorePlus.hasProperty,
     }
-    # CORE_SETTERS: ClassVar[dict[str, PropSetter]] = {
-    #     "value": CMMCorePlus.setProperty,
-    # }
 
     def _core_args(self) -> tuple[str, str]:
-        # the first two args to all of the funcs in CORE_GETTERS/CORE_SETTERS
+        # the first two args to all of the funcs in CORE_GETTERS
         return self.device_name, self.name
 
     def apply_to_core(

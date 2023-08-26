@@ -43,11 +43,6 @@ HUB_DEVICE_GETTERS: dict[str, DeviceGetter] = {
     "children": CMMCorePlus.getInstalledDevices,
 }
 
-# DEVICE_SETTERS: dict[str, DeviceSetter] = {
-#     "delay_ms": CMMCorePlus.setDeviceDelayMs,
-#     "parent_label": CMMCorePlus.setParentLabel,
-# }
-
 
 @dataclass
 class Device(CoreObject):
@@ -82,7 +77,7 @@ class Device(CoreObject):
     children: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
-        if self.device_type == DeviceType.Core:
+        if self.name == Keyword.CoreDevice or self.device_type == DeviceType.Core:
             raise ValueError(
                 "Cannot create a Device with type Core. Use CoreDevice instead"
             )
@@ -91,17 +86,24 @@ class Device(CoreObject):
         if self.name == UNDEFINED and self.device_type == DeviceType.Serial:
             self.name = self.adapter_name
 
-        self.CORE_GETTERS = {
-            DeviceType.StateDevice: STATE_DEVICE_GETTERS,
-            DeviceType.StageDevice: STAGE_DEVICE_GETTERS,
-            DeviceType.Hub: HUB_DEVICE_GETTERS,
-        }.get(self.device_type, DEVICE_GETTERS)
+    @classmethod
+    def create_from_core(cls, core: CMMCorePlus, *args: Any, **kwargs: Any) -> Device:
+        if (
+            kwargs.get("name", UNDEFINED) == Keyword.CoreDevice
+            or kwargs.get("device_type") == DeviceType.Core
+        ):
+            from ._core_device import CoreDevice
+
+            cls = CoreDevice
+        obj = cls(*args, **kwargs)
+        obj.update_from_core(core)
+        return obj
 
     def _find_property(self, prop_name: str) -> Property | None:
         """Find a property by name."""
         return next((p for p in self.properties if p.name == prop_name), None)
 
-    def set_property(self, prop_name: str, value: Any):
+    def set_property(self, prop_name: str, value: Any) -> None:
         if not (prop := self._find_property(prop_name)):
             raise ValueError(f"Device {self.name} has no property {prop_name!r}.")
         prop.value = value
@@ -150,6 +152,19 @@ class Device(CoreObject):
         on_err: ErrCallback | None = None,
     ) -> None:
         """Update device properties from the core."""
+        # need to update device_type first, to determine which getters to use
+        try:
+            self.device_type = core.getDeviceType(self.name)
+        except RuntimeError as e:
+            if callable(on_err):
+                on_err(self, "device_type", e)
+
+        self.CORE_GETTERS = {
+            DeviceType.StateDevice: STATE_DEVICE_GETTERS,
+            DeviceType.StageDevice: STAGE_DEVICE_GETTERS,
+            DeviceType.Hub: HUB_DEVICE_GETTERS,
+        }.get(self.device_type, DEVICE_GETTERS)
+
         super().update_from_core(core, exclude=exclude, on_err=on_err)
         self.properties = [
             Property.create_from_core(core, device_name=self.name, name=prop_name)

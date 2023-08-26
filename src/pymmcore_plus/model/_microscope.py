@@ -5,9 +5,9 @@ from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Container, Iterable
 
-from pymmcore_plus import CFGGroup, DeviceType, Keyword
+from pymmcore_plus import DeviceType, Keyword
 
-from ._config_group import ConfigGroup, ConfigPreset
+from ._config_group import ConfigGroup
 from ._core_device import CoreDevice
 from ._device import Device, iter_available_devices
 from ._pixel_size_config import PixelSizeGroup
@@ -32,7 +32,7 @@ class Microscope:
     core_device: CoreDevice = field(default_factory=CoreDevice)
     devices: list[Device] = field(default_factory=list)
     config_groups: dict[str, ConfigGroup] = field(default_factory=dict)
-    pixel_size_configs: PixelSizeGroup = field(default_factory=PixelSizeGroup)
+    pixel_size_group: PixelSizeGroup = field(default_factory=PixelSizeGroup)
     config_file: str = ""
 
     initialized: bool = False
@@ -46,17 +46,6 @@ class Microscope:
                 "Cannot have CoreDevice in devices list. "
                 "Use core_device field to set the Core device."
             )
-
-        SYS_CONFIGS: list[tuple[str, tuple[str, ...]]] = [
-            (CFGGroup.System.value, (CFGGroup.System_Startup.value,)),
-            (Keyword.Channel.value, ()),
-        ]
-
-        # ensure system configs exist:
-        for cfg_grp, presets in SYS_CONFIGS:
-            cg = self.config_groups.setdefault(str(cfg_grp), ConfigGroup(name=cfg_grp))
-            for preset in presets:
-                cg.presets.setdefault(str(preset), ConfigPreset(name=preset))
 
     def reset(self) -> None:
         """Reset the Microscope to an empty state."""
@@ -85,6 +74,13 @@ class Microscope:
             if dev.device_type == DeviceType.Serial:
                 yield dev
 
+    def get_device(self, name: str) -> Device:
+        """Get a device by name."""
+        for dev in self.devices:
+            if dev.name == name:
+                return dev
+        raise KeyError(f"Device {name} not found")
+
     def filter_devices(
         self,
         name: str | None = None,
@@ -95,6 +91,8 @@ class Microscope:
         parent_label: str | None = None,
     ) -> Iterable[Device]:
         """Filter devices by name ."""
+        if isinstance(device_type, str):
+            device_type = DeviceType[device_type]
         if name == Keyword.CoreDevice.value or device_type == DeviceType.Core:
             yield self.core_device
             return
@@ -157,7 +155,10 @@ class Microscope:
             self.devices = [
                 Device.create_from_core(core, name=name)
                 for name in core.getLoadedDevices()
+                if name != Keyword.CoreDevice
             ]
+        if "core_device" not in exclude:
+            self.core_device.update_from_core(core)
         if "available_devices" not in exclude:
             self.load_available_devices(core)
         if "config_groups" not in exclude:
@@ -198,7 +199,8 @@ class Microscope:
     def update_config_groups_from_core(self, core: CMMCorePlus) -> None:
         """Load config groups from the core."""
         self.config_groups = ConfigGroup.all_config_groups(core)
+        # self.config_groups.update(ConfigGroup.all_config_groups(core))
 
     def update_pixel_sizes_from_core(self, core: CMMCorePlus) -> None:
         """Load pixel size groups from the core."""
-        self.pixel_size_configs = PixelSizeGroup.create_from_core(core)
+        self.pixel_size_group = PixelSizeGroup.create_from_core(core)
