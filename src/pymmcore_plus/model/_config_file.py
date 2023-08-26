@@ -66,6 +66,15 @@ def iter_devices(scope: Microscope) -> Iterable[str]:
         yield _serialize(CFGCommand.Device, d.name, d.library, d.adapter_name)
 
 
+# NOTE/TODO:
+# MMCore.cpp and MMStudio MicroscopeModel do this a bit differently from each other
+# MMStudio only writes out the pre-init properties for specific properties that have
+# been marked as "setup properties", created by the config wizard.
+# MMCore.cpp just writes out all init props.
+# So MMCore will generate more verbose config files.  For now, we are matching the
+# core behavior... but this has some slightly undesired implications.
+# loading and resaving a config file may ADD a bunch of pre-init properties
+# that are simply their default values.
 def iter_pre_init_props(scope: Microscope) -> Iterable[str]:
     for dev in scope.devices:
         if dev.name == Keyword.CoreDevice:
