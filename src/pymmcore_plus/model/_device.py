@@ -153,12 +153,10 @@ class Device(CoreObject):
     ) -> None:
         """Update device properties from the core."""
         # need to update device_type first, to determine which getters to use
-        try:
-            self.device_type = core.getDeviceType(self.name)
-        except RuntimeError as e:
-            if callable(on_err):
-                on_err(self, "device_type", e)
+        if self.name not in core.getLoadedDevices():
+            raise RuntimeError(f"Device {self.name} is not loaded in the core.")
 
+        self.device_type = core.getDeviceType(self.name)
         self.CORE_GETTERS = {
             DeviceType.StateDevice: STATE_DEVICE_GETTERS,
             DeviceType.StageDevice: STAGE_DEVICE_GETTERS,
@@ -173,7 +171,7 @@ class Device(CoreObject):
 
     def load(self, core: CMMCorePlus, *, reload: bool = False) -> None:
         """Load device properties from the core."""
-        if reload and self.name in core.getLoadedDevices():
+        if reload and core.getLoadedDevices():
             # could check whether:
             # core.getDeviceLibrary(self.name) == self.library
             # core.getDeviceName(self.name) == self.adapter_name
