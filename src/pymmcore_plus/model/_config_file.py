@@ -241,19 +241,7 @@ def _exec_Label(scope: Microscope, args: Sequence[str]) -> None:
     device_name, state, label = args
     dev = next(iter(scope.filter_devices(name=device_name)))
     dev.device_type = DeviceType.State
-    try:
-        state_int = int(state)
-    except (ValueError, TypeError):
-        raise ValueError(f"State {state} is not an integer") from None
-
-    lst = list(dev.labels)
-    current_length = len(dev.labels)
-
-    # Expand the list with new strings if needed
-    if state_int >= current_length:
-        lst.extend(f"State-{i}" for i in range(current_length, state_int + 1))
-    lst[state_int] = label
-    dev.labels = tuple(lst)
+    dev.set_label(state, label)
 
 
 def _exec_ConfigGroup(scope: Microscope, args: Sequence[str]) -> None:

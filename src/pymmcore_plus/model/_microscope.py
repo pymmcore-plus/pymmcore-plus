@@ -9,7 +9,7 @@ from pymmcore_plus import DeviceType, Keyword
 
 from ._config_group import ConfigGroup
 from ._core_device import CoreDevice
-from ._device import Device, iter_available_devices
+from ._device import AvailableDevice, Device, get_available_devices
 from ._pixel_size_config import PixelSizeGroup
 
 if TYPE_CHECKING:
@@ -36,7 +36,9 @@ class Microscope:
     config_file: str = ""
 
     initialized: bool = False
-    available_devices: tuple[Device, ...] = field(default_factory=tuple, repr=False)
+    available_devices: tuple[AvailableDevice, ...] = field(
+        default_factory=tuple, repr=False
+    )
 
     def __post_init__(self) -> None:
         """Validate and initialized the Microscope."""
@@ -51,7 +53,8 @@ class Microscope:
         """Reset the Microscope to an empty state."""
         defaults = Microscope()
         for f in fields(self):
-            setattr(self, f.name, getattr(defaults, f.name))
+            if f.name not in ("available_devices", "config_file"):
+                setattr(self, f.name, getattr(defaults, f.name))
 
     @property
     def assigned_com_ports(self) -> dict[Device, Device]:
@@ -194,7 +197,7 @@ class Microscope:
 
     def load_available_devices(self, core: CMMCorePlus) -> None:
         """Load the available device list."""
-        self.available_devices = tuple(iter_available_devices(core))
+        self.available_devices = tuple(get_available_devices(core))
 
     def update_config_groups_from_core(self, core: CMMCorePlus) -> None:
         """Load config groups from the core."""

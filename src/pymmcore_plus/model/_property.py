@@ -30,8 +30,8 @@ class Property(CoreObject):
     lower_limit: float = 0.0
     upper_limit: float = 0.0
     property_type: PropertyType = PropertyType.Undef
-    is_sequenceable: bool = False
-    sequence_max_length: int = 0
+    # is_sequenceable: bool = False
+    # sequence_max_length: int = 0
 
     CORE_GETTERS: ClassVar[dict[str, PropGetter]] = {
         "value": CMMCorePlus.getProperty,
@@ -42,8 +42,8 @@ class Property(CoreObject):
         "lower_limit": CMMCorePlus.getPropertyLowerLimit,
         "upper_limit": CMMCorePlus.getPropertyUpperLimit,
         "property_type": CMMCorePlus.getPropertyType,
-        "is_sequenceable": CMMCorePlus.isPropertySequenceable,
-        "sequence_max_length": CMMCorePlus.getPropertySequenceMaxLength,
+        # "is_sequenceable": CMMCorePlus.isPropertySequenceable,
+        # "sequence_max_length": CMMCorePlus.getPropertySequenceMaxLength,
         "exists": CMMCorePlus.hasProperty,
     }
 

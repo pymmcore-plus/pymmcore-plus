@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import TYPE_CHECKING, Any, Callable, Container, Iterable, TypeAlias
 
 from pymmcore_plus import CMMCorePlus, DeviceType, FocusDirection, Keyword
@@ -12,6 +12,7 @@ from ._property import Property
 
 if TYPE_CHECKING:
     from ._core_link import ErrCallback
+    from ._microscope import Microscope
 
     PropVal: TypeAlias = bool | float | int | str
     DeviceGetter: TypeAlias = Callable[[CMMCorePlus, str], Any]
@@ -74,6 +75,8 @@ class Device(CoreObject):
     # StageDevice only
     focus_direction: FocusDirection = FocusDirection.Unknown
     # HubDevice only
+    # These are adapter_name (NOT loaded device labels) of child devices
+    # from the same library that can be loaded into this hub.
     children: tuple[str, ...] = field(default_factory=tuple)
 
     def __post_init__(self) -> None:
@@ -86,18 +89,8 @@ class Device(CoreObject):
         if self.name == UNDEFINED and self.device_type == DeviceType.Serial:
             self.name = self.adapter_name
 
-    @classmethod
-    def create_from_core(cls, core: CMMCorePlus, *args: Any, **kwargs: Any) -> Device:
-        if (
-            kwargs.get("name", UNDEFINED) == Keyword.CoreDevice
-            or kwargs.get("device_type") == DeviceType.Core
-        ):
-            from ._core_device import CoreDevice
-
-            cls = CoreDevice
-        obj = cls(*args, **kwargs)
-        obj.update_from_core(core)
-        return obj
+    def __hash__(self) -> int:
+        return id(self)
 
     def _find_property(self, prop_name: str) -> Property | None:
         """Find a property by name."""
@@ -138,7 +131,22 @@ class Device(CoreObject):
         else:
             raise ValueError(f"Device {self.name} has no port property.")
 
+    def replace(self, **kwargs: Any) -> Device:
+        return replace(self, **kwargs)
+
     # ------------- Core-interacting methods -------------
+    @classmethod
+    def create_from_core(cls, core: CMMCorePlus, *args: Any, **kwargs: Any) -> Device:
+        if (
+            kwargs.get("name", UNDEFINED) == Keyword.CoreDevice
+            or kwargs.get("device_type") == DeviceType.Core
+        ):
+            from ._core_device import CoreDevice
+
+            cls = CoreDevice
+        obj = cls(*args, **kwargs)
+        obj.update_from_core(core)
+        return obj
 
     def _core_args(self) -> tuple[str]:
         """Args to pass to all CORE_GETTERS."""
@@ -171,7 +179,7 @@ class Device(CoreObject):
 
     def load(self, core: CMMCorePlus, *, reload: bool = False) -> None:
         """Load device properties from the core."""
-        if reload and core.getLoadedDevices():
+        if reload and self.name in core.getLoadedDevices():
             # could check whether:
             # core.getDeviceLibrary(self.name) == self.library
             # core.getDeviceName(self.name) == self.adapter_name
@@ -264,7 +272,7 @@ class Device(CoreObject):
     #     if dev == self.name and prop == self.name:
     #         self.value = new_val
 
-    # ------------- DeviceType specific Core methods -------------
+    # ------------- DeviceType specific methods -------------
 
     def _assert_is(self, dev_type: DeviceType) -> None:
         if self.device_type != dev_type:
@@ -278,28 +286,96 @@ class Device(CoreObject):
         )
 
     def loaded_peripherals(self, core: CMMCorePlus) -> tuple[str, ...]:
+        """Return device labels of all loaded devices that belong to this hub.
+
+        NOTE: unlike "available_peripherals", this returns device labels currently
+        loaded into core. It does not check whether the devices are in the model.
+        """
         self._assert_is(DeviceType.Hub)
         return tuple(core.getLoadedPeripheralDevices(self.name))
 
+    def available_peripherals(self, model: Microscope) -> Iterable[AvailableDevice]:
+        """Return all available devices that belong to this hub that aren't in model."""
+        self._assert_is(DeviceType.Hub)
 
-def iter_available_devices(core: CMMCorePlus) -> Iterable[Device]:
+        # get all available devices that belong to this hub
+        # and have not been loaded
+        for dev in model.available_devices:
+            if (
+                # has a parent hub
+                (hub := dev.library_hub)
+                # that is this hub
+                and hub.library == self.library
+                and hub.adapter_name == self.adapter_name
+                # and has not been loaded into the model
+                and not any(
+                    model.filter_devices(
+                        library=dev.library,
+                        adapter_name=dev.adapter_name,
+                        parent_label=self.name,
+                    )
+                )
+            ):
+                yield dev
+
+    def set_label(self, state: int | str, label: str) -> None:
+        """Set the label for a state device."""
+        self._assert_is(DeviceType.State)
+
+        try:
+            state = int(state)
+        except (ValueError, TypeError):
+            raise ValueError(f"State {state!r} is not an integer") from None
+
+        lst = list(self.labels)
+        current_length = len(self.labels)
+
+        # Expand the list with new strings if needed
+        if state >= current_length:
+            lst.extend(f"State-{i}" for i in range(current_length, state + 1))
+        lst[state] = label
+        self.labels = tuple(lst)
+
+
+@dataclass
+class AvailableDevice(Device):
+    """Model of an available device, with a possible hub parent."""
+
+    library_hub: AvailableDevice | None = None
+
+    def __hash__(self) -> int:
+        return id(self)
+
+
+def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:
     """Iterate over available devices."""
+    available_devices: list[AvailableDevice] = []
+    library_to_hub: dict[str, AvailableDevice] = {}
     for lib_name in core.getDeviceAdapterNames():
-        # should we be excluding serial ports here? like MMStudio?
         with suppress(RuntimeError):
-            yield from iter_available_library_devices(core, lib_name)
+            for dev in iter_available_library_devices(core, lib_name):
+                available_devices.append(dev)
+                if dev.device_type == DeviceType.Hub:
+                    library_to_hub[lib_name] = dev
+
+    # now associate devices with their hubs
+    for d in available_devices:
+        if d.device_type != DeviceType.Hub:
+            d.library_hub = library_to_hub.get(d.library)
+
+    return available_devices
 
 
 def iter_available_library_devices(
     core: CMMCorePlus, library_name: str
-) -> Iterable[Device]:
+) -> Iterable[AvailableDevice]:
     """Iterate over Devices in the given library."""
     with no_stdout():
         devs = core.getAvailableDevices(library_name)  # this could raise
     types = core.getAvailableDeviceTypes(library_name)
     descriptions = core.getAvailableDeviceDescriptions(library_name)
     for dev_name, dev_type, desc in zip(devs, types, descriptions):
-        yield Device(
+        yield AvailableDevice(
             library=library_name,
             adapter_name=dev_name,
             description=desc,
