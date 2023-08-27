@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, Container, Iterable
@@ -36,9 +37,10 @@ class Microscope:
     config_file: str = ""
 
     initialized: bool = False
-    available_devices: tuple[AvailableDevice, ...] = field(
-        default_factory=tuple, repr=False
-    )
+
+    @property
+    def available_devices(self) -> tuple[AvailableDevice, ...]:
+        return self._available_devices
 
     def __post_init__(self) -> None:
         """Validate and initialized the Microscope."""
@@ -49,12 +51,23 @@ class Microscope:
                 "Use core_device field to set the Core device."
             )
 
+        self._available_devices: tuple[AvailableDevice, ...] = ()
+        self._compare_state: Microscope | None = None  # for is_dirty()
+
     def reset(self) -> None:
         """Reset the Microscope to an empty state."""
         defaults = Microscope()
         for f in fields(self):
             if f.name not in ("available_devices", "config_file"):
                 setattr(self, f.name, getattr(defaults, f.name))
+
+    def is_dirty(self) -> bool:
+        """Return True if the model has changed since last save."""
+        return self != (self._compare_state or Microscope())
+
+    def mark_clean(self) -> None:
+        """Mark the model as clean."""
+        self._compare_state = deepcopy(self)
 
     @property
     def assigned_com_ports(self) -> dict[Device, Device]:
@@ -113,6 +126,7 @@ class Microscope:
     def create_from_config(cls, config_file: str) -> Microscope:
         obj = cls()
         obj.load_config(config_file)
+        obj.mark_clean()
         return obj
 
     def load_config(self, path_or_text: str | Path) -> None:
@@ -135,6 +149,8 @@ class Microscope:
         with open(path, "w") as fh:
             dump(self, fh)
 
+        self.mark_clean()
+
     # ------------- Core-interacting methods -------------
 
     @classmethod
@@ -143,6 +159,7 @@ class Microscope:
     ) -> Microscope:
         obj = cls(*args, **kwargs)
         obj.update_from_core(core)
+        obj.mark_clean()
         return obj
 
     def update_from_core(
@@ -197,7 +214,7 @@ class Microscope:
 
     def load_available_devices(self, core: CMMCorePlus) -> None:
         """Load the available device list."""
-        self.available_devices = tuple(get_available_devices(core))
+        self._available_devices = tuple(get_available_devices(core))
 
     def update_config_groups_from_core(self, core: CMMCorePlus) -> None:
         """Load config groups from the core."""
