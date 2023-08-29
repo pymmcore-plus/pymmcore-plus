@@ -1,7 +1,8 @@
 from __future__ import annotations
 
+import dataclasses
 from contextlib import suppress
-from dataclasses import dataclass, field, replace
+from dataclasses import dataclass, field
 from typing import TYPE_CHECKING
 
 from pymmcore_plus import CMMCorePlus, DeviceType, FocusDirection, Keyword
@@ -139,7 +140,7 @@ class Device(CoreObject):
             raise ValueError(f"Device {self.name} has no port property.")
 
     def replace(self, **kwargs: Any) -> Device:
-        return replace(self, **kwargs)
+        return dataclasses.replace(self, **kwargs)
 
     # ------------- Core-interacting methods -------------
     @classmethod
