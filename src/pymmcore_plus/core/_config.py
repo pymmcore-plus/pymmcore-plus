@@ -99,7 +99,7 @@ class Configuration(pymmcore.Configuration):
         """Delete setting for `(devLabel, propLabel)` from the configuration."""
         if not isinstance(key, tuple) or len(key) != 2:
             raise TypeError("key must be a 2-tuple of strings.")
-        self.deleteSetting(*key)  # type: ignore  # error in stub.
+        self.deleteSetting(*key)
 
     def remove(self, key: DevPropTuple) -> None:
         """Remove setting for `(devLabel, propLabel)` from the configuration."""

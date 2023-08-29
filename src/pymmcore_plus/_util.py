@@ -94,7 +94,8 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         full_list.append(env_path)
 
     # then look in appdirs.user_data_dir
-    user_install = sorted(USER_DATA_MM_PATH.glob("Micro-Manager*"), reverse=True)
+    _folders = (p for p in USER_DATA_MM_PATH.glob("Micro-Manager*") if p.is_dir())
+    user_install = sorted(_folders, reverse=True)
     if user_install:
         if return_first:
             logger.debug("using MM path from user install: %s", user_install[0])
@@ -103,7 +104,9 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
 
     # then look for an installation in this folder (from `pymmcore_plus.install`)
     sfx = "_win" if os.name == "nt" else "_mac"
-    local_install = list(PYMMCORE_PLUS_PATH.glob(f"**/Micro-Manager*{sfx}"))
+    local_install = [
+        p for p in PYMMCORE_PLUS_PATH.glob(f"**/Micro-Manager*{sfx}") if p.is_dir()
+    ]
     if local_install:
         if return_first:
             logger.debug("using MM path from local install: %s", local_install[0])
