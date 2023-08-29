@@ -1,13 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Container, TypeAlias
+from typing import TYPE_CHECKING
 
 from pymmcore_plus import CMMCorePlus, PropertyType
 
 from ._core_link import CoreObject
 
 if TYPE_CHECKING:
+    from typing import Any, Callable, ClassVar, Container
+
+    from typing_extensions import TypeAlias
+
     from ._core_link import ErrCallback
 
     PropVal: TypeAlias = bool | float | int | str
