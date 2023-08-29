@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, MutableMapping, NamedTuple
+from typing import TYPE_CHECKING, Container, MutableMapping, NamedTuple
 
 if TYPE_CHECKING:
     from typing import Final
 
     from pymmcore_plus import CMMCorePlus
+
+    from ._core_link import ErrCallback
 
 
 UNDEFINED: Final = "UNDEFINED"
@@ -66,3 +68,21 @@ class ConfigGroup:
             group: ConfigGroup.create_from_core(core, group)
             for group in core.getAvailableConfigGroups()
         }
+
+    def apply_to_core(
+        self,
+        core: CMMCorePlus,
+        *,
+        exclude: Container[str] = (),
+        on_err: ErrCallback | None = None,
+        apply_properties: bool = False,
+        then_update: bool = True,
+    ) -> None:
+        if self.name not in core.getAvailableConfigGroups():
+            core.defineConfigGroup(self.name)
+        for config_name, preset in self.presets.items():
+            for dev, prop, val in preset.settings:
+                core.defineConfig(self.name, config_name, dev, prop, val)
+
+        if then_update:
+            self.update_from_core(core)  # pragma: no cover

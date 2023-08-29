@@ -24,7 +24,7 @@ __all__ = ["load_from_string", "dump"]
 def load_from_string(text: str, scope: Microscope | None = None) -> Microscope:
     """Load the Microscope from a string."""
     if scope is None:
-        scope = Microscope()
+        scope = Microscope()  # pragma: no cover
     scope.reset()  # should this go here?
     for line in text.splitlines():
         line = line.strip()
@@ -185,7 +185,7 @@ def run_command(line: str, scope: Microscope) -> None:
     """Apply a line of a config file to a scope model instance."""
     try:
         cmd_name, *args = line.split(CFGCommand.FieldDelimiters)
-    except ValueError:
+    except ValueError:  # pragma: no cover
         raise ValueError(f"Invalid config line: {line!r}") from None
 
     try:
@@ -283,7 +283,7 @@ def _exec_PixelSizeAffine(scope: Microscope, args: Sequence[str]) -> None:
         raise ValueError(f"Pixel size preset {preset_name!r} not found") from None
 
     # TODO: I think zero args is also a valid value for the affine transform
-    if len(tform) != 6:
+    if len(tform) != 6:  # pragma: no cover
         raise ValueError(f"Expected 6 values for affine transform, got {len(tform)}")
 
     try:
@@ -301,7 +301,7 @@ def _exec_ParentID(scope: Microscope, args: Sequence[str]) -> None:
     dev.device_type = DeviceType.Hub
     try:
         next(iter(scope.filter_devices(name=parent_label)))
-    except ValueError:
+    except ValueError:  # pragma: no cover
         warnings.warn(
             f"Parent hub {parent_label!r} not found for device {device_name!r}",
             RuntimeWarning,

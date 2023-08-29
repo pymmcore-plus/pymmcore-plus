@@ -96,20 +96,23 @@ class Device(CoreObject):
     def __hash__(self) -> int:
         return id(self)
 
-    def _find_property(self, prop_name: str) -> Property | None:
-        """Find a property by name."""
-        return next((p for p in self.properties if p.name == prop_name), None)
+    def get_property(self, name: str) -> Property:
+        """Get a device by name."""
+        for prop in self.properties:
+            if prop.name == name:
+                return prop
+        raise ValueError(f"Device {self.name!r} has no property {name!r}.")
 
     def set_property(self, prop_name: str, value: Any) -> None:
-        if not (prop := self._find_property(prop_name)):
-            raise ValueError(f"Device {self.name} has no property {prop_name!r}.")
-        prop.value = value
+        self.get_property(prop_name).value = value
 
     def set_prop_default(
         self, prop_name: str, value: str = "", **kwargs: Any
     ) -> Property:
         """Works similar to `dict.set_default`. Add property if it doesn't exist."""
-        if not (prop := self._find_property(prop_name)):
+        try:
+            prop = self.get_property(prop_name)
+        except ValueError:
             prop = Property(self.name, str(prop_name), value, **kwargs)
             self.properties.append(prop)
         return prop
@@ -223,7 +226,7 @@ class Device(CoreObject):
         *,
         exclude: Container[str] = ("delay_ms",),
         on_err: ErrCallback | None = None,
-        apply_properties: bool = False,
+        apply_properties: bool = True,
         then_update: bool = True,
     ) -> None:
         try:
@@ -348,7 +351,7 @@ class AvailableDevice(Device):
     library_hub: AvailableDevice | None = None
 
     def __hash__(self) -> int:
-        return id(self)
+        return super().__hash__()
 
 
 def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:

@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING, Container
 
-from pymmcore_plus import DeviceType, Keyword
+from pymmcore_plus import CMMCorePlus, DeviceType, Keyword
 
 from ._device import Device
 from ._property import Property
+
+if TYPE_CHECKING:
+    from pymmcore_plus.model._core_link import ErrCallback
 
 CORE = Keyword.CoreDevice.value
 
@@ -18,7 +22,7 @@ def _core_prop(name: str, val: str = "", allowed: tuple[str, ...] = ("",)) -> Pr
 
 def _core_props() -> list[Property]:
     return [
-        _core_prop(Keyword.CoreInitialize, "0", ("0", "1")),
+        # _core_prop(Keyword.CoreInitialize, "0", ("0", "1")),
         _core_prop(Keyword.CoreAutoShutter, "1", ("0", "1")),
         _core_prop(Keyword.CoreCamera),
         _core_prop(Keyword.CoreShutter),
@@ -43,3 +47,21 @@ class CoreDevice(Device):
 
     def __post_init__(self) -> None:
         self.CORE_GETTERS = {}  # type: ignore
+
+    def __hash__(self) -> int:
+        return super().__hash__()
+
+    def apply_to_core(
+        self,
+        core: CMMCorePlus,
+        *,
+        exclude: Container[str] = (),
+        on_err: ErrCallback | None = None,
+        apply_properties: bool = True,
+        then_update: bool = True,
+    ) -> None:
+        for prop in self.properties:
+            if prop.name not in exclude:
+                core.setProperty(self.name, prop.name, prop.value)
+        if then_update:
+            self.update_from_core(core)

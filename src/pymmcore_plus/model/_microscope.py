@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
 
 def _noop(*args: Any, **kwargs: Any) -> None:
-    pass
+    pass  # pragma: no cover
 
 
 @dataclass
@@ -95,7 +95,7 @@ class Microscope:
         for dev in self.devices:
             if dev.name == name:
                 return dev
-        raise KeyError(f"Device {name} not found")
+        raise KeyError(f"Device {name!r} not found")  # pragma: no cover
 
     def filter_devices(
         self,
@@ -103,7 +103,7 @@ class Microscope:
         library: str | None = None,
         adapter_name: str | None = None,
         description: str | None = None,
-        device_type: DeviceType | None = None,
+        device_type: DeviceType | str | None = None,
         parent_label: str | None = None,
     ) -> Iterable[Device]:
         """Filter devices by name ."""
@@ -111,7 +111,7 @@ class Microscope:
             device_type = DeviceType[device_type]
         if name == Keyword.CoreDevice.value or device_type == DeviceType.Core:
             yield self.core_device
-            return
+            return  # pragma: no cover
 
         criteria = {
             k: val for k, val in locals().items() if k != "self" and val is not None
@@ -186,6 +186,45 @@ class Microscope:
         if "pixel_size_configs" not in exclude:
             self.update_pixel_sizes_from_core(core)
 
+    def apply_to_core(
+        self,
+        core: CMMCorePlus,
+        *,
+        exclude: Container[str] = (),
+        on_err: ErrCallback | None = None,
+        apply_properties: bool = True,
+        then_update: bool = True,
+    ) -> None:
+        # devices must be initialized first
+        if "devices" not in exclude:
+            for device in self.devices:
+                device.initialize(
+                    core, reload=True, apply_pre_init=True, then_update=False
+                )
+        if "config_groups" not in exclude:
+            for group in self.config_groups.values():
+                group.apply_to_core(core, then_update=False)
+
+        if "pixel_size_group" not in exclude:
+            self.pixel_size_group.apply_to_core(core, then_update=False)
+        # core device must come after config groups
+        if "core_device" not in exclude:
+            self.core_device.apply_to_core(
+                core,
+                on_err=on_err,
+                apply_properties=apply_properties,
+                then_update=False,
+            )
+        # apply_to_core must come after core
+        if "devices" not in exclude:
+            for device in self.devices:
+                device.apply_to_core(
+                    core,
+                    on_err=on_err,
+                    apply_properties=apply_properties,
+                    then_update=then_update,
+                )
+
     def initialize(
         self,
         core: CMMCorePlus,
@@ -204,8 +243,9 @@ class Microscope:
         devs_to_init = sorted((*self.assigned_com_ports, *self.devices), key=_sort_key)
 
         for device in devs_to_init:
+            # shouldn't happen
             if device.device_type == DeviceType.Core:
-                continue
+                continue  # pragma: no cover
             try:
                 device.initialize(core, reload=True, apply_pre_init=True)
             except Exception as e:

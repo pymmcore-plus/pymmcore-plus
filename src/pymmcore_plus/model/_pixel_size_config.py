@@ -29,7 +29,7 @@ class PixelSizePreset(ConfigPreset):
         """Make AvailableDevices look a little less verbose."""
         for f in fields(self):
             if f.repr is False:
-                continue
+                continue  # pragma: no cover
             val = getattr(self, f.name)
             default = f.default_factory() if callable(f.default_factory) else f.default
             if defaults or val != default:

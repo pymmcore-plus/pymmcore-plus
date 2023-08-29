@@ -3,8 +3,8 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
-from pymmcore_plus import CMMCorePlus, find_micromanager
-from pymmcore_plus.model import Microscope
+from pymmcore_plus import CMMCorePlus, DeviceType, find_micromanager
+from pymmcore_plus.model import CoreDevice, Device, Microscope
 
 
 def test_model_create() -> None:
@@ -12,6 +12,9 @@ def test_model_create() -> None:
     assert model.core_device
     assert not model.devices
     assert not list(model.filter_devices("NotADevice"))
+    assert not list(model.filter_devices(device_type="Camera"))
+    assert not list(model.filter_devices(device_type=DeviceType.Camera))
+    assert next(model.filter_devices(device_type=DeviceType.Core)) == model.core_device
 
 
 def test_model_from_core() -> None:
@@ -19,11 +22,24 @@ def test_model_from_core() -> None:
     core.loadSystemConfiguration()
     model = Microscope.create_from_core(core)
     assert model.devices
+    assert model.available_devices
+    assert model.available_serial_devices
+    assert not model.assigned_com_ports
+    hash(model.devices[0])
+    hash(model.core_device)
+    hash(model.available_devices[0])
 
     model2 = Microscope()
     model2.update_from_core(core)
 
     assert model == model2
+
+
+def test_model_from_config() -> None:
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    config = Path(__file__).parent / "local_config.cfg"
+    assert Microscope.create_from_config(config).devices
 
 
 def non_empty_lines(path: Path) -> list[str]:
@@ -157,3 +173,50 @@ def test_load_errors() -> None:
     # for now
     with pytest.warns(RuntimeWarning, match="not implemented"):
         model.load_config("Equipment,1,2,3,4")
+
+
+def test_scope_errs():
+    with pytest.raises(ValueError, match="Cannot create a Device with type Core"):
+        Device(name="Core", device_type=DeviceType.Core)
+    with pytest.raises(ValueError, match="Cannot have CoreDevice in devices list"):
+        Microscope(devices=[CoreDevice()])
+
+
+def test_apply():
+    core1 = CMMCorePlus()
+    core1.loadSystemConfiguration()
+    state1 = core1.getSystemState()
+    model = Microscope.create_from_core(core1)
+    assert model.get_device("LED Shutter").get_property("State Device").value == "LED"
+    assert core1.getProperty("Core", "XYStage") == "XY"
+
+    core2 = CMMCorePlus()
+    model.apply_to_core(core2)
+    state2 = core2.getSystemState()
+    assert core2.getProperty("LED Shutter", "State Device") == "LED"
+    assert core2.getProperty("Core", "XYStage") == "XY"
+    assert list(state1) == list(state2)
+
+    core3 = CMMCorePlus()
+    model.initialize(core3)
+    assert core3.getProperty("Camera", "Binning") == "1"
+
+
+def test_rich_repr():
+    pytest.importorskip("rich")
+    from rich import pretty
+
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    scope = Microscope.create_from_core(core)
+
+    pretty.pretty_repr(scope)
+
+
+def test_dirty():
+    scope = Microscope()
+    assert not scope.is_dirty()
+    scope.devices.append(Device("name"))
+    assert scope.is_dirty()
+    scope.mark_clean()
+    assert not scope.is_dirty()

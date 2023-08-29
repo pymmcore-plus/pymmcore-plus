@@ -68,12 +68,13 @@ class Property(CoreObject):
         # same as super().apply_to_core(core, *args, **kwargs)
         # but much simpler
         if "value" in exclude:
-            return
+            return  # pragma: no cover
         try:
             core.setProperty(self.device_name, self.name, self.value)
         except Exception as e:
             if callable(on_err):
                 on_err(self, "value", e)
+
         if then_update:
             self.value = core.getProperty(self.device_name, self.name)
 
