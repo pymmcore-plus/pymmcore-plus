@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, Any, Iterable, MutableMapping, TypeAlias
+from typing import TYPE_CHECKING, Any, Iterable, MutableMapping
 
 from ._config_group import ConfigGroup, ConfigPreset, Setting
 
 if TYPE_CHECKING:
     from typing import Final
+
+    from typing_extensions import TypeAlias
 
     from pymmcore_plus import CMMCorePlus
 

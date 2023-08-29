@@ -22,7 +22,7 @@ class CoreObject(Protocol):
         ...
 
     __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
-    CORE_GETTERS: ClassVar[dict[str, Callable]]
+    CORE_GETTERS: dict[str, Callable]
 
     @classmethod
     def create_from_core(

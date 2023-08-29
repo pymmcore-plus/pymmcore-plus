@@ -8,7 +8,7 @@ from pymmcore_plus import CMMCorePlus, PropertyType
 from ._core_link import CoreObject
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, ClassVar, Container
+    from typing import Any, Callable, Container
 
     from typing_extensions import TypeAlias
 
@@ -37,19 +37,20 @@ class Property(CoreObject):
     # is_sequenceable: bool = False
     # sequence_max_length: int = 0
 
-    CORE_GETTERS: ClassVar[dict[str, PropGetter]] = {
-        "value": CMMCorePlus.getProperty,
-        "is_read_only": CMMCorePlus.isPropertyReadOnly,
-        "is_pre_init": CMMCorePlus.isPropertyPreInit,
-        "allowed_values": CMMCorePlus.getAllowedPropertyValues,
-        "has_limits": CMMCorePlus.hasPropertyLimits,
-        "lower_limit": CMMCorePlus.getPropertyLowerLimit,
-        "upper_limit": CMMCorePlus.getPropertyUpperLimit,
-        "property_type": CMMCorePlus.getPropertyType,
-        # "is_sequenceable": CMMCorePlus.isPropertySequenceable,
-        # "sequence_max_length": CMMCorePlus.getPropertySequenceMaxLength,
-        "exists": CMMCorePlus.hasProperty,
-    }
+    def __post_init__(self) -> None:
+        self.CORE_GETTERS: dict[str, PropGetter] = {
+            "value": CMMCorePlus.getProperty,
+            "is_read_only": CMMCorePlus.isPropertyReadOnly,
+            "is_pre_init": CMMCorePlus.isPropertyPreInit,
+            "allowed_values": CMMCorePlus.getAllowedPropertyValues,
+            "has_limits": CMMCorePlus.hasPropertyLimits,
+            "lower_limit": CMMCorePlus.getPropertyLowerLimit,
+            "upper_limit": CMMCorePlus.getPropertyUpperLimit,
+            "property_type": CMMCorePlus.getPropertyType,
+            # "is_sequenceable": CMMCorePlus.isPropertySequenceable,
+            # "sequence_max_length": CMMCorePlus.getPropertySequenceMaxLength,
+            "exists": CMMCorePlus.hasProperty,
+        }
 
     def _core_args(self) -> tuple[str, str]:
         # the first two args to all of the funcs in CORE_GETTERS
