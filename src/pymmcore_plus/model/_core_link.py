@@ -2,20 +2,13 @@ from __future__ import annotations
 
 import abc
 from dataclasses import fields
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    ClassVar,
-    Container,
-    Iterable,
-    Protocol,
-    TypeAlias,
-    TypeVar,
-)
+from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
     from dataclasses import Field
+    from typing import Any, Callable, ClassVar, Container, Iterable, TypeVar
+
+    from typing_extensions import TypeAlias
 
     from pymmcore_plus import CMMCorePlus
 
