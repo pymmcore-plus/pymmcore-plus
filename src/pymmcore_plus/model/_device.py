@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from contextlib import suppress
 from dataclasses import dataclass, field, replace
-from typing import TYPE_CHECKING, Any, Callable, Container, Iterable, TypeAlias
+from typing import TYPE_CHECKING
 
 from pymmcore_plus import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus._util import no_stdout
@@ -11,6 +11,10 @@ from ._core_link import CoreObject
 from ._property import Property
 
 if TYPE_CHECKING:
+    from typing import Any, Callable, Container, Iterable
+
+    from typing_extensions import TypeAlias
+
     from ._core_link import ErrCallback
     from ._microscope import Microscope
 
