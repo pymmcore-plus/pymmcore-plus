@@ -1,16 +1,19 @@
 __all__ = [
     "ActionType",
-    "DeviceAdapter",
+    "CFGCommand",
+    "CFGGroup",
     "CMMCorePlus",
     "ConfigGroup",
     "Configuration",
+    "Device",
+    "DeviceAdapter",
     "DeviceDetectionStatus",
     "DeviceNotification",
-    "DeviceType",
-    "Device",
-    "FocusDirection",
-    "Metadata",
     "DeviceProperty",
+    "DeviceType",
+    "FocusDirection",
+    "Keyword",
+    "Metadata",
     "PortType",
     "PropertyType",
 ]
@@ -20,10 +23,13 @@ from ._config import Configuration
 from ._config_group import ConfigGroup
 from ._constants import (
     ActionType,
+    CFGCommand,
+    CFGGroup,
     DeviceDetectionStatus,
     DeviceNotification,
     DeviceType,
     FocusDirection,
+    Keyword,
     PortType,
     PropertyType,
 )

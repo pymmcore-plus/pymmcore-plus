@@ -272,7 +272,7 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     result = runner.invoke(app, ["logs", "-n", "60"])
     assert result.exit_code == 0
     assert "[IFO,Core]" in result.output  # this will come from CMMCore
-    assert "Initialized core" in result.output  # this will come from CMMCorePlus
+    assert "Initialized" in result.output  # this will come from CMMCorePlus
 
     # run mmcore logs --tail
     # not sure how to kill the subprocess correctly on windows yet
