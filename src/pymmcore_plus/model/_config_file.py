@@ -87,6 +87,7 @@ def iter_pre_init_props(scope: Microscope) -> Iterable[str]:
             if p.is_pre_init:
                 yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
 
+
 def iter_com_port_props(scope: Microscope) -> Iterable[str]:
     for dev in scope.assigned_com_ports:
         for p in dev.properties:
