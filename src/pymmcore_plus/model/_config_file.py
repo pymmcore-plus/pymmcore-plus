@@ -62,6 +62,8 @@ def yield_date(scope: Microscope) -> Iterable[str]:
 
 
 def iter_devices(scope: Microscope) -> Iterable[str]:
+    for d in scope.assigned_com_ports:
+        yield _serialize(CFGCommand.Device, d.name, d.library, d.adapter_name)
     for d in scope.devices:
         yield _serialize(CFGCommand.Device, d.name, d.library, d.adapter_name)
 
@@ -81,6 +83,12 @@ def iter_pre_init_props(scope: Microscope) -> Iterable[str]:
             # We shouldn't ever get here, since there should be no core device in
             # in model.devices ... but just in case, we don't want to write it out.
             continue  # pragma: no cover
+        for p in dev.properties:
+            if p.is_pre_init:
+                yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
+
+def iter_com_port_props(scope: Microscope) -> Iterable[str]:
+    for dev in scope.assigned_com_ports:
         for p in dev.properties:
             if p.is_pre_init:
                 yield _serialize(CFGCommand.Property, p.device_name, p.name, p.value)
@@ -163,7 +171,7 @@ CONFIG_SECTIONS: dict[str, Callable[[Microscope], Iterable[str]]] = {
     "Load devices": iter_devices,
     # "Equipment attributes": lambda _: [],  propertyBlockData
     "Pre-initialization properties": iter_pre_init_props,
-    "Pre-init settings for COM ports": lambda _: [],
+    "Pre-init settings for COM ports": iter_com_port_props,
     "Hub references": iter_hub_refs,
     "Initialize": lambda _: [INIT],
     "Delays": iter_delays,

@@ -78,9 +78,12 @@ class Microscope:
         assigned: dict[Device, Device] = {}
         com_devices = {d.name: d for d in self.available_serial_devices}
         for dev in self.devices:
-            for prop in dev.properties:
-                if prop.name == Keyword.Port and prop.value in com_devices:
-                    assigned[com_devices[prop.value]] = dev
+            # NOTE: one consequence if this structure is that devices
+            # later in the list will "claim" the port of devices earlier in the list
+            # in the case of a conflict.
+            if dev.port in com_devices:
+                assigned[com_devices[dev.port]] = dev
+
         return assigned
 
     @property
