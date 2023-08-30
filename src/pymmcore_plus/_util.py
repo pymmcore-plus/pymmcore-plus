@@ -22,8 +22,15 @@ if TYPE_CHECKING:
     P = ParamSpec("P")
     R = TypeVar("R")
 
+try:
+    # if we have wurlitzer, use it to suppress MMCorePlus output
+    # during device discovery
+    from wurlitzer import pipes as no_stdout
+except ImportError:
+    from contextlib import nullcontext as no_stdout
 
-__all__ = ["find_micromanager", "_qt_app_is_running", "retry"]
+
+__all__ = ["find_micromanager", "_qt_app_is_running", "retry", "no_stdout"]
 
 USER_DATA_DIR = Path(appdirs.user_data_dir(appname="pymmcore-plus"))
 USER_DATA_MM_PATH = USER_DATA_DIR / "mm"

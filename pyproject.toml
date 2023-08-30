@@ -163,6 +163,7 @@ exclude_lines = [
     "@overload",
     "except ImportError",
     "raise AssertionError",
+    "\\.\\.\\.",
     "if __name__ == .__main__.:",
     "raise NotImplementedError",
 ]

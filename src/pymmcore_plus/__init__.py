@@ -9,6 +9,8 @@ except PackageNotFoundError:  # pragma: no cover
 from ._logger import configure_logging
 from ._util import find_micromanager
 from .core import (
+    CFGCommand,
+    CFGGroup,
     CMMCorePlus,
     ConfigGroup,
     Configuration,
@@ -19,6 +21,7 @@ from .core import (
     DeviceProperty,
     DeviceType,
     FocusDirection,
+    Keyword,
     Metadata,
     PortType,
     PropertyType,
@@ -29,6 +32,8 @@ from .mda._runner import GeneratorMDASequence
 __all__ = [
     "__version__",
     "ActionType",
+    "CFGCommand",
+    "CFGGroup",
     "CMMCorePlus",
     "CMMCoreSignaler",
     "ConfigGroup",
@@ -43,6 +48,7 @@ __all__ = [
     "find_micromanager",
     "FocusDirection",
     "GeneratorMDASequence",
+    "Keyword",
     "Metadata",
     "PCoreSignaler",
     "PortType",
