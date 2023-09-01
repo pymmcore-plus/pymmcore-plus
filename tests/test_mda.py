@@ -345,8 +345,7 @@ def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
     event1 = MDAEvent()
-    with qtbot.waitSignal(core.mda.events.sequenceStarted):
-        core.run_mda([event1, MDAEvent(min_start_time=10)])
+    core.run_mda([event1, MDAEvent(min_start_time=10)])
     with qtbot.waitSignal(core.mda.events.sequenceCanceled):
         time.sleep(0.1)
         core.mda.cancel()

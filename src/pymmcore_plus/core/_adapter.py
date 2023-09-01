@@ -1,26 +1,12 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, NamedTuple
+from typing import TYPE_CHECKING
 
 from pymmcore_plus.core._constants import DeviceType
+from pymmcore_plus.core._device import Device
 
 if TYPE_CHECKING:
-    from pymmcore_plus.core._device import Device
-
     from ._mmcore_plus import CMMCorePlus
-
-
-class AvailableDevice(NamedTuple):
-    adapter_name: str
-    device_name: str
-    type: DeviceType
-    description: str
-    core: CMMCorePlus
-
-    def load(self, label: str) -> Device:
-        """Load the device under the label `label`."""
-        self.core.loadDevice(label, self.adapter_name, self.device_name)
-        return self.core.getDeviceObject(label)
 
 
 class DeviceAdapter:
@@ -53,13 +39,13 @@ class DeviceAdapter:
         return self._mmc
 
     @property
-    def available_devices(self) -> tuple[AvailableDevice, ...]:
+    def available_devices(self) -> tuple[Device, ...]:
         """Get available devices offered by this device adapter.
 
         Returns
         -------
-        tuple[AvailableDevice, ...]
-            Tuple of `AvailableDevice` objects, with the name, type, and description
+        tuple[Device, ...]
+            Tuple of `Device` objects, with the name, type, and description
             of each device.  These objects also have a `load` method that can be used
             to load the device under a given label.
         """
@@ -71,8 +57,14 @@ class DeviceAdapter:
         types = self._mmc.getAvailableDeviceTypes(self.name)
         descriptions = self._mmc.getAvailableDeviceDescriptions(self.name)
         return tuple(
-            AvailableDevice(self.name, label, DeviceType(dt), desc, self._mmc)
-            for label, dt, desc in zip(devs, types, descriptions)
+            Device(
+                mmcore=self._mmc,
+                adapter_name=self.name,
+                device_name=dev_name,
+                type=DeviceType(dt),
+                description=desc,
+            )
+            for dev_name, dt, desc in zip(devs, types, descriptions)
         )
 
     @property

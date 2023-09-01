@@ -3,6 +3,7 @@ from __future__ import annotations
 import atexit
 import os
 import re
+import time
 import warnings
 import weakref
 from collections import defaultdict
@@ -17,6 +18,7 @@ from typing import (
     Callable,
     Iterable,
     Iterator,
+    NamedTuple,
     Pattern,
     Sequence,
     TypeVar,
@@ -109,6 +111,11 @@ STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)
 UNNAMED_PRESET = "NewPreset"
+
+
+class TaggedImage(NamedTuple):
+    pix: np.ndarray
+    tags: dict[str, Any]
 
 
 @contextmanager
@@ -1433,6 +1440,99 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
         return img
 
+    def getTaggedImage(self, channel_index: int = 0) -> TaggedImage:
+        """Return getImage as named tuple with metadata.
+
+        :sparkles: *This method is new in `CMMCorePlus`.* It returns an object
+        similar to MMCoreJ.getTaggedImage().
+        """
+        img = self.getImage(channel_index)
+        return TaggedImage(img, self.getTags(None, channel_index))
+
+    def popNextTaggedImage(self, channel_index: int = 0) -> TaggedImage:
+        """Return popNextImageAndMD as named tuple with metadata.
+
+        :sparkles: *This method is new in `CMMCorePlus`.* It returns an object
+        similar to MMCoreJ.popNextTaggedImage().
+        """
+        img, meta = self.popNextImageAndMD(channel_index, 0)
+        return TaggedImage(img, self.getTags(meta, channel_index))
+
+    # this matches the MMCoreJ implementation ... which we may or may not want to do?
+    def getTags(
+        self, meta: Metadata | None = None, channel_index: int | None = None
+    ) -> dict[str, Any]:
+        """Return a dict of metadata tags for the state of the core.
+
+        NOTE: this function is pretty slow, and is potentially called on every frame
+        of an acquisition. It would be nice to determine what is absolutely necessary,
+        and possible allow the user to specify what they want to include.
+
+        :sparkles: *This method is new in `CMMCorePlus`.* It returns only the `.tags`
+        attribute of what you would get with `getTaggedImage()` or
+        `popNextTaggedImage()`.
+        """
+        # TODO: make these keys into an enum or something somewhere...
+        # you shouldn't have to search the code to find out what keys are available
+
+        tags = dict(meta) if meta else {}
+        for dev, label, val in self.getSystemStateCache():  # type: ignore
+            tags[f"{dev}-{label}"] = val
+
+        tags["BitDepth"] = self.getImageBitDepth()
+
+        # NOTE: AcqEngJ appears to also add this as PixelSize_um
+        # while MMCoreJ uses PixelSizeUm?  not sure why both are needed
+        tags["PixelSizeUm"] = self.getPixelSizeUm(True)  # true == cached
+
+        affine = self.getPixelSizeAffine(True)  # true == cached
+        tags["PixelSizeAffine"] = ";".join(str(x) for x in affine)
+        tags["ROI"] = "-".join(str(x) for x in self.getROI())
+        tags["Width"] = self.getImageWidth()
+        tags["Height"] = self.getImageHeight()
+        if (depth := self.getBytesPerPixel()) == 4:
+            ncomp = self.getNumberOfComponents()
+            pix_type = "GRAY32" if ncomp == 1 else "RGB32"
+        else:
+            pix_type = {1: "GRAY8", 2: "GRAY16", 8: "RGB64"}[depth]
+        tags["PixelType"] = pix_type
+        tags["Frame"] = 0
+        tags["FrameIndex"] = 0
+        tags["Position"] = "Default"
+        tags["PositionIndex"] = 0
+        tags["Slice"] = 0
+        tags["SliceIndex"] = 0
+
+        try:
+            channel_group = self.getPropertyFromCache("Core", "ChannelGroup")
+            channel = self.getCurrentConfigFromCache(channel_group)
+        except Exception:
+            channel = "Default"
+        tags["Channel"] = channel
+        tags["ChannelIndex"] = 0
+
+        with suppress(Exception):
+            tags["Binning"] = self.getProperty(self.getCameraDevice(), "Binning")
+
+        if channel_index is not None:
+            if "CameraChannelIndex" not in tags:
+                tags["CameraChannelIndex"] = channel_index
+                tags["ChannelIndex"] = channel_index
+            if "Camera" not in tags:
+                core_cam = tags.get("Core-Camera")
+                phys_cam_key = f"{core_cam}-Physical Camera {channel_index+1}"
+                if phys_cam_key in tags:
+                    tags["Camera"] = tags[phys_cam_key]
+                    # tags["Channel"] = tags[phys_cam_key] # ?? why did MMCoreJ do this?
+
+        # these are added by AcqEngJ
+        # yyyy-MM-dd HH:mm:ss.mmmmmm  # NOTE AcqEngJ omits microseconds
+        tags["Time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+        # used by Runner
+        tags["PerfCounter"] = time.perf_counter()
+        return tags
+
     def snap(self, numChannel: int | None = None, *, fix: bool = True) -> np.ndarray:
         """Snap and return an image.
 
@@ -1694,6 +1794,31 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         super().definePixelSizeConfig(*args, **kwargs)
         self.events.pixelSizeChanged.emit(0.0)
+
+    def getMultiROI(  # type: ignore [override]
+        self, *_: Any
+    ) -> tuple[list[int], list[int], list[int], list[int]]:
+        """Get multiple ROIs from the current camera device.
+
+        Will fail if the camera does not support multiple ROIs. Will return empty
+        vectors if multiple ROIs are not currently being used.
+
+        **Why Override?** So that the user doesn't need to pass in four empty
+        pymmcore.UnsignedVector() objects.
+        """
+        if _:
+            warnings.warn(  # pragma: no cover
+                "Unlike pymmcore, CMMCorePlus.getMultiROI does not require arguments."
+                "Arguments are ignored.",
+                stacklevel=2,
+            )
+
+        xs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+        ys = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+        ws = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+        hs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+        super().getMultiROI(xs, ys, ws, hs)
+        return list(xs), list(ys), list(ws), list(hs)
 
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None:
