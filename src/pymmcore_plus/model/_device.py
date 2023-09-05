@@ -30,11 +30,11 @@ DEVICE_GETTERS: dict[str, DeviceGetter] = {
     "adapter_name": CMMCorePlus.getDeviceName,
     "description": CMMCorePlus.getDeviceDescription,
     "device_type": CMMCorePlus.getDeviceType,
-    "is_busy": CMMCorePlus.deviceBusy,
     "delay_ms": CMMCorePlus.getDeviceDelayMs,
     "uses_delay": CMMCorePlus.usesDeviceDelay,
     "parent_label": CMMCorePlus.getParentLabel,
     "property_names": CMMCorePlus.getDevicePropertyNames,
+    # "is_busy": CMMCorePlus.deviceBusy,  # Leave this out... it can crash when checking
 }
 STATE_DEVICE_GETTERS: dict[str, DeviceGetter] = {
     **DEVICE_GETTERS,
