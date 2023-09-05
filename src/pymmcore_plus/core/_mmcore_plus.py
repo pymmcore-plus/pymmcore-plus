@@ -2133,7 +2133,7 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         super().__init__()
 
     @staticmethod
-    def _make_reemitter(name: str) -> Callable[..., None]:
+    def make_reemitter(name: str) -> Callable[..., None]:
         sig_name = name[2].lower() + name[3:]
 
         def reemit(self: _MMCallbackRelay, *args: Any) -> None:
@@ -2151,7 +2151,7 @@ MMCallbackRelay = type(
     "MMCallbackRelay",
     (_MMCallbackRelay,),
     {
-        n: _MMCallbackRelay._make_reemitter(n)
+        n: _MMCallbackRelay.make_reemitter(n)
         for n in dir(pymmcore.MMEventCallback)
         if n.startswith("on")
     },
