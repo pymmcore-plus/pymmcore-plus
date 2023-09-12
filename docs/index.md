@@ -35,23 +35,31 @@ pure python/C environments**.
 
     A common question about `pymmcore-plus` and related libraries is how it
     differs from [Pycro-Manager](https://github.com/micro-manager/pycro-manager),
-    another python library for working with Micro-manager.
+    another python library written by Henry Pinkard for working with Micro-manager.
+    
+    The two projects are not mutually exclusive! They aim to support
+    different use cases
 
-    The primary design difference is that Pycro-Manager controls Micro-manager
-    via a ZMQ-based RPC connection to a Java process in which the Micro-manager
+    The primary difference is that Pycro-Manager controls Micro-manager
+    via a ZMQ-based connection to a remote Java process in which the Micro-manager
     GUI is running (or a headless Java process if the GUI is not running). The
     Java process in turn communicates with the C++ core driving the hardware.
 
     `pymmcore-plus` aims to remove the need for a Java process by communicating
-    *directly* with the C++ core (via the `pymmcore` library), and re-implementing
-    any necessary event-based or GUI-based functionality in pure python or C.
+    directly with the C++ core (via the
+    [`pymmcore`](https://github.com/micro-manager/pymmcore) library), and
+    re-implementing any necessary event-based or GUI-based functionality in pure
+    python or C.
 
-    An advantage of Pycro-Manager is that you can interact with the entire Java-based micro-manager
-    ecosystem, including the GUI and plugins. A disadvantage, however, is that it requires a
-    Java runtime environment and cross-process communication and data sharing. If you are
-    looking to control a microscope via python without any need for Java, `pymmcore(-plus)` will
-    help, and much of the critical GUI components have been re-implemented in `pymmcore-widgets`
-    and `napari-micromanager`.
+    A major advantage of Pycro-Manager is that you get the entire Java-based
+    micro-manager ecosystem, including the GUI and plugins. A potential disadvantage
+    (depending on your needs), is that it requires a Java runtime environment and
+    cross-process communication.
+    
+    If you are looking to control a microscope via python without any need for Java
+    or interprocess communication, `pymmcore(-plus)` may help. Note however, that
+    you will be sacrificing the MMStudio GUI! See `pymmcore-widgets` and
+    `napari-micromanager` for ongoing efforts to re-implement GUI components in python.
 
     ![micro-manager ecosystem components](images/components.png){ loading=lazy }
 
