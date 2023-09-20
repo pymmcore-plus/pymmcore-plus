@@ -1,15 +1,36 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, MutableMapping, Sequence
+import warnings
+from typing import TYPE_CHECKING, Literal, MutableMapping, Protocol, Sequence, TypedDict
 
 import useq
-from pymmcore_plus import CMMCorePlus, configure_logging
+from pymmcore_plus import CMMCorePlus
 from pymmcore_plus._util import listeners_connected
 from useq import MDASequence
 
 if TYPE_CHECKING:
+    from typing import ContextManager
+
     import numpy as np
     import zarr
+    from numcodecs.abc import Codec
+
+    class ZarrSynchronizer(Protocol):
+        def __getitem__(self, key: str) -> ContextManager:
+            ...
+
+    class ArrayCreationKwargs(TypedDict, total=False):
+        compressor: str | Codec
+        fill_value: int | None
+        order: Literal["C", "F"]
+        synchronizer: ZarrSynchronizer | None
+        overwrite: bool
+        filters: Sequence[Codec] | None
+        cache_attrs: bool
+        read_only: bool
+        object_codec: Codec | None
+        dimension_separator: Literal["/", "."] | None
+        write_empty_chunks: bool
 
 
 POS_PREFIX = "p"
@@ -23,35 +44,45 @@ AXTYPE = {
 }
 
 
-def multiscales_image(path: str, name: str, axes: Sequence[str]) -> dict:
-    # make one for each position
-    axes = [*axes, "y", "x"]
-    scale = [1] * len(axes)
-    return {
-        "axes": [{"name": ax, "type": AXTYPE.get(ax, "")} for ax in axes],
-        "datasets": [
-            {
-                "coordinateTransformations": [{"scale": scale, "type": "scale"}],
-                "path": path,
-            },
-        ],
-        "name": name,
-        "version": "0.4",
-    }
-
-
 class OMEZarrHandler:
+    """Write an MDA to a zarr file.
+
+    Parameters
+    ----------
+    store_or_group : MutableMapping | str | None | zarr.Group
+        The zarr store or `zarr.Group` to write to. If a string, it will be passed to
+        `zarr.group` to create a group. If None, a new in-memory group will be
+        created.
+    overwrite : bool
+        Whether to overwrite an existing group. (ignored if passing a `zarr.Group`)
+    synchronizer
+        Array synchronizer passed to `zarr.group`. (ignored if passing a `zarr.Group`)
+    zarr_version
+        Zarr version passed to `zarr.group`. (ignored if passing a `zarr.Group`)
+    dimension_separator : str
+        Separator placed between the dimensions of a chunk in each Array.
+        Default is `"/"`.
+    """
+
     def __init__(
         self,
         store_or_group: MutableMapping | str | None | zarr.Group = None,
-        overwrite: bool = False,
         *,
-        synchronizer=None,
-        zarr_version=None,
+        overwrite: bool = False,
+        synchronizer: ZarrSynchronizer | None = None,
+        zarr_version: Literal[2, 3, None] = None,
+        array_kwargs: ArrayCreationKwargs | None = None,
     ) -> None:
         import zarr
 
         if isinstance(store_or_group, zarr.Group):
+            if overwrite or synchronizer or zarr_version:
+                warnings.warn(  # pragma: no cover
+                    "overwrite, synchronizer, and zarr_version are ignored"
+                    " when passing a zarr.Group",
+                    stacklevel=2,
+                )
+
             self._group = store_or_group
         else:
             self._group = zarr.group(
@@ -66,6 +97,9 @@ class OMEZarrHandler:
         self._arrays: dict[str, zarr.Array] = {}
         self._current_sequence: useq.MDASequence | None = None
 
+        self._array_kwargs: ArrayCreationKwargs = array_kwargs or {}
+        self._array_kwargs.setdefault("dimension_separator", "/")
+
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         self._current_sequence = seq
         self._used_axes = tuple(x for x in self._current_sequence.used_axes if x != "p")
@@ -77,7 +111,9 @@ class OMEZarrHandler:
         self, frame: np.ndarray, event: useq.MDAEvent, meta: dict | None = None
     ) -> None:
         key = f'{POS_PREFIX}{event.index.get("p", 0)}'
-        if key not in self._arrays:
+        if key in self._arrays:
+            ary = self._arrays[key]
+        else:
             if not self._current_sequence:
                 self._current_sequence = event.sequence
             if not (seq := self._current_sequence):
@@ -87,8 +123,6 @@ class OMEZarrHandler:
             shape = (*tuple(v for k, v in seq.sizes.items() if k != "p"), *frame.shape)
             axes = tuple(k for k in seq.sizes if k != "p")
             ary = self._new_array(key, shape, frame.dtype, axes)
-        else:
-            ary = self._arrays[key]
 
         index = tuple(event.index.get(k) for k in self._used_axes)
         ary[index] = frame
@@ -100,35 +134,62 @@ class OMEZarrHandler:
     def _new_array(
         self, key: str, shape: tuple[int, ...], dtype: np.dtype, axes: tuple[str, ...]
     ) -> zarr.Array:
-        # a chunk is a single XY plane
-        chunks = [1] * len(shape)
-        chunks[-2:] = shape[-2:]
-        ary = self._group.create(
-            key, shape=shape, chunks=chunks, dtype=dtype, dimension_separator="/"
+        self._arrays[key] = ary = self._group.create(
+            key,
+            shape=shape,
+            chunks=(1,) * len(shape[:-2]) + shape[-2:],  # single XY plane chunks
+            dtype=dtype,
+            **self._array_kwargs,
         )
-        self._arrays[key] = ary
 
         scales = self._group.attrs.get("multiscales", [])
-        scales.append(multiscales_image(ary.path, ary.path, axes))
+        scales.append(self._multiscales_item(ary.path, ary.path, axes))
         self._group.attrs["multiscales"] = scales
 
         return ary
 
+    def _multiscales_item(self, path: str, name: str, axes: Sequence[str]) -> dict:
+        """ome-zarr multiscales image metadata
+
+        https://ngff.openmicroscopy.org/latest/index.html#multiscale-md
+        """
+        # make one for each position
+        axes = [*axes, "y", "x"]
+        tforms = [{"scale": [1] * len(axes), "type": "scale"}]
+        return {
+            "axes": [{"name": ax, "type": AXTYPE.get(ax, "")} for ax in axes],
+            "datasets": [{"coordinateTransformations": tforms, "path": path}],
+            "name": name,
+            "version": "0.4",
+        }
+
 
 sequence = MDASequence(
     channels=["DAPI", {"config": "FITC", "exposure": 1}],
-    stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
-    time_plan={"interval": 0.1, "loops": 5},
+    # stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
+    time_plan={"interval": 0.1, "loops": 100},
     z_plan={"range": 4, "step": 0.5},
     axis_order="tpcz",
 )
 
 core = CMMCorePlus.instance()
 core.loadSystemConfiguration()
-handler = OMEZarrHandler("out.zarr", overwrite=True)
-configure_logging(stderr_level="WARNING")
-with listeners_connected(core.mda.events, handler):
-    core.mda.run(sequence)
 
-print([x.shape for _, x in handler.group.arrays()])
-print([x.chunks for _, x in handler.group.arrays()])
+handler = OMEZarrHandler("out.zarr", overwrite=True)
+
+
+class Handler2:
+    def frameReady(self, frame, event, meta=None):
+        print("frameReady", frame, event, meta)
+
+
+class Handler3:
+    def __init__(self, arg):
+        self.arg = arg
+
+    def sequenceFinished(self):
+        print(f"DOME!!! {self.arg}")
+
+
+with listeners_connected(core.mda.events, handler, Handler2(), Handler3("arg")):
+    core.mda.run(sequence)
