@@ -1,17 +1,30 @@
 from __future__ import annotations
 
+import threading
+import time
 import warnings
-from typing import TYPE_CHECKING, Literal, MutableMapping, Protocol, Sequence, TypedDict
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Deque,
+    Literal,
+    MutableMapping,
+    Protocol,
+    Sequence,
+    TypedDict,
+)
 
+import numpy as np
 import useq
+from psygnal import Signal
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus._util import listeners_connected
 from useq import MDASequence
 
 if TYPE_CHECKING:
+    from collections import deque
     from typing import ContextManager
 
-    import numpy as np
     import zarr
     from numcodecs.abc import Codec
 
@@ -45,7 +58,10 @@ AXTYPE = {
 
 
 class OMEZarrHandler:
-    """Write an MDA to a zarr file.
+    """Write an MDA to a zarr file following the ngff spec.
+
+    This implements v0.4
+    https://ngff.openmicroscopy.org/0.4/index.html
 
     Parameters
     ----------
@@ -73,7 +89,12 @@ class OMEZarrHandler:
         zarr_version: Literal[2, 3, None] = None,
         array_kwargs: ArrayCreationKwargs | None = None,
     ) -> None:
-        import zarr
+        try:
+            import zarr
+        except ImportError as e:
+            raise ImportError(
+                "zarr is required to use this handler. Install with `pip install zarr`"
+            ) from e
 
         if isinstance(store_or_group, zarr.Group):
             if overwrite or synchronizer or zarr_version:
@@ -90,6 +111,13 @@ class OMEZarrHandler:
                 overwrite=overwrite,
                 synchronizer=synchronizer,
                 zarr_version=zarr_version,
+            )
+
+        # if we don't check this here, we'll get an error when creating the first array
+        if not overwrite and any(self._group.arrays()) or self._group.attrs:
+            path = self._group.store.path if hasattr(self._group.store, "path") else ""
+            raise ValueError(
+                f"There is already data in {path!r}. Use 'overwrite=True' to overwrite."
             )
 
         # we store a map of position index to zarr.Array
@@ -151,7 +179,7 @@ class OMEZarrHandler:
     def _multiscales_item(self, path: str, name: str, axes: Sequence[str]) -> dict:
         """ome-zarr multiscales image metadata
 
-        https://ngff.openmicroscopy.org/latest/index.html#multiscale-md
+        https://ngff.openmicroscopy.org/0.4/index.html#multiscale-md
         """
         # make one for each position
         axes = [*axes, "y", "x"]
@@ -164,10 +192,38 @@ class OMEZarrHandler:
         }
 
 
+class ThreadedHandler:
+    frameReady = Signal(np.ndarray, useq.MDAEvent, dict)
+
+    def __init__(self) -> None:
+        self._deque: deque[tuple | None] = Deque()
+
+    def sequenceStarted(self) -> None:
+        self.thread = threading.Thread(target=self.watch_queue)
+        self.thread.start()
+
+    def _frameReady(self, *args: Any) -> None:
+        self._deque.append(args)
+
+    def sequenceFinished(self) -> None:
+        self._deque.append(None)
+        self.thread.join()
+
+    def watch_queue(self) -> None:
+        while True:
+            try:
+                args = self._deque.popleft()
+            except IndexError:
+                time.sleep(0.001)
+            if args is None:
+                break
+            self.frameReady.emit(*args)
+
+
 sequence = MDASequence(
     channels=["DAPI", {"config": "FITC", "exposure": 1}],
     # stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
-    time_plan={"interval": 0.1, "loops": 100},
+    time_plan={"interval": 0.1, "loops": 5},
     z_plan={"range": 4, "step": 0.5},
     axis_order="tpcz",
 )
@@ -175,21 +231,10 @@ sequence = MDASequence(
 core = CMMCorePlus.instance()
 core.loadSystemConfiguration()
 
+thread_relay = ThreadedHandler()
+
 handler = OMEZarrHandler("out.zarr", overwrite=True)
 
 
-class Handler2:
-    def frameReady(self, frame, event, meta=None):
-        print("frameReady", frame, event, meta)
-
-
-class Handler3:
-    def __init__(self, arg):
-        self.arg = arg
-
-    def sequenceFinished(self):
-        print(f"DOME!!! {self.arg}")
-
-
-with listeners_connected(core.mda.events, handler, Handler2(), Handler3("arg")):
+with listeners_connected(core.mda.events, handler):
     core.mda.run(sequence)
