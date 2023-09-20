@@ -36,21 +36,34 @@ def test_listener_connected(qtbot: QtBot) -> None:
     from psygnal import Signal
 
     mock = Mock()
+    mock2 = Mock()
 
     class Emitter:
-        signalName = Signal(int)
+        signal1 = Signal(int)
 
     class Listener:
-        def signalName(self, value: int) -> None:
+        def signal1(self, value: int) -> None:
             mock(value)
+
+        def method_2(self, value: int) -> None:
+            mock2(value)
 
     emitter = Emitter()
     listener = Listener()
 
-    assert len(emitter.signalName) == 0
+    assert len(emitter.signal1) == 0
     with listeners_connected(emitter, listener):
-        emitter.signalName.emit(42)
-        assert len(emitter.signalName) == 1
+        emitter.signal1.emit(42)
+        assert len(emitter.signal1) == 1
 
     mock.assert_called_once_with(42)
-    assert len(emitter.signalName) == 0
+    mock2.assert_not_called()
+    assert len(emitter.signal1) == 0
+
+    # now connect to a different method
+    mock.reset_mock()
+    with listeners_connected(emitter, listener, name_map={"signal1": "method_2"}):
+        emitter.signal1.emit(42)
+
+    mock2.assert_called_once_with(42)
+    mock.assert_not_called()
