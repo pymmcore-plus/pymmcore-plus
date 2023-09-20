@@ -193,7 +193,7 @@ class OMEZarrHandler:
 
 
 class ThreadedHandler:
-    frameReady = Signal(np.ndarray, useq.MDAEvent, dict)
+    frame_ready = Signal(np.ndarray, useq.MDAEvent, dict)
 
     def __init__(self) -> None:
         self._deque: deque[tuple | None] = Deque()
@@ -217,7 +217,7 @@ class ThreadedHandler:
                 time.sleep(0.001)
             if args is None:
                 break
-            self.frameReady.emit(*args)
+            self.frame_ready.emit(*args)
 
 
 sequence = MDASequence(
@@ -232,7 +232,6 @@ core = CMMCorePlus.instance()
 core.loadSystemConfiguration()
 
 thread_relay = ThreadedHandler()
-
 handler = OMEZarrHandler("out.zarr", overwrite=True)
 
 
