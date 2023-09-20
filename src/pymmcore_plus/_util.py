@@ -314,12 +314,16 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
 
 
 @contextmanager
-def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
+def listeners_connected(
+    emitter: Any, *listeners: Any, name_map: dict[str, str] | None = None
+) -> Iterator[None]:
     """Context manager for listening to signals.
 
     This provides a way for one or more `listener` to temporarily connect to signals on
-    an `emitter`. Any methods on `listener` that match signals on `emitter` will be
-    connected, then disconnected when the context exits (see example below).
+    an `emitter`. Any method names on `listener` that match signal names on `emitter`
+    will be connected, then disconnected when the context exits (see example below).
+    Names can be mapped explicitly using `name_map` if the signal names do not match
+    exactly.
 
     Parameters
     ----------
@@ -329,6 +333,10 @@ def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
         methods.
     listeners : Any
         Object(s) that has methods matching the name of signals on `emitter`.
+    name_map : dict[str, str] | None
+        Optionally map signal names on `emitter` to signal names on `listener`.  This
+        can be used to connect signals with different names. By default, the signal
+        names must match exactly.
 
     Examples
     --------
@@ -353,14 +361,26 @@ def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
     """
     # mapping of signal name on emitter to a set of tokens to disconnect later.
     tokens: defaultdict[str, set[Any]] = defaultdict(set)
+    name_map = name_map or {}
 
     for listener in listeners:
-        # get a list of common names:
-        common_attrs: set[str] = set(dir(emitter)).intersection(dir(listener))
+        if isinstance(listener, dict):  # pragma: no cover
+            import warnings
 
-        for attr_name in common_attrs:
+            warnings.warn(
+                "Received a dict as a listener. Did you mean to use `name_map`?",
+                stacklevel=2,
+            )
+            continue
+
+        # get a list of common names:
+        listener_names = set(dir(listener)).union(name_map)
+        common_names: set[str] = set(dir(emitter)).intersection(listener_names)
+
+        for attr_name in common_names:
             if _is_signal_instance(signal := getattr(emitter, attr_name)):
-                if callable(slot := getattr(listener, attr_name)):
+                slot_name = name_map.get(attr_name, attr_name)
+                if callable(slot := getattr(listener, slot_name)):
                     tokens[attr_name].add(signal.connect(slot))
 
     try:
