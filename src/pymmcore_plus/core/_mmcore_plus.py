@@ -180,6 +180,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__()
 
+        # Set the first instance of this class as the global singleton
+        global _instance
+        if _instance is None:
+            _instance = self
+
         if logfile := current_logfile(logger):
             self.setPrimaryLogFile(str(logfile))
             logger.debug("Initialized core %s", self)
@@ -221,7 +226,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         return f"<{type(self).__name__} at {hex(id(self))}>"
 
     def __del__(self) -> None:
-        atexit.unregister(self._weak_clean)
+        if hasattr(self, "_weak_clean"):
+            atexit.unregister(self._weak_clean)
         self.unloadAllDevices()
 
     # Re-implemented methods from the CMMCore API
