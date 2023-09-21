@@ -5,6 +5,9 @@ from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import OMEZarrHandler
 from useq import MDASequence
 
+core = CMMCorePlus.instance()
+core.loadSystemConfiguration()
+
 sequence = MDASequence(
     channels=["DAPI", {"config": "FITC", "exposure": 1}],
     # stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
@@ -13,10 +16,10 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
-core = CMMCorePlus.instance()
-core.loadSystemConfiguration()
+# use OMEZarrHandler("file.zarr") to write to a directory
+# use OMEZarrHandler.in_tmpdir() to write to a temporary directory
+# pass None or no arguments to write to Memory
+writer = OMEZarrHandler("file.zarr", overwrite=True)
 
-
-handler = OMEZarrHandler("file.zarr", overwrite=True, minify_attrs_metadata=True)
-with mda_listeners_connected(handler):
+with mda_listeners_connected(writer):
     core.mda.run(sequence)
