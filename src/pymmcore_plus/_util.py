@@ -395,13 +395,15 @@ def listeners_connected(
         for attr_name in common_names:
             if _is_signal_instance(signal := getattr(emitter, attr_name)):
                 slot_name = name_map.get(attr_name, attr_name)
-                args: tuple[Any, ...] = ()
                 if callable(slot := getattr(listener, slot_name)):
                     if qt_connection_type and "Qt" in type(signal).__module__:
                         from qtpy.QtCore import Qt
 
-                        args = (getattr(Qt.ConnectionType, qt_connection_type),)
-                    tokens[attr_name].add(signal.connect(slot, *args))
+                        ctype = getattr(Qt.ConnectionType, qt_connection_type)
+                        token = signal.connect(slot, ctype)  # type: ignore
+                        tokens[attr_name].add(token)
+                    else:
+                        tokens[attr_name].add(signal.connect(slot))
 
     try:
         yield
