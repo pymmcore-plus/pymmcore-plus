@@ -17,6 +17,8 @@ import appdirs
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterator, Literal, TypeVar
 
+    QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
+
     from typing_extensions import ParamSpec, TypeGuard
 
     from pymmcore_plus.mda import PMDASignaler
@@ -322,6 +324,7 @@ def listeners_connected(
     emitter: Any,
     *listeners: Any,
     name_map: dict[str, str] | None = None,
+    qt_connection_type: QtConnectionType | None = None,
 ) -> Iterator[None]:
     """Context manager for listening to signals.
 
@@ -343,6 +346,12 @@ def listeners_connected(
         Optionally map signal names on `emitter` to different method names on
         `listener`.  This can be used to connect callbacks with different names. By
         default, callbacks names must match the signal names exactly.
+    qt_connection_type: str | None
+        ADVANCED: Optionally specify the Qt connection type to use when connecting
+        signals, in the case where `emitter` is a Qt object.  This is useful for
+        connecting to Qt signals in a thread-safe way. Must be one of
+        `"AutoConnection"`, `"DirectConnection"`, `"QueuedConnection"`.
+        If `None` (the default), `Qt.ConnectionType.AutoConnection` will be used.
 
     Examples
     --------
@@ -386,8 +395,13 @@ def listeners_connected(
         for attr_name in common_names:
             if _is_signal_instance(signal := getattr(emitter, attr_name)):
                 slot_name = name_map.get(attr_name, attr_name)
+                args: tuple[Any, ...] = ()
                 if callable(slot := getattr(listener, slot_name)):
-                    tokens[attr_name].add(signal.connect(slot))
+                    if qt_connection_type and "Qt" in type(signal).__module__:
+                        from qtpy.QtCore import Qt
+
+                        args = (getattr(Qt.ConnectionType, qt_connection_type),)
+                    tokens[attr_name].add(signal.connect(slot, *args))
 
     try:
         yield
@@ -403,66 +417,3 @@ def _is_signal_instance(obj: Any) -> TypeGuard[PSignalInstance]:
     return (
         hasattr(obj, "connect") and callable(obj.connect) and hasattr(obj, "disconnect")
     )
-
-
-@contextmanager
-def mda_listeners_connected(
-    mda_events: PMDASignaler,
-    *listeners: Any,
-    name_map: dict[str, str] | None = None,
-    asynchronous: bool = True,
-) -> Iterator[None]:
-    if not asynchronous:
-        relay_context: ContextManager[None] = nullcontext()
-        mda_signals = mda_events
-    else:
-        thread_relay = MDARelayThread()
-        relay_context = listeners_connected(mda_events, thread_relay)
-        mda_events.sequenceStarted.connect(thread_relay.start)
-        mda_signals = thread_relay.signals
-
-    with relay_context, listeners_connected(mda_signals, *listeners, name_map=name_map):
-        yield
-
-
-class MDARelayThread(threading.Thread):
-    def __init__(self, interval_s: float = 0.001) -> None:
-        super().__init__()
-
-        from pymmcore_plus.mda.events import _get_auto_MDA_callback_class
-
-        self.signals = _get_auto_MDA_callback_class()()
-
-        self._interval_s = interval_s
-        self._deque: deque[tuple[str, tuple[Any, ...]]] = deque()
-        self._stop_event = threading.Event()
-
-    def stop(self) -> None:
-        self._stop_event.set()
-
-    def sequenceStarted(self, *args: Any) -> None:
-        self._deque.append(("sequenceStarted", args))
-
-    def frameReady(self, *args: Any) -> None:
-        self._deque.append(("frameReady", args))
-
-    def sequencePauseToggled(self, *args: Any) -> None:
-        self._deque.append(("sequencePauseToggled", args))
-
-    def sequenceCanceled(self, *args: Any) -> None:
-        self._deque.append(("sequenceCanceled", args))
-
-    def sequenceFinished(self, *args: Any) -> None:
-        self._deque.append(("sequenceFinished", args))
-        self.join()
-
-    def run(self) -> None:
-        while not self._stop_event.is_set():
-            if self._deque:
-                signal_name, args = self._deque.popleft()
-                emitter: PSignalInstance = getattr(self.signals, signal_name)
-                emitter.emit(*args)
-                if signal_name == "sequenceFinished":
-                    self.stop()
-            else:
-                time.sleep(self._interval_s)
