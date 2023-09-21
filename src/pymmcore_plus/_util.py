@@ -3,14 +3,12 @@ from __future__ import annotations
 import importlib
 import os
 import sys
-import threading
-import time
-from collections import defaultdict, deque
-from contextlib import contextmanager, nullcontext
+from collections import defaultdict
+from contextlib import contextmanager
 from functools import wraps
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, ContextManager, cast, overload
+from typing import TYPE_CHECKING, cast, overload
 
 import appdirs
 
@@ -20,8 +18,6 @@ if TYPE_CHECKING:
     QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
 
     from typing_extensions import ParamSpec, TypeGuard
-
-    from pymmcore_plus.mda import PMDASignaler
 
     from .core.events._protocol import PSignalInstance
 
