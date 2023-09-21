@@ -44,10 +44,12 @@ class OMEZarrHandler:
     This implements v0.4
     https://ngff.openmicroscopy.org/0.4/index.html
 
+    It also aims to be compatible with the xarray Zarr spec:
+    https://docs.xarray.dev/en/latest/internals/zarr-encoding-spec.html
+
     Note: this does *not* currently calculate any additional pyramid levels.
     But it would be easy to do so after acquisition.
-
-    Chunksize is currently fixed at 1 XY plane.
+    Chunk size is currently 1 XY plane.
 
     Zarr directory structure will be:
 
@@ -68,7 +70,7 @@ class OMEZarrHandler:
     ├── pn
     │   ├── .zarray
     │   ├── .zattrs
-    │   └── 0
+    │   └── t...
     ```
 
     Parameters
@@ -224,12 +226,15 @@ class OMEZarrHandler:
             # create the new array, getting XY chunksize from the frame
             # and total shape from the sequence
             shape = (*tuple(v for k, v in seq.sizes.items() if k != "p"), *frame.shape)
-            axes = tuple(k for k in seq.sizes if k != "p")
+            axes = (*(k for k in seq.sizes if k != "p"), "y", "x")
             ary = self._new_array(key, shape, frame.dtype, axes)
 
-            # write the MDASequence metadata to the array
-            ary.attrs["useq_MDASequence"] = json.loads(
-                self._current_sequence.json(exclude_unset=True)
+            # write the MDASequence metadata and xarray _ARRAY_DIMENSIONS to the array
+            ary.attrs.update(
+                {
+                    "useq_MDASequence": json.loads(seq.json(exclude_unset=True)),
+                    "_ARRAY_DIMENSIONS": axes,
+                }
             )
 
         # WRITE DATA TO DISK
@@ -250,6 +255,7 @@ class OMEZarrHandler:
     # ------------------------------- private --------------------------------
 
     def _set_sequence(self, seq: useq.MDASequence | None) -> None:
+        """Set the current sequence, and update the used axes."""
         self._current_sequence = seq
         if seq:
             self._used_axes = tuple(x for x in seq.used_axes if x != "p")
@@ -257,6 +263,7 @@ class OMEZarrHandler:
     def _new_array(
         self, key: str, shape: tuple[int, ...], dtype: np.dtype, axes: tuple[str, ...]
     ) -> zarr.Array:
+        """Create a new array in the group, under `key`."""
         self._arrays[key] = ary = self._group.create(
             key,
             shape=shape,
@@ -265,6 +272,7 @@ class OMEZarrHandler:
             **self._array_kwargs,
         )
 
+        # add minimal OME-NGFF metadata
         scales = self._group.attrs.get("multiscales", [])
         scales.append(self._multiscales_item(ary.path, ary.path, axes))
         self._group.attrs["multiscales"] = scales
@@ -276,8 +284,6 @@ class OMEZarrHandler:
 
         https://ngff.openmicroscopy.org/0.4/index.html#multiscale-md
         """
-        # make one for each position
-        axes = [*axes, "y", "x"]
         tforms = [{"scale": [1] * len(axes), "type": "scale"}]
         return {
             "axes": [{"name": ax, "type": AXTYPE.get(ax, "")} for ax in axes],
@@ -287,12 +293,17 @@ class OMEZarrHandler:
         }
 
     def _minify_zattrs_metadata(self) -> None:
-        """Read, minify, and write zattrs metadata to disk."""
+        """Read, minify, and write zattrs metadata to disk.
+
+        Totally optional and just saves a little space since zattrs for arrays can
+        get big with all the metadata.
+
+        called during sequenceFinished if `minify_attrs_metadata=True`
+        """
         from zarr.util import json_loads
 
         store = self._group.store
         for key in store.keys():
-            print(key)
             if key.endswith(".zattrs"):
                 data = json_loads(store[key])
                 # dump minified data back to disk

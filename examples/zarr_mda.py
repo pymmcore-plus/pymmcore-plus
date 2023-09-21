@@ -19,7 +19,7 @@ sequence = MDASequence(
 # use OMEZarrHandler("file.zarr") to write to a directory
 # use OMEZarrHandler.in_tmpdir() to write to a temporary directory
 # pass None or no arguments to write to Memory
-writer = OMEZarrHandler("file.zarr", overwrite=True)
+writer = OMEZarrHandler("file.zarr", overwrite=True, minify_attrs_metadata=True)
 
 with mda_listeners_connected(writer):
     core.mda.run(sequence)
