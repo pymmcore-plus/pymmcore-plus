@@ -1,12 +1,9 @@
 from __future__ import annotations
 
-import threading
 import time
 import warnings
 from typing import (
     TYPE_CHECKING,
-    Any,
-    Deque,
     Literal,
     MutableMapping,
     Protocol,
@@ -14,17 +11,15 @@ from typing import (
     TypedDict,
 )
 
-import numpy as np
 import useq
-from psygnal import Signal
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus._util import listeners_connected
+from pymmcore_plus._util import mda_listeners_connected
 from useq import MDASequence
 
 if TYPE_CHECKING:
-    from collections import deque
     from typing import ContextManager
 
+    import numpy as np
     import zarr
     from numcodecs.abc import Codec
 
@@ -154,6 +149,8 @@ class OMEZarrHandler:
 
         index = tuple(event.index.get(k) for k in self._used_axes)
         ary[index] = frame
+        print("writing...")
+        time.sleep(0.05)
 
     @property
     def group(self) -> zarr.Group:
@@ -192,38 +189,10 @@ class OMEZarrHandler:
         }
 
 
-class ThreadedHandler:
-    frame_ready = Signal(np.ndarray, useq.MDAEvent, dict)
-
-    def __init__(self) -> None:
-        self._deque: deque[tuple | None] = Deque()
-
-    def sequenceStarted(self) -> None:
-        self.thread = threading.Thread(target=self.watch_queue)
-        self.thread.start()
-
-    def _frameReady(self, *args: Any) -> None:
-        self._deque.append(args)
-
-    def sequenceFinished(self) -> None:
-        self._deque.append(None)
-        self.thread.join()
-
-    def watch_queue(self) -> None:
-        while True:
-            try:
-                args = self._deque.popleft()
-            except IndexError:
-                time.sleep(0.001)
-            if args is None:
-                break
-            self.frame_ready.emit(*args)
-
-
 sequence = MDASequence(
     channels=["DAPI", {"config": "FITC", "exposure": 1}],
     # stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
-    time_plan={"interval": 0.1, "loops": 5},
+    time_plan={"interval": 2, "loops": 2},
     z_plan={"range": 4, "step": 0.5},
     axis_order="tpcz",
 )
@@ -231,9 +200,6 @@ sequence = MDASequence(
 core = CMMCorePlus.instance()
 core.loadSystemConfiguration()
 
-thread_relay = ThreadedHandler()
-handler = OMEZarrHandler("out.zarr", overwrite=True)
 
-
-with listeners_connected(core.mda.events, handler):
+with mda_listeners_connected(core.mda.events, OMEZarrHandler(overwrite=True)):
     core.mda.run(sequence)

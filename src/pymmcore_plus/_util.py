@@ -3,12 +3,14 @@ from __future__ import annotations
 import importlib
 import os
 import sys
-from collections import defaultdict
-from contextlib import contextmanager
+import threading
+import time
+from collections import defaultdict, deque
+from contextlib import contextmanager, nullcontext
 from functools import wraps
 from pathlib import Path
 from time import sleep
-from typing import TYPE_CHECKING, cast, overload
+from typing import TYPE_CHECKING, ContextManager, cast, overload
 
 import appdirs
 
@@ -16,6 +18,8 @@ if TYPE_CHECKING:
     from typing import Any, Callable, Iterator, Literal, TypeVar
 
     from typing_extensions import ParamSpec, TypeGuard
+
+    from pymmcore_plus.mda import PMDASignaler
 
     from .core.events._protocol import PSignalInstance
 
@@ -315,7 +319,9 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
 
 @contextmanager
 def listeners_connected(
-    emitter: Any, *listeners: Any, name_map: dict[str, str] | None = None
+    emitter: Any,
+    *listeners: Any,
+    name_map: dict[str, str] | None = None,
 ) -> Iterator[None]:
     """Context manager for listening to signals.
 
@@ -397,3 +403,66 @@ def _is_signal_instance(obj: Any) -> TypeGuard[PSignalInstance]:
     return (
         hasattr(obj, "connect") and callable(obj.connect) and hasattr(obj, "disconnect")
     )
+
+
+@contextmanager
+def mda_listeners_connected(
+    mda_events: PMDASignaler,
+    *listeners: Any,
+    name_map: dict[str, str] | None = None,
+    asynchronous: bool = True,
+) -> Iterator[None]:
+    if not asynchronous:
+        relay_context: ContextManager[None] = nullcontext()
+        mda_signals = mda_events
+    else:
+        thread_relay = MDARelayThread()
+        relay_context = listeners_connected(mda_events, thread_relay)
+        mda_events.sequenceStarted.connect(thread_relay.start)
+        mda_signals = thread_relay.signals
+
+    with relay_context, listeners_connected(mda_signals, *listeners, name_map=name_map):
+        yield
+
+
+class MDARelayThread(threading.Thread):
+    def __init__(self, interval_s: float = 0.001) -> None:
+        super().__init__()
+
+        from pymmcore_plus.mda.events import _get_auto_MDA_callback_class
+
+        self.signals = _get_auto_MDA_callback_class()()
+
+        self._interval_s = interval_s
+        self._deque: deque[tuple[str, tuple[Any, ...]]] = deque()
+        self._stop_event = threading.Event()
+
+    def stop(self) -> None:
+        self._stop_event.set()
+
+    def sequenceStarted(self, *args: Any) -> None:
+        self._deque.append(("sequenceStarted", args))
+
+    def frameReady(self, *args: Any) -> None:
+        self._deque.append(("frameReady", args))
+
+    def sequencePauseToggled(self, *args: Any) -> None:
+        self._deque.append(("sequencePauseToggled", args))
+
+    def sequenceCanceled(self, *args: Any) -> None:
+        self._deque.append(("sequenceCanceled", args))
+
+    def sequenceFinished(self, *args: Any) -> None:
+        self._deque.append(("sequenceFinished", args))
+        self.join()
+
+    def run(self) -> None:
+        while not self._stop_event.is_set():
+            if self._deque:
+                signal_name, args = self._deque.popleft()
+                emitter: PSignalInstance = getattr(self.signals, signal_name)
+                emitter.emit(*args)
+                if signal_name == "sequenceFinished":
+                    self.stop()
+            else:
+                time.sleep(self._interval_s)
