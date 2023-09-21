@@ -24,7 +24,6 @@ def test_mda_listeners_connected(core: CMMCorePlus) -> None:
     # so the mock should be called LOOPS times
     with mda_listeners_connected(handler, mda_events=core.mda.events):
         core.mda.run(seq)
-
     assert mock.call_count == LOOPS
     mock.assert_has_calls([call(t) for t in range(LOOPS)])
 
