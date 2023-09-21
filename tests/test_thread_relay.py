@@ -7,7 +7,7 @@ from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
 
 
-def test_runner_cancel(core: CMMCorePlus) -> None:
+def test_mda_listeners_connected(core: CMMCorePlus) -> None:
     mock = Mock()
 
     class SlowHandler:
