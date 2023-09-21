@@ -334,9 +334,9 @@ def listeners_connected(
     listeners : Any
         Object(s) that has methods matching the name of signals on `emitter`.
     name_map : dict[str, str] | None
-        Optionally map signal names on `emitter` to signal names on `listener`.  This
-        can be used to connect signals with different names. By default, the signal
-        names must match exactly.
+        Optionally map signal names on `emitter` to different method names on
+        `listener`.  This can be used to connect callbacks with different names. By
+        default, callbacks names must match the signal names exactly.
 
     Examples
     --------
