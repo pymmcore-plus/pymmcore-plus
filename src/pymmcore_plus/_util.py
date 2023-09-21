@@ -15,6 +15,8 @@ import appdirs
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterator, Literal, TypeVar
 
+    QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
+
     from typing_extensions import ParamSpec, TypeGuard
 
     from .core.events._protocol import PSignalInstance
@@ -315,7 +317,10 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
 
 @contextmanager
 def listeners_connected(
-    emitter: Any, *listeners: Any, name_map: dict[str, str] | None = None
+    emitter: Any,
+    *listeners: Any,
+    name_map: dict[str, str] | None = None,
+    qt_connection_type: QtConnectionType | None = None,
 ) -> Iterator[None]:
     """Context manager for listening to signals.
 
@@ -337,6 +342,12 @@ def listeners_connected(
         Optionally map signal names on `emitter` to different method names on
         `listener`.  This can be used to connect callbacks with different names. By
         default, callbacks names must match the signal names exactly.
+    qt_connection_type: str | None
+        ADVANCED: Optionally specify the Qt connection type to use when connecting
+        signals, in the case where `emitter` is a Qt object.  This is useful for
+        connecting to Qt signals in a thread-safe way. Must be one of
+        `"AutoConnection"`, `"DirectConnection"`, `"QueuedConnection"`.
+        If `None` (the default), `Qt.ConnectionType.AutoConnection` will be used.
 
     Examples
     --------
@@ -380,8 +391,13 @@ def listeners_connected(
         for attr_name in common_names:
             if _is_signal_instance(signal := getattr(emitter, attr_name)):
                 slot_name = name_map.get(attr_name, attr_name)
+                args: tuple[Any, ...] = ()
                 if callable(slot := getattr(listener, slot_name)):
-                    tokens[attr_name].add(signal.connect(slot))
+                    if qt_connection_type and "Qt" in type(signal).__module__:
+                        from qtpy.QtCore import Qt
+
+                        args = (getattr(Qt.ConnectionType, qt_connection_type),)
+                    tokens[attr_name].add(signal.connect(slot, *args))
 
     try:
         yield

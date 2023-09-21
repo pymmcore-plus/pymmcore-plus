@@ -82,7 +82,7 @@ def mda_listeners_connected(
         return
 
     # create a relay thread and start/stop it when the sequence starts/finishes
-    relay = MDARelayThread()
+    relay = MDARelayThread(type(mda_events))
     mda_events.sequenceStarted.connect(relay.start)
     mda_events.sequenceFinished.connect(relay.stop)
 
@@ -90,7 +90,12 @@ def mda_listeners_connected(
         # connect the actual core.mda.events to methods on the relay
         with listeners_connected(mda_events, relay):
             # connect the signals on the relay to the listeners
-            with listeners_connected(relay.signals, *listeners, name_map=name_map):
+            with listeners_connected(
+                relay.signals,
+                *listeners,
+                name_map=name_map,
+                qt_connection_type="DirectConnection",
+            ):
                 yield relay
 
                 if wait_on_exit:
@@ -115,13 +120,18 @@ class MDARelayThread(threading.Thread):
     Parameters
     ----------
     sleep_interval : float, optional
-        The interval in seconds to sleep between processing events, by default 0.001
+        The interval in seconds to sleep between processing events, by default 0.005
     """
 
-    def __init__(self, sleep_interval: float = 0.001) -> None:
+    def __init__(
+        self,
+        signal_class: type[PMDASignaler] | None = None,
+        sleep_interval: float = 0.005,
+    ) -> None:
         super().__init__()
-
-        self.signals = _get_auto_MDA_callback_class()()
+        if signal_class is None:
+            signal_class = _get_auto_MDA_callback_class()
+        self.signals = signal_class()
 
         self._sleep_interval = sleep_interval
         self._deque: deque[tuple[str, tuple[Any, ...]]] = deque()
