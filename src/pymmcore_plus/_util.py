@@ -393,10 +393,12 @@ def listeners_connected(
         common_names: set[str] = set(dir(emitter)).intersection(listener_names)
 
         for attr_name in common_names:
+            if attr_name.startswith("__"):
+                continue
             if _is_signal_instance(signal := getattr(emitter, attr_name)):
                 slot_name = name_map.get(attr_name, attr_name)
                 if callable(slot := getattr(listener, slot_name)):
-                    if qt_connection_type and "Qt" in type(signal).__module__:
+                    if qt_connection_type and _is_qt_signal(signal):
                         from qtpy.QtCore import Qt
 
                         ctype = getattr(Qt.ConnectionType, qt_connection_type)
@@ -419,3 +421,8 @@ def _is_signal_instance(obj: Any) -> TypeGuard[PSignalInstance]:
     return (
         hasattr(obj, "connect") and callable(obj.connect) and hasattr(obj, "disconnect")
     )
+
+
+def _is_qt_signal(obj: Any) -> TypeGuard[PSignalInstance]:
+    modname = getattr(type(obj), "__module__", "")
+    return "Qt" in modname or "Shiboken" in modname
