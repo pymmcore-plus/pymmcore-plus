@@ -397,6 +397,7 @@ def listeners_connected(
                 continue
             if _is_signal_instance(signal := getattr(emitter, attr_name)):
                 slot_name = name_map.get(attr_name, attr_name)
+                args: tuple[Any, ...] = ()
                 if callable(slot := getattr(listener, slot_name)):
                     if qt_connection_type and _is_qt_signal(signal):
                         from qtpy.QtCore import Qt
