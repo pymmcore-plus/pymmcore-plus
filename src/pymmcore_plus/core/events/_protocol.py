@@ -72,13 +72,13 @@ class PCoreSignaler(Protocol):
     def on_exposure_changed(device: str, new_exposure: float):
         print(f"Exposure changed for {device} to {new_exposure}")
 
-    core.exposureChanged.connect(my_callback)
+    core.events.exposureChanged.connect(my_callback)
     ```
 
     Events may also be connected as a decorator:
 
     ```python
-    @core.exposureChanged.connect
+    @core.events.exposureChanged.connect
     def on_exposure_changed(device: str, new_exposure: float):
         ...
     ```
