@@ -9,12 +9,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import numpy as np
     import useq
 
 
 class OMETiffWriter:
-    def __init__(self, filename: str) -> None:
+    def __init__(self, filename: Path | str) -> None:
         try:
             import tifffile  # noqa: F401
         except ImportError as e:
@@ -56,18 +58,20 @@ class OMETiffWriter:
         """Set the current sequence, and update the used axes."""
         self._current_sequence = seq
         if seq:
-            self._used_axes = tuple(x for x in seq.used_axes if x != "p")
+            self._used_axes = tuple(seq.used_axes)
 
     def _create_seq_memmap(
         self, frame: np.ndarray, seq: useq.MDASequence, meta: dict
     ) -> np.memmap:
         from tifffile import imwrite, memmap
 
-        shape = (*tuple(v for k, v in seq.sizes.items() if k != "p"), *frame.shape)
-        axes = (*(k for k in seq.sizes if k != "p"), "y", "x")
+        shape = (
+            *tuple(v for k, v in seq.sizes.items() if k in self._used_axes),
+            *frame.shape,
+        )
+        axes = (*self._used_axes, "y", "x")
         dtype = frame.dtype
         pixelsize = 1
-
         # see tifffile.tiffile for more metadata options
 
         metadata = {
