@@ -1,3 +1,3 @@
-from ._simple_tiff_writer import SimpleTiffWriter
+from ._tiff_series_writer import TiffSeriesWriter
 
-__all__ = ["SimpleTiffWriter"]
+__all__ = ["TiffSeriesWriter"]

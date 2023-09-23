@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 FRAME_KEY = "frame"
 
 
-class SimpleTiffWriter:
+class TiffSeriesWriter:
     """Write each frame of an MDA to a directory as individual TIFF files.
 
     This writer It assumes very little about the sequence, and simply writes each frame
