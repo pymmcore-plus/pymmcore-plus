@@ -64,6 +64,7 @@ testing = [
     "qtpy",
     "typer",
     "rich",
+    "zarr",
 ]
 dev = [
     "black",
