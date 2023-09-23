@@ -19,7 +19,7 @@ class OMETiffWriter:
     def __init__(self, filename: Path | str) -> None:
         try:
             import tifffile  # noqa: F401
-        except ImportError as e:
+        except ImportError as e:  # pragma: no cover
             raise ImportError(
                 "tifffile is required to use this handler. "
                 "Please `pip install tifffile`."
@@ -36,7 +36,7 @@ class OMETiffWriter:
         if self._mmap is None:
             if not self._current_sequence:
                 # just in case sequenceStarted wasn't called
-                self._set_sequence(event.sequence)
+                self._set_sequence(event.sequence)  # pragma: no cover
 
             if not (seq := self._current_sequence):
                 raise NotImplementedError(
