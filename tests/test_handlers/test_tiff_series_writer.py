@@ -8,7 +8,7 @@ import pytest
 import useq
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
-from pymmcore_plus.mda.handlers import TiffSeriesWriter
+from pymmcore_plus.mda.handlers import TiffSequenceWriter
 
 if TYPE_CHECKING:
     import tifffile as tf
@@ -26,7 +26,7 @@ def test_tiff_series_writer(tmp_path: Path, core: CMMCorePlus) -> None:
     )
 
     dest = tmp_path / "out"
-    writer = TiffSeriesWriter(dest, prefix="hello")
+    writer = TiffSequenceWriter(dest, prefix="hello")
 
     with mda_listeners_connected(
         writer, mda_events=core.mda.events, asynchronous=False
@@ -43,14 +43,14 @@ def test_tiff_series_writer(tmp_path: Path, core: CMMCorePlus) -> None:
     assert data.shape == (*mda.shape, 512, 512)
 
     # test metadata
-    frame_meta = json.loads((dest / TiffSeriesWriter.FRAME_META_PATH).read_text())
+    frame_meta = json.loads((dest / TiffSequenceWriter.FRAME_META_PATH).read_text())
     assert set(frame_meta) == {f.name for f in files_written}
     # we can recover the original MDASequence from the metadata
-    assert useq.MDASequence.from_file(dest / TiffSeriesWriter.SEQ_META_PATH) == mda
+    assert useq.MDASequence.from_file(dest / TiffSequenceWriter.SEQ_META_PATH) == mda
 
     # test overwrite
     with pytest.raises(FileExistsError):
-        TiffSeriesWriter(dest, prefix="hello", overwrite=False)
+        TiffSequenceWriter(dest, prefix="hello", overwrite=False)
 
-    TiffSeriesWriter(dest, prefix="hello", overwrite=True)
+    TiffSequenceWriter(dest, prefix="hello", overwrite=True)
     assert not dest.exists()

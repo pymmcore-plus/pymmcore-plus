@@ -1,4 +1,7 @@
-"""Simple TIFF series writer for MDASequences."""
+"""Simple TIFF sequence writer for MDASequences.
+
+Writes each frame of an MDA to a directory as individual TIFF files.
+"""
 
 from __future__ import annotations
 
@@ -14,7 +17,7 @@ if TYPE_CHECKING:
 FRAME_KEY = "frame"
 
 
-class TiffSeriesWriter:
+class TiffSequenceWriter:
     """Write each frame of an MDA to a directory as individual TIFF files.
 
     This writer It assumes very little about the sequence, and simply writes each frame
