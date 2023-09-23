@@ -13,7 +13,8 @@ else:
     zarr = pytest.importorskip("zarr")
 
 
-def test_ome_zarr_writer(tmp_path: Path, core: CMMCorePlus) -> None:
+@pytest.mark.parametrize("store", ["out.zarr", None, "tmp"])
+def test_ome_zarr_writer(store: str | None, tmp_path: Path, core: CMMCorePlus) -> None:
     mda = useq.MDASequence(
         channels=["Cy5", "FITC"],
         time_plan={"interval": 0.1, "loops": 3},
@@ -22,13 +23,27 @@ def test_ome_zarr_writer(tmp_path: Path, core: CMMCorePlus) -> None:
         axis_order="tpcz",
     )
 
-    dest = tmp_path / "out.zarr"
-    writer = OMEZarrWriter(dest)
+    if store == "tmp":
+        writer = OMEZarrWriter.in_tmpdir()
+    elif store is None:
+        writer = OMEZarrWriter()
+    else:
+        writer = OMEZarrWriter(tmp_path / store)
 
     with mda_listeners_connected(writer, mda_events=core.mda.events):
         core.mda.run(mda)
 
-    data = zarr.open(dest)
     no_p_shape = tuple(v for k, v in mda.sizes.items() if k != "p")
-    assert data["p0"].shape == (*no_p_shape, 512, 512)
-    assert data["p1"].shape == (*no_p_shape, 512, 512)
+    expected_shape = (*no_p_shape, 512, 512)
+
+    actual_shapes = {k: v.shape for k, v in writer.group.arrays()}
+    assert actual_shapes == {"p0": expected_shape, "p1": expected_shape}
+
+    if store:
+        # check that non-memory stores were written to disk
+        data = zarr.open(writer.group.store.path)
+        actual_shapes = {k: v.shape for k, v in data.arrays()}
+        assert actual_shapes == {"p0": expected_shape, "p1": expected_shape}
+
+        p0 = data["p0"]
+        assert p0[0, 0, 0].mean() > p0.fill_value  # real data was written
