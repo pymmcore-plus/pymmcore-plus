@@ -13,7 +13,7 @@ else:
     zarr = pytest.importorskip("zarr")
 
 
-def test_ome_tiff_writer(tmp_path: Path, core: CMMCorePlus) -> None:
+def test_ome_zarr_writer(tmp_path: Path, core: CMMCorePlus) -> None:
     mda = useq.MDASequence(
         channels=["Cy5", "FITC"],
         time_plan={"interval": 0.1, "loops": 3},
