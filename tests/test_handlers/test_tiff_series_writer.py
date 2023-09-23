@@ -16,7 +16,7 @@ else:
     tf = pytest.importorskip("tifffile")
 
 
-def test_simple_tiff_writer(tmp_path: Path, core: CMMCorePlus) -> None:
+def test_tiff_series_writer(tmp_path: Path, core: CMMCorePlus) -> None:
     mda = useq.MDASequence(
         channels=["Cy5", "FITC"],
         time_plan={"interval": 0.1, "loops": 3},

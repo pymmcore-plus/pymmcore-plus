@@ -1,4 +1,4 @@
-"""Simple TIFF writer for MDASequences."""
+"""Simple TIFF series writer for MDASequences."""
 
 from __future__ import annotations
 
