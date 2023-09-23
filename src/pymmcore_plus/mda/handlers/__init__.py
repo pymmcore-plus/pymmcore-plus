@@ -1,3 +1,3 @@
-from ._ome_zarr_writer import OMEZarrHandler
+from ._ome_zarr_writer import OMEZarrWriter
 
-__all__ = ["OMEZarrHandler"]
+__all__ = ["OMEZarrWriter"]

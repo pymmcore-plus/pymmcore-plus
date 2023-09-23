@@ -14,6 +14,7 @@ if TYPE_CHECKING:
     import numpy as np
     import useq
     import zarr
+    from fsspec import FSMap
     from numcodecs.abc import Codec
     from typing_extensions import TypedDict
 
@@ -38,7 +39,7 @@ if TYPE_CHECKING:
 POS_PREFIX = "p"
 
 
-class OMEZarrHandler:
+class OMEZarrWriter:
     """MDA handler that writes to a zarr file following the ome-ngff spec.
 
     This implements v0.4
@@ -100,7 +101,7 @@ class OMEZarrHandler:
 
     def __init__(
         self,
-        store: MutableMapping | str | None = None,
+        store: MutableMapping | str | os.PathLike | FSMap | None = None,
         *,
         overwrite: bool = False,
         synchronizer: ZarrSynchronizer | None = None,
@@ -151,7 +152,7 @@ class OMEZarrHandler:
         dir: str | PathLike[str] | None = None,
         cleanup_atexit: bool = True,
         **kwargs: Any,
-    ) -> OMEZarrHandler:
+    ) -> OMEZarrWriter:
         """Create OMEZarrHandler that writes to a temporary directory.
 
         Parameters
