@@ -111,7 +111,7 @@ class OMEZarrWriter:
     ) -> None:
         try:
             import zarr
-        except ImportError as e:
+        except ImportError as e:  # pragma: no cover
             raise ImportError(
                 "zarr is required to use this handler. Install with `pip install zarr`"
             ) from e
@@ -125,7 +125,9 @@ class OMEZarrWriter:
         )
 
         # if we don't check this here, we'll get an error when creating the first array
-        if not overwrite and any(self._group.arrays()) or self._group.attrs:
+        if (
+            not overwrite and any(self._group.arrays()) or self._group.attrs
+        ):  # pragma: no cover
             path = self._group.store.path if hasattr(self._group.store, "path") else ""
             raise ValueError(
                 f"There is already data in {path!r}. Use 'overwrite=True' to overwrite."
