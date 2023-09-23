@@ -29,6 +29,21 @@ class SimpleTiffWriter:
     The metadata for the entire MDA sequence is stored in a JSON file in the directory
     (by default, named ".sequence_metadata.json").
 
+    !!! note
+
+        This writer outputs a format that is easily consumed by `tifffile.imread`
+        using the `pattern="axes"` option.
+
+        ```python
+        from tifffile import imread
+        data = imread("my_folder/*.tif", pattern="axes")
+
+        # or with zarr
+        import zarr
+        store = imread('data_folder/*.tif', pattern='axes', aszarr=True)
+        data = zarr.open(store)
+        ```
+
     Parameters
     ----------
     directory: Path | str
@@ -106,7 +121,7 @@ class SimpleTiffWriter:
         if seq:
             self._name_template = self.fname_template(
                 seq.used_axes,
-                prefix=self._prefix or f"seq{str(seq.uid)[:6]}",
+                prefix=self._prefix,
                 extension=self._ext,
                 delimiter=self._delimiter,
                 include_frame_count=self._include_frame_count,
@@ -119,7 +134,10 @@ class SimpleTiffWriter:
         # WRITE DATA TO DISK
         frame_idx = next(self._counter)
         if self._name_template:
-            indices = {**event.index, FRAME_KEY: frame_idx}
+            if FRAME_KEY in self._name_template:
+                indices: Mapping = {**event.index, FRAME_KEY: frame_idx}
+            else:
+                indices = event.index
             name = self._name_template.format(**indices)
         else:
             # if we don't have a sequence, just use the counter
@@ -161,9 +179,9 @@ class SimpleTiffWriter:
         Examples
         --------
         >>> SimpleTiffWriter.fname_template("tcz")
-        'fr{frame:05}_t{t:04}_c{c:02}_z{z:03}.tif'
+        '{frame:05}_t{t:04}_c{c:02}_z{z:03}.tif'
         >>> fname_template({"c": 2, "z": 3}, "some_prefix")
-        'some_prefix_fr{frame:05}_c{c:02}_z{z:03}.tif'
+        'some_prefix{frame:05}_c{c:02}_z{z:03}.tif'
         """
         # determine the number of digits to use for each axis
         # if an axis is not in ndigits, it will use 3 digits
@@ -178,5 +196,8 @@ class SimpleTiffWriter:
         if prefix and not prefix.endswith(delimiter):
             prefix += delimiter
         if include_frame_count:
-            prefix += f"fr{{{FRAME_KEY}:05}}{delimiter}"
+            prefix = prefix.rstrip(delimiter)
+            if prefix:
+                prefix += "-"
+            prefix += f"{{{FRAME_KEY}:05}}{delimiter}"
         return f"{prefix}{items}{extension}"

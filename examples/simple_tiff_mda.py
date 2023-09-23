@@ -16,7 +16,9 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
-writer = SimpleTiffWriter("data_folder", overwrite=True)
+writer = SimpleTiffWriter(
+    "data_folder", overwrite=True, prefix="asdf", include_frame_count=True
+)
 
 with mda_listeners_connected(writer):
     core.mda.run(sequence)
