@@ -6,7 +6,8 @@ https://forum.image.sc/t/how-to-create-an-image-series-ome-tiff-from-python/4273
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any, cast
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -71,22 +72,34 @@ class OMETiffWriter:
         )
         axes = (*self._used_axes, "y", "x")
         dtype = frame.dtype
-        pixelsize = 1
+
         # see tifffile.tiffile for more metadata options
+        metadata: dict[str, Any] = {"axes": "".join(axes).upper()}
+        if seq:
+            if seq.time_plan and hasattr(seq.time_plan, "interval"):
+                interval = seq.time_plan.interval
+                if isinstance(interval, timedelta):
+                    interval = interval.total_seconds()
+                metadata["TimeIncrement"] = interval
+                metadata["TimeIncrementUnit"] = "s"
+            if seq.z_plan and hasattr(seq.z_plan, "step"):
+                metadata["PhysicalSizeZ"] = seq.z_plan.step
+                metadata["PhysicalSizeZUnit"] = "µm"
+            if seq.channels:
+                metadata["Channel"] = {"Name": [c.config for c in seq.channels]}
+        if acq_date := meta.get("Time"):
+            metadata["AcquisitionDate"] = acq_date
+        if pix := meta.get("PixelSizeUm"):
+            metadata["PhysicalSizeX"] = pix
+            metadata["PhysicalSizeY"] = pix
+            metadata["PhysicalSizeXUnit"] = "µm"
+            metadata["PhysicalSizeYUnit"] = "µm"
 
-        metadata = {
-            "axes": "".join(axes).upper(),
-            "SignificantBits": 12,
-            "TimeIncrement": 0.1,
-            "TimeIncrementUnit": "s",
-            "PhysicalSizeX": pixelsize,
-            "PhysicalSizeXUnit": "µm",
-            "PhysicalSizeY": pixelsize,
-            "PhysicalSizeYUnit": "µm",
-            # "Channel": {"Name": ["Channel 1", "Channel 2"]},
-            # "Plane": {"PositionX": [0.0] * 16, "PositionXUnit": ["µm"] * 16},
-        }
-
+        # TODO:
+        # there's a lot we could still capture, but it comes off the microscope
+        # over the course of the acquisition (such as stage positions, exposure times)
+        # ... one option is to accumulate these things and then use `tifffile.comment`
+        # to update the total metadata in sequenceFinished
         imwrite(self._filename, shape=shape, dtype=dtype, metadata=metadata)
 
         # memory map numpy array to data in OME-TIFF file

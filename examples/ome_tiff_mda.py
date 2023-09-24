@@ -6,13 +6,14 @@ from pymmcore_plus.mda.handlers import OMETiffWriter
 from useq import MDASequence
 
 core = CMMCorePlus.instance()
-core.loadSystemConfiguration()
+core.loadSystemConfiguration("tests/local_config.cfg")
+core.setPixelSizeConfig("Res40x")
 
 sequence = MDASequence(
-    channels=["DAPI", {"config": "FITC", "exposure": 1}],
-    # stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
-    time_plan={"interval": 2, "loops": 2},
-    z_plan={"range": 4, "step": 0.5},
+    channels=["DAPI", {"config": "FITC", "exposure": 2}],
+    stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
+    time_plan={"interval": 0.66, "loops": 3},
+    z_plan={"range": 4, "step": 0.76},
     axis_order="tpcz",
 )
 
