@@ -227,5 +227,7 @@ class PixelType(str, Enum):
     @classmethod
     def for_bytes(cls, depth: int, n_comp: int = 1) -> PixelType:
         if depth != 4:
-            return {1: cls.GRAY8, 2: cls.GRAY16, 8: cls.RGB64, 0: cls.UNKNOWN}[depth]
+            return {1: cls.GRAY8, 2: cls.GRAY16, 8: cls.RGB64, 0: cls.UNKNOWN}.get(
+                depth, cls.UNKNOWN
+            )
         return cls.GRAY32 if n_comp == 1 else cls.RGB32
