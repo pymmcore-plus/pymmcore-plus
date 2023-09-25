@@ -1287,16 +1287,26 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`:
         added to complement `getXPosition` and `getYPosition`*
+
+        !!! note
+            This is simply an alias for [`pymmcore.CMMCore.getPosition`][], which
+            returns the position of the current focus device when called without
+            arguments.
         """
-        return self.getPosition(self.getFocusDevice())
+        return self.getPosition()
 
     def setZPosition(self, val: float) -> None:
         """Set the position of the current focus device in microns.
 
         :sparkles: *This method is new in `CMMCorePlus`:
         added to complement `setXYPosition`*
+
+        !!! note
+            This is simply an alias for [`pymmcore.CMMCore.setPosition`][], which
+            returns the position of the current focus device when called with a single
+            argument.
         """
-        return self.setPosition(self.getFocusDevice(), val)
+        return self.setPosition(val)
 
     @overload
     def setPosition(self, position: float) -> None:
