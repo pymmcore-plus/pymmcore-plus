@@ -20,6 +20,7 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
+from pymmcore_plus.mda._engine import _summary_meta
 from qtpy.QtCore import QObject
 from qtpy.QtCore import SignalInstance as QSignalInstance
 from useq import MDASequence
@@ -146,7 +147,13 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
         assert isinstance(_call.args[0], np.ndarray)
         assert _call.args[1] == event
 
-    ss_mock.assert_called_once_with(mda)
+    summary = _summary_meta(core)
+    summary.pop("DateAndTime", "")
+    ss_mock.assert_called_once()
+    _seq, _meta = ss_mock.call_args[0]
+    assert _seq == mda
+    _meta.pop("DateAndTime", "")
+    assert _meta == summary
     sf_mock.assert_called_once_with(mda)
     xystage_mock.assert_called_with("XY", 1.0, 1.0)
     exp_mock.assert_called_with("Camera", 1.0)
@@ -200,7 +207,8 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
     with qtbot.waitSignal(core.mda._signals.sequenceFinished):
         core.run_mda(mda)
 
-    ss_mock.assert_called_once_with(mda)
+    ss_mock.assert_called_once()
+    assert ss_mock.call_args[0][0] == mda
     cancel_mock.assert_called_once_with(mda)
     assert _fcount < len(list(mda))
     sf_mock.assert_called_once_with(mda)
