@@ -1289,9 +1289,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         added to complement `getXPosition` and `getYPosition`*
 
         !!! note
-            This is simply an alias for [`pymmcore.CMMCore.getPosition`][], which
-            returns the position of the current focus device when called without
-            arguments.
+            This is simply an alias for `getPosition`], which returns the position of
+            the current focus device when called without arguments.
         """
         return self.getPosition()
 
@@ -1302,9 +1301,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         added to complement `setXYPosition`*
 
         !!! note
-            This is simply an alias for [`pymmcore.CMMCore.setPosition`][], which
-            returns the position of the current focus device when called with a single
-            argument.
+            This is simply an alias for `setPosition`, which returns the position of the
+            current focus device when called with a single argument.
         """
         return self.setPosition(val)
 
