@@ -1,23 +1,54 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Iterable, Iterator, NamedTuple, Sequence, cast
+from datetime import datetime
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Iterable,
+    Iterator,
+    Mapping,
+    NamedTuple,
+    Sequence,
+    cast,
+)
 
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
+from pymmcore_plus.core._constants import PixelType
 from pymmcore_plus.core._sequencing import SequencedEvent
 
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
     from numpy.typing import NDArray
+    from typing_extensions import TypedDict
 
     from pymmcore_plus.core import CMMCorePlus
     from pymmcore_plus.core._mmcore_plus import TaggedImage
 
     from ._protocol import PImagePayload
+
+    # currently matching keys from metadata from AcqEngJ
+    SummaryMetadata = TypedDict(
+        "SummaryMetadata",
+        {
+            "DateAndTime": str,
+            "PixelType": str,
+            "PixelSize_um": float,
+            "Core-XYStage": str,
+            "Core-Focus": str,
+            "Core-Autofocus": str,
+            "Core-Camera": str,
+            "Core-Galvo": str,
+            "Core-ImageProcessor": str,
+            "Core-SLM": str,
+            "Core-Shutter": str,
+            "AffineTransform": str,
+        },
+    )
 
 
 class MDAEngine(PMDAEngine):
@@ -60,12 +91,8 @@ class MDAEngine(PMDAEngine):
 
     # ===================== Protocol Implementation =====================
 
-    def setup_sequence(self, sequence: MDASequence) -> None:
-        """Setup the hardware for the entire sequence.
-
-        (currently, this does nothing but get the global `CMMCorePlus` singleton
-        if one has not already been provided).
-        """
+    def setup_sequence(self, sequence: MDASequence) -> Mapping[str, Any]:
+        """Setup the hardware for the entire sequence."""
         if not self._mmc:  # pragma: no cover
             from pymmcore_plus.core import CMMCorePlus
 
@@ -75,6 +102,7 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = self._mmc.getAutoShutter()
+        return _summary_meta(self._mmc)
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()
@@ -370,3 +398,22 @@ class ImagePayload(NamedTuple):
     image: NDArray
     event: MDAEvent
     metadata: dict
+
+
+def _summary_meta(core: CMMCorePlus) -> SummaryMetadata:
+    pt = PixelType.for_bytes(core.getBytesPerPixel(), core.getNumberOfComponents())
+
+    return {
+        "DateAndTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+        "PixelType": str(pt),
+        "PixelSize_um": core.getPixelSizeUm(),
+        "Core-XYStage": core.getXYStageDevice(),
+        "Core-Focus": core.getFocusDevice(),
+        "Core-Autofocus": core.getAutoFocusDevice(),
+        "Core-Camera": core.getCameraDevice(),
+        "Core-Galvo": core.getGalvoDevice(),
+        "Core-ImageProcessor": core.getImageProcessorDevice(),
+        "Core-SLM": core.getSLMDevice(),
+        "Core-Shutter": core.getShutterDevice(),
+        "AffineTransform": "Undefined",
+    }
