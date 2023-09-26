@@ -359,10 +359,10 @@ class MDAEngine(PMDAEngine):
         self._mmc.enableContinuousFocus(False)
 
         # setup the autofocus device
-        self._mmc.setPosition(
-            action.autofocus_device_name,
-            action.autofocus_motor_offset,
-        )
+        if name := getattr(action, "autofocus_device_name", None):
+            self._mmc.setPosition(name, action.autofocus_motor_offset)
+        else:
+            self._mmc.setAutoFocusOffset(action.autofocus_motor_offset)
         self._mmc.waitForSystem()
 
         @retry(exceptions=RuntimeError, tries=action.max_retries, logger=logger.warning)
