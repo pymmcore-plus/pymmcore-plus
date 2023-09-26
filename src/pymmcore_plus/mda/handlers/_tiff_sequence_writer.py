@@ -121,7 +121,7 @@ class TiffSequenceWriter:
         self._directory.mkdir(parents=True, exist_ok=True)
 
         self._current_sequence = seq
-        self._axes = self._get_axis_labels(seq)
+        self._axes = self._get_full_sequence_axis(seq)
         if seq:
             self._name_template = self.fname_template(
                 self._axes,
@@ -133,8 +133,8 @@ class TiffSequenceWriter:
             # make directory and write metadata
             self._seq_meta_file.write_text(seq.json(exclude_unset=True, indent=4))
 
-    def _get_axis_labels(self, sequence: useq.MDASequence) -> tuple[str, ...]:
-        """Get the axis labels from sequence and sub-sequences."""
+    def _get_full_sequence_axis(self, sequence: useq.MDASequence) -> tuple[str, ...]:
+        """Get the combined axis labels from sequence and sub-sequences."""
         # axis main sequence
         main_seq_axis = list(sequence.used_axes)
         if not sequence.stage_positions:
@@ -155,7 +155,8 @@ class TiffSequenceWriter:
 
         if self._name_template:
             if self._axes != tuple(event.index.keys()):
-                # add axes that are not in the event but are a sub-sequence
+                # if the event.index has fewer axes than self._axes, we need to
+                # add the missing axes with a value of 0
                 _add_axes = set(self._axes) - set(event.index.keys())
                 _ev_index = {**event.index, **{ax: 0 for ax in _add_axes}}
             else:
