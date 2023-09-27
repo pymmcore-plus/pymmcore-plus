@@ -8,7 +8,7 @@ class PMDASignaler(Protocol):
     """Declares the protocol for all signals that will be emitted from [`pymmcore_plus.mda.MDARunner`][]."""  # noqa: E501
 
     sequenceStarted: PSignal
-    """Emits `(sequence: MDASequence)` when an acquisition sequence is started."""
+    """Emits `(sequence: MDASequence, metadata: dict)` when an acquisition sequence is started."""  # noqa: E501
     sequencePauseToggled: PSignal
     """Emits `(paused: bool)` when an acquisition sequence is paused or unpaused."""
     sequenceCanceled: PSignal
@@ -16,4 +16,4 @@ class PMDASignaler(Protocol):
     sequenceFinished: PSignal
     """Emits `(sequence: MDASequence)` when an acquisition sequence is finished."""
     frameReady: PSignal
-    """Emits `(img, MDAEvent, metadata)` after an image is acquired during an acquisition sequence."""  # noqa: E501
+    """Emits `(img: np.ndarray, event: MDAEvent, metadata: dict)` after an image is acquired during an acquisition sequence."""  # noqa: E501

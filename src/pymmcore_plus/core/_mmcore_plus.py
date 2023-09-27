@@ -36,7 +36,7 @@ from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
-from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
+from ._constants import DeviceDetectionStatus, DeviceType, PixelType, PropertyType
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
@@ -1287,16 +1287,24 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`:
         added to complement `getXPosition` and `getYPosition`*
+
+        !!! note
+            This is simply an alias for `getPosition`], which returns the position of
+            the current focus device when called without arguments.
         """
-        return self.getPosition(self.getFocusDevice())
+        return self.getPosition()
 
     def setZPosition(self, val: float) -> None:
         """Set the position of the current focus device in microns.
 
         :sparkles: *This method is new in `CMMCorePlus`:
         added to complement `setXYPosition`*
+
+        !!! note
+            This is simply an alias for `setPosition`, which returns the position of the
+            current focus device when called with a single argument.
         """
-        return self.setPosition(self.getFocusDevice(), val)
+        return self.setPosition(val)
 
     @overload
     def setPosition(self, position: float) -> None:
@@ -1496,12 +1504,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         tags["ROI"] = "-".join(str(x) for x in self.getROI())
         tags["Width"] = self.getImageWidth()
         tags["Height"] = self.getImageHeight()
-        if (depth := self.getBytesPerPixel()) == 4:
-            ncomp = self.getNumberOfComponents()
-            pix_type = "GRAY32" if ncomp == 1 else "RGB32"
-        else:
-            pix_type = {1: "GRAY8", 2: "GRAY16", 8: "RGB64"}[depth]
-        tags["PixelType"] = pix_type
+        tags["PixelType"] = str(
+            PixelType.for_bytes(self.getBytesPerPixel(), self.getNumberOfComponents())
+        )
         tags["Frame"] = 0
         tags["FrameIndex"] = 0
         tags["Position"] = "Default"
