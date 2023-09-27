@@ -10,6 +10,8 @@ from itertools import count
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Mapping, Sequence
 
+from ._util import get_full_sequence_axes
+
 if TYPE_CHECKING:
     import numpy as np
     import useq
@@ -121,9 +123,10 @@ class TiffSequenceWriter:
         self._directory.mkdir(parents=True, exist_ok=True)
 
         self._current_sequence = seq
+        self._axes = get_full_sequence_axes(seq)
         if seq:
             self._name_template = self.fname_template(
-                seq.used_axes,
+                self._axes,
                 prefix=self._prefix,
                 extension=self._ext,
                 delimiter=self._delimiter,
@@ -136,12 +139,23 @@ class TiffSequenceWriter:
         """Write a frame to disk."""
         # WRITE DATA TO DISK
         frame_idx = next(self._counter)
+
         if self._name_template:
-            if FRAME_KEY in self._name_template:
-                indices: Mapping = {**event.index, FRAME_KEY: frame_idx}
+            if self._axes != tuple(event.index):
+                # if the event.index has fewer axes than self._axes, we need to
+                # add the missing axes with a value of 0
+                _add_axes = set(self._axes) - set(event.index)
+                _ev_index = {**event.index, **{ax: 0 for ax in _add_axes}}
             else:
-                indices = event.index
+                _ev_index = {**event.index}
+
+            if FRAME_KEY in self._name_template:
+                indices = {**_ev_index, FRAME_KEY: frame_idx}
+            else:
+                indices = _ev_index
+
             name = self._name_template.format(**indices)
+
         else:
             # if we don't have a sequence, just use the counter
             name = f"{self._prefix}_fr{frame_idx:05}.tif"
