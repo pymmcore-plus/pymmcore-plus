@@ -107,6 +107,29 @@ else:
 _OBJDEV_REGEX = re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
+# these are devices for which setAutoFocusOffset is known to have no effect
+# maps (device_library, device_name) -> offset_device_name
+# see _getAutoFocusOffsetDevice for details
+_OFFSET_DEVICES: dict[tuple[str, str], str] = {
+    ("NikonTE2000", "PerfectFocus"): "PFS-Offset",
+    ("NikonTI", "TIPFSStatus"): "TIPFSOffset",
+    # --------------------------
+    # these devices have an apparent offset device
+    # but may implicitly/privately control it just fine with the setOffset API
+    # need testing to see whether setAutoFocusOffset works as is.
+    # ("ZeissCAN29", "ZeissDefiniteFocus"): "ZeissDefiniteFocusOffset",
+    # ("Olympus", "AutoFocusZDC"): "ZDC2OffsetDrive",
+    # ("OlympusIX83", "Autofocus"): "AutofocusDrive",
+    # ("LeicaDMI", "Adaptive Focus Control"): "Adaptive Focus Control Offset",
+    # --------------------------
+    # these devices have a known no-op for setOffset()
+    # but have no apparent offset device
+    # ("DemoCamera", "DAutoFocus"): "",
+    # ("AmScope", ""): "",
+    # ("ASIStage", "CRIF"): "",
+    # ("FocalPoint", "FocalPoint"): "",
+}
+
 STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)
@@ -1660,6 +1683,53 @@ class CMMCorePlus(pymmcore.CMMCore):
             super().stopSequenceAcquisition(cameraLabel)
         cameraLabel = cameraLabel or super().getCameraDevice()
         self.events.sequenceAcquisitionStopped.emit(cameraLabel)
+
+    def setAutoFocusOffset(self, offset: float) -> None:
+        """Applies offset the one-shot focusing device.
+
+        In micro-manager, there is some variability in the way that autofocus devices
+        are implemented.  Some have a separate offset device, while others can directly
+        set the offset of an associated device.  As a result, calling
+        `setAutoFocusOffset`, may or may not do anything depending on the current
+        autofocus device.
+
+        This method attempts to detect known autofocus devices and
+        """
+        if offset_dev := self._getAutoFocusOffsetDevice():
+            self.setPosition(offset_dev, offset)
+        super().setAutoFocusOffset(offset)
+
+    def getAutoFocusOffset(self) -> float:
+        if offset_dev := self._getAutoFocusOffsetDevice():
+            return self.getPosition(offset_dev)
+        return super().getAutoFocusOffset()
+
+    def _getAutoFocusOffsetDevice(self, af_dev: str | None = None) -> str | None:
+        """Return label of offset device for `af_dev` or the current autofocus device.
+
+        This method matches the device library and name of the provided or autofocus
+        device against a list of known autofocus devices that have an offset device
+        that must be manually managed.  If a match is found, the label of a currently
+        loaded stage device is returned (which may be used in a call to `setPosition`).
+
+        If no match is found, `None` is returned.
+        """
+        if af_dev is None:
+            af_dev = self.getAutoFocusDevice()
+
+        if af_dev:
+            try:
+                lib_name = self.getDeviceLibrary(af_dev)
+            except RuntimeError:
+                return None
+            dev_name = self.getDeviceName(af_dev)
+            if offset_dev := _OFFSET_DEVICES.get((lib_name, dev_name)):
+                # a match was found,
+                # find the label of currently loaded device with the same name
+                for dev in self.getLoadedDevicesOfType(DeviceType.StageDevice):
+                    if self.getDeviceName(dev) == offset_dev:
+                        return dev
+        return None
 
     def setAutoShutter(self, state: bool) -> None:
         """Set shutter to automatically open and close when an image is acquired.
