@@ -1,3 +1,3 @@
-from ._tiff_sequence_writer import TiffSequenceWriter
+from ._img_sequence_writer import ImageSequenceWriter
 
-__all__ = ["TiffSequenceWriter"]
+__all__ = ["ImageSequenceWriter"]

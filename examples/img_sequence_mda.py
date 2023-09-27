@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
-from pymmcore_plus.mda.handlers import TiffSequenceWriter
+from pymmcore_plus.mda.handlers import ImageSequenceWriter
 from useq import MDASequence, Position
 
 core = CMMCorePlus.instance()
@@ -21,12 +21,13 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
-writer = TiffSequenceWriter(
-    "data_folder",
-    overwrite=True,
-    prefix="test",
-    include_frame_count=True,
+# requires tifffile
+tiff_writer = ImageSequenceWriter(
+    "data_folder", overwrite=True, prefix="test", include_frame_count=True
 )
 
-with mda_listeners_connected(writer):
+# requires imageio
+png_writer = ImageSequenceWriter("data_folderp", extension=".png", overwrite=True)
+
+with mda_listeners_connected(tiff_writer, png_writer):
     core.mda.run(sequence)
