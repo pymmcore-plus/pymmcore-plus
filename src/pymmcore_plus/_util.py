@@ -15,6 +15,8 @@ import appdirs
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterator, Literal, TypeVar
 
+    QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
+
     from typing_extensions import ParamSpec, TypeGuard
 
     from .core.events._protocol import PSignalInstance
@@ -314,12 +316,19 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
 
 
 @contextmanager
-def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
+def listeners_connected(
+    emitter: Any,
+    *listeners: Any,
+    name_map: dict[str, str] | None = None,
+    qt_connection_type: QtConnectionType | None = None,
+) -> Iterator[None]:
     """Context manager for listening to signals.
 
     This provides a way for one or more `listener` to temporarily connect to signals on
-    an `emitter`. Any methods on `listener` that match signals on `emitter` will be
-    connected, then disconnected when the context exits (see example below).
+    an `emitter`. Any method names on `listener` that match signal names on `emitter`
+    will be connected, then disconnected when the context exits (see example below).
+    Names can be mapped explicitly using `name_map` if the signal names do not match
+    exactly.
 
     Parameters
     ----------
@@ -329,6 +338,16 @@ def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
         methods.
     listeners : Any
         Object(s) that has methods matching the name of signals on `emitter`.
+    name_map : dict[str, str] | None
+        Optionally map signal names on `emitter` to different method names on
+        `listener`.  This can be used to connect callbacks with different names. By
+        default, callbacks names must match the signal names exactly.
+    qt_connection_type: str | None
+        ADVANCED: Optionally specify the Qt connection type to use when connecting
+        signals, in the case where `emitter` is a Qt object.  This is useful for
+        connecting to Qt signals in a thread-safe way. Must be one of
+        `"AutoConnection"`, `"DirectConnection"`, `"QueuedConnection"`.
+        If `None` (the default), `Qt.ConnectionType.AutoConnection` will be used.
 
     Examples
     --------
@@ -353,15 +372,36 @@ def listeners_connected(emitter: Any, *listeners: Any) -> Iterator[None]:
     """
     # mapping of signal name on emitter to a set of tokens to disconnect later.
     tokens: defaultdict[str, set[Any]] = defaultdict(set)
+    name_map = name_map or {}
 
     for listener in listeners:
-        # get a list of common names:
-        common_attrs: set[str] = set(dir(emitter)).intersection(dir(listener))
+        if isinstance(listener, dict):  # pragma: no cover
+            import warnings
 
-        for attr_name in common_attrs:
+            warnings.warn(
+                "Received a dict as a listener. Did you mean to use `name_map`?",
+                stacklevel=2,
+            )
+            continue
+
+        # get a list of common names:
+        listener_names = set(dir(listener)).union(name_map)
+        common_names: set[str] = set(dir(emitter)).intersection(listener_names)
+
+        for attr_name in common_names:
+            if attr_name.startswith("__"):
+                continue
             if _is_signal_instance(signal := getattr(emitter, attr_name)):
-                if callable(slot := getattr(listener, attr_name)):
-                    tokens[attr_name].add(signal.connect(slot))
+                slot_name = name_map.get(attr_name, attr_name)
+                if callable(slot := getattr(listener, slot_name)):
+                    if qt_connection_type and _is_qt_signal(signal):
+                        from qtpy.QtCore import Qt
+
+                        ctype = getattr(Qt.ConnectionType, qt_connection_type)
+                        token = signal.connect(slot, ctype)  # type: ignore
+                        tokens[attr_name].add(token)
+                    else:
+                        tokens[attr_name].add(signal.connect(slot))
 
     try:
         yield
@@ -377,3 +417,8 @@ def _is_signal_instance(obj: Any) -> TypeGuard[PSignalInstance]:
     return (
         hasattr(obj, "connect") and callable(obj.connect) and hasattr(obj, "disconnect")
     )
+
+
+def _is_qt_signal(obj: Any) -> TypeGuard[PSignalInstance]:
+    modname = getattr(type(obj), "__module__", "")
+    return "Qt" in modname or "Shiboken" in modname

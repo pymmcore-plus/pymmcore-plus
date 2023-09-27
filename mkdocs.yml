@@ -21,7 +21,6 @@ nav:
           - guides/custom_engine.md
           - guides/event_driven_acquisition.md
           - guides/logging.md
-          - guides/pycromanager_migration.md
       - Examples:
           - examples/mda.md
           - examples/integration-with-qt.md

@@ -59,23 +59,23 @@ python users are accustomed to. This library:
 - generally feel more pythonic (note however, `camelCase` method names from the
   CMMCore API are _not_ substituted with `snake_case`).
 
-## What about `Pycro-Manager`?
+## How does this relate to `Pycro-Manager`?
 
-[Pycro-Manager](https://github.com/micro-manager/pycro-manager) is a library
-designed to make it easier to work with and control the **Java** Micro-manager
-application using python. As such, it requires Java to be installed and running
-in the background (either via the micro-manager GUI application directly, or via
-a headless process). The python half communicates with the Java half using
-ZeroMQ messaging.
+[Pycro-Manager](https://github.com/micro-manager/pycro-manager) is an impressive
+library written by Henry Pinkard designed to make it easier to work with and
+control the Java Micro-manager application using python. As such, it requires
+Java to be installed and running in the background (either via the micro-manager
+GUI application directly, or via a headless process). The python half
+communicates with the Java half using ZeroMQ messaging.
 
 **In brief**: while `Pycro-Manager` provides a python API to control the Java
 Micro-manager application (which in turn controls the C++ core), `pymmcore-plus`
 provides a python API to control the C++ core directly, without the need for
-Java in the loop.
-
-See [migrating from
-pycromanager](https://pymmcore-plus.github.io/pymmcore-plus/guides/pycromanager_migration/)
-for details.
+Java in the loop.  Each has its own advantages and disadvantages!  With
+pycro-manager you immediately get the entire existing micro-manager ecosystem
+and GUI application. With pymmcore-plus you don't need to install Java, and you
+have direct access to the memory buffers used by the C++ core, but the GUI
+side of things is far less mature.
 
 ## Quickstart
 
