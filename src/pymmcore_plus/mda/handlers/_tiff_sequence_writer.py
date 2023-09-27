@@ -141,7 +141,7 @@ class TiffSequenceWriter:
         frame_idx = next(self._counter)
 
         if self._name_template:
-            if self._axes != tuple(event.index.keys()):
+            if self._axes != tuple(event.index):
                 # if the event.index has fewer axes than self._axes, we need to
                 # add the missing axes with a value of 0
                 _add_axes = set(self._axes) - set(event.index.keys())
