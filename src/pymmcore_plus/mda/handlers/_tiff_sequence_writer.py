@@ -27,12 +27,12 @@ class TiffSequenceWriter:
     sequences, or where the exact number of frames is not known in advance.
 
     The metadata for each frame is stored in a JSON file in the directory (by default,
-    named ".frame_metadata.json").  The metadata is stored as a dict, with the key
+    named "_frame_metadata.json").  The metadata is stored as a dict, with the key
     being the index string for the frame (see index_template), and the value being
     the metadata dict for that frame.
 
     The metadata for the entire MDA sequence is stored in a JSON file in the directory
-    (by default, named ".sequence_metadata.json").
+    (by default, named "_sequence_metadata.json").
 
     !!! note
 
@@ -62,8 +62,8 @@ class TiffSequenceWriter:
         Extra keyword arguments to pass to tifffile.imwrite.
     """
 
-    FRAME_META_PATH: ClassVar[str] = ".frame_metadata.json"
-    SEQ_META_PATH: ClassVar[str] = ".sequence_metadata.json"
+    FRAME_META_PATH: ClassVar[str] = "_frame_metadata.json"
+    SEQ_META_PATH: ClassVar[str] = "_sequence_metadata.json"
 
     def __init__(
         self,
@@ -120,13 +120,15 @@ class TiffSequenceWriter:
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """Store the sequence metadata and reset the frame counter."""
         self._counter = count()  # reset counter
+        self._frame_metadata = {}  # reset metadata
         self._directory.mkdir(parents=True, exist_ok=True)
 
         self._current_sequence = seq
-        self._axes = get_full_sequence_axes(seq)
+        axes = get_full_sequence_axes(seq)
+        self._first_index = dict.fromkeys(axes, 0)
         if seq:
             self._name_template = self.fname_template(
-                self._axes,
+                axes,
                 prefix=self._prefix,
                 extension=self._ext,
                 delimiter=self._delimiter,
@@ -135,36 +137,32 @@ class TiffSequenceWriter:
             # make directory and write metadata
             self._seq_meta_file.write_text(seq.json(exclude_unset=True, indent=4))
 
+    def sequenceFinished(self, seq: useq.MDASequence) -> None:
+        # write final frame metadata to disk
+        self._frame_meta_file.write_text(json.dumps(self._frame_metadata, indent=2))
+
     def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
         """Write a frame to disk."""
-        # WRITE DATA TO DISK
         frame_idx = next(self._counter)
-
         if self._name_template:
-            if self._axes != tuple(event.index):
-                # if the event.index has fewer axes than self._axes, we need to
-                # add the missing axes with a value of 0
-                _add_axes = set(self._axes) - set(event.index)
-                _ev_index = {**event.index, **{ax: 0 for ax in _add_axes}}
-            else:
-                _ev_index = {**event.index}
-
             if FRAME_KEY in self._name_template:
-                indices = {**_ev_index, FRAME_KEY: frame_idx}
+                indices = {**self._first_index, **event.index, FRAME_KEY: frame_idx}
             else:
-                indices = _ev_index
-
-            name = self._name_template.format(**indices)
-
+                indices = {**self._first_index, **event.index}
+            filename = self._name_template.format(**indices)
         else:
             # if we don't have a sequence, just use the counter
-            name = f"{self._prefix}_fr{frame_idx:05}.tif"
-        self._imwrite(self._directory / name, frame, **self._imwrite_kwargs)
+            filename = f"{self._prefix}_fr{frame_idx:05}.tif"
 
-        # write metadata to disk
+        # WRITE DATA TO DISK
+        self._imwrite(self._directory / filename, frame, **self._imwrite_kwargs)
+
+        # store metadata
         meta["Event"] = json.loads(event.json(exclude={"sequence"}, exclude_unset=True))
-        self._frame_metadata[name] = meta
-        self._frame_meta_file.write_text(json.dumps(self._frame_metadata, indent=2))
+        self._frame_metadata[filename] = meta
+        # write metadata to disk every 10 frames
+        if frame_idx % 10 == 0:
+            self._frame_meta_file.write_text(json.dumps(self._frame_metadata, indent=2))
 
     @staticmethod
     def fname_template(
@@ -205,7 +203,9 @@ class TiffSequenceWriter:
         ndigits = {"t": 4, "c": 2}  # Too magic?
         if isinstance(axes, Mapping):
             ndigits = {**ndigits, **axes}
-        ax_lengths = {ax: ndigits.get(ax.lower(), 3) for ax in axes}
+
+        lower_axes = (ax.lower() for ax in axes)
+        ax_lengths = {ax: ndigits.get(ax, 3) for ax in lower_axes}
 
         items = delimiter.join(
             (f"{ax}{{{ax}:0{lngth}}}" for ax, lngth in ax_lengths.items())
