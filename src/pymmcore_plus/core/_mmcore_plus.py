@@ -107,6 +107,29 @@ else:
 _OBJDEV_REGEX = re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
 
+# these are devices for which setAutoFocusOffset is known to have no effect
+# maps (device_library, device_name) -> offset_device_name
+# see _getAutoFocusOffsetDevice for details
+_OFFSET_DEVICES: dict[tuple[str, str], str] = {
+    ("NikonTE2000", "PerfectFocus"): "PFS-Offset",
+    ("NikonTI", "TIPFSStatus"): "TIPFSOffset",
+    # --------------------------
+    # these devices have an apparent offset device
+    # but may implicitly/privately control it just fine with the setOffset API
+    # need testing to see whether setAutoFocusOffset works as is.
+    # ("ZeissCAN29", "ZeissDefiniteFocus"): "ZeissDefiniteFocusOffset",
+    # ("Olympus", "AutoFocusZDC"): "ZDC2OffsetDrive",
+    # ("OlympusIX83", "Autofocus"): "AutofocusDrive",
+    # ("LeicaDMI", "Adaptive Focus Control"): "Adaptive Focus Control Offset",
+    # --------------------------
+    # these devices have a known no-op for setOffset()
+    # but have no apparent offset device
+    # ("DemoCamera", "DAutoFocus"): "",
+    # ("AmScope", ""): "",
+    # ("ASIStage", "CRIF"): "",
+    # ("FocalPoint", "FocalPoint"): "",
+}
+
 STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)
@@ -1676,6 +1699,11 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.setPosition(offset_dev, offset)
         super().setAutoFocusOffset(offset)
 
+    def getAutoFocusOffset(self) -> float:
+        if offset_dev := self._getAutoFocusOffsetDevice():
+            return self.getPosition(offset_dev)
+        return super().getAutoFocusOffset()
+
     def _getAutoFocusOffsetDevice(self, af_dev: str | None = None) -> str | None:
         """Return label of offset device for `af_dev` or the current autofocus device.
 
@@ -1686,27 +1714,6 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         If no match is found, `None` is returned.
         """
-        # these are devices for which setAutoFocusOffset is known to have no effect
-        # maps (device_library, device_name) -> offset_device_name
-        _OFFSET_DEVS: dict[tuple[str, str], str] = {
-            ("NikonTE2000", "PerfectFocus"): "PFS-Offset",
-            ("NikonTI", "TIPFSStatus"): "TIPFSOffset",
-            # --------------------------
-            # these devices have an apparent offset device
-            # but may implicitly/privately control it just fine with the setOffset API
-            # need testing to see whether setAutoFocusOffset works as is.
-            # ("ZeissCAN29", "ZeissDefiniteFocus"): "ZeissDefiniteFocusOffset",
-            # ("Olympus", "AutoFocusZDC"): "ZDC2OffsetDrive",
-            # ("OlympusIX83", "Autofocus"): "AutofocusDrive",
-            # ("LeicaDMI", "Adaptive Focus Control"): "Adaptive Focus Control Offset",
-            # --------------------------
-            # these devices have a known no-op for setOffset()
-            # but have no apparent offset device
-            # ("DemoCamera", "DAutoFocus"): "",
-            # ("AmScope", ""): "",
-            # ("ASIStage", "CRIF"): "",
-            # ("FocalPoint", "FocalPoint"): "",
-        }
         if af_dev is None:
             af_dev = self.getAutoFocusDevice()
 
@@ -1716,7 +1723,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             except RuntimeError:
                 return None
             dev_name = self.getDeviceName(af_dev)
-            if offset_dev := _OFFSET_DEVS.get((lib_name, dev_name)):
+            if offset_dev := _OFFSET_DEVICES.get((lib_name, dev_name)):
                 # a match was found,
                 # find the label of currently loaded device with the same name
                 for dev in self.getLoadedDevicesOfType(DeviceType.StageDevice):

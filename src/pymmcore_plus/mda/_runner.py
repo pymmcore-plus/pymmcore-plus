@@ -23,7 +23,7 @@ MSG = (
 
 
 class GeneratorMDASequence(MDASequence):
-    axis_order: str = ""
+    axis_order: tuple[str, ...] = ()
 
     @property
     def sizes(self) -> dict[str, int]:  # pragma: no cover
