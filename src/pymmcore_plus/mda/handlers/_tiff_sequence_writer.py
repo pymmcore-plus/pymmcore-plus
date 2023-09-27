@@ -32,7 +32,7 @@ class TiffSequenceWriter:
     the metadata dict for that frame.
 
     The metadata for the entire MDA sequence is stored in a JSON file in the directory
-    (by default, named "_sequence_metadata.json").
+    (by default, named "_useq_MDASequence.json").
 
     !!! note
 
@@ -63,7 +63,7 @@ class TiffSequenceWriter:
     """
 
     FRAME_META_PATH: ClassVar[str] = "_frame_metadata.json"
-    SEQ_META_PATH: ClassVar[str] = "_sequence_metadata.json"
+    SEQ_META_PATH: ClassVar[str] = "_useq_MDASequence.json"
 
     def __init__(
         self,
