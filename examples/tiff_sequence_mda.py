@@ -23,7 +23,7 @@ sequence = MDASequence(
 )
 
 writer = TiffSequenceWriter(
-    "/Users/fdrgsp/Desktop/test",
+    "data_folder",
     overwrite=True,
     prefix="test",
     include_frame_count=True,
