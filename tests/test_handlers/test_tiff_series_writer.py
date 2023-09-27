@@ -44,7 +44,7 @@ def test_tiff_series_writer(tmp_path: Path, core: CMMCorePlus) -> None:
         core.mda.run(mda)
 
     files_written = list(dest.glob("*.tif"))
-    assert len(files_written) == len(list(mda.iter_events()))
+    assert len(files_written) == len(list(mda))
 
     # we can use tiffile pattern='axes' to load the data in the correct
     # shape because write a filename pattern that tifffile recognizes (Leica tiff)
