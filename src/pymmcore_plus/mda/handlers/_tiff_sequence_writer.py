@@ -10,6 +10,8 @@ from itertools import count
 from pathlib import Path
 from typing import TYPE_CHECKING, ClassVar, Mapping, Sequence
 
+from ._util import get_full_sequence_axes
+
 if TYPE_CHECKING:
     import numpy as np
     import useq
@@ -121,7 +123,7 @@ class TiffSequenceWriter:
         self._directory.mkdir(parents=True, exist_ok=True)
 
         self._current_sequence = seq
-        self._axes = self._get_full_sequence_axis(seq)
+        self._axes = get_full_sequence_axes(seq)
         if seq:
             self._name_template = self.fname_template(
                 self._axes,
@@ -132,21 +134,6 @@ class TiffSequenceWriter:
             )
             # make directory and write metadata
             self._seq_meta_file.write_text(seq.json(exclude_unset=True, indent=4))
-
-    def _get_full_sequence_axis(self, sequence: useq.MDASequence) -> tuple[str, ...]:
-        """Get the combined axis labels from sequence and sub-sequences."""
-        # axis main sequence
-        main_seq_axis = list(sequence.used_axes)
-        if not sequence.stage_positions:
-            return tuple(main_seq_axis)
-        # axes from sub sequences
-        sub_seq_axis: list = []
-        for p in sequence.stage_positions:
-            if p.sequence is not None:
-                sub_seq_axis.extend(
-                    [ax for ax in p.sequence.used_axes if ax not in main_seq_axis]
-                )
-        return tuple(main_seq_axis + sub_seq_axis)
 
     def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
         """Write a frame to disk."""
