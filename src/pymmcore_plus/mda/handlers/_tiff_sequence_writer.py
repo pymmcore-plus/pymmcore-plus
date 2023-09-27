@@ -144,7 +144,7 @@ class TiffSequenceWriter:
             if self._axes != tuple(event.index):
                 # if the event.index has fewer axes than self._axes, we need to
                 # add the missing axes with a value of 0
-                _add_axes = set(self._axes) - set(event.index.keys())
+                _add_axes = set(self._axes) - set(event.index)
                 _ev_index = {**event.index, **{ax: 0 for ax in _add_axes}}
             else:
                 _ev_index = {**event.index}
