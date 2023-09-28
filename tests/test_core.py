@@ -576,3 +576,15 @@ def test_multi_roi(core: CMMCorePlus) -> None:
     roi = ([0, 0], [10, 10], [20, 20], [30, 30])
     core.setMultiROI(*roi)
     assert core.getMultiROI() == roi
+
+
+def test_set_autofocus_offset(
+    core: CMMCorePlus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pymmcore_plus.core import _mmcore_plus
+
+    monkeypatch.setitem(
+        _mmcore_plus._OFFSET_DEVICES, ("DemoCamera", "DAutoFocus"), "DStage"
+    )
+    core.setAutoFocusOffset(1.0)
+    assert core.getAutoFocusOffset() == 1.0

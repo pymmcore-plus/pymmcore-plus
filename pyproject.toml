@@ -62,8 +62,9 @@ testing = [
     "pytest-cov",
     "pytest-qt",
     "qtpy",
-    "typer",
     "rich",
+    "tiffile",
+    "typer",
 ]
 dev = [
     "black",

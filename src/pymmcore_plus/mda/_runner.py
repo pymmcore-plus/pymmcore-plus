@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Any, Iterable, Iterator
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Tuple
 
 from useq import MDASequence
 
@@ -23,7 +23,7 @@ MSG = (
 
 
 class GeneratorMDASequence(MDASequence):
-    axis_order: str = ""
+    axis_order: Tuple[str, ...] = ()  # noqa: UP006
 
     @property
     def sizes(self) -> dict[str, int]:  # pragma: no cover
