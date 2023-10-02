@@ -5,18 +5,18 @@ ci:
 
 repos:
   - repo: https://github.com/crate-ci/typos
-    rev: v1.16.10
+    rev: typos-dict-v0.11.1
     hooks:
       - id: typos
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.0.287
+    rev: v0.0.291
     hooks:
       - id: ruff
         args: [--fix]
 
   - repo: https://github.com/psf/black
-    rev: 23.7.0
+    rev: 23.9.1
     hooks:
       - id: black
 
