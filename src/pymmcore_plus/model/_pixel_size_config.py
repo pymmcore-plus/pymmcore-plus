@@ -41,7 +41,7 @@ class PixelSizeGroup(ConfigGroup):
     """Model of the pixel size group."""
 
     name: str = PIXEL_SIZE_GROUP
-    presets: MutableMapping[str, PixelSizePreset] = field(default_factory=dict)  # type: ignore # noqa: E501
+    presets: MutableMapping[str, PixelSizePreset] = field(default_factory=dict)  # type: ignore
 
     @classmethod
     def create_from_core(
