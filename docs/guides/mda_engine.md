@@ -140,12 +140,12 @@ mmc.run_mda(mda_sequence)
     that look something like this:
 
     ```log
-    2023-08-12 16:37:50,694 - INFO - MDA Started: GeneratorMDASequence()
+    2023-08-12 16:37:50,694 - INFO - MDA Started: EventIterable()
     2023-08-12 16:37:50,695 - INFO - channel=Channel(config='DAPI') x_pos=1100.0 y_pos=1240.0
     2023-08-12 16:37:50,881 - INFO - channel=Channel(config='FITC') x_pos=1100.0 y_pos=1240.0
     2023-08-12 16:37:50,891 - INFO - channel=Channel(config='DAPI') x_pos=1442.0 y_pos=1099.0
     2023-08-12 16:37:50,947 - INFO - channel=Channel(config='FITC') x_pos=1442.0 y_pos=1099.0
-    2023-08-12 16:37:50,958 - INFO - MDA Finished: GeneratorMDASequence()
+    2023-08-12 16:37:50,958 - INFO - MDA Finished: EventIterable()
     ```
 
     See [logging](logging.md) for more details on how to configure and review logs.
