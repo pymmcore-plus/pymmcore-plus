@@ -179,7 +179,7 @@ def test_shutter_device_events(core: CMMCorePlus):
     core.setShutterOpen("White Light Shutter", True)
     mock.assert_has_calls(
         [
-            call("White Light Shutter", STATE, True),
+            call("White Light Shutter", STATE, "1"),
         ]
     )
     assert core.getShutterOpen("White Light Shutter")
