@@ -144,6 +144,11 @@ def _download_url(url: str, output_path: Path) -> None:
 
 def install(dest: Path, release: str) -> None:
     """Install Micro-Manager to `dest`."""
+    if PLATFORM == "Linux":
+        from ._build import build
+        
+        return  build(dest)
+
     if PLATFORM not in ("Darwin", "Windows"):  # pragma: no cover
         print(f":x: [bold red]Unsupported platform: {PLATFORM!r}")
         raise sys.exit(1)
