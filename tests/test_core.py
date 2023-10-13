@@ -618,3 +618,7 @@ def test_core_state(core: CMMCorePlus) -> None:
     }:
         if val := state["Devices"]["Core"][key]:
             assert val in state["Devices"]
+
+    core.unloadAllDevices()
+    # should still work without error
+    state = core.state()
