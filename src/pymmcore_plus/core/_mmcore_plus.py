@@ -1754,11 +1754,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         super().setShutterOpen(*args, **kwargs)
         shutterLabel, state = kwargs.get("shutterLabel"), kwargs.get("state")
-        if len(args) > 1:
+        if len(args) == 2:
             shutterLabel, state = args
-        elif args:
+        elif len(args) == 1:
             shutterLabel = super().getShutterDevice()
-            state = args
+            state = args[0]
+        state = str(int(bool(state)))
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
     @overload
