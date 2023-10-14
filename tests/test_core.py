@@ -588,3 +588,37 @@ def test_set_autofocus_offset(
     )
     core.setAutoFocusOffset(1.0)
     assert core.getAutoFocusOffset() == 1.0
+
+
+def test_core_state(core: CMMCorePlus) -> None:
+    state = core.state(
+        devices=True,
+        image=True,
+        system_info=True,
+        system_status=True,
+        config_groups=True,
+        position=True,
+        autofocus=True,
+        pixel_size_configs=True,
+        device_types=True,
+    )
+    assert isinstance(state, dict)
+    assert "Devices" in state
+    assert "Core" in state["Devices"]
+
+    for key in {
+        "AutoFocus",
+        "Camera",
+        "Focus",
+        "Galvo",
+        "ImageProcessor",
+        "SLM",
+        "Shutter",
+        "XYStage",
+    }:
+        if val := state["Devices"]["Core"][key]:
+            assert val in state["Devices"]
+
+    core.unloadAllDevices()
+    # should still work without error
+    state = core.state()

@@ -22,7 +22,6 @@ from typing import (
     Pattern,
     Sequence,
     TypeVar,
-    cast,
     overload,
 )
 
@@ -41,6 +40,7 @@ from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from ._sequencing import can_sequence_events
+from ._state import core_state
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
@@ -48,34 +48,11 @@ if TYPE_CHECKING:
     from typing_extensions import Literal, TypedDict
     from useq import MDAEvent
 
+    from ._state import StateDict
+
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
     ListOrTuple = list[_T] | tuple[_T, ...]
-
-    class StateDict(TypedDict, total=False):
-        """Dictionary of state values for a device.
-
-        This object should only be imported inside a `TYPE_CHECKING` block.
-        """
-
-        AutoFocusDevice: str
-        BytesPerPixel: int
-        CameraChannelNames: tuple[str, ...]
-        CameraDevice: str
-        Datetime: str
-        Exposure: float
-        FocusDevice: str
-        GalvoDevice: str
-        ImageBitDepth: int
-        ImageHeight: int
-        ImageProcessorDevice: str
-        ImageWidth: int
-        PixelSizeUm: float
-        ShutterDevice: str
-        SLMDevice: str
-        XYPosition: tuple[float, float]
-        XYStageDevice: str
-        ZPosition: float
 
     class PropertySchema(TypedDict, total=False):
         """JSON schema `dict` describing a device property."""
@@ -497,6 +474,18 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         cfg = super().getConfigGroupState(group)
         return cfg if native else Configuration.from_configuration(cfg)
+
+    @overload
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native: Literal[True]
+    ) -> pymmcore.Configuration:
+        ...
+
+    @overload
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native: Literal[False] = False
+    ) -> Configuration:
+        ...
 
     def getConfigGroupStateFromCache(
         self, group: str, *, native: bool = False
@@ -2000,58 +1989,36 @@ class CMMCorePlus(pymmcore.CMMCore):
         print("Adapter path:", ",".join(self.getDeviceAdapterSearchPaths()))
         print_tabular_data(data, sort=sort)
 
-    def state(self, exclude: Iterable[str] = ()) -> StateDict:
-        """Return `StateDict` with commonly accessed state values.
-
-        :sparkles: *This method is new in `CMMCorePlus`. It is a bit faster
-        than [`getSystemState`][pymmcore_plus.CMMCorePlus.getSystemState].*
-
-        Parameters
-        ----------
-        exclude : Iterable[str]
-            List of properties to exclude when gathering state (may speed things up).
-            See [`StateDict`][pymmcore_plus.core._mmcore_plus.StateDict] for a list of
-            keys that can be excluded.
-
-        Returns
-        -------
-        StateDict
-            A dictionary of commonly accessed state values.
-        """
-        # approx retrieval cost in comment (for demoCam)
-        exclude = set(exclude)
-        state: dict = {}
-        for attr in (
-            "AutoFocusDevice",  # 150 ns
-            "BytesPerPixel",  # 149 ns
-            "CameraChannelNames",  # 1 µs
-            "CameraDevice",  # 159 ns
-            "Datetime",
-            "Exposure",  # 726 ns
-            "FocusDevice",  # 112 ns
-            "GalvoDevice",  # 109 ns
-            "ImageBitDepth",  # 147 ns
-            "ImageHeight",  # 164 ns
-            "ImageProcessorDevice",  # 110 ns
-            "ImageWidth",  # 172 ns
-            "PixelSizeUm",  # 2.2 µs
-            "ShutterDevice",  # 152 ns
-            "SLMDevice",  # 110 ns
-            "XYPosition",  # 1.1 µs
-            "XYStageDevice",  # 156 ns
-            "ZPosition",  # 1.03 µs
-        ):
-            if attr not in exclude:
-                if attr == "Datetime":
-                    state[attr] = str(datetime.now())
-                elif attr == "PixelSizeUm":
-                    state[attr] = self.getPixelSizeUm(True)  # True==cached
-                else:
-                    try:
-                        state[attr] = getattr(self, f"get{attr}")()
-                    except RuntimeError:
-                        continue
-        return cast("StateDict", state)
+    def state(
+        self,
+        *,
+        devices: bool = True,
+        image: bool = True,
+        system_info: bool = False,
+        system_status: bool = False,
+        config_groups: bool | Sequence[str] = True,
+        position: bool = False,
+        autofocus: bool = False,
+        pixel_size_configs: bool = False,
+        device_types: bool = False,
+        cached: bool = True,
+        error_value: Any = None,
+    ) -> StateDict:
+        """Return info on the current state of the core."""
+        return core_state(
+            self,
+            devices=devices,
+            image=image,
+            system_info=system_info,
+            system_status=system_status,
+            config_groups=config_groups,
+            position=position,
+            autofocus=autofocus,
+            pixel_size_configs=pixel_size_configs,
+            device_types=device_types,
+            cached=cached,
+            error_value=error_value,
+        )
 
     @contextmanager
     def _property_change_emission_ensured(
