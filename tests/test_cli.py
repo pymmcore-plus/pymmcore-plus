@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 import subprocess
 import time
@@ -24,6 +25,7 @@ from useq import MDASequence
 if TYPE_CHECKING:
     from pathlib import Path
 
+LINUX = platform.system() == "Linux"
 runner = CliRunner()
 subrun = subprocess.run
 
@@ -65,6 +67,7 @@ def _mock_run(dest: Path) -> Callable:
     return runner
 
 
+@pytest.mark.skipif(LINUX, reason="quick install not available on linux")
 def test_app(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
@@ -75,6 +78,7 @@ def test_app(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
+@pytest.mark.skipif(LINUX, reason="quick install not available on linux")
 def test_available_versions(tmp_path: Path) -> None:
     """installing with an erroneous version should fail and show available versions."""
     result = runner.invoke(app, ["install", "-r", "xxxx"])
