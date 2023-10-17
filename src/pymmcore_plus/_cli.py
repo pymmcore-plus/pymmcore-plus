@@ -102,12 +102,13 @@ def _list() -> None:
 def find() -> None:
     """Show the location of Micro-Manager in use by pymmcore-plus."""
     configure_logging(stderr_level="CRITICAL")
-    print("[bold red]`mmcore find` is deprecated. Use `mmcore list` instead.")
+    print("[bold red]`mmcore find` is deprecated. Use `mmcore list` instead.\n")
+    _list()
 
 
 @app.command()
-def mmgui() -> None:  # pragma: no cover
-    """Run the Java Micro-Manager GUI for the MM install returned by `mmcore find`."""
+def mmstudio() -> None:  # pragma: no cover
+    """Run the Java Micro-Manager GUI."""
     mm = pymmcore_plus.find_micromanager()
     app = (
         next((x for x in Path(mm).glob("ImageJ*") if not str(x).endswith("cfg")), None)
@@ -120,6 +121,12 @@ def mmgui() -> None:  # pragma: no cover
         raise typer.Exit(1)
     cmd = ["open", "-a", str(app)] if PLATFORM == "Darwin" else [str(app)]
     raise typer.Exit(subprocess.run(cmd).returncode)
+
+
+@app.command()
+def mmgui() -> None:  # pragma: no cover
+    print("[bold red]`mmcore mmgui` is deprecated. Use `mmcore mmstudio` instead.\n")
+    mmstudio()
 
 
 @app.command()
