@@ -198,6 +198,11 @@ class Microscope:
         apply_properties: bool = True,
         then_update: bool = True,
     ) -> None:
+        # this is a workaround for an inconsistency in MMCore itself
+        # https://github.com/micro-manager/mmCoreAndDevices/issues/384
+        init_prop = self.core_device.get_property(Keyword.CoreInitialize)
+        core.setProperty(self.core_device.name, Keyword.CoreInitialize, init_prop.value)
+
         # devices must be initialized first
         if "devices" not in exclude:
             for device in self.devices:

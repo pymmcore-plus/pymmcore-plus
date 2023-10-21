@@ -35,7 +35,13 @@ from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
-from ._constants import DeviceDetectionStatus, DeviceType, PixelType, PropertyType
+from ._constants import (
+    DeviceDetectionStatus,
+    DeviceInitializationState,
+    DeviceType,
+    PixelType,
+    PropertyType,
+)
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
@@ -400,6 +406,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         is more interpretable than the raw `int` returned by `pymmcore`
         """
         return DeviceDetectionStatus(super().detectDevice(deviceLabel))
+
+    def getDeviceInitializationState(self, label: str) -> DeviceInitializationState:
+        """Queries the initialization state of the given device.
+
+        **Why Override?** The returned [`pymmcore_plus.DeviceInitializationState`][]
+        enum is more interpretable than the raw `int` returned by `pymmcore`
+        """
+        return DeviceInitializationState(super().getDeviceInitializationState(label))
 
     # config overrides
 
