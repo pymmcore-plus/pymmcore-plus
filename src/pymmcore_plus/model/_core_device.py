@@ -55,11 +55,16 @@ class CoreDevice(Device):
         self,
         core: CMMCorePlus,
         *,
-        exclude: Container[str] = (),
+        exclude: Container[str] = (Keyword.CoreInitialize.value,),
         on_err: ErrCallback | None = None,
         apply_properties: bool = True,
         then_update: bool = True,
     ) -> None:
+        # note: calling core.setProperty('Core', 'Initialize', '1') may cause a crash
+        # if the core device is already initialized. However, it can't currently be
+        # checked with core.getProperty('Core', 'Initialize') or
+        # get.getDeviceInitializationStatus('Core').
+        # see https://github.com/micro-manager/mmCoreAndDevices/issues/384
         for prop in self.properties:
             if prop.name not in exclude:
                 core.setProperty(self.name, prop.name, prop.value)
