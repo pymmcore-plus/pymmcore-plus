@@ -76,6 +76,7 @@ dev = [
     "pytest",
     "rich",
     "ruff",
+    "types-appdirs",
     "types-psutil",
 ]
 
