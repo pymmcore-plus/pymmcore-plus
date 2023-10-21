@@ -37,7 +37,7 @@ dependencies = [
     "appdirs",
     "numpy",
     "psygnal >=0.4.2",
-    "pymmcore >=10.4.0.71.0",
+    "pymmcore >=10.7.0.71.0",
     "rich >=10.2.0",
     "typer >=0.4.2",
     "typing-extensions",
