@@ -144,11 +144,24 @@ def install(
     release: str = typer.Option(
         "latest", "-r", "--release", help="Release date. e.g. 20210201"
     ),
+    plain_output: bool = typer.Option(
+        False,
+        "--plain-output",
+        help="Do not use rich output. Useful for scripting.",
+        show_default=False,
+    ),
 ) -> None:
     """Install Micro-Manager Device adapters."""
     import pymmcore_plus.install
 
-    pymmcore_plus.install.install(dest, release)
+    if plain_output:
+
+        def _log_msg(text: str, color: str = "", emoji: str = "") -> None:
+            print(text)
+
+        pymmcore_plus.install.install(dest, release, log_msg=_log_msg)
+    else:
+        pymmcore_plus.install.install(dest, release)
 
 
 @app.command()
