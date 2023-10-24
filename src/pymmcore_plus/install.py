@@ -72,13 +72,14 @@ def _mac_install(dmg: Path, dest: Path) -> None:
             print(f"\n[bold red]Error mounting {dmg.name}:\n{proc.stderr.decode()}")
             sys.exit(1)
 
-    # with progress bar, mount dmg
-    with _spinner(f"Installing to {dest} ..."):
-        # get mount point
-        mount = proc.stdout.splitlines()[-1].split()[-1].decode()
-        try:
+    # get mount point
+    disk_id, *_, volume = proc.stdout.splitlines()[-1].decode().split("\t")
+
+    try:
+        # with progress bar, mount dmg
+        with _spinner(f"Installing to {dest} ..."):
             try:
-                src = next(Path(mount).glob("Micro-Manager*"))
+                src = next(Path(volume).glob("Micro-Manager*"))
             except StopIteration:  # pragma: no cover
                 print(
                     "[bold red]\nError: Could not find Micro-Manager in dmg.\n"
@@ -88,15 +89,14 @@ def _mac_install(dmg: Path, dest: Path) -> None:
                 sys.exit(1)
             install_path = dest / src.name
             shutil.copytree(src, install_path, dirs_exist_ok=True)
-        finally:
-            subprocess.run(
-                ["hdiutil", "detach", mount], check=True, capture_output=True
-            )
+    finally:
+        subprocess.run(
+            ["hdiutil", "detach", disk_id.strip()], check=True, capture_output=True
+        )
 
-    # fix gatekeeper ... requires password
-    print("[green](Your password may be required to install Micro-manager.)")
-    cmd = ["sudo", "xattr", "-r", "-d", "com.apple.quarantine", str(install_path)]
-    subprocess.run(cmd, check=True)
+    # fix gatekeeper ... may require password?  But better if sudo not needed.
+    cmd = ["xattr", "-r", "-d", "com.apple.quarantine", str(install_path)]
+    subprocess.run(cmd)
 
     # # fix path randomization by temporarily copying elsewhere and back
     with tempfile.TemporaryDirectory() as tmpdir:

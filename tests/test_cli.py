@@ -49,7 +49,8 @@ def _mock_run(dest: Path) -> Callable:
                 (mmdir / "ImageJ.app").touch()
                 # the output of hdiutil attach is a list of lines
                 # the last line is the name of the mount (which install uses)
-                return subprocess.CompletedProcess(args[0], 0, str(mnt).encode(), "")
+                last_line = f"\t/dev/disk2s1\tApple_HFS\t{mnt}"
+                return subprocess.CompletedProcess(args[0], 0, last_line.encode(), "")
             if args[0][1] == "detach":
                 # hdiutil detach just cleans up the mount
                 shutil.rmtree(mnt)
