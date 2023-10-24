@@ -13,7 +13,9 @@ def test_mda_listeners_connected(core: CMMCorePlus) -> None:
     class SlowHandler:
         def frameReady(self, ary: np.ndarray, event: useq.MDAEvent) -> None:
             mock(event.index.get("t"))
-            time.sleep(0.1)
+            # This is to simulate a slow handler... but it's very error prone
+            # too long and the test is slow, too short and the test fails :/
+            time.sleep(0.15)
 
     LOOPS = 3
     seq = useq.MDASequence(time_plan=useq.TIntervalLoops(loops=LOOPS, interval=0))
