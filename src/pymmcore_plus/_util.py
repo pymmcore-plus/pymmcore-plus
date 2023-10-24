@@ -128,7 +128,9 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     pth = next(app_path.glob("[m,M]icro-[m,M]anager*"), None)
     if return_first:
         if pth is None:
-            logger.error("could not find micromanager directory in %s", app_path)
+            logger.error(
+                "could not find micromanager directory. Please run 'mmcore install'"
+            )
             return None
         logger.debug("using MM path found in applications: %s", pth)
         return str(pth)
