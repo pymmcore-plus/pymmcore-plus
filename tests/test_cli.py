@@ -8,7 +8,7 @@ import time
 from multiprocessing import Process, Queue
 from time import sleep
 from typing import TYPE_CHECKING, Any, Callable, cast
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -66,7 +66,7 @@ def _mock_run(dest: Path) -> Callable:
     return runner
 
 
-def test_app(tmp_path: Path) -> None:
+def test_install_app(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
 
@@ -74,6 +74,17 @@ def test_app(tmp_path: Path) -> None:
         result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
     assert (tmp_path / "Micro-Manager-2.0.0" / "ImageJ.app").exists()
     assert result.exit_code == 0
+
+
+def test_basic_install(tmp_path: Path) -> None:
+    patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
+    patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
+    # test calling install.install() with a simple message logger
+    mock = Mock()
+    with patch_download, patch_run:
+        install.install(log_msg=mock)
+    assert mock.call_args_list[0][0][0].startswith("Downloading")
+    assert mock.call_args_list[-1][0][0].startswith("Installed")
 
 
 def test_available_versions(tmp_path: Path) -> None:
