@@ -78,40 +78,37 @@ def clean(
 @app.command(name="list")
 def _list() -> None:
     """Show all Micro-Manager installs downloaded by pymmcore-plus."""
-    if USER_DATA_MM_PATH.exists():
-        print(f":file_folder:[bold green] {USER_DATA_MM_PATH}")
-        for path in USER_DATA_MM_PATH.iterdir():
-            if not path.name.startswith("."):
-                print(f"   • [cyan]{path.name}")
+    configure_logging(stderr_level="CRITICAL")
+    found: dict[Path, list[str]] = {}
+    with suppress(Exception):
+        for p in pymmcore_plus.find_micromanager(return_first=False):
+            pth = Path(p)
+            found.setdefault(pth.parent, []).append(pth.name)
+
+    if found:
+        first = True
+        for parent, items in found.items():
+            print(f":file_folder:[bold green] {parent}")
+            for item in items:
+                bullet = "   [bold yellow]*" if first else "   •"
+                print(f"{bullet} [cyan]{item}")
+                first = False
     else:
-        print(":sparkles: [bold green]There are no pymmcore-plus Micro-Manager files.")
+        print(":x: [bold red]There are no pymmcore-plus Micro-Manager files.")
+        print("[magenta]run `mmcore install` to install a version of Micro-Manager")
 
 
 @app.command()
 def find() -> None:
     """Show the location of Micro-Manager in use by pymmcore-plus."""
     configure_logging(stderr_level="CRITICAL")
-
-    found = None
-    with suppress(Exception):
-        found = pymmcore_plus.find_micromanager(return_first=False)
-    if found:
-        first, *rest = found
-        print(f":white_check_mark: [bold green]Using: {first}")
-        if rest:
-            print("\n[bold cyan](Also found):")
-            for p in rest:
-                print(f"   • [cyan]{p}")
-        raise typer.Exit(0)
-    else:  # pragma: no cover
-        print(":x: [bold red]No Micro-Manager installation found")
-        print("[magenta]run `mmcore install` to install a version of Micro-Manager")
-        raise typer.Exit(1)
+    print("[bold red]`mmcore find` is deprecated. Use `mmcore list` instead.\n")
+    _list()
 
 
 @app.command()
-def mmgui() -> None:  # pragma: no cover
-    """Run the Java Micro-Manager GUI for the MM install returned by `mmcore find`."""
+def mmstudio() -> None:  # pragma: no cover
+    """Run the Java Micro-Manager GUI."""
     mm = pymmcore_plus.find_micromanager()
     app = (
         next((x for x in Path(mm).glob("ImageJ*") if not str(x).endswith("cfg")), None)
@@ -124,6 +121,12 @@ def mmgui() -> None:  # pragma: no cover
         raise typer.Exit(1)
     cmd = ["open", "-a", str(app)] if PLATFORM == "Darwin" else [str(app)]
     raise typer.Exit(subprocess.run(cmd).returncode)
+
+
+@app.command()
+def mmgui() -> None:  # pragma: no cover
+    print("[bold red]`mmcore mmgui` is deprecated. Use `mmcore mmstudio` instead.\n")
+    mmstudio()
 
 
 @app.command()
