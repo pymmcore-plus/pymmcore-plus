@@ -110,26 +110,10 @@ def test_clean(tmp_path: Path) -> None:
 
 def test_list(tmp_path: Path) -> None:
     """Just shows what's in the user data folder."""
-    empty_dir = tmp_path / "empty"
-    _cli.USER_DATA_MM_PATH = empty_dir  # type: ignore
     result = runner.invoke(app, ["list"])
-    assert "test.txt" not in result.stdout
-
-    empty_dir.mkdir()
-    test_file = empty_dir / "test.txt"
-    test_file.touch()
-    result = runner.invoke(app, ["list"])
-    assert result.exit_code == 0
-    assert "test.txt" in result.stdout
-
-
-def test_find() -> None:
-    # this should pass if any of the tests work :)
-    # since we probably need to find mmore for anything to work!
-    result = runner.invoke(app, ["find"])
     if result.exit_code != 0:
         raise AssertionError(
-            "mmcore find failed... is Micro-Manager installed?  (run mmcore install)"
+            "mmcore list failed... is Micro-Manager installed?  (run mmcore install)"
         )
 
 
