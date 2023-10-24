@@ -113,7 +113,7 @@ def _mac_install(dmg: Path, dest: Path, log_msg: _MsgLogger) -> None:
 
     try:
         # with progress bar, mount dmg
-        with spinner(f"Installing to {dest} ..."):
+        with spinner(f"Installing to {str(dest)!r} ..."):
             try:
                 src = next(Path(volume).glob("Micro-Manager*"))
             except StopIteration:  # pragma: no cover
@@ -244,7 +244,7 @@ def install(
             filename = filename.replace(".exe", "")
             _win_install(installer, dest / filename, log_msg)
 
-    log_msg(f"Installed to {dest}", "bold green", ":sparkles:")
+    log_msg(f"Installed to {str(dest)!r}", "bold green", ":sparkles:")
 
 
 if __name__ == "__main__":
