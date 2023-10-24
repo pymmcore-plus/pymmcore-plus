@@ -64,6 +64,7 @@ def test_load_system_config(core: CMMCorePlus):
 
     config_path = Path(__file__).parent / "local_config.cfg"
     core.loadSystemConfiguration(str(config_path))
+    assert core.systemConfigurationFile() == str(config_path)
     assert core.getLoadedDevices() == (
         "DHub",
         "Camera",
