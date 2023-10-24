@@ -91,7 +91,7 @@ class MDAEngine(PMDAEngine):
 
     # ===================== Protocol Implementation =====================
 
-    def setup_sequence(self, sequence: MDASequence) -> Mapping[str, Any]:
+    def setup_sequence(self, sequence: MDASequence) -> tuple[Mapping[str, Any]]:
         """Setup the hardware for the entire sequence."""
         if not self._mmc:  # pragma: no cover
             from pymmcore_plus.core import CMMCorePlus
@@ -102,7 +102,7 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = self._mmc.getAutoShutter()
-        return _summary_meta(self._mmc)
+        return (_summary_meta(self._mmc),)
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()

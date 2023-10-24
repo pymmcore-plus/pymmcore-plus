@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Tuple
+from typing import TYPE_CHECKING, Any, Iterable, Iterator, Mapping, Tuple, cast
 
 from useq import MDASequence
 
@@ -22,7 +22,14 @@ MSG = (
 )
 
 
-class GeneratorMDASequence(MDASequence):
+class EventIterable(MDASequence):
+    """A placeholder for an iterable of events with unknown length & shape.
+
+    This object serves as a placeholder for an iterable of events with unknown length
+    and shape. It satisfies the need for a `useq.MDASequence` object to be passed to
+    setup_sequence, when the user passed a more generic iterable of events.
+    """
+
     axis_order: Tuple[str, ...] = ()  # noqa: UP006
 
     @property
@@ -35,7 +42,7 @@ class GeneratorMDASequence(MDASequence):
         yield from []
 
     def __str__(self) -> str:
-        return "GeneratorMDASequence()"
+        return "EventIterable()"
 
 
 class MDARunner:
@@ -60,7 +67,7 @@ class MDARunner:
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
 
         self._canceled = False
-        self._sequence: MDASequence | None = None
+        self._current_sequence: MDASequence | None = None
         self._reset_timer()
 
     def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
@@ -159,14 +166,13 @@ class MDARunner:
             An iterable of `useq.MDAEvents` objects to execute.
         """
         error = None
-        sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
         try:
-            engine = self._prepare_to_run(sequence)
+            engine, events = self._prepare_to_run(events)
             self._run(engine, events)
         except Exception as e:
             error = e
         with exceptions_logged():
-            self._finish_run(sequence)
+            self._finish_run()
         if error is not None:
             raise error
 
@@ -196,13 +202,16 @@ class MDARunner:
 
             teardown_event(event)
 
-    def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
+    def _prepare_to_run(
+        self, events: Iterable[MDAEvent]
+    ) -> tuple[PMDAEngine, Iterable[MDAEvent]]:
         """Set up for the MDA run.
 
         Parameters
         ----------
-        sequence : MDASequence
-            The sequence of events to run.
+        events : MDASequence | Iterable[MDAEvent]
+            The sequence of events to run.  May be a `useq.MDASequence` or a generic
+            iterable of `useq.MDAEvent` objects.
         """
         if not self._engine:  # pragma: no cover
             raise RuntimeError("No MDAEngine set.")
@@ -210,14 +219,43 @@ class MDARunner:
         self._running = True
         self._paused = False
         self._paused_time = 0.0
-        self._sequence = sequence
 
-        meta = self._engine.setup_sequence(sequence)
+        # if a generic iterable of events is passed, wrap it in a mock MDASequence
+        # object that can be passed to the engine.
+        sequence = events if isinstance(events, MDASequence) else EventIterable()
+        result = self._engine.setup_sequence(sequence)
+        # the engine can return None or (meta,) or (meta, modified_sequence)
+
+        meta: Mapping[str, Any] = {}
+        if isinstance(result, tuple):
+            if len(result) == 1:
+                meta = result[0]
+            elif len(result) == 2:
+                # 2-tuple is returned.  Engine wants to modify the sequence.
+                meta, sequence = result  # type: ignore [misc]
+                if not isinstance(sequence, MDASequence):
+                    raise TypeError(
+                        "Engine.setup_sequence returned an invalid result. "
+                        "The second element of the tuple must be a useq.MDASequence. "
+                        f"Got: {type(sequence)}"
+                    )
+                # If the incoming object was a useq.MDASequence, then we replace it
+                # with the modified one.
+                # XXX: this is potentially buggy, since the user could have passed
+                # a generic iterable, and the engine could have modified the mock
+                # EventIterable object.  Technically, the engine could/should check
+                # if it's a EventIterable and not modify it, but that's hard to enforce
+                # and requires more imports, and tighter coupling between the engine
+                # and the runner.
+                if isinstance(events, MDASequence):
+                    events = sequence
+
+        self._current_sequence = sequence
         logger.info("MDA Started: %s", sequence)
 
-        self._signals.sequenceStarted.emit(sequence, meta or {})
+        self._signals.sequenceStarted.emit(sequence, meta)
         self._reset_timer()
-        return self._engine
+        return self._engine, events
 
     def _reset_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
@@ -237,8 +275,8 @@ class MDARunner:
             Whether the MDA has been canceled.
         """
         if self._canceled:
-            logger.warning("MDA Canceled: %s", self._sequence)
-            self._signals.sequenceCanceled.emit(self._sequence)
+            logger.warning("MDA Canceled: %s", self._current_sequence)
+            self._signals.sequenceCanceled.emit(self._current_sequence)
             self._canceled = False
             return True
         return False
@@ -291,7 +329,7 @@ class MDARunner:
         # during the waiting loop
         return self._check_canceled()
 
-    def _finish_run(self, sequence: MDASequence) -> None:
+    def _finish_run(self) -> None:
         """To be called at the end of an acquisition.
 
         Parameters
@@ -303,10 +341,13 @@ class MDARunner:
         self._canceled = False
 
         if hasattr(self._engine, "teardown_sequence"):
-            self._engine.teardown_sequence(sequence)  # type: ignore
+            engine = cast("PMDAEngine", self._engine)
+            seq = cast("MDASequence", self._current_sequence)
+            engine.teardown_sequence(seq)
 
-        logger.info("MDA Finished: %s", sequence)
-        self._signals.sequenceFinished.emit(sequence)
+        logger.info("MDA Finished: %s", self._current_sequence)
+        self._signals.sequenceFinished.emit(self._current_sequence)
+        self._current_sequence = None
 
 
 def _assert_handler(handler: Any) -> None:

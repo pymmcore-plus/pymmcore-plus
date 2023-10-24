@@ -21,10 +21,18 @@ class PMDAEngine(Protocol):
     """Protocol that all MDA engines must implement."""
 
     @abstractmethod
-    def setup_sequence(self, sequence: MDASequence) -> None | Mapping[str, Any]:
+    def setup_sequence(
+        self, sequence: MDASequence
+    ) -> None | tuple[Mapping[str, Any]] | tuple[Mapping[str, Any], MDASequence]:
         """Setup state of system (hardware, etc.) before an MDA is run.
 
         This method is called once at the beginning of a sequence.
+        It should prepare the state of the system for the sequence and return one of:
+        - None: no summary metadata or modified sequence
+        - (meta,): 1-tuple containing summary metadata dict
+        - (meta, sequence): 2-tuple containing summary metadata dict and modified
+          MDASequence.  If the sequence is modified, the modified sequence will be
+          used for the rest of the sequence.
         """
 
     @abstractmethod

@@ -28,7 +28,7 @@ from .core import (
     PropertyType,
 )
 from .core.events import CMMCoreSignaler, PCoreSignaler
-from .mda._runner import GeneratorMDASequence
+from .mda._runner import EventIterable
 
 __all__ = [
     "__version__",
@@ -49,7 +49,7 @@ __all__ = [
     "DeviceType",
     "find_micromanager",
     "FocusDirection",
-    "GeneratorMDASequence",
+    "EventIterable",
     "Keyword",
     "Metadata",
     "PCoreSignaler",
