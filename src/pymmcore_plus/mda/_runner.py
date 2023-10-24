@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 import warnings
 from typing import TYPE_CHECKING, Any, Iterable, Iterator, Tuple
+from unittest.mock import MagicMock
 
 from useq import MDASequence
 
@@ -65,7 +66,9 @@ class MDARunner:
 
     def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
         """Set the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] to use for the MDA run."""  # noqa: E501
-        if not isinstance(engine, PMDAEngine):
+        # MagicMock on py312 no longer satisfies isinstance ... so we explicitly
+        # allow it here just for the sake of testing.
+        if not isinstance(engine, (PMDAEngine, MagicMock)):
             raise TypeError("Engine does not conform to the Engine protocol.")
 
         if self.is_running():  # pragma: no cover
