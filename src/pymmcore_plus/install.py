@@ -87,7 +87,7 @@ def _get_spinner(log_msg: _MsgLogger) -> Callable[[str], ContextManager[None]]:
 
 def _win_install(exe: Path, dest: Path, log_msg: _MsgLogger) -> None:
     spinner = _get_spinner(log_msg)
-    cmd = [str(exe), "/VERYSILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"]
+    cmd = [str(exe), "/SILENT", "/SUPPRESSMSGBOXES", "/NORESTART", f"/DIR={dest}"]
     with spinner("Installing ..."):
         subprocess.run(cmd, check=True)
 
