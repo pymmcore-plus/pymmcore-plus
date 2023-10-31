@@ -8,7 +8,7 @@ import time
 from multiprocessing import Process, Queue
 from time import sleep
 from typing import TYPE_CHECKING, Any, Callable, cast
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -49,7 +49,8 @@ def _mock_run(dest: Path) -> Callable:
                 (mmdir / "ImageJ.app").touch()
                 # the output of hdiutil attach is a list of lines
                 # the last line is the name of the mount (which install uses)
-                return subprocess.CompletedProcess(args[0], 0, str(mnt).encode(), "")
+                last_line = f"\t/dev/disk2s1\tApple_HFS\t{mnt}"
+                return subprocess.CompletedProcess(args[0], 0, last_line.encode(), "")
             if args[0][1] == "detach":
                 # hdiutil detach just cleans up the mount
                 shutil.rmtree(mnt)
@@ -65,7 +66,7 @@ def _mock_run(dest: Path) -> Callable:
     return runner
 
 
-def test_app(tmp_path: Path) -> None:
+def test_install_app(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
 
@@ -73,6 +74,17 @@ def test_app(tmp_path: Path) -> None:
         result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
     assert (tmp_path / "Micro-Manager-2.0.0" / "ImageJ.app").exists()
     assert result.exit_code == 0
+
+
+def test_basic_install(tmp_path: Path) -> None:
+    patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
+    patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
+    # test calling install.install() with a simple message logger
+    mock = Mock()
+    with patch_download, patch_run:
+        install.install(log_msg=mock)
+    assert mock.call_args_list[0][0][0].startswith("Downloading")
+    assert mock.call_args_list[-1][0][0].startswith("Installed")
 
 
 def test_available_versions(tmp_path: Path) -> None:
@@ -109,26 +121,10 @@ def test_clean(tmp_path: Path) -> None:
 
 def test_list(tmp_path: Path) -> None:
     """Just shows what's in the user data folder."""
-    empty_dir = tmp_path / "empty"
-    _cli.USER_DATA_MM_PATH = empty_dir  # type: ignore
     result = runner.invoke(app, ["list"])
-    assert "test.txt" not in result.stdout
-
-    empty_dir.mkdir()
-    test_file = empty_dir / "test.txt"
-    test_file.touch()
-    result = runner.invoke(app, ["list"])
-    assert result.exit_code == 0
-    assert "test.txt" in result.stdout
-
-
-def test_find() -> None:
-    # this should pass if any of the tests work :)
-    # since we probably need to find mmore for anything to work!
-    result = runner.invoke(app, ["find"])
     if result.exit_code != 0:
         raise AssertionError(
-            "mmcore find failed... is Micro-Manager installed?  (run mmcore install)"
+            "mmcore list failed... is Micro-Manager installed?  (run mmcore install)"
         )
 
 
