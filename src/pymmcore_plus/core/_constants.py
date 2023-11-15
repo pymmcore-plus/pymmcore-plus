@@ -216,9 +216,9 @@ class DeviceDetectionStatus(IntEnum):
 class DeviceInitializationState(IntEnum):
     """DeviceInitializationState returned by getDeviceInitializationState."""
 
-    Uninitialized = pymmcore.Uninitialized  # type: ignore
-    InitializedSuccessfully = pymmcore.InitializedSuccessfully  # type: ignore
-    InitializationFailed = pymmcore.InitializationFailed  # type: ignore
+    Uninitialized = pymmcore.Uninitialized
+    InitializedSuccessfully = pymmcore.InitializedSuccessfully
+    InitializationFailed = pymmcore.InitializationFailed
 
 
 class PixelType(str, Enum):
