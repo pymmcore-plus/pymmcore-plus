@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, Any, Iterable, MutableMapping
+from typing import TYPE_CHECKING, Any, Container, Iterable, MutableMapping
 
 from ._config_group import ConfigGroup, ConfigPreset, Setting
 
@@ -11,6 +11,8 @@ if TYPE_CHECKING:
     from typing_extensions import TypeAlias
 
     from pymmcore_plus import CMMCorePlus
+
+    from ._core_link import ErrCallback
 
     AffineTuple: TypeAlias = tuple[float, float, float, float, float, float]
 
@@ -59,3 +61,20 @@ class PixelSizeGroup(ConfigGroup):
                 for preset in core.getAvailablePixelSizeConfigs()
             }
         )
+
+    def apply_to_core(
+        self,
+        core: CMMCorePlus,
+        *,
+        exclude: Container[str] = (),
+        on_err: ErrCallback | None = None,
+        apply_properties: bool = False,
+        then_update: bool = True,
+    ) -> None:
+        for config_name, preset in self.presets.items():
+            for dev, prop, val in preset.settings:
+                core.definePixelSizeConfig(config_name, dev, prop, val)
+                core.setPixelSizeUm(config_name, preset.pixel_size_um)
+
+        if then_update:
+            self.update_from_core(core)  # pragma: no cover
