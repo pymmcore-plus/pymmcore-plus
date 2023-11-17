@@ -15,13 +15,14 @@ class SystemInfoDict(TypedDict):
     BufferTotalCapacity: int
     CircularBufferMemoryFootprint: int
     DeviceAdapterSearchPaths: tuple[str, ...]
-    HostName: str
-    MACAddresses: tuple[str, ...]
     PrimaryLogFile: str
     RemainingImageCount: int
     TimeoutMs: int  # rarely needed for metadata
-    UserId: str
     VersionInfo: str
+    # these were removed in mmcore11 and probably shouldn't be used anyway
+    # HostName: str
+    # MACAddresses: tuple[str, ...]
+    # UserId: str
 
 
 class ImageDict(TypedDict):
