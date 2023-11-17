@@ -74,7 +74,8 @@ class PixelSizeGroup(ConfigGroup):
         for config_name, preset in self.presets.items():
             for dev, prop, val in preset.settings:
                 core.definePixelSizeConfig(config_name, dev, prop, val)
-                core.setPixelSizeUm(config_name, preset.pixel_size_um)
+            core.setPixelSizeUm(config_name, preset.pixel_size_um)
+            core.setPixelSizeAffine(config_name, preset.affine)
 
         if then_update:
             self.update_from_core(core)  # pragma: no cover
