@@ -46,7 +46,7 @@ class CoreDevice(Device):
     properties: list[Property] = field(default_factory=_core_props)
 
     def __post_init__(self) -> None:
-        self.CORE_GETTERS = {}  # type: ignore
+        self.CORE_GETTERS = {}
 
     def __hash__(self) -> int:
         return super().__hash__()
