@@ -213,6 +213,14 @@ class DeviceDetectionStatus(IntEnum):
     """Communication verified, parameters have been set to valid values."""
 
 
+class DeviceInitializationState(IntEnum):
+    """DeviceInitializationState returned by getDeviceInitializationState."""
+
+    Uninitialized = pymmcore.Uninitialized
+    InitializedSuccessfully = pymmcore.InitializedSuccessfully
+    InitializationFailed = pymmcore.InitializationFailed
+
+
 class PixelType(str, Enum):
     UNKNOWN = ""
     GRAY8 = "GRAY8"

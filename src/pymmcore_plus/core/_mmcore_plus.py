@@ -35,7 +35,13 @@ from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
-from ._constants import DeviceDetectionStatus, DeviceType, PixelType, PropertyType
+from ._constants import (
+    DeviceDetectionStatus,
+    DeviceInitializationState,
+    DeviceType,
+    PixelType,
+    PropertyType,
+)
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
@@ -189,6 +195,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.setPrimaryLogFile(str(logfile))
             logger.debug("Initialized core %s", self)
 
+        self._last_config: str | None = None  # last loaded config file
         self._mm_path = mm_path or find_micromanager()
         if not adapter_paths and self._mm_path:
             adapter_paths = [self._mm_path]
@@ -363,7 +370,15 @@ class CMMCorePlus(pymmcore.CMMCore):
             fpath = Path(self._mm_path) / fileName
         if not fpath.exists():
             raise FileNotFoundError(f"Path does not exist: {fpath}")
-        super().loadSystemConfiguration(str(fpath.resolve()))
+        self._last_config = str(fpath.resolve())
+        super().loadSystemConfiguration(self._last_config)
+
+    def systemConfigurationFile(self) -> str | None:
+        """Return the path to the last loaded system configuration file, or `None`.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+        """
+        return self._last_config
 
     def unloadAllDevices(self) -> None:
         """Unload all devices from the core and reset all configuration data.
@@ -400,6 +415,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         is more interpretable than the raw `int` returned by `pymmcore`
         """
         return DeviceDetectionStatus(super().detectDevice(deviceLabel))
+
+    def getDeviceInitializationState(self, label: str) -> DeviceInitializationState:
+        """Queries the initialization state of the given device.
+
+        **Why Override?** The returned [`pymmcore_plus.DeviceInitializationState`][]
+        enum is more interpretable than the raw `int` returned by `pymmcore`
+        """
+        return DeviceInitializationState(super().getDeviceInitializationState(label))
 
     # config overrides
 
