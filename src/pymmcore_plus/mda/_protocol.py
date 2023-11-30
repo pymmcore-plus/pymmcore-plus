@@ -40,7 +40,7 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    def exec_event(self, event: MDAEvent) -> Sequence[PImagePayload]:
+    def exec_event(self, event: MDAEvent) -> Iterable[PImagePayload]:
         """Execute `event`.
 
         This method is called after `setup_event` and is responsible for
