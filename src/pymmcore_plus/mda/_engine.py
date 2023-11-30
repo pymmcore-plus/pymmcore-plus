@@ -27,7 +27,6 @@ if TYPE_CHECKING:
     from typing_extensions import TypedDict
 
     from pymmcore_plus.core import CMMCorePlus
-    from pymmcore_plus.core._mmcore_plus import TaggedImage
 
     from ._protocol import PImagePayload
 
