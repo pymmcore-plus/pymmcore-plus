@@ -58,7 +58,7 @@ docs = [
     # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
 testing = [
-    "PyQt6",
+    "PyQt6 <6.6",
     "pytest",
     "pytest-cov",
     "pytest-qt",
