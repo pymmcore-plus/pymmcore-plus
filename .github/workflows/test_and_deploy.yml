@@ -125,6 +125,7 @@ jobs:
           python -m pip install -U pip
           python -m pip install -e ./napari-micromanager[testing]
           python -m pip install -e ./pymmcore-plus[cli]
+          python -m pip install PySide2
 
       - name: Install Micro-Manager
         run: mmcore install
