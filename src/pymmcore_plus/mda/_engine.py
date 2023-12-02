@@ -9,7 +9,6 @@ from typing import (
     Iterator,
     Mapping,
     NamedTuple,
-    Sequence,
     cast,
 )
 
@@ -27,7 +26,6 @@ if TYPE_CHECKING:
     from typing_extensions import TypedDict
 
     from pymmcore_plus.core import CMMCorePlus
-    from pymmcore_plus.core._mmcore_plus import TaggedImage
 
     from ._protocol import PImagePayload
 
@@ -133,7 +131,7 @@ class MDAEngine(PMDAEngine):
             self.setup_single_event(event)
         self._mmc.waitForSystem()
 
-    def exec_event(self, event: MDAEvent) -> Sequence[PImagePayload]:
+    def exec_event(self, event: MDAEvent) -> Iterable[PImagePayload]:
         """Execute an individual event and return the image data."""
         action = getattr(event, "action", None)
         if isinstance(action, HardwareAutofocus):
@@ -154,9 +152,9 @@ class MDAEngine(PMDAEngine):
             return ()
 
         if isinstance(event, SequencedEvent):
-            return self.exec_sequenced_event(event)
+            yield from self.exec_sequenced_event(event)
         else:
-            return self.exec_single_event(event)
+            yield from self.exec_single_event(event)
 
     def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
         """Event iterator that merges events for hardware sequencing if possible.
@@ -226,7 +224,7 @@ class MDAEngine(PMDAEngine):
             self._mmc.setAutoShutter(False)
             self._mmc.setShutterOpen(True)
 
-    def exec_single_event(self, event: MDAEvent) -> Sequence[PImagePayload]:
+    def exec_single_event(self, event: MDAEvent) -> Iterator[PImagePayload]:
         """Execute a single (non-triggered) event and return the image data.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -240,7 +238,7 @@ class MDAEngine(PMDAEngine):
             return ()
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
-        return ((self._mmc.getImage(), event, self._mmc.getTags()),)
+        yield ImagePayload(self._mmc.getImage(), event, self._mmc.getTags())
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
@@ -302,7 +300,7 @@ class MDAEngine(PMDAEngine):
         elif event.channel is not None:
             core.setConfig(event.channel.group, event.channel.config)
 
-    def exec_sequenced_event(self, event: SequencedEvent) -> Sequence[PImagePayload]:
+    def exec_sequenced_event(self, event: SequencedEvent) -> Iterable[PImagePayload]:
         """Execute a sequenced (triggered) event and return the image data.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -322,11 +320,15 @@ class MDAEngine(PMDAEngine):
             True,  # stopOnOverflow
         )
 
+        count = 0
+        iter_events = iter(event.events)
         # block until the sequence is done, popping images in the meantime
-        images: list[TaggedImage] = []
         while self._mmc.isSequenceRunning():
             if self._mmc.getRemainingImageCount():
-                images.append(self._mmc.popNextTaggedImage())
+                img = self._mmc.popNextTaggedImage()
+                e = next(iter_events)
+                yield ImagePayload(img.pix, e, img.tags)
+                count += 1
             else:
                 time.sleep(0.001)
 
@@ -334,19 +336,18 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while self._mmc.getRemainingImageCount():
-            images.append(self._mmc.popNextTaggedImage())
+            img = self._mmc.popNextTaggedImage()
+            e = next(iter_events)
+            yield ImagePayload(img.pix, e, img.tags)
+            count += 1
 
-        if len(images) != n_events:
+        if count != n_events:
             logger.warning(
                 "Unexpected number of images returned from sequence. "
                 "Expected %s, got %s",
                 n_events,
-                len(images),
+                count,
             )
-
-        return tuple(
-            ImagePayload(img.pix, e, img.tags) for img, e in zip(images, event.events)
-        )
 
     # ===================== EXTRA =====================
 

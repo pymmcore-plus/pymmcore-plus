@@ -224,14 +224,16 @@ DEVICE_ERRORS: dict[str, list[str]] = {
     "Autofocus": ["No autofocus device found. Cannot execute autofocus"],
     "Camera": [
         "Failed to set exposure.",
-        "Failed to snap image. Camera not loaded or initialized",
+        "Camera not loaded or initialized",
     ],
     "Dichroic": ['No device with label "Dichroic"'],
 }
 
 
 @pytest.mark.parametrize("device", DEVICE_ERRORS)
-def test_mda_no_device(device: str, core: CMMCorePlus, caplog: LogCaptureFixture):
+def test_mda_no_device(
+    device: str, core: CMMCorePlus, caplog: LogCaptureFixture
+) -> None:
     core.unloadDevice(device)
 
     if device == "Autofocus":
@@ -242,8 +244,9 @@ def test_mda_no_device(device: str, core: CMMCorePlus, caplog: LogCaptureFixture
         )
     else:
         event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
-    core.mda.engine.setup_event(event)  # type: ignore
-    core.mda.engine.exec_event(event)  # type: ignore
+    engine = cast("MDAEngine", core.mda.engine)
+    engine.setup_event(event)
+    list(engine.exec_event(event))
 
     for e in DEVICE_ERRORS[device]:
         assert e in caplog.text
