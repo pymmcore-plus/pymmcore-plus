@@ -191,6 +191,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if _instance is None:
             _instance = self
 
+        # TODO: test this on windows ... writing to the same file may be an issue there
         if logfile := current_logfile(logger):
             self.setPrimaryLogFile(str(logfile))
             logger.debug("Initialized core %s", self)
@@ -1485,8 +1486,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             ncomponents = self.getNumberOfComponents()
         if ncomponents == 4:
             new_shape = (*img.shape, 4)
-            img = img.view(dtype=f"u{img.dtype.itemsize//4}")
-            img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
+            img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
+            img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
         return img
 
     def getTaggedImage(self, channel_index: int = 0) -> TaggedImage:
