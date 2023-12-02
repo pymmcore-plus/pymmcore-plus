@@ -9,7 +9,6 @@ from typing import (
     Iterator,
     Mapping,
     NamedTuple,
-    Sequence,
     cast,
 )
 
@@ -225,7 +224,7 @@ class MDAEngine(PMDAEngine):
             self._mmc.setAutoShutter(False)
             self._mmc.setShutterOpen(True)
 
-    def exec_single_event(self, event: MDAEvent) -> Sequence[PImagePayload]:
+    def exec_single_event(self, event: MDAEvent) -> Iterator[PImagePayload]:
         """Execute a single (non-triggered) event and return the image data.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -239,7 +238,7 @@ class MDAEngine(PMDAEngine):
             return ()
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
-        yield (self._mmc.getImage(), event, self._mmc.getTags())
+        yield ImagePayload(self._mmc.getImage(), event, self._mmc.getTags())
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
@@ -301,7 +300,7 @@ class MDAEngine(PMDAEngine):
         elif event.channel is not None:
             core.setConfig(event.channel.group, event.channel.config)
 
-    def exec_sequenced_event(self, event: SequencedEvent) -> Sequence[PImagePayload]:
+    def exec_sequenced_event(self, event: SequencedEvent) -> Iterable[PImagePayload]:
         """Execute a sequenced (triggered) event and return the image data.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -328,7 +327,7 @@ class MDAEngine(PMDAEngine):
             if self._mmc.getRemainingImageCount():
                 img = self._mmc.popNextTaggedImage()
                 e = next(iter_events)
-                yield (ImagePayload(img.pix, e, img.tags), e)
+                yield ImagePayload(img.pix, e, img.tags)
                 count += 1
             else:
                 time.sleep(0.001)
@@ -339,7 +338,7 @@ class MDAEngine(PMDAEngine):
         while self._mmc.getRemainingImageCount():
             img = self._mmc.popNextTaggedImage()
             e = next(iter_events)
-            yield (ImagePayload(img.pix, e, img.tags), e)
+            yield ImagePayload(img.pix, e, img.tags)
             count += 1
 
         if count != n_events:
