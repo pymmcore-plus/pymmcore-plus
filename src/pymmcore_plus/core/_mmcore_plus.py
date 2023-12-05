@@ -2083,10 +2083,13 @@ class CMMCorePlus(pymmcore.CMMCore):
             device = args[0]
         else:
             device = self.getXYStageDevice()
+
         class Receiver:
             moved = False
+
             def receive(self, *args):
                 self.moved = True
+
         receiver = Receiver()
         self.events.XYStagePositionChanged.connect(receiver.receive)
         yield
@@ -2094,7 +2097,6 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.waitForDevice(device)
             pos = self.getXYPosition(device)
             self.events.XYStagePositionChanged.emit(device, *pos)
-
 
     @contextmanager
     def setContext(self, **kwargs: Any) -> Iterator[None]:
