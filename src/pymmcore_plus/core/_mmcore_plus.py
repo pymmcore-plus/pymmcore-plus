@@ -1372,7 +1372,9 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To add a lock to prevent concurrent calls across threads.
         """
-        return super().setXYPosition(*args, **kwargs)
+        print("In modified setXYPosition")
+        with self._stage_moved_emission_ensured(*args):
+            return super().setXYPosition(*args, **kwargs)
 
     @synchronized(_lock)
     def getCameraChannelNames(self) -> tuple[str, ...]:
@@ -2074,6 +2076,28 @@ class CMMCorePlus(pymmcore.CMMCore):
         if before != after:
             for i, val in enumerate(after):
                 self.events.propertyChanged.emit(device, properties[i], val)
+
+    @contextmanager
+    def _stage_moved_emission_ensured(self, *args, **kwargs) -> Iterator[None]:
+        """Context that emits events if any stage device moves."""
+        if args[0] is str:
+            device = args[0]
+        else:
+            device = self.getXYStageDevice()
+            print(device)
+        class Receiver:
+            moved = False
+            def receive(self, *args):
+                self.moved = True
+        receiver = Receiver()
+        self.events.XYStagePositionChanged.connect(receiver.receive)
+        yield
+        if not receiver.moved:
+            print("SENING SIGNAL IN PLUS, moved:", receiver.moved)
+            self.waitForDevice(device)
+            pos = self.getXYPosition(device)
+            self.events.XYStagePositionChanged.emit(device, *pos)
+
 
     @contextmanager
     def setContext(self, **kwargs: Any) -> Iterator[None]:
