@@ -1376,6 +1376,13 @@ class CMMCorePlus(pymmcore.CMMCore):
             return super().setXYPosition(*args, **kwargs)
 
     @synchronized(_lock)
+    def setRelativeXYPosition(self, device: str, dx: float, dy: float) -> None:
+        if dx or dy:
+            x, y = self.getXPosition(), self.getYPosition()
+            self.setXYPosition(device, x + dx, y + dy)
+        self.waitForDevice(device)
+
+    @synchronized(_lock)
     def getCameraChannelNames(self) -> tuple[str, ...]:
         """Convenience method to call `getCameraChannelName` for all camera channels.
 
