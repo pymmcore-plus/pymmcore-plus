@@ -1372,7 +1372,6 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To add a lock to prevent concurrent calls across threads.
         """
-        print("In modified setXYPosition")
         with self._stage_moved_emission_ensured(*args):
             return super().setXYPosition(*args, **kwargs)
 
@@ -2084,7 +2083,6 @@ class CMMCorePlus(pymmcore.CMMCore):
             device = args[0]
         else:
             device = self.getXYStageDevice()
-            print(device)
         class Receiver:
             moved = False
             def receive(self, *args):
@@ -2093,7 +2091,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.XYStagePositionChanged.connect(receiver.receive)
         yield
         if not receiver.moved:
-            print("SENING SIGNAL IN PLUS, moved:", receiver.moved)
             self.waitForDevice(device)
             pos = self.getXYPosition(device)
             self.events.XYStagePositionChanged.emit(device, *pos)
