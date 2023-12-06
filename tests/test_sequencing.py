@@ -143,6 +143,7 @@ def test_sequence_tester_decoding(sequence_tester: CMMCorePlus) -> None:
     core = sequence_tester
     core.startContinuousSequenceAcquisition(3)
     core.waitForSystem()
+    core.stopSequenceAcquisition()
 
     for i in range(3):
         info = decode_image(core.popNextImage())
