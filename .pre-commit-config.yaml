@@ -5,33 +5,33 @@ ci:
 
 repos:
   - repo: https://github.com/crate-ci/typos
-    rev: v1.16.10
+    rev: v1.16.23
     hooks:
       - id: typos
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.0.287
+    rev: v0.1.6
     hooks:
       - id: ruff
         args: [--fix]
 
   - repo: https://github.com/psf/black
-    rev: 23.7.0
+    rev: 23.11.0
     hooks:
       - id: black
 
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.14
+    rev: v0.15
     hooks:
       - id: validate-pyproject
 
   - repo: https://github.com/pre-commit/mirrors-mypy
-    rev: v1.5.1
+    rev: v1.7.1
     hooks:
       - id: mypy
         additional_dependencies:
-          - pymmcore >=10.4.0.71.0
-          - useq-schema >= 0.4.0
+          - pymmcore >=10.7.0.71.0
+          - useq-schema >= 0.4.7
           - psygnal
           - typer
         files: "^src/"

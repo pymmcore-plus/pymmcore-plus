@@ -22,7 +22,6 @@ from typing import (
     Pattern,
     Sequence,
     TypeVar,
-    cast,
     overload,
 )
 
@@ -36,11 +35,18 @@ from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
-from ._constants import DeviceDetectionStatus, DeviceType, PropertyType
+from ._constants import (
+    DeviceDetectionStatus,
+    DeviceInitializationState,
+    DeviceType,
+    PixelType,
+    PropertyType,
+)
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from ._sequencing import can_sequence_events
+from ._state import core_state
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
@@ -48,34 +54,11 @@ if TYPE_CHECKING:
     from typing_extensions import Literal, TypedDict
     from useq import MDAEvent
 
+    from ._state import StateDict
+
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
     ListOrTuple = list[_T] | tuple[_T, ...]
-
-    class StateDict(TypedDict, total=False):
-        """Dictionary of state values for a device.
-
-        This object should only be imported inside a `TYPE_CHECKING` block.
-        """
-
-        AutoFocusDevice: str
-        BytesPerPixel: int
-        CameraChannelNames: tuple[str, ...]
-        CameraDevice: str
-        Datetime: str
-        Exposure: float
-        FocusDevice: str
-        GalvoDevice: str
-        ImageBitDepth: int
-        ImageHeight: int
-        ImageProcessorDevice: str
-        ImageWidth: int
-        PixelSizeUm: float
-        ShutterDevice: str
-        SLMDevice: str
-        XYPosition: tuple[float, float]
-        XYStageDevice: str
-        ZPosition: float
 
     class PropertySchema(TypedDict, total=False):
         """JSON schema `dict` describing a device property."""
@@ -106,6 +89,29 @@ else:
 
 _OBJDEV_REGEX = re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
+
+# these are devices for which setAutoFocusOffset is known to have no effect
+# maps (device_library, device_name) -> offset_device_name
+# see _getAutoFocusOffsetDevice for details
+_OFFSET_DEVICES: dict[tuple[str, str], str] = {
+    ("NikonTE2000", "PerfectFocus"): "PFS-Offset",
+    ("NikonTI", "TIPFSStatus"): "TIPFSOffset",
+    # --------------------------
+    # these devices have an apparent offset device
+    # but may implicitly/privately control it just fine with the setOffset API
+    # need testing to see whether setAutoFocusOffset works as is.
+    # ("ZeissCAN29", "ZeissDefiniteFocus"): "ZeissDefiniteFocusOffset",
+    # ("Olympus", "AutoFocusZDC"): "ZDC2OffsetDrive",
+    # ("OlympusIX83", "Autofocus"): "AutofocusDrive",
+    # ("LeicaDMI", "Adaptive Focus Control"): "Adaptive Focus Control Offset",
+    # --------------------------
+    # these devices have a known no-op for setOffset()
+    # but have no apparent offset device
+    # ("DemoCamera", "DAutoFocus"): "",
+    # ("AmScope", ""): "",
+    # ("ASIStage", "CRIF"): "",
+    # ("FocalPoint", "FocalPoint"): "",
+}
 
 STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
@@ -185,10 +191,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         if _instance is None:
             _instance = self
 
+        # TODO: test this on windows ... writing to the same file may be an issue there
         if logfile := current_logfile(logger):
             self.setPrimaryLogFile(str(logfile))
             logger.debug("Initialized core %s", self)
 
+        self._last_config: str | None = None  # last loaded config file
         self._mm_path = mm_path or find_micromanager()
         if not adapter_paths and self._mm_path:
             adapter_paths = [self._mm_path]
@@ -363,7 +371,15 @@ class CMMCorePlus(pymmcore.CMMCore):
             fpath = Path(self._mm_path) / fileName
         if not fpath.exists():
             raise FileNotFoundError(f"Path does not exist: {fpath}")
-        super().loadSystemConfiguration(str(fpath.resolve()))
+        self._last_config = str(fpath.resolve())
+        super().loadSystemConfiguration(self._last_config)
+
+    def systemConfigurationFile(self) -> str | None:
+        """Return the path to the last loaded system configuration file, or `None`.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+        """
+        return self._last_config
 
     def unloadAllDevices(self) -> None:
         """Unload all devices from the core and reset all configuration data.
@@ -400,6 +416,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         is more interpretable than the raw `int` returned by `pymmcore`
         """
         return DeviceDetectionStatus(super().detectDevice(deviceLabel))
+
+    def getDeviceInitializationState(self, label: str) -> DeviceInitializationState:
+        """Queries the initialization state of the given device.
+
+        **Why Override?** The returned [`pymmcore_plus.DeviceInitializationState`][]
+        enum is more interpretable than the raw `int` returned by `pymmcore`
+        """
+        return DeviceInitializationState(super().getDeviceInitializationState(label))
 
     # config overrides
 
@@ -474,6 +498,18 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         cfg = super().getConfigGroupState(group)
         return cfg if native else Configuration.from_configuration(cfg)
+
+    @overload
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native: Literal[True]
+    ) -> pymmcore.Configuration:
+        ...
+
+    @overload
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native: Literal[False] = False
+    ) -> Configuration:
+        ...
 
     def getConfigGroupStateFromCache(
         self, group: str, *, native: bool = False
@@ -1287,16 +1323,24 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`:
         added to complement `getXPosition` and `getYPosition`*
+
+        !!! note
+            This is simply an alias for `getPosition`], which returns the position of
+            the current focus device when called without arguments.
         """
-        return self.getPosition(self.getFocusDevice())
+        return self.getPosition()
 
     def setZPosition(self, val: float) -> None:
         """Set the position of the current focus device in microns.
 
         :sparkles: *This method is new in `CMMCorePlus`:
         added to complement `setXYPosition`*
+
+        !!! note
+            This is simply an alias for `setPosition`, which returns the position of the
+            current focus device when called with a single argument.
         """
-        return self.setPosition(self.getFocusDevice(), val)
+        return self.setPosition(val)
 
     @overload
     def setPosition(self, position: float) -> None:
@@ -1442,8 +1486,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             ncomponents = self.getNumberOfComponents()
         if ncomponents == 4:
             new_shape = (*img.shape, 4)
-            img = img.view(dtype=f"u{img.dtype.itemsize//4}")
-            img = img.reshape(new_shape)[:, :, (2, 1, 0, 3)]  # mmcore gives bgra
+            img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
+            img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
         return img
 
     def getTaggedImage(self, channel_index: int = 0) -> TaggedImage:
@@ -1496,12 +1540,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         tags["ROI"] = "-".join(str(x) for x in self.getROI())
         tags["Width"] = self.getImageWidth()
         tags["Height"] = self.getImageHeight()
-        if (depth := self.getBytesPerPixel()) == 4:
-            ncomp = self.getNumberOfComponents()
-            pix_type = "GRAY32" if ncomp == 1 else "RGB32"
-        else:
-            pix_type = {1: "GRAY8", 2: "GRAY16", 8: "RGB64"}[depth]
-        tags["PixelType"] = pix_type
+        tags["PixelType"] = str(
+            PixelType.for_bytes(self.getBytesPerPixel(), self.getNumberOfComponents())
+        )
         tags["Frame"] = 0
         tags["FrameIndex"] = 0
         tags["Position"] = "Default"
@@ -1656,6 +1697,53 @@ class CMMCorePlus(pymmcore.CMMCore):
         cameraLabel = cameraLabel or super().getCameraDevice()
         self.events.sequenceAcquisitionStopped.emit(cameraLabel)
 
+    def setAutoFocusOffset(self, offset: float) -> None:
+        """Applies offset the one-shot focusing device.
+
+        In micro-manager, there is some variability in the way that autofocus devices
+        are implemented.  Some have a separate offset device, while others can directly
+        set the offset of an associated device.  As a result, calling
+        `setAutoFocusOffset`, may or may not do anything depending on the current
+        autofocus device.
+
+        This method attempts to detect known autofocus devices and
+        """
+        if offset_dev := self._getAutoFocusOffsetDevice():
+            self.setPosition(offset_dev, offset)
+        super().setAutoFocusOffset(offset)
+
+    def getAutoFocusOffset(self) -> float:
+        if offset_dev := self._getAutoFocusOffsetDevice():
+            return self.getPosition(offset_dev)
+        return super().getAutoFocusOffset()
+
+    def _getAutoFocusOffsetDevice(self, af_dev: str | None = None) -> str | None:
+        """Return label of offset device for `af_dev` or the current autofocus device.
+
+        This method matches the device library and name of the provided or autofocus
+        device against a list of known autofocus devices that have an offset device
+        that must be manually managed.  If a match is found, the label of a currently
+        loaded stage device is returned (which may be used in a call to `setPosition`).
+
+        If no match is found, `None` is returned.
+        """
+        if af_dev is None:
+            af_dev = self.getAutoFocusDevice()
+
+        if af_dev:
+            try:
+                lib_name = self.getDeviceLibrary(af_dev)
+            except RuntimeError:
+                return None
+            dev_name = self.getDeviceName(af_dev)
+            if offset_dev := _OFFSET_DEVICES.get((lib_name, dev_name)):
+                # a match was found,
+                # find the label of currently loaded device with the same name
+                for dev in self.getLoadedDevicesOfType(DeviceType.StageDevice):
+                    if self.getDeviceName(dev) == offset_dev:
+                        return dev
+        return None
+
     def setAutoShutter(self, state: bool) -> None:
         """Set shutter to automatically open and close when an image is acquired.
 
@@ -1679,11 +1767,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         super().setShutterOpen(*args, **kwargs)
         shutterLabel, state = kwargs.get("shutterLabel"), kwargs.get("state")
-        if len(args) > 1:
+        if len(args) == 2:
             shutterLabel, state = args
-        elif args:
+        elif len(args) == 1:
             shutterLabel = super().getShutterDevice()
-            state = args
+            state = args[0]
+        state = str(int(bool(state)))
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
     @overload
@@ -1924,58 +2013,36 @@ class CMMCorePlus(pymmcore.CMMCore):
         print("Adapter path:", ",".join(self.getDeviceAdapterSearchPaths()))
         print_tabular_data(data, sort=sort)
 
-    def state(self, exclude: Iterable[str] = ()) -> StateDict:
-        """Return `StateDict` with commonly accessed state values.
-
-        :sparkles: *This method is new in `CMMCorePlus`. It is a bit faster
-        than [`getSystemState`][pymmcore_plus.CMMCorePlus.getSystemState].*
-
-        Parameters
-        ----------
-        exclude : Iterable[str]
-            List of properties to exclude when gathering state (may speed things up).
-            See [`StateDict`][pymmcore_plus.core._mmcore_plus.StateDict] for a list of
-            keys that can be excluded.
-
-        Returns
-        -------
-        StateDict
-            A dictionary of commonly accessed state values.
-        """
-        # approx retrieval cost in comment (for demoCam)
-        exclude = set(exclude)
-        state: dict = {}
-        for attr in (
-            "AutoFocusDevice",  # 150 ns
-            "BytesPerPixel",  # 149 ns
-            "CameraChannelNames",  # 1 µs
-            "CameraDevice",  # 159 ns
-            "Datetime",
-            "Exposure",  # 726 ns
-            "FocusDevice",  # 112 ns
-            "GalvoDevice",  # 109 ns
-            "ImageBitDepth",  # 147 ns
-            "ImageHeight",  # 164 ns
-            "ImageProcessorDevice",  # 110 ns
-            "ImageWidth",  # 172 ns
-            "PixelSizeUm",  # 2.2 µs
-            "ShutterDevice",  # 152 ns
-            "SLMDevice",  # 110 ns
-            "XYPosition",  # 1.1 µs
-            "XYStageDevice",  # 156 ns
-            "ZPosition",  # 1.03 µs
-        ):
-            if attr not in exclude:
-                if attr == "Datetime":
-                    state[attr] = str(datetime.now())
-                elif attr == "PixelSizeUm":
-                    state[attr] = self.getPixelSizeUm(True)  # True==cached
-                else:
-                    try:
-                        state[attr] = getattr(self, f"get{attr}")()
-                    except RuntimeError:
-                        continue
-        return cast("StateDict", state)
+    def state(
+        self,
+        *,
+        devices: bool = True,
+        image: bool = True,
+        system_info: bool = False,
+        system_status: bool = False,
+        config_groups: bool | Sequence[str] = True,
+        position: bool = False,
+        autofocus: bool = False,
+        pixel_size_configs: bool = False,
+        device_types: bool = False,
+        cached: bool = True,
+        error_value: Any = None,
+    ) -> StateDict:
+        """Return info on the current state of the core."""
+        return core_state(
+            self,
+            devices=devices,
+            image=image,
+            system_info=system_info,
+            system_status=system_status,
+            config_groups=config_groups,
+            position=position,
+            autofocus=autofocus,
+            pixel_size_configs=pixel_size_configs,
+            device_types=device_types,
+            cached=cached,
+            error_value=error_value,
+        )
 
     @contextmanager
     def _property_change_emission_ensured(

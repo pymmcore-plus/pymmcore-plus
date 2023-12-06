@@ -41,7 +41,7 @@ def __getattr__(name: str) -> Any:  # pragma: no cover
             return QCoreSignaler
         except ImportError as e:
             raise ImportError(
-                f"{e}.\nQCoreSignaler requires qtpy and either PySide2 or PyQt5.`"
+                f"{e}.\nQCoreSignaler requires qtpy and a Qt binding."
             ) from e
 
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

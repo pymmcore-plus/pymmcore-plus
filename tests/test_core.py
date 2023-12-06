@@ -20,6 +20,7 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
+from pymmcore_plus.mda._engine import _summary_meta
 from qtpy.QtCore import QObject
 from qtpy.QtCore import SignalInstance as QSignalInstance
 from useq import MDASequence
@@ -63,6 +64,7 @@ def test_load_system_config(core: CMMCorePlus):
 
     config_path = Path(__file__).parent / "local_config.cfg"
     core.loadSystemConfiguration(str(config_path))
+    assert core.systemConfigurationFile() == str(config_path)
     assert core.getLoadedDevices() == (
         "DHub",
         "Camera",
@@ -146,7 +148,13 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
         assert isinstance(_call.args[0], np.ndarray)
         assert _call.args[1] == event
 
-    ss_mock.assert_called_once_with(mda)
+    summary = _summary_meta(core)
+    summary.pop("DateAndTime", "")
+    ss_mock.assert_called_once()
+    _seq, _meta = ss_mock.call_args[0]
+    assert _seq == mda
+    _meta.pop("DateAndTime", "")
+    assert _meta == summary
     sf_mock.assert_called_once_with(mda)
     xystage_mock.assert_called_with("XY", 1.0, 1.0)
     exp_mock.assert_called_with("Camera", 1.0)
@@ -200,7 +208,8 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
     with qtbot.waitSignal(core.mda._signals.sequenceFinished):
         core.run_mda(mda)
 
-    ss_mock.assert_called_once_with(mda)
+    ss_mock.assert_called_once()
+    assert ss_mock.call_args[0][0] == mda
     cancel_mock.assert_called_once_with(mda)
     assert _fcount < len(list(mda))
     sf_mock.assert_called_once_with(mda)
@@ -568,3 +577,71 @@ def test_multi_roi(core: CMMCorePlus) -> None:
     roi = ([0, 0], [10, 10], [20, 20], [30, 30])
     core.setMultiROI(*roi)
     assert core.getMultiROI() == roi
+
+
+def test_set_autofocus_offset(
+    core: CMMCorePlus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from pymmcore_plus.core import _mmcore_plus
+
+    monkeypatch.setitem(
+        _mmcore_plus._OFFSET_DEVICES, ("DemoCamera", "DAutoFocus"), "DStage"
+    )
+    core.setAutoFocusOffset(1.0)
+    assert core.getAutoFocusOffset() == 1.0
+
+
+def test_core_state(core: CMMCorePlus) -> None:
+    state = core.state(
+        devices=True,
+        image=True,
+        system_info=True,
+        system_status=True,
+        config_groups=True,
+        position=True,
+        autofocus=True,
+        pixel_size_configs=True,
+        device_types=True,
+    )
+    assert isinstance(state, dict)
+    assert "Devices" in state
+    assert "Core" in state["Devices"]
+
+    for key in {
+        "AutoFocus",
+        "Camera",
+        "Focus",
+        "Galvo",
+        "ImageProcessor",
+        "SLM",
+        "Shutter",
+        "XYStage",
+    }:
+        if val := state["Devices"]["Core"][key]:
+            assert val in state["Devices"]
+
+    core.unloadAllDevices()
+    # should still work without error
+    state = core.state()
+
+
+def test_snap_rgb(core: CMMCorePlus) -> None:
+    core.setProperty("Camera", "PixelType", "32bitRGB")
+    core.setProperty("Camera", "Mode", "Color Test Pattern")
+    core.snapImage()
+    img = core.getImage()
+    assert img.shape == (512, 512, 3)
+    expect = np.array(
+        [
+            [0, 0, 255],
+            [0, 255, 0],
+            [255, 0, 0],
+            [0, 0, 0],
+            [255, 255, 0],
+            [255, 0, 255],
+            [0, 255, 255],
+            [255, 255, 255],
+        ],
+        dtype="uint8",
+    )
+    assert np.array_equal(img[::64, -1], expect)

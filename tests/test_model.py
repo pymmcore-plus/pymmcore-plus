@@ -50,10 +50,14 @@ def non_empty_lines(path: Path) -> list[str]:
     ]
 
 
+if not (mm_path := find_micromanager()):
+    raise RuntimeError("Could not find Micro-Manager, please run `mmcore install`")
+
+
 @pytest.mark.parametrize(
     "input_",
     [
-        Path(find_micromanager()) / "MMConfig_demo.cfg",  # type: ignore
+        Path(mm_path) / "MMConfig_demo.cfg",  # type: ignore
         Path(__file__).parent / "local_config.cfg",
     ],
 )
