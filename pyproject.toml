@@ -66,6 +66,7 @@ testing = [
     "rich",
     "tiffile",
     "typer",
+    "msgpack",
 ]
 dev = [
     "black",
