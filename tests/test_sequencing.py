@@ -1,13 +1,13 @@
 from math import prod
-from typing import Any, Self, cast
+from typing import cast
 from unittest.mock import MagicMock, call
 
 import pytest
 import useq
-from attr import dataclass
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.core._sequencing import SequencedEvent, get_all_sequenceable
 from pymmcore_plus.mda import MDAEngine, MDARunner
+from pymmcore_plus.seq_tester import decode_image
 
 
 def test_get_all_sequencable(core: CMMCorePlus) -> None:
@@ -129,7 +129,6 @@ def sequence_tester() -> CMMCorePlus:
     core = CMMCorePlus()
     core.loadDevice("THub", "SequenceTester", "THub")
     core.initializeDevice("THub")
-
     core.loadDevice("TCamera", "SequenceTester", "TCamera")
     core.setParentLabel("TCamera", "THub")
     core.setProperty("TCamera", "ImageMode", "MachineReadable")
@@ -140,5 +139,18 @@ def sequence_tester() -> CMMCorePlus:
     yield core
 
 
-def test_sequence_tester(sequence_tester: CMMCorePlus) -> None:
-    pass
+def test_sequence_tester_decoding(sequence_tester: CMMCorePlus) -> None:
+    core = sequence_tester
+    core.startContinuousSequenceAcquisition(3)
+    core.waitForSystem()
+
+    for i in range(3):
+        info = decode_image(core.popNextImage())
+        assert info.camera_info.is_sequence
+
+        assert info.hub_global_packet_nr == i
+        assert info.camera_info.cumulative_img_num == i
+        assert info.camera_info.frame_num == i
+        assert info.camera_info.serial_img_num == i
+
+        assert bool(info.start_state) == (i != 0)
