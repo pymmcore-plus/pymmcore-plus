@@ -2,10 +2,12 @@ from math import prod
 from typing import cast
 from unittest.mock import MagicMock, call
 
+import pytest
 import useq
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.core._sequencing import SequencedEvent, get_all_sequenceable
 from pymmcore_plus.mda import MDAEngine, MDARunner
+from pymmcore_plus.seq_tester import decode_image
 
 
 def test_get_all_sequencable(core: CMMCorePlus) -> None:
@@ -65,7 +67,7 @@ def test_sequenced_mda_with_zero_values() -> None:
     core.mda.run(mda)
 
 
-def test_fully_sequenceable_core():
+def test_fully_sequenceable_core() -> None:
     mda = useq.MDASequence(
         stage_positions=[(0, 0, 0), (1, 1, 1)],
         z_plan=useq.ZRangeAround(range=3, step=1),
@@ -110,7 +112,7 @@ def test_fully_sequenceable_core():
     )
 
 
-def test_sequenced_circular_buffer(core: CMMCorePlus):
+def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:
     core.initializeCircularBuffer()
     core.setCircularBufferMemoryFootprint(20)
     max_imgs = core.getBufferFreeCapacity()
@@ -120,3 +122,36 @@ def test_sequenced_circular_buffer(core: CMMCorePlus):
     )
     core.mda.engine.use_hardware_sequencing = True
     core.mda.run(mda)
+
+
+@pytest.fixture
+def sequence_tester() -> CMMCorePlus:
+    core = CMMCorePlus()
+    core.loadDevice("THub", "SequenceTester", "THub")
+    core.initializeDevice("THub")
+    core.loadDevice("TCamera", "SequenceTester", "TCamera")
+    core.setParentLabel("TCamera", "THub")
+    core.setProperty("TCamera", "ImageMode", "MachineReadable")
+    core.setProperty("TCamera", "ImageWidth", 128)
+    core.setProperty("TCamera", "ImageHeight", 128)
+    core.initializeDevice("TCamera")
+    core.setCameraDevice("TCamera")
+    yield core
+
+
+def test_sequence_tester_decoding(sequence_tester: CMMCorePlus) -> None:
+    core = sequence_tester
+    core.startContinuousSequenceAcquisition(3)
+    core.waitForSystem()
+    core.stopSequenceAcquisition()
+
+    for i in range(3):
+        info = decode_image(core.popNextImage())
+        assert info.camera_info.is_sequence
+
+        assert info.hub_global_packet_nr == i
+        assert info.camera_info.cumulative_img_num == i
+        assert info.camera_info.frame_num == i
+        assert info.camera_info.serial_img_num == i
+
+        assert bool(info.start_state) == (i != 0)
