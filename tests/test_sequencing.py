@@ -1,8 +1,10 @@
 from math import prod
-from typing import cast
+from typing import Any, Self, cast
 from unittest.mock import MagicMock, call
 
+import pytest
 import useq
+from attr import dataclass
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.core._sequencing import SequencedEvent, get_all_sequenceable
 from pymmcore_plus.mda import MDAEngine, MDARunner
@@ -65,7 +67,7 @@ def test_sequenced_mda_with_zero_values() -> None:
     core.mda.run(mda)
 
 
-def test_fully_sequenceable_core():
+def test_fully_sequenceable_core() -> None:
     mda = useq.MDASequence(
         stage_positions=[(0, 0, 0), (1, 1, 1)],
         z_plan=useq.ZRangeAround(range=3, step=1),
@@ -110,7 +112,7 @@ def test_fully_sequenceable_core():
     )
 
 
-def test_sequenced_circular_buffer(core: CMMCorePlus):
+def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:
     core.initializeCircularBuffer()
     core.setCircularBufferMemoryFootprint(20)
     max_imgs = core.getBufferFreeCapacity()
@@ -120,3 +122,23 @@ def test_sequenced_circular_buffer(core: CMMCorePlus):
     )
     core.mda.engine.use_hardware_sequencing = True
     core.mda.run(mda)
+
+
+@pytest.fixture
+def sequence_tester() -> CMMCorePlus:
+    core = CMMCorePlus()
+    core.loadDevice("THub", "SequenceTester", "THub")
+    core.initializeDevice("THub")
+
+    core.loadDevice("TCamera", "SequenceTester", "TCamera")
+    core.setParentLabel("TCamera", "THub")
+    core.setProperty("TCamera", "ImageMode", "MachineReadable")
+    core.setProperty("TCamera", "ImageWidth", 128)
+    core.setProperty("TCamera", "ImageHeight", 128)
+    core.initializeDevice("TCamera")
+    core.setCameraDevice("TCamera")
+    yield core
+
+
+def test_sequence_tester(sequence_tester: CMMCorePlus) -> None:
+    pass
