@@ -6,13 +6,9 @@
 
 ```bash
 pip install pymmcore-plus
-
-# or, add the [cli] extra if you wish to use the `mmcore` command line tool:
-
-pip install "pymmcore-plus[cli]"
 ```
 
-... as well as conda:
+or with as conda:
 
 ```bash
 conda install -c conda-forge pymmcore-plus
@@ -20,17 +16,14 @@ conda install -c conda-forge pymmcore-plus
 
 ## Installing Micro-Manager Device Adapters
 
-Just like underlying the [`pymmcore`](https://github.com/micro-manager/pymmcore)
-that this library, `pymmcore-plus` relies on the device adapters and C++ core
-provided by
+Just like the underlying library [`pymmcore`](https://github.com/micro-manager/pymmcore),
+`pymmcore-plus` also relies on the device adapters and C++ core provided by
 [mmCoreAndDevices](https://github.com/micro-manager/mmCoreAndDevices#mmcoreanddevices).
-There are two ways to do this:
+They can be installed in two ways:
 
 1. **Use the `mmcore` command line tool**
 
-    If you've installed with `pip install "pymmcore-plus[cli]"`,
-    this library provides a quick way to install the latest version of
-    micro-manager:
+    This library provides a quick way to install the latest version of micro-manager:
 
     ```bash
     mmcore install
@@ -76,19 +69,14 @@ There are two ways to do this:
     By default, `pymmcore-plus` will look for a `Micro-Manager` folder in the
     default install location. On Windows this is `C:\Program Files\`, on macOS it is
     `/Applications/` and on Linux it is `/usr/local/lib/`. To override these default
-    device adapter search path, set the `MICROMANAGER_PATH` environment variable.
+    device adapter search path, set the `MICROMANAGER_PATH` environment variable
+    (e.g. `export MICROMANAGER_PATH=/path/to/installation`).
 
     To see which micro-manager installation `pymmcore-plus` is using, you
     can run:
 
     ```shell
-    mmcore find
-    ```
-
-    or... if you didn't install with the `cli` extra:
-
-    ```shell
-    python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
+    mmcore list
     ```
 
 ### On Linux
