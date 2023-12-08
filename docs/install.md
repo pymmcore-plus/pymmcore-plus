@@ -6,9 +6,13 @@
 
 ```bash
 pip install pymmcore-plus
+
+# or, add the [cli] extra if you wish to use the `mmcore` command line tool:
+
+pip install "pymmcore-plus[cli]"
 ```
 
-or with as conda:
+or with conda:
 
 ```bash
 conda install -c conda-forge pymmcore-plus
@@ -16,21 +20,22 @@ conda install -c conda-forge pymmcore-plus
 
 ## Installing Micro-Manager Device Adapters
 
-Just like the underlying library [`pymmcore`](https://github.com/micro-manager/pymmcore),
+Just like the underlying [`pymmcore`](https://github.com/micro-manager/pymmcore) library,
 `pymmcore-plus` also relies on the device adapters and C++ core provided by
 [mmCoreAndDevices](https://github.com/micro-manager/mmCoreAndDevices#mmcoreanddevices).
 They can be installed in two ways:
 
 1. **Use the `mmcore` command line tool**
 
-    This library provides a quick way to install the latest version of micro-manager:
+    If you've installed with `pip install "pymmcore-plus[cli]"`, this library provides
+    a quick way to install the latest version of micro-manager:
 
     ```bash
     mmcore install
     ```
 
     This will download the latest release of micro-manager and place it in the
-    pymmcore-plus folder. If you would like to modify the location of the
+    `pymmcore-plus` folder. If you would like to modify the location of the
     installation, or the release of micro-manager to install, you can use the
     `--dest` and `--release` flags respectively.
 
