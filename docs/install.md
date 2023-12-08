@@ -53,12 +53,18 @@ They can be installed in two ways:
 
 !!! danger "Critical"
 
-    The *device interface version* MUST match between pymmcore and the
+    The *device interface version* MUST match between `pymmcore` and the
     Micro-Manager device adapters.
 
-    The device interface version of a given pymmcore version is the
-    fourth part in the version number, and can also be with the following
-    command:
+    The device interface version of a given `pymmcore` version is the
+    fourth part in the version number (e.g. v11.1.1.**71**.0), and can also be
+    identified with the following command:
+
+    ```bash
+    mmcore --version
+    ```
+
+    or, if you didn't install with the `cli` extra:
 
     ```bash
     python -c "print(__import__('pymmcore').CMMCore().getAPIVersionInfo())"
@@ -84,7 +90,7 @@ They can be installed in two ways:
     mmcore list
     ```
 
-    or... if you didn't install with the `cli` extra:
+    or, if you didn't install with the `cli` extra:
 
     ```shell
     python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
