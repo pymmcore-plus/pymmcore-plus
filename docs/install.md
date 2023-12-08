@@ -84,6 +84,12 @@ They can be installed in two ways:
     mmcore list
     ```
 
+    or... if you didn't install with the `cli` extra:
+
+    ```shell
+    python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
+    ```
+
 ### On Linux
 
 On a linux based system the easiest approach is to just install the C++ core of
