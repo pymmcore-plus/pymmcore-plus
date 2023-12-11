@@ -64,6 +64,7 @@ testing = [
     "pytest-qt",
     "qtpy",
     "rich",
+    "zarr",
     "tiffile",
     "typer",
     "msgpack",
