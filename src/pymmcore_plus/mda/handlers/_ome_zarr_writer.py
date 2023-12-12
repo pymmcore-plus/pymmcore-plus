@@ -362,7 +362,7 @@ class OMEZarrWriter:
         return tuple(shape) + frame.shape, tuple(updated_used_axis)
 
     def _used_axis(self, seq: useq.MDASequence) -> tuple[str, ...]:
-        """Get the used axes for the current sequence."""
+        """Get the used axes for the current sequence excluding the position axis."""
         return tuple(x for x in seq.used_axes if x != "p")
 
     def _new_array(
