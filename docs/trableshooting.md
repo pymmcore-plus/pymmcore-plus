@@ -1,4 +1,4 @@
-# Trableshooting
+# Troubleshooting
 
 ## Micro-Manager directory not found
 
