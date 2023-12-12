@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 import useq
-
 from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import OMEZarrWriter
 
@@ -12,7 +11,6 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import zarr
-
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")
