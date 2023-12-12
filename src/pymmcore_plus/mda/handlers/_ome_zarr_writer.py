@@ -340,13 +340,13 @@ class OMEZarrWriter:
         if not self._current_sequence:
             raise ValueError("Current sequence is not set.")
 
-        main_used_axis = self._used_axis(self._current_sequence)
+        main_seq_used_axis = self._used_axis(self._current_sequence)
         sub_seq_used_axis = self._used_axis(sub_sequence)
 
         # here not using the set() function because it doesn't preserve the order
         # updated_used_axis = list(set(sub_seq_used_axis + main_used_axis))
         updated_used_axis = []
-        for axis in sub_seq_used_axis + main_used_axis:
+        for axis in sub_seq_used_axis + main_seq_used_axis:
             if axis not in updated_used_axis:
                 updated_used_axis.append(axis)
 
