@@ -137,7 +137,7 @@ class OMEZarrWriter:
         # (the group will have a dataset for each position)
         self._arrays: dict[str, zarr.Array] = {}
 
-        # local cache of {position index -> event index}
+        # local cache of {position index -> event keys}
         self._used_axes: dict[str, tuple[str, ...]] = {}
 
         # set during sequenceStarted and cleared during sequenceFinished
