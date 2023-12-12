@@ -213,8 +213,6 @@ class OMEZarrWriter:
         """Write frame to the zarr array for the appropriate position."""
         # get the position key to store the array in the group
         key = f'{POS_PREFIX}{event.index.get("p", 0)}'
-        # get the index of the event, excluding the position
-        index = {key: event.index[key] for key in event.index if key != "p"}
 
         if key in self._arrays:
             ary = self._arrays[key]
@@ -251,8 +249,7 @@ class OMEZarrWriter:
             )
 
         # WRITE DATA TO DISK
-        # TODO: fix type: ignore
-        index = tuple(event.index.get(k) for k in self._used_axes[key])  # type: ignore
+        index = tuple(event.index.get(k) for k in self._used_axes[key])
         ary[index] = frame  # for zarr, this immediately writes to disk
 
         # write frame metadata
