@@ -198,8 +198,7 @@ class OMEZarrWriter:
 
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """On sequence started, simply store the sequence."""
-        # self._set_sequence(seq)
-        ...
+        self._current_sequence = seq
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
