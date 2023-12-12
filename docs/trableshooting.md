@@ -8,7 +8,7 @@ pymmcore-plus - ERROR - (_util.py:131) could not find micromanager directory. Pl
 
 If you tried to create a [`pymmcore_plus.CMMCorePlus`](api/cmmcoreplus.md) instance and got an
 error similar the one above, it means that pymmcore-plus was unable to find micro-manager on on your system.
-(for example, you can run `mmcore install` to install the latest version of Micro-Manager).
+Please run `mmcore install` to install the latest version of Micro-Manager.
 
 See the [installation](install.md#installing-micro-manager-device-adapters) section for more details.
 
