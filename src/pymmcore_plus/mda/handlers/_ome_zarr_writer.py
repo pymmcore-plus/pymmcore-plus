@@ -276,21 +276,19 @@ class OMEZarrWriter:
         if not (main_seq := self._current_sequence):
             raise ValueError("Curr ent sequence is not set.")
 
-        positions = main_seq.stage_positions
-
         def get_main_shape_and_axis() -> tuple[tuple[int, ...], tuple[str, ...]]:
-            """Rerturn the shape and axis for the main sequence."""
+            """Rerturn the shape and axis of the main sequence."""
             used_axis = self._used_axis(main_seq)
             shape = tuple(v for k, v in main_seq.sizes.items() if k != "p" and v != 0)
             return shape + frame.shape, used_axis
 
         # if no positions, just use main sequence shape and axes
-        if not positions:
+        if not main_seq.stage_positions:
             return get_main_shape_and_axis()
 
         # get the current position and position index
         p_idx = index.get("p", 0)
-        current_position = positions[p_idx]
+        current_position = main_seq.stage_positions[p_idx]
 
         # if the position has a sub-sequence, we need to combine the used axes
         # from both the main sequence and the sub-sequence and then calculate the
