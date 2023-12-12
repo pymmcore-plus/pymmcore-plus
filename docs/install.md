@@ -34,15 +34,21 @@ They can be installed in two ways:
     mmcore install
     ```
 
-    This will download the latest release of micro-manager and place it in the
-    `pymmcore-plus` folder. If you would like to modify the location of the
-    installation, or the release of micro-manager to install, you can use the
-    `--dest` and `--release` flags respectively.
+    This will download the latest release of micro-manager and, by default, place it in
+    a `pymmcore-plus\mm` folder in the user's data directory (e.g. `C:\Users\UserName\AppData\Local\pymmcore-plus\mm`). If you would like to modify
+    the location of the installation, or the release of micro-manager to install, you can use
+    the `--dest` and `--release` flags respectively.
 
-    For more information, run:
+    For more information on the `install` command, run:
 
     ```bash
     mmcore install --help
+    ```
+
+    To explore all the `mmcore` command line tool functionalities, run:
+
+    ```bash
+    mmcore --help
     ```
 
 2. **Download manually from micro-manager.org**
