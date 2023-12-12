@@ -5,7 +5,7 @@ import json
 import os.path
 import shutil
 import tempfile
-from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Mapping, MutableMapping, Protocol
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -137,6 +137,9 @@ class OMEZarrWriter:
         # (the group will have a dataset for each position)
         self._arrays: dict[str, zarr.Array] = {}
 
+        # local cache of {position index -> event index}
+        self._used_axes: dict[str, tuple[str, ...]] = {}
+
         # set during sequenceStarted and cleared during sequenceFinished
         self._current_sequence: useq.MDASequence | None = None
 
@@ -195,7 +198,8 @@ class OMEZarrWriter:
 
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """On sequence started, simply store the sequence."""
-        self._set_sequence(seq)
+        # self._set_sequence(seq)
+        ...
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
@@ -208,7 +212,11 @@ class OMEZarrWriter:
         self, frame: np.ndarray, event: useq.MDAEvent, meta: dict | None = None
     ) -> None:
         """Write frame to the zarr array for the appropriate position."""
+        # get the position key to store the array in the group
         key = f'{POS_PREFIX}{event.index.get("p", 0)}'
+        # get the index of the event, excluding the position
+        index = {key: event.index[key] for key in event.index if key != "p"}
+
         if key in self._arrays:
             ary = self._arrays[key]
         else:
@@ -216,32 +224,36 @@ class OMEZarrWriter:
             # create a new Zarr array in the group for it
             if not self._current_sequence:
                 # just in case sequenceStarted wasn't called
-                self._set_sequence(event.sequence)
+                self._current_sequence = event.sequence
 
             if not (seq := self._current_sequence):
                 # This needs to be implemented for cases where we're not executing
-                # an MDASequence.  Or, we need to create a better "mock" MDASequence
+                # an MDASequence. Or, we need to create a better "mock" MDASequence
                 # for generic Iterable[MDAEvent]
                 raise NotImplementedError(
                     "Writing zarr without a MDASequence not yet implemented"
                 )
 
             # create the new array, getting XY chunksize from the frame
-            # and total shape from the sequence
-            shape = (*tuple(v for k, v in seq.sizes.items() if k != "p"), *frame.shape)
-            axes = (*(k for k in seq.sizes if k != "p"), "y", "x")
-            ary = self._new_array(key, shape, frame.dtype, axes)
+            # and total shape from the sequence. _used_axes below is to store the axes
+            # that have been used for each array. we need this because different
+            # positions can have a sub-sequence and so the axes can change.
+            shape, self._used_axes[key] = self._get_shape_and_axis(event.index, frame)
+
+            # create the array in the group
+            ary = self._new_array(key, shape, frame.dtype, self._used_axes[key])
 
             # write the MDASequence metadata and xarray _ARRAY_DIMENSIONS to the array
             ary.attrs.update(
                 {
                     "useq_MDASequence": json.loads(seq.json(exclude_unset=True)),
-                    "_ARRAY_DIMENSIONS": axes,
+                    "_ARRAY_DIMENSIONS": self._used_axes[key],
                 }
             )
 
         # WRITE DATA TO DISK
-        index = tuple(event.index.get(k) for k in self._used_axes)
+        # TODO: fix type: ignore
+        index = tuple(event.index.get(k) for k in self._used_axes[key])  # type: ignore
         ary[index] = frame  # for zarr, this immediately writes to disk
 
         # write frame metadata
@@ -257,11 +269,89 @@ class OMEZarrWriter:
 
     # ------------------------------- private --------------------------------
 
-    def _set_sequence(self, seq: useq.MDASequence | None) -> None:
-        """Set the current sequence, and update the used axes."""
-        self._current_sequence = seq
-        if seq:
-            self._used_axes = tuple(x for x in seq.used_axes if x != "p")
+    def _get_shape_and_axis(
+        self, index: Mapping[str, int], frame: np.ndarray
+    ) -> tuple[tuple[int, ...], tuple[str, ...]]:
+        """Get the shape depending on the current position."""
+        if not (main_seq := self._current_sequence):
+            raise ValueError("Curr ent sequence is not set.")
+
+        positions = main_seq.stage_positions
+
+        def get_main_shape_and_axis() -> tuple[tuple[int, ...], tuple[str, ...]]:
+            """Rerturn the shape and axis for the main sequence."""
+            used_axis = self._used_axis(main_seq)
+            shape = tuple(v for k, v in main_seq.sizes.items() if k != "p" and v != 0)
+            return shape + frame.shape, used_axis
+
+        # if no positions, just use main sequence shape and axes
+        if not positions:
+            return get_main_shape_and_axis()
+
+        # get the current position and position index
+        p_idx = index.get("p", 0)
+        current_position = positions[p_idx]
+
+        # if the position has a sub-sequence, we need to combine the used axes
+        # from both the main sequence and the sub-sequence and then calculate the
+        # shape from that because sub-sequences might not use all the axes of the
+        # main sequence.
+
+        # For example if we have this sequence:
+
+        # sequence = MDASequence(
+        #     axis_order="pcz",
+        #     channels=["DAPI"],
+        #     stage_positions=[
+        #         (1, 2, 3),
+        #         {
+        #             "x": 4,
+        #             "y": 5,
+        #             "z": 6,
+        #             "sequence": MDASequence(
+        #                 grid_plan=GridRowsColumns(rows=2, columns=1)
+        #             ),
+        #         },
+        #     ],
+        #     z_plan={"range": 3, "step": 1},
+        # )
+
+        # the `sequence.used_axes` (excluding "p") for the main sequence gives
+        # ("c", "z") but for the position with the sub-sequence, `sequence.used_axes`
+        # is  ("g",) only. Therefore, we need to combine the used axes from both the
+        # main sequence and the sub-sequence so that the sub-sequence used axis also
+        # contains the main axes ("g", "z", "c").
+        # With this, we can calculate the shape of the array.
+
+        if current_position.sequence is not None:
+            main_used_axis = self._used_axis(main_seq)
+            sub_seq_used_axis = self._used_axis(current_position.sequence)
+
+            # here not using the set() function because it doesn't preserve the order
+            # updated_used_axis = list(set(sub_seq_used_axis + main_used_axis))
+            updated_used_axis = []
+            for axis in sub_seq_used_axis + main_used_axis:
+                if axis not in updated_used_axis:
+                    updated_used_axis.append(axis)
+
+            # get the shape of the array by using the main sequence or the sub-sequence
+            # sizes
+            shape = []
+            for ax in updated_used_axis:
+                if ax in sub_seq_used_axis:
+                    shape.append(current_position.sequence.sizes[ax])
+                else:
+                    shape.append(main_seq.sizes[ax])
+
+            return tuple(shape) + frame.shape, tuple(updated_used_axis)
+
+        else:
+            # if no sub-sequence, just use the main sequence shape and axes
+            return get_main_shape_and_axis()
+
+    def _used_axis(self, seq: useq.MDASequence) -> tuple[str, ...]:
+        """Get the used axes for the current sequence."""
+        return tuple(x for x in seq.used_axes if x != "p")
 
     def _new_array(
         self, key: str, shape: tuple[int, ...], dtype: np.dtype, axes: tuple[str, ...]
