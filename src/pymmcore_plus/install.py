@@ -58,6 +58,7 @@ except ImportError:  # pragma: no cover
 
 
 PLATFORM = system()
+PLATFORM = "Windows"
 BASE_URL = "https://download.micro-manager.org"
 _version_regex = re.compile(r"(\d+\.){2}\d+")
 
@@ -149,10 +150,12 @@ def available_versions() -> dict[str, str]:
     with urlopen(f"{BASE_URL}/nightly/2.0/{plat}/") as resp:
         html = resp.read().decode("utf-8")
 
+    all_links = re.findall(r"href=\"([^\"]+)\"", html)
+    delim = "_" if PLATFORM == "Windows" else "-"
     return {
-        ref.rsplit("-", 1)[-1].split(".")[0]: BASE_URL + ref
-        for ref in re.findall(r"href=\"([^\"]+)\"", html)
-        if ref != "/"
+        ref.rsplit(delim, 1)[-1].split(".")[0]: BASE_URL + ref
+        for ref in all_links
+        if ref != "/" and "32bit" not in ref
     }
 
 
@@ -218,6 +221,7 @@ def install(
         url = f"{BASE_URL}/latest/{plat}"
     else:
         available = available_versions()
+        breakpoint()
         if release not in available:
             n = 15
             avail = ", ".join(list(available)[:n]) + " ..."
