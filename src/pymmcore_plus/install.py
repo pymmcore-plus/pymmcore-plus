@@ -221,7 +221,6 @@ def install(
         url = f"{BASE_URL}/latest/{plat}"
     else:
         available = available_versions()
-        breakpoint()
         if release not in available:
             n = 15
             avail = ", ".join(list(available)[:n]) + " ..."
