@@ -59,7 +59,6 @@ except ImportError:  # pragma: no cover
 
 PLATFORM = system()
 BASE_URL = "https://download.micro-manager.org"
-_version_regex = re.compile(r"(\d+\.){2}\d+")
 
 
 def _get_download_name(url: str) -> str:
