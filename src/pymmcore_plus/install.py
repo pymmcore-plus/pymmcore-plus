@@ -58,7 +58,6 @@ except ImportError:  # pragma: no cover
 
 
 PLATFORM = system()
-PLATFORM = "Windows"
 BASE_URL = "https://download.micro-manager.org"
 _version_regex = re.compile(r"(\d+\.){2}\d+")
 
