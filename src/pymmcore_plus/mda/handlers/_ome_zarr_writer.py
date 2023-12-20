@@ -270,7 +270,7 @@ class OMEZarrWriter:
     ) -> tuple[tuple[int, ...], tuple[str, ...]]:
         """Get the shape depending on the current position."""
         if not (main_seq := self._current_sequence):
-            raise ValueError("Curr ent sequence is not set.")
+            raise ValueError("Current sequence is not set.")
 
         # if no positions, just use main sequence shape and axes
         if not main_seq.stage_positions:
