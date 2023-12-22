@@ -25,6 +25,7 @@ full_mda = useq.MDASequence(
 
 part_mda = useq.MDASequence(
     channels=["Cy5", "FITC"],
+    stage_positions=[(222, 1, 1), (111, 0, 0)],
     time_plan={"interval": 0.1, "loops": 3},
 )
 
@@ -46,7 +47,7 @@ def test_ome_zarr_writer(
     with mda_listeners_connected(writer, mda_events=core.mda.events):
         core.mda.run(mda)
 
-    no_p_shape = tuple(v for k, v in mda.sizes.items() if k != "p")
+    no_p_shape = tuple(v for k, v in mda.sizes.items() if k != "p" and v > 0)
     expected_shape = (*no_p_shape, 512, 512)
 
     actual_shapes = {k: v.shape for k, v in writer.group.arrays()}
