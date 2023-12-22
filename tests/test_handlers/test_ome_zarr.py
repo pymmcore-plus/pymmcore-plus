@@ -15,27 +15,32 @@ if TYPE_CHECKING:
 else:
     zarr = pytest.importorskip("zarr")
 
+part_mda = useq.MDASequence(
+    channels=["Cy5", "FITC"],
+    stage_positions=[
+        (222, 1, 1),
+        {
+            "x": 0,
+            "y": 0,
+            "sequence": useq.MDASequence(
+                grid_plan=useq.GridRowsColumns(rows=2, columns=1),
+                z_plan={"range": 3, "step": 1},
+            ),
+        },
+    ],
+    z_plan={"range": 0.3, "step": 0.1},
+    time_plan={"interval": 0.1, "loops": 2},
+)
+full_mda = part_mda.replace(axis_order="tpcz", channels=["Cy5", "FITC"])
 
-@pytest.mark.parametrize("store", ["out.zarr", None, "tmp"])
-def test_ome_zarr_writer(store: str | None, tmp_path: Path, core: CMMCorePlus) -> None:
-    mda = useq.MDASequence(
-        channels=["Cy5", "FITC"],
-        time_plan={"interval": 0.1, "loops": 2},
-        stage_positions=[
-            (222, 1, 1),
-            {
-                "x": 0,
-                "y": 0,
-                "sequence": useq.MDASequence(
-                    grid_plan=useq.GridRowsColumns(rows=2, columns=1),
-                    z_plan={"range": 3, "step": 1},
-                ),
-            },
-        ],
-        z_plan={"range": 0.3, "step": 0.1},
-        axis_order="tpcz",
-    )
 
+@pytest.mark.parametrize(
+    "store, mda",
+    [("out.zarr", full_mda), (None, full_mda), ("tmp", full_mda), (None, part_mda)],
+)
+def test_ome_zarr_writer(
+    store: str | None, mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
+) -> None:
     if store == "tmp":
         writer = OMEZarrWriter.in_tmpdir()
     elif store is None:
