@@ -228,11 +228,8 @@ class OMEZarrWriter:
 
             # create the new array, getting XY chunksize from the frame
             # and total shape from the sequence
-            shape = (
-                *tuple(v for k, v in seq.sizes.items() if k != "p" and v > 0),
-                *frame.shape,
-            )
-            axes = (*(k for k, v in seq.sizes.items() if k != "p" and v > 0), "y", "x")
+            axes = (*(k for k in seq.used_axes if k != "p"), "y", "x")
+            shape = (*tuple(v for k, v in seq.sizes.items() if k in axes), *frame.shape)
             ary = self._new_array(key, shape, frame.dtype, axes)
 
             # write the MDASequence metadata and xarray _ARRAY_DIMENSIONS to the array
