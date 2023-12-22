@@ -228,7 +228,10 @@ class OMEZarrWriter:
 
             # create the new array, getting XY chunksize from the frame
             # and total shape from the sequence
-            shape = (*tuple(v for k, v in seq.sizes.items() if k != "p" and v > 0), *frame.shape)
+            shape = (
+                *tuple(v for k, v in seq.sizes.items() if k != "p" and v > 0),
+                *frame.shape,
+            )
             axes = (*(k for k in seq.sizes if k != "p"), "y", "x")
             ary = self._new_array(key, shape, frame.dtype, axes)
 
