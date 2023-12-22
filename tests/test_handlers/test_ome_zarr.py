@@ -15,19 +15,13 @@ if TYPE_CHECKING:
 else:
     zarr = pytest.importorskip("zarr")
 
-full_mda = useq.MDASequence(
-    channels=["Cy5", "FITC"],
-    time_plan={"interval": 0.1, "loops": 3},
-    stage_positions=[(222, 1, 1), (111, 0, 0)],
-    z_plan={"range": 0.3, "step": 0.1},
-    axis_order="tpcz",
-)
-
 part_mda = useq.MDASequence(
-    channels=["Cy5", "FITC"],
-    stage_positions=[(222, 1, 1), (111, 0, 0)],
-    time_plan={"interval": 0.1, "loops": 3},
-)
+     channels=["Cy5", "FITC"],
+     stage_positions=[(222, 1, 1), (111, 0, 0)],
+     time_plan={"interval": 0.1, "loops": 3},
+ )
+ 
+ full_mda = part_mda.replace(axis_order="tpcz", channels=["Cy5", "FITC"])
 
 
 @pytest.mark.parametrize(
