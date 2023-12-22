@@ -21,7 +21,7 @@ part_mda = useq.MDASequence(
      time_plan={"interval": 0.1, "loops": 3},
  )
 
- full_mda = part_mda.replace(axis_order="tpcz", channels=["Cy5", "FITC"])
+full_mda = part_mda.replace(axis_order="tpcz", channels=["Cy5", "FITC"])
 
 
 @pytest.mark.parametrize(
