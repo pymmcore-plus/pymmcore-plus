@@ -20,7 +20,7 @@ part_mda = useq.MDASequence(
      stage_positions=[(222, 1, 1), (111, 0, 0)],
      time_plan={"interval": 0.1, "loops": 3},
  )
- 
+
  full_mda = part_mda.replace(axis_order="tpcz", channels=["Cy5", "FITC"])
 
 
