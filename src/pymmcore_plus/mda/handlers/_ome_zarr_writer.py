@@ -232,7 +232,7 @@ class OMEZarrWriter:
                 *tuple(v for k, v in seq.sizes.items() if k != "p" and v > 0),
                 *frame.shape,
             )
-            axes = (*(k for k in seq.sizes if k != "p"), "y", "x")
+            axes = (*(k for k, v in seq.sizes.items() if k != "p" and v > 0), "y", "x")
             ary = self._new_array(key, shape, frame.dtype, axes)
 
             # write the MDASequence metadata and xarray _ARRAY_DIMENSIONS to the array
