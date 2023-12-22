@@ -15,16 +15,25 @@ if TYPE_CHECKING:
 else:
     zarr = pytest.importorskip("zarr")
 
-
-@pytest.mark.parametrize("store", ["out.zarr", None, "tmp"])
-def test_ome_zarr_writer(store: str | None, tmp_path: Path, core: CMMCorePlus) -> None:
-    mda = useq.MDASequence(
+full_mda = useq.MDASequence(
         channels=["Cy5", "FITC"],
         time_plan={"interval": 0.1, "loops": 3},
         stage_positions=[(222, 1, 1), (111, 0, 0)],
         z_plan={"range": 0.3, "step": 0.1},
         axis_order="tpcz",
     )
+
+part_mda = useq.MDASequence(
+        channels=["Cy5", "FITC"],
+        time_plan={"interval": 0.1, "loops": 3},
+    )
+
+@pytest.mark.parametrize("store, mda", [("out.zarr", full_mda), (None, full_mda), ("tmp", full_mda),
+                                        (None, part_mda)])
+def test_ome_zarr_writer(store: str | None,
+                         mda: useq.MDASequence,
+                         tmp_path: Path,
+                         core: CMMCorePlus) -> None:
 
     if store == "tmp":
         writer = OMEZarrWriter.in_tmpdir()
