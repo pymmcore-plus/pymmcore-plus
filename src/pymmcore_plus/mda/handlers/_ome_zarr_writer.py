@@ -265,7 +265,9 @@ class OMEZarrWriter:
             # create the array in the group
             ary = self._new_array(key, shape, frame.dtype, used_axes)
 
-            # write the MDASequence metadata and xarray _ARRAY_DIMENSIONS to the array
+            # write the MDASequence metadata and xarray _ARRAY_DIMENSIONS to the array.
+            # _ARRAY_DIMENSIONS will be used to get the correct index order when writing
+            # to disk.
             ary.attrs.update(
                 {
                     "useq_MDASequence": json.loads(seq.json(exclude_unset=True)),
@@ -274,6 +276,7 @@ class OMEZarrWriter:
             )
 
         # WRITE DATA TO DISK
+        # using the ary.attrs "_ARRAY_DIMENSIONS" to get the correct index order
         index = tuple(event.index.get(k) for k in ary.attrs["_ARRAY_DIMENSIONS"])
         ary[index] = frame  # for zarr, this immediately writes to disk
 
