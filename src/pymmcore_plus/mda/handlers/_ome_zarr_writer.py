@@ -259,7 +259,6 @@ class OMEZarrWriter:
                 event.index.get("p", 0)
             ]
             shape = tuple(curr_pos_size[k] for k in curr_pos_size) + frame.shape
-            # used_axes is the axes that will be used to index into the array
             used_axes = tuple(curr_pos_size)
 
             # create the array in the group
