@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING
 
 import pytest
 import useq
+
 from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import OMEZarrWriter
 
@@ -11,6 +12,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import zarr
+
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")
@@ -40,6 +42,8 @@ FULL_EXPECTATION = {
 }
 
 COMPLEX_MDA = FULL_MDA.replace(
+    channels=["Cy5"],
+    time_plan={"interval": 0.1, "loops": 3},
     stage_positions=[
         (222, 1, 1),
         {
@@ -50,11 +54,11 @@ COMPLEX_MDA = FULL_MDA.replace(
                 z_plan={"range": 3, "step": 1},
             ),
         },
-    ]
+    ],
 )
 COMPLEX_EXPECTATION = {
-    "p0": {"shape": (2, 2, 4, 512, 512), "axes": ["t", "c", "z"]},
-    "p1": {"shape": (2, 4, 2, 2, 512, 512), "axes": ["g", "z", "t", "c"]},
+    "p0": {"shape": (3, 1, 4, 512, 512), "axes": ["t", "c", "z"]},
+    "p1": {"shape": (3, 2, 1, 4, 512, 512), "axes": ["t", "g", "c", "z"]},
 }
 
 
