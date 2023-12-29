@@ -5,13 +5,7 @@ import json
 import os.path
 import shutil
 import tempfile
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Literal,
-    MutableMapping,
-    Protocol,
-)
+from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -45,8 +39,13 @@ if TYPE_CHECKING:
 POS_PREFIX = "p"
 
 
-def position_sizes(seq: useq.MDASequence) -> list[dict]:
-    """Return a list of size dicts for each position in the sequence."""
+def position_sizes(seq: useq.MDASequence) -> list[dict[str, int]]:
+    """Return a list of size dicts for each position in the sequence.
+
+    There will be one dict for each position in the sequence. Each dict will contain
+    `{dim: size}` pairs for each dimension in the sequence. Dimensions with no size
+    will be omitted.
+    """
     main_sizes = seq.sizes.copy()
     main_sizes.pop("p", None)  # remove position
 
@@ -60,7 +59,7 @@ def position_sizes(seq: useq.MDASequence) -> list[dict]:
             psizes = {k: v or main_sizes.get(k, 0) for k, v in p.sequence.sizes.items()}
         else:
             psizes = main_sizes.copy()
-        sizes.append({k: v for k, v in psizes.items() if v})
+        sizes.append({k: v for k, v in psizes.items() if v and k != "p"})
     return sizes
 
 
