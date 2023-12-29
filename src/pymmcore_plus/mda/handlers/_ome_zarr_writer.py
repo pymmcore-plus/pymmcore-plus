@@ -258,7 +258,7 @@ class OMEZarrWriter:
                 event.index.get("p", 0)
             ]
             shape = tuple(curr_pos_size[k] for k in curr_pos_size) + frame.shape
-            used_axes = tuple(curr_pos_size)
+            used_axes = (*tuple(curr_pos_size), "y", "x")
 
             # create the array in the group
             ary = self._new_array(key, shape, frame.dtype, used_axes)
@@ -275,7 +275,9 @@ class OMEZarrWriter:
 
         # WRITE DATA TO DISK
         # using the ary.attrs "_ARRAY_DIMENSIONS" to get the correct index order
-        index = tuple(event.index.get(k) for k in ary.attrs["_ARRAY_DIMENSIONS"])
+        index = tuple(
+            event.index.get(k) for k in ary.attrs["_ARRAY_DIMENSIONS"] if k not in "xy"
+        )
         ary[index] = frame  # for zarr, this immediately writes to disk
 
         # write frame metadata
