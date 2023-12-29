@@ -21,7 +21,7 @@ SIMPLE_MDA = useq.MDASequence(
     time_plan={"interval": 0.1, "loops": 2},
     axis_order="tpcz",
 )
-SIMPLE_EXPECTATION = {"p0": {"shape": (2, 2, 512, 512), "axes": ["t", "c"]}}
+SIMPLE_EXPECTATION = {"p0": {"shape": (2, 2, 512, 512), "dims": ["t", "c", "y", "x"]}}
 
 MULTIPOINT_MDA = SIMPLE_MDA.replace(
     channels=["Cy5", "FITC"],
@@ -29,14 +29,14 @@ MULTIPOINT_MDA = SIMPLE_MDA.replace(
     time_plan={"interval": 0.1, "loops": 2},
 )
 MULTIPOINT_EXPECTATION = {
-    "p0": {"shape": (2, 2, 512, 512), "axes": ["t", "c"]},
-    "p1": {"shape": (2, 2, 512, 512), "axes": ["t", "c"]},
+    "p0": {"shape": (2, 2, 512, 512), "dims": ["t", "c", "y", "x"]},
+    "p1": {"shape": (2, 2, 512, 512), "dims": ["t", "c", "y", "x"]},
 }
 
 FULL_MDA = MULTIPOINT_MDA.replace(z_plan={"range": 0.3, "step": 0.1})
 FULL_EXPECTATION = {
-    "p0": {"shape": (2, 2, 4, 512, 512), "axes": ["t", "c", "z"]},
-    "p1": {"shape": (2, 2, 4, 512, 512), "axes": ["t", "c", "z"]},
+    "p0": {"shape": (2, 2, 4, 512, 512), "dims": ["t", "c", "z", "y", "x"]},
+    "p1": {"shape": (2, 2, 4, 512, 512), "dims": ["t", "c", "z", "y", "x"]},
 }
 
 COMPLEX_MDA = FULL_MDA.replace(
@@ -55,8 +55,8 @@ COMPLEX_MDA = FULL_MDA.replace(
     ],
 )
 COMPLEX_EXPECTATION = {
-    "p0": {"shape": (3, 1, 4, 512, 512), "axes": ["t", "c", "z"]},
-    "p1": {"shape": (3, 2, 1, 4, 512, 512), "axes": ["t", "g", "c", "z"]},
+    "p0": {"shape": (3, 1, 4, 512, 512), "dims": ["t", "c", "z", "y", "x"]},
+    "p1": {"shape": (3, 2, 1, 4, 512, 512), "dims": ["t", "g", "c", "z", "y", "x"]},
 }
 
 
@@ -100,7 +100,7 @@ def test_ome_zarr_writer(
         data = writer.group
 
     actual_shapes = {
-        k: {"shape": v.shape, "axes": v.attrs["_ARRAY_DIMENSIONS"]}
+        k: {"shape": v.shape, "dims": v.attrs["_ARRAY_DIMENSIONS"]}
         for k, v in data.arrays()
     }
     assert actual_shapes == expected_shapes
