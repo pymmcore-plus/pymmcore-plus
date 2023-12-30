@@ -99,7 +99,13 @@ def test_ome_zarr_writer(
     else:
         data = writer.group
 
+    # check that arrays have expected shape and dimensions
     actual_shapes = {
         k: dict(zip(v.attrs["_ARRAY_DIMENSIONS"], v.shape)) for k, v in data.arrays()
     }
     assert actual_shapes == expected_shapes
+
+    # check that the MDASequence was stored
+    for _, v in data.arrays():
+        stored_seq = useq.MDASequence.parse_obj(v.attrs["useq_MDASequence"])
+        assert stored_seq == mda

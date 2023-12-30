@@ -160,6 +160,7 @@ class OMEZarrWriter:
         # local cache of {position index -> zarr.Array}
         # (the group will have a dataset for each position)
         self._arrays: dict[str, zarr.Array] = {}
+        self._sizes: list[dict[str, int]] = []
 
         # set during sequenceStarted and cleared during sequenceFinished
         self._current_sequence: useq.MDASequence | None = None
@@ -224,6 +225,7 @@ class OMEZarrWriter:
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
         self._current_sequence = None
+        self._sizes = []
 
         if self._minify_metadata:
             self._minify_zattrs_metadata()
