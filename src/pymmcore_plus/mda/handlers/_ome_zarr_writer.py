@@ -219,7 +219,7 @@ class OMEZarrWriter:
 
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """On sequence started, simply store the sequence."""
-        self._current_sequence = seq
+        self._set_sequence(seq)
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
@@ -234,7 +234,6 @@ class OMEZarrWriter:
         """Write frame to the zarr array for the appropriate position."""
         # get the position key to store the array in the group
         key = f'{POS_PREFIX}{event.index.get("p", 0)}'
-
         if key in self._arrays:
             ary = self._arrays[key]
         else:
@@ -242,11 +241,11 @@ class OMEZarrWriter:
             # create a new Zarr array in the group for it
             if not self._current_sequence:
                 # just in case sequenceStarted wasn't called
-                self._current_sequence = event.sequence
+                self._set_sequence(event.sequence)
 
             if not (seq := self._current_sequence):
                 # This needs to be implemented for cases where we're not executing
-                # an MDASequence. Or, we need to create a better "mock" MDASequence
+                # an MDASequence.  Or, we need to create a better "mock" MDASequence
                 # for generic Iterable[MDAEvent]
                 raise NotImplementedError(
                     "Writing zarr without a MDASequence not yet implemented"
@@ -254,30 +253,15 @@ class OMEZarrWriter:
 
             # create the new array, getting XY chunksize from the frame
             # and total shape from the sequence.
-            curr_pos_size = position_sizes(self._current_sequence)[
-                event.index.get("p", 0)
-            ]
-            shape = tuple(curr_pos_size[k] for k in curr_pos_size) + frame.shape
-            used_axes = (*tuple(curr_pos_size), "y", "x")
+            sizes = self._sizes[event.index.get("p", 0)]
+            sizes.update({"y": frame.shape[-2], "x": frame.shape[-1]})
 
-            # create the array in the group
-            ary = self._new_array(key, shape, frame.dtype, used_axes)
-
-            # write the MDASequence metadata and xarray _ARRAY_DIMENSIONS to the array.
-            # _ARRAY_DIMENSIONS will be used to get the correct index order when writing
-            # to disk.
-            ary.attrs.update(
-                {
-                    "useq_MDASequence": json.loads(seq.json(exclude_unset=True)),
-                    "_ARRAY_DIMENSIONS": used_axes,
-                }
-            )
+            # create the array in the group, store sequence metadata in attrs
+            self._arrays[key] = ary = self._new_array(key, frame.dtype, sizes)
+            ary.attrs["useq_MDASequence"] = json.loads(seq.json(exclude_unset=True))
 
         # WRITE DATA TO DISK
-        # using the ary.attrs "_ARRAY_DIMENSIONS" to get the correct index order
-        index = tuple(
-            event.index.get(k) for k in ary.attrs["_ARRAY_DIMENSIONS"] if k not in "xy"
-        )
+        index = tuple(event.index.get(k) for k in ary.attrs["_ARRAY_DIMENSIONS"][:-2])
         ary[index] = frame  # for zarr, this immediately writes to disk
 
         # write frame metadata
@@ -293,11 +277,18 @@ class OMEZarrWriter:
 
     # ------------------------------- private --------------------------------
 
+    def _set_sequence(self, seq: useq.MDASequence | None) -> None:
+        """Set the current sequence, and update the used axes."""
+        self._current_sequence = seq
+        if seq:
+            self._sizes = position_sizes(seq)
+
     def _new_array(
-        self, key: str, shape: tuple[int, ...], dtype: np.dtype, axes: tuple[str, ...]
+        self, key: str, dtype: np.dtype, sizes: dict[str, int]
     ) -> zarr.Array:
         """Create a new array in the group, under `key`."""
-        self._arrays[key] = ary = self._group.create(
+        dims, shape = zip(*sizes.items())
+        ary: zarr.Array = self._group.create(
             key,
             shape=shape,
             chunks=(1,) * len(shape[:-2]) + shape[-2:],  # single XY plane chunks
@@ -307,9 +298,9 @@ class OMEZarrWriter:
 
         # add minimal OME-NGFF metadata
         scales = self._group.attrs.get("multiscales", [])
-        scales.append(self._multiscales_item(ary.path, ary.path, axes))
+        scales.append(self._multiscales_item(ary.path, ary.path, dims))
         self._group.attrs["multiscales"] = scales
-
+        ary.attrs["_ARRAY_DIMENSIONS"] = dims
         return ary
 
     def _multiscales_item(self, path: str, name: str, axes: Sequence[str]) -> dict:
