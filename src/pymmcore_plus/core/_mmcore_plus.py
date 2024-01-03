@@ -1375,12 +1375,13 @@ class CMMCorePlus(pymmcore.CMMCore):
         with self._stage_moved_emission_ensured(*args):
             return super().setXYPosition(*args, **kwargs)
 
-    @synchronized(_lock)
+    # @synchronized(_lock)
     def setRelativeXYPosition(self, device: str, dx: float, dy: float) -> None:
-        if dx or dy:
-            x, y = self.getXPosition(), self.getYPosition()
-            self.setXYPosition(device, x + dx, y + dy)
-        self.waitForDevice(device)
+        if not (dx or dy):
+            return
+        x, y = self.getXPosition(), self.getYPosition()
+        with self._stage_moved_emission_ensured(device, x + dx, y + dy):
+            super().setXYPosition(device, x + dx, y + dy)
 
     @synchronized(_lock)
     def getCameraChannelNames(self) -> tuple[str, ...]:
@@ -2104,6 +2105,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.waitForDevice(device)
             pos = self.getXYPosition(device)
             self.events.XYStagePositionChanged.emit(device, *pos)
+        del receiver
 
     @contextmanager
     def setContext(self, **kwargs: Any) -> Iterator[None]:
