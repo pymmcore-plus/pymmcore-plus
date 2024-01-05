@@ -1,5 +1,4 @@
 from __future__ import annotations
-
 import atexit
 import json
 import os.path
@@ -10,14 +9,13 @@ from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 if TYPE_CHECKING:
     from os import PathLike
     from typing import ContextManager, Sequence
-
+    from useq import MDASequence
     import numpy as np
     import useq
     import zarr
     from fsspec import FSMap
     from numcodecs.abc import Codec
     from typing_extensions import TypedDict
-    from useq import MDASequence
 
     class ZarrSynchronizer(Protocol):
         def __getitem__(self, key: str) -> ContextManager:
@@ -229,7 +227,6 @@ class OMEZarrWriter:
         self._current_sequence = None
         self._sizes = []
         self._write_frame_meta(seq)
-        print("FRAME META WRITTEN")
 
         if self._minify_metadata:
             self._minify_zattrs_metadata()
@@ -279,10 +276,11 @@ class OMEZarrWriter:
             )
         self._frame_metas[key].append(meta or {})
 
+
     # ------------------------------- private --------------------------------
-    def _write_frame_meta(self, seq: MDASequence):
+    def _write_frame_meta(self, seq: MDASequence) -> None:
         for i in range(seq.sizes.get("p", 1)):
-            key = f"{POS_PREFIX}{i}"
+            key = f'{POS_PREFIX}{i}'
             ary = self._arrays[key]
             ary.attrs["frame_meta"] = self._frame_metas.get(key, [])
 
