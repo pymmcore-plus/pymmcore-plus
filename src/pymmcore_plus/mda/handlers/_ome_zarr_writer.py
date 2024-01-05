@@ -1,5 +1,4 @@
 from __future__ import annotations
-import time
 import atexit
 import json
 import os.path
@@ -10,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 if TYPE_CHECKING:
     from os import PathLike
     from typing import ContextManager, Sequence
-
+    from useq import MDASequence
     import numpy as np
     import useq
     import zarr
