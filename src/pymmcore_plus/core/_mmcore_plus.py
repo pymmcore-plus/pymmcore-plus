@@ -1379,7 +1379,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setRelativeXYPosition(self, device: str, dx: float, dy: float) -> None:
         if not (dx or dy):
             return
-        x, y = self.getXPosition(), self.getYPosition()
+        x, y = self.getXPosition(device), self.getYPosition(device)
         with self._stage_moved_emission_ensured(device, x + dx, y + dy):
             super().setXYPosition(device, x + dx, y + dy)
 
