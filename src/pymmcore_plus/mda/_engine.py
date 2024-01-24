@@ -269,13 +269,24 @@ class MDAEngine(PMDAEngine):
             stage = core.getXYStageDevice()
             core.loadXYStageSequence(stage, event.x_sequence, event.y_sequence)
         if event.z_sequence:
+            # these notes are from Nico Stuurman in AcqEngJ
+            # https://github.com/micro-manager/AcqEngJ/pull/108
+            # at least some zStages freak out (in this case, NIDAQ board) when you
+            # try to load a sequence while the sequence is still running.  Nothing in
+            # the engine stops a stage sequence if all goes well.
+            # Stopping a sequence if it is not running hopefully will not harm anyone.
             zstage = core.getFocusDevice()
+            core.stopStageSequence(zstage)
             core.loadStageSequence(zstage, event.z_sequence)
         if prop_seqs := event.property_sequences(core):
             for (dev, prop), value_sequence in prop_seqs.items():
                 core.loadPropertySequence(dev, prop, value_sequence)
 
         # TODO: SLM
+
+        # preparing a Sequence while another is running is dangerous.
+        if core.isSequenceRunning():
+            self._await_sequence_acquisition()
         core.prepareSequenceAcquisition(cam_device)
 
         # start sequences or set non-sequenced values
@@ -299,6 +310,17 @@ class MDAEngine(PMDAEngine):
                 core.startPropertySequence(dev, prop)
         elif event.channel is not None:
             core.setConfig(event.channel.group, event.channel.config)
+
+    def _await_sequence_acquisition(
+        self, timeout: float = 5.0, poll_interval: float = 0.2
+    ) -> None:
+        tot = 0.0
+        self._mmc.stopSequenceAcquisition()
+        while self._mmc.isSequenceRunning():
+            time.sleep(poll_interval)
+            tot += poll_interval
+            if tot >= timeout:
+                raise TimeoutError("Failed to stop running sequence")
 
     def exec_sequenced_event(self, event: SequencedEvent) -> Iterable[PImagePayload]:
         """Execute a sequenced (triggered) event and return the image data.
