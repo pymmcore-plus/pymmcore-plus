@@ -623,3 +623,25 @@ def test_core_state(core: CMMCorePlus) -> None:
     core.unloadAllDevices()
     # should still work without error
     state = core.state()
+
+
+def test_snap_rgb(core: CMMCorePlus) -> None:
+    core.setProperty("Camera", "PixelType", "32bitRGB")
+    core.setProperty("Camera", "Mode", "Color Test Pattern")
+    core.snapImage()
+    img = core.getImage()
+    assert img.shape == (512, 512, 3)
+    expect = np.array(
+        [
+            [0, 0, 255],
+            [0, 255, 0],
+            [255, 0, 0],
+            [0, 0, 0],
+            [255, 255, 0],
+            [255, 0, 255],
+            [0, 255, 255],
+            [255, 255, 255],
+        ],
+        dtype="uint8",
+    )
+    assert np.array_equal(img[::64, -1], expect)
