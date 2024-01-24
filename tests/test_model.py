@@ -224,3 +224,20 @@ def test_dirty():
     assert scope.is_dirty()
     scope.mark_clean()
     assert not scope.is_dirty()
+
+
+def test_hubs():
+    from pymmcore_plus import CMMCorePlus
+    from pymmcore_plus.model import Device, Microscope
+
+    core = CMMCorePlus()
+    model = Microscope()
+
+    core.loadDevice("THub", "SequenceTester", "THub")
+    core.initializeDevice("THub")
+
+    # successful closing of the dialog will have loaded and initialized the device.
+    dev = Device.create_from_core(core, name="THub")
+
+    model.load_available_devices(core)
+    # assert list(dev.available_peripherals(model))

@@ -365,6 +365,14 @@ def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:
                 available_devices.append(dev)
                 if dev.device_type == DeviceType.Hub:
                     library_to_hub[lib_name] = dev
+    breakpoint()
+
+    for hub in core.getLoadedDevicesOfType(DeviceType.Hub):
+        for child in core.getInstalledDevices(hub):
+            dev = AvailableDevice(
+                
+            )
+
 
     # now associate devices with their hubs
     for d in available_devices:
