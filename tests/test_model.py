@@ -227,12 +227,13 @@ def test_dirty():
 
 
 def test_hubs():
-    from pymmcore_plus import CMMCorePlus
-    from pymmcore_plus.model import Device, Microscope
-
+    """Make sure that calling load_available_devices() on a model after loading
+    a hub device will find all peripherals when using dev.available_peripherals."""
     core = CMMCorePlus()
     model = Microscope()
 
+    # SequenceTester is a good example of a device library that only shows a Hub,
+    # but has peripherals that are visible only after calling initializeDevice
     core.loadDevice("THub", "SequenceTester", "THub")
     core.initializeDevice("THub")
 
@@ -240,4 +241,6 @@ def test_hubs():
     dev = Device.create_from_core(core, name="THub")
 
     model.load_available_devices(core)
-    # assert list(dev.available_peripherals(model))
+    assert model.available_devices
+    peripherals = list(dev.available_peripherals(model))
+    assert peripherals

@@ -365,14 +365,17 @@ def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:
                 available_devices.append(dev)
                 if dev.device_type == DeviceType.Hub:
                     library_to_hub[lib_name] = dev
-    breakpoint()
 
+    # We also need to check for child devices of loaded hubs
+    # which will not visible via `core.getAvailableDevices`, and will only be
+    # visible after a hub device has been loaded.
+    # HACK: this is a bit of a hack, but it's due to the (multiple) ways that
+    # hub devices and child devices work in MMCore
     for hub in core.getLoadedDevicesOfType(DeviceType.Hub):
+        lib_name = core.getDeviceLibrary(hub)
         for child in core.getInstalledDevices(hub):
-            dev = AvailableDevice(
-                
-            )
-
+            dev = AvailableDevice(library=lib_name, adapter_name=child)
+            available_devices.append(dev)
 
     # now associate devices with their hubs
     for d in available_devices:
