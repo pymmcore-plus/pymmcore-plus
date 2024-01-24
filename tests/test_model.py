@@ -224,3 +224,23 @@ def test_dirty():
     assert scope.is_dirty()
     scope.mark_clean()
     assert not scope.is_dirty()
+
+
+def test_hubs():
+    """Make sure that calling load_available_devices() on a model after loading
+    a hub device will find all peripherals when using dev.available_peripherals."""
+    core = CMMCorePlus()
+    model = Microscope()
+
+    # SequenceTester is a good example of a device library that only shows a Hub,
+    # but has peripherals that are visible only after calling initializeDevice
+    core.loadDevice("THub", "SequenceTester", "THub")
+    core.initializeDevice("THub")
+
+    # successful closing of the dialog will have loaded and initialized the device.
+    dev = Device.create_from_core(core, name="THub")
+
+    model.load_available_devices(core)
+    assert model.available_devices
+    peripherals = list(dev.available_peripherals(model))
+    assert peripherals
