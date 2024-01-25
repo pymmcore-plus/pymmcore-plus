@@ -358,13 +358,18 @@ class AvailableDevice(Device):
 def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:
     """Iterate over available devices."""
     available_devices: list[AvailableDevice] = []
-    library_to_hub: dict[str, AvailableDevice] = {}
+    library_to_hub: dict[tuple[str, str], AvailableDevice] = {}
     for lib_name in core.getDeviceAdapterNames():
         with suppress(RuntimeError):
             for dev in iter_available_library_devices(core, lib_name):
                 available_devices.append(dev)
                 if dev.device_type == DeviceType.Hub:
-                    library_to_hub[lib_name] = dev
+                    library_to_hub[(lib_name, dev.adapter_name)] = dev
+
+    # now associate devices with their hubs
+    for d in available_devices:
+        if d.device_type != DeviceType.Hub:
+            d.library_hub = library_to_hub.get((d.library, d.adapter_name))
 
     # We also need to check for child devices of loaded hubs
     # which will not visible via `core.getAvailableDevices`, and will only be
@@ -373,14 +378,10 @@ def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:
     # hub devices and child devices work in MMCore
     for hub in core.getLoadedDevicesOfType(DeviceType.Hub):
         lib_name = core.getDeviceLibrary(hub)
+        hub_dev = library_to_hub.get((lib_name, hub))
         for child in core.getInstalledDevices(hub):
-            dev = AvailableDevice(library=lib_name, adapter_name=child)
+            dev = AvailableDevice(library=lib_name, adapter_name=child, library_hub=hub_dev)
             available_devices.append(dev)
-
-    # now associate devices with their hubs
-    for d in available_devices:
-        if d.device_type != DeviceType.Hub:
-            d.library_hub = library_to_hub.get(d.library)
 
     return available_devices
 
