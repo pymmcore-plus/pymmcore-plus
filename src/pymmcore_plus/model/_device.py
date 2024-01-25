@@ -380,7 +380,9 @@ def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:
         lib_name = core.getDeviceLibrary(hub)
         hub_dev = library_to_hub.get((lib_name, hub))
         for child in core.getInstalledDevices(hub):
-            dev = AvailableDevice(library=lib_name, adapter_name=child, library_hub=hub_dev)
+            dev = AvailableDevice(
+                library=lib_name, adapter_name=child, library_hub=hub_dev
+            )
             available_devices.append(dev)
 
     return available_devices
