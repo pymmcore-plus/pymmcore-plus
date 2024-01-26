@@ -11,12 +11,14 @@ from rich.prompt import Prompt
 
 # DemoCamera and Utilities are currently hard coded in here, but could
 # be made configurable in the future.
+# replaces "mmCoreAndDevices/DeviceAdapters/Makefile.am"
 _MINIMAL_MAKE = r"""
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I ../m4
-SUBDIRS = DemoCamera Utilities
+SUBDIRS = DemoCamera Utilities SequenceTester
 """
 
+# replaces "mmCoreAndDevices/DeviceAdapters/configure.ac"
 _MINIMAL_CONFIG = r"""
 AC_PREREQ([2.69])
 AC_INIT([Micro-Manager], [2])
@@ -40,6 +42,21 @@ AC_SUBST(MMDEVAPI_LDFLAGS)
 
 MM_INSTALL_DIRS
 
+# MessagePack (for SequenceTester)
+MM_ARG_WITH_OPTIONAL_LIB([MessagePack], [msgpack], [MSGPACK])
+AS_IF([test "x$want_msgpack" != xno],
+[
+   MM_LIB_MSGPACK([$MSGPACK_PREFIX],
+   [use_msgpack=yes],
+   [
+      use_msgpack=no
+      AS_IF([test "x$want_msgpack" = xyes],
+            [MM_MSG_OPTIONAL_LIB_FAILURE([MSGPACK], [msgpack])])
+   ])
+],
+[use_msgpack=no])
+AM_CONDITIONAL([BUILD_SEQUENCER_TEST], [test "x$use_msgpack" = xyes])
+
 AC_MSG_CHECKING(library suffix)
 AC_MSG_RESULT($MMSUFFIX)
 AC_SUBST(MMSUFFIX)
@@ -50,6 +67,7 @@ AC_CHECK_FUNCS([memset])
 m4_define([device_adapter_dirs], [m4_strip([
     DemoCamera
     Utilities
+    SequenceTester
 ])])
 AC_CONFIG_FILES(Makefile m4_map_args_w(device_adapter_dirs, [], [/Makefile], [ ]))
 AC_OUTPUT
@@ -80,12 +98,13 @@ def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> Non
     if not shutil.which("brew"):
         print("Homebrew is required but not found. Please install it: https://brew.sh")
         return
+    BREW_PREFIX = subprocess.check_output(["brew", "--prefix"]).decode().strip()
 
     if not shutil.which("git"):
         print("git is required but not found. Please install it first.")
         return
 
-    for dep in ("autoconf", "automake", "libtool", "boost"):
+    for dep in ("autoconf", "automake", "libtool", "boost", "msgpack-cxx"):
         output = subprocess.run(["brew", "ls", "--versions", dep], capture_output=True)
         if not output.stdout:
             ok = input(f"Dependency {dep!r} is not installed. Install? [y/N] ")
@@ -131,8 +150,8 @@ def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> Non
         (devAdapters / "Makefile.am").write_text(_MINIMAL_MAKE)
 
         # add homebrew paths to env vars
-        os.environ["LDFLAGS"] = "-L/opt/homebrew/lib/ -Wl,-rpath,'$ORIGIN'"
-        os.environ["CPPFLAGS"] = "-I/opt/homebrew/include/"
+        os.environ["LDFLAGS"] = f"-L{BREW_PREFIX}/lib/ -Wl,-rpath,'$ORIGIN'"
+        os.environ["CPPFLAGS"] = f"-I{BREW_PREFIX}/include/"
 
         # make and install
         subprocess.run(["./autogen.sh"], check=True)
