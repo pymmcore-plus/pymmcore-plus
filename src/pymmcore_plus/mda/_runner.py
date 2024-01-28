@@ -2,7 +2,17 @@ from __future__ import annotations
 
 import time
 import warnings
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Tuple
+from contextlib import nullcontext
+from pathlib import Path
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ContextManager,
+    Iterable,
+    Iterator,
+    Sequence,
+    Tuple,
+)
 from unittest.mock import MagicMock
 
 from useq import MDASequence
@@ -10,12 +20,17 @@ from useq import MDASequence
 from pymmcore_plus._logger import exceptions_logged, logger
 
 from ._protocol import PMDAEngine
+from ._thread_relay import mda_listeners_connected
 from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
+    from typing import TypeAlias
+
     from useq import MDAEvent
 
     from ._engine import MDAEngine
+
+    SingleOutput: TypeAlias = Path | str | object
 
 MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
@@ -148,7 +163,11 @@ class MDARunner:
             self._paused = not self._paused
             self._signals.sequencePauseToggled.emit(self._paused)
 
-    def run(self, events: Iterable[MDAEvent]) -> None:
+    def run(
+        self,
+        events: Iterable[MDAEvent],
+        output: SingleOutput | Sequence[SingleOutput] | None = None,
+    ) -> None:
         """Run the multi-dimensional acquistion defined by `sequence`.
 
         Most users should not use this directly as it will block further
@@ -160,18 +179,75 @@ class MDARunner:
         ----------
         events : Iterable[MDAEvent]
             An iterable of `useq.MDAEvents` objects to execute.
+        output : SingleOutput | Sequence[SingleOutput] | None, optional
+            The output handler(s) to use.  If None, no output will be saved.
+            "SingleOutput" can be any of the following:
+
+            - A string or Path to a directory to save images to. A handler will be
+                created automatically based on the extension of the path.
+            - A handler object that implements the `DataHandler` protocol, currently
+                meaning it has a `frameReady` method.  See `mda_listeners_connected`
+                for more details.
+            - A sequence of either of the above. (all will be connected)
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
         try:
-            engine = self._prepare_to_run(sequence)
-            self._run(engine, events)
+            with self._outputs_connected(output):
+                engine = self._prepare_to_run(sequence)
+                self._run(engine, events)
         except Exception as e:
             error = e
         with exceptions_logged():
             self._finish_run(sequence)
         if error is not None:
             raise error
+
+    def _outputs_connected(
+        self, output: SingleOutput | Sequence[SingleOutput] | None
+    ) -> ContextManager:
+        if output is None:
+            return nullcontext()
+
+        if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
+            output = [output]
+
+        # convert all items to handler objects
+        handlers: list[Any] = []
+        for item in output:
+            if isinstance(item, (str, Path)):
+                handlers.append(self._handler_for_path(item))
+            else:
+                # TODO: better check for valid handler protocol
+                # quick hack for now.
+                if not hasattr(item, "frameReady"):
+                    raise TypeError(
+                        "Output handlers must have a frameReady method. "
+                        f"Got {item} with type {type(item)}."
+                    )
+                handlers.append(item)
+
+        return mda_listeners_connected(*handlers, mda_events=self._signals)
+
+    def _handler_for_path(self, path: str | Path) -> object:
+        path = str(path)
+        if path.endswith(".zarr"):
+            from pymmcore_plus.mda.handlers import OMEZarrWriter
+
+            return OMEZarrWriter(path)
+
+        if path.endswith(".ome.tiff"):
+            raise NotImplementedError("OME-TIFF not yet supported.")
+            # from pymmcore_plus.mda.handlers import OMETiffWriter
+            # return OMETiffWriter(path)
+
+        # FIXME: ugly hack for the moment to represent a non-existent directory
+        if "." not in path and not Path(path).exists():
+            from pymmcore_plus.mda.handlers import ImageSequenceWriter
+
+            return ImageSequenceWriter(path)
+
+        raise ValueError(f"Unknown output path: {path}")
 
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""

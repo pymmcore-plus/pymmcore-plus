@@ -1410,7 +1410,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self._mda_runner
 
-    def run_mda(self, events: Iterable[MDAEvent], block: bool = False) -> Thread:
+    def run_mda(
+        self, events: Iterable[MDAEvent], *, output=None, block: bool = False
+    ) -> Thread:
         """Run a sequence of [useq.MDAEvent][] on a new thread.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -1439,7 +1441,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self.mda.run, args=(events,))
+        th = Thread(target=self.mda.run, args=(events, output))
         th.start()
         if block:
             th.join()
