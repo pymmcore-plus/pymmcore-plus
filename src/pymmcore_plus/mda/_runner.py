@@ -192,14 +192,17 @@ class MDARunner:
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-        try:
-            with self._outputs_connected(output):
+        with self._outputs_connected(output):
+            # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
+            # called inside the context manager, since the `mda_listeners_connected`
+            # context manager expects to see both of those signals.
+            try:
                 engine = self._prepare_to_run(sequence)
                 self._run(engine, events)
-        except Exception as e:
-            error = e
-        with exceptions_logged():
-            self._finish_run(sequence)
+            except Exception as e:
+                error = e
+            with exceptions_logged():
+                self._finish_run(sequence)
         if error is not None:
             raise error
 
