@@ -1391,11 +1391,11 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To add a lock to prevent concurrent calls across threads.
         """
-        autoshutter = self.getAutoShutter()
-        if autoshutter:
+        if autoshutter := self.getAutoShutter():
             self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
         try:
             super().snapImage()
+            self.events.imageSnapped.emit()
         finally:
             if autoshutter:
                 self.events.propertyChanged.emit(
@@ -1603,7 +1603,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         self.snapImage()
         img = self.getImage(numChannel, fix=fix)  # type: ignore
-        self.events.imageSnapped.emit(img)
         return img
 
     @overload
