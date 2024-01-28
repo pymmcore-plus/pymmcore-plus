@@ -209,6 +209,7 @@ class MDARunner:
     def _outputs_connected(
         self, output: SingleOutput | Sequence[SingleOutput] | None
     ) -> ContextManager:
+        """Context in which output handlers are connected to the frameReady signal."""
         if output is None:
             return nullcontext()
 
@@ -233,6 +234,10 @@ class MDARunner:
         return mda_listeners_connected(*handlers, mda_events=self._signals)
 
     def _handler_for_path(self, path: str | Path) -> object:
+        """Convert a string or Path into a handler object.
+
+        This method picks from the built-in handlers based on the extension of the path.
+        """
         path = str(path)
         if path.endswith(".zarr"):
             from pymmcore_plus.mda.handlers import OMEZarrWriter
@@ -240,17 +245,20 @@ class MDARunner:
             return OMEZarrWriter(path)
 
         if path.endswith(".ome.tiff"):
+            # https://github.com/pymmcore-plus/pymmcore-plus/pull/265
             raise NotImplementedError("OME-TIFF not yet supported.")
             # from pymmcore_plus.mda.handlers import OMETiffWriter
             # return OMETiffWriter(path)
 
         # FIXME: ugly hack for the moment to represent a non-existent directory
-        if "." not in path and not Path(path).exists():
+        # there are many features that ImageSequenceWriter supports, and it's unclear
+        # how to infer them all from a single string.
+        if not (Path(path).suffix or Path(path).exists()):
             from pymmcore_plus.mda.handlers import ImageSequenceWriter
 
             return ImageSequenceWriter(path)
 
-        raise ValueError(f"Unknown output path: {path}")
+        raise ValueError(f"Could not infer a writer handler for path: '{path}'")
 
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
