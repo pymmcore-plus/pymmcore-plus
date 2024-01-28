@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from typing_extensions import TypedDict
 
-    from pymmcore_plus.core import CMMCorePlus
+    from pymmcore_plus.core import CMMCorePlus, Metadata
 
     from ._protocol import PImagePayload
 
@@ -36,6 +36,7 @@ if TYPE_CHECKING:
             "DateAndTime": str,
             "PixelType": str,
             "PixelSize_um": float,
+            "PixelSizeAffine": str,
             "Core-XYStage": str,
             "Core-Focus": str,
             "Core-Autofocus": str,
@@ -100,7 +101,30 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = self._mmc.getAutoShutter()
-        return _summary_meta(self._mmc)
+        return self.get_summary_metadata()
+
+    def get_summary_metadata(self) -> SummaryMetadata:
+        """Get the summary metadata for the sequence."""
+        pt = PixelType.for_bytes(
+            self._mmc.getBytesPerPixel(), self._mmc.getNumberOfComponents()
+        )
+        affine = self._mmc.getPixelSizeAffine(True)  # true == cached
+
+        return {
+            "DateAndTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
+            "PixelType": str(pt),
+            "PixelSize_um": self._mmc.getPixelSizeUm(),
+            "PixelSizeAffine": ";".join(str(x) for x in affine),
+            "Core-XYStage": self._mmc.getXYStageDevice(),
+            "Core-Focus": self._mmc.getFocusDevice(),
+            "Core-Autofocus": self._mmc.getAutoFocusDevice(),
+            "Core-Camera": self._mmc.getCameraDevice(),
+            "Core-Galvo": self._mmc.getGalvoDevice(),
+            "Core-ImageProcessor": self._mmc.getImageProcessorDevice(),
+            "Core-SLM": self._mmc.getSLMDevice(),
+            "Core-Shutter": self._mmc.getShutterDevice(),
+            "AffineTransform": "Undefined",
+        }
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()
@@ -238,7 +262,35 @@ class MDAEngine(PMDAEngine):
             return ()
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
-        yield ImagePayload(self._mmc.getImage(), event, self._mmc.getTags())
+        yield ImagePayload(self._mmc.getImage(), event, self.get_frame_metadata())
+
+    def get_frame_metadata(
+        self, meta: Metadata | None = None, channel_index: int | None = None
+    ) -> dict[str, Any]:
+        # TODO:
+
+        # this is not a very fast method, and it is called for every frame.
+        # Nico Stuurman has suggested that it was a mistake for MM to pull so much
+        # metadata for every frame.  So we'll begin with a more conservative approach.
+
+        # while users can now simply re-implement this method,
+        # consider coming up with a user-configurable way to specify needed metadata
+
+        # rather than using self._mmc.getTags (which mimics MM) we pull a smaller
+        # amount of metadata.
+        # If you need more than this, either override or open an issue.
+
+        tags = dict(meta) if meta else {}
+        for dev, label, val in self._mmc.getSystemStateCache():
+            tags[f"{dev}-{label}"] = val
+
+        # these are added by AcqEngJ
+        # yyyy-MM-dd HH:mm:ss.mmmmmm  # NOTE AcqEngJ omits microseconds
+        tags["Time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+
+        # used by Runner
+        tags["PerfCounter"] = time.perf_counter()
+        return tags
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
@@ -347,9 +399,7 @@ class MDAEngine(PMDAEngine):
         # block until the sequence is done, popping images in the meantime
         while self._mmc.isSequenceRunning():
             if self._mmc.getRemainingImageCount():
-                img = self._mmc.popNextTaggedImage()
-                e = next(iter_events)
-                yield ImagePayload(img.pix, e, img.tags)
+                yield self._next_img_payload(next(iter_events))
                 count += 1
             else:
                 time.sleep(0.001)
@@ -358,9 +408,7 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while self._mmc.getRemainingImageCount():
-            img = self._mmc.popNextTaggedImage()
-            e = next(iter_events)
-            yield ImagePayload(img.pix, e, img.tags)
+            yield self._next_img_payload(next(iter_events))
             count += 1
 
         if count != n_events:
@@ -370,6 +418,12 @@ class MDAEngine(PMDAEngine):
                 n_events,
                 count,
             )
+
+    def _next_img_payload(self, event: MDAEvent) -> PImagePayload:
+        """Grab next image from the circular buffer and return it as an ImagePayload."""
+        img, meta = self._mmc.popNextImageAndMD()
+        tags = self.get_frame_metadata(meta)
+        return ImagePayload(img, event, tags)
 
     # ===================== EXTRA =====================
 
@@ -424,22 +478,3 @@ class ImagePayload(NamedTuple):
     image: NDArray
     event: MDAEvent
     metadata: dict
-
-
-def _summary_meta(core: CMMCorePlus) -> SummaryMetadata:
-    pt = PixelType.for_bytes(core.getBytesPerPixel(), core.getNumberOfComponents())
-
-    return {
-        "DateAndTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
-        "PixelType": str(pt),
-        "PixelSize_um": core.getPixelSizeUm(),
-        "Core-XYStage": core.getXYStageDevice(),
-        "Core-Focus": core.getFocusDevice(),
-        "Core-Autofocus": core.getAutoFocusDevice(),
-        "Core-Camera": core.getCameraDevice(),
-        "Core-Galvo": core.getGalvoDevice(),
-        "Core-ImageProcessor": core.getImageProcessorDevice(),
-        "Core-SLM": core.getSLMDevice(),
-        "Core-Shutter": core.getShutterDevice(),
-        "AffineTransform": "Undefined",
-    }
