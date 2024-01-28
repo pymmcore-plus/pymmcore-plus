@@ -1,4 +1,3 @@
-import numpy as np
 from psygnal import Signal, SignalInstance
 
 from pymmcore_plus.mda import MDAEngine
