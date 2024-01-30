@@ -149,6 +149,14 @@ class MDAEngine(PMDAEngine):
                 # store correction for this position index
                 p_idx = event.index.get("p", None)
                 self._z_correction[p_idx] = new_correction
+            
+            # this is necessary for SequencedEvent, if we don't yield
+            # from self.exec_sequenced_event(event) the acquisition stops
+            # because we return ()
+            if isinstance(event, SequencedEvent):
+                self._mmc.enableContinuousFocus(True)
+                yield from self.exec_sequenced_event(event)
+
             return ()
 
         if isinstance(event, SequencedEvent):
