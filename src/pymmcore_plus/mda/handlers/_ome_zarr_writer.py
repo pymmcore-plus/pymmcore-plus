@@ -230,7 +230,8 @@ class OMEZarrWriter:
         # flush frame metadata to disk
         while self._frame_metas:
             key, metas = self._frame_metas.popitem()
-            self._arrays[key].attrs["frame_meta"] = metas
+            if key in self._arrays:
+                self._arrays[key].attrs["frame_meta"] = metas
 
         self._current_sequence = None
         self._sizes = []
