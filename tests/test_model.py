@@ -224,3 +224,34 @@ def test_dirty():
     assert scope.is_dirty()
     scope.mark_clean()
     assert not scope.is_dirty()
+
+
+# SequenceTester is a good example of a device library that only shows a Hub,
+# but has peripherals that are visible only after calling initializeDevice
+# Ti2 is an example of a library that has multiple hubs... are there better ones?
+@pytest.mark.parametrize(
+    "lib, hub", [("SequenceTester", "THub"), ("NikonTi2", "Ti2-E__0")]
+)
+def test_hubs(lib: str, hub: str) -> None:
+    """Make sure that calling load_available_devices() on a model after loading
+    a hub device will find all peripherals when using dev.available_peripherals."""
+    core = CMMCorePlus()
+    model = Microscope()
+
+    try:
+        core.loadDevice(hub, lib, hub)
+    except RuntimeError:
+        if lib == "SequenceTester":
+            raise
+        pytest.skip(reason=f"{lib}, {hub} Not Available")
+        return
+
+    core.initializeDevice(hub)
+
+    # successful closing of the dialog will have loaded and initialized the device.
+    dev = Device.create_from_core(core, name=hub)
+
+    model.load_available_devices(core)
+    assert model.available_devices
+    peripherals = list(dev.available_peripherals(model))
+    assert peripherals
