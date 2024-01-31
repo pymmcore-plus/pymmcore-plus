@@ -5,6 +5,7 @@ import json
 import os.path
 import shutil
 import tempfile
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
 if TYPE_CHECKING:
@@ -17,7 +18,6 @@ if TYPE_CHECKING:
     from fsspec import FSMap
     from numcodecs.abc import Codec
     from typing_extensions import TypedDict
-    from useq import MDASequence
 
     class ZarrSynchronizer(Protocol):
         def __getitem__(self, key: str) -> ContextManager:
@@ -162,7 +162,7 @@ class OMEZarrWriter:
         # (the group will have a dataset for each position)
         self._arrays: dict[str, zarr.Array] = {}
         self._sizes: list[dict[str, int]] = []
-        self._frame_metas: dict[str, list[dict[str, Any]]] = {}
+        self._frame_metas: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
 
         # set during sequenceStarted and cleared during sequenceFinished
         self._current_sequence: useq.MDASequence | None = None
@@ -223,13 +223,17 @@ class OMEZarrWriter:
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """On sequence started, simply store the sequence."""
         self._set_sequence(seq)
+        self._frame_metas.clear()
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
+        # flush frame metadata to disk
+        while self._frame_metas:
+            key, metas = self._frame_metas.popitem()
+            self._arrays[key].attrs["frame_meta"] = metas
+
         self._current_sequence = None
         self._sizes = []
-        self._write_frame_meta(seq)
-
         if self._minify_metadata:
             self._minify_zattrs_metadata()
 
@@ -264,11 +268,11 @@ class OMEZarrWriter:
             # create the array in the group, store sequence metadata in attrs
             self._arrays[key] = ary = self._new_array(key, frame.dtype, sizes)
             ary.attrs["useq_MDASequence"] = json.loads(seq.json(exclude_unset=True))
-            self._frame_metas[key] = []
 
         # WRITE DATA TO DISK
         index = tuple(event.index.get(k) for k in ary.attrs["_ARRAY_DIMENSIONS"][:-2])
         ary[index] = frame  # for zarr, this immediately writes to disk
+
         # write frame metadata
         if meta:
             # fix serialization MDAEvent
@@ -279,11 +283,6 @@ class OMEZarrWriter:
         self._frame_metas[key].append(meta or {})
 
     # ------------------------------- private --------------------------------
-    def _write_frame_meta(self, seq: MDASequence) -> None:
-        for i in range(seq.sizes.get("p", 1)):
-            key = f"{POS_PREFIX}{i}"
-            ary = self._arrays[key]
-            ary.attrs["frame_meta"] = self._frame_metas.get(key, [])
 
     def _set_sequence(self, seq: useq.MDASequence | None) -> None:
         """Set the current sequence, and update the used axes."""
