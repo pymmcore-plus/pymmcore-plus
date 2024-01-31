@@ -4,6 +4,7 @@ from unittest.mock import MagicMock, call
 
 import pytest
 import useq
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.core._sequencing import SequencedEvent, get_all_sequenceable
 from pymmcore_plus.mda import MDAEngine, MDARunner
@@ -155,3 +156,20 @@ def test_sequence_tester_decoding(sequence_tester: CMMCorePlus) -> None:
         assert info.camera_info.serial_img_num == i
 
         assert bool(info.start_state) == (i != 0)
+
+
+def test_sequence_actions(core: CMMCorePlus):
+    mda = useq.MDASequence(
+        axis_order="ptc",  # do complete t for each c at each p
+        stage_positions=[(0, 0), (1, 1)],
+        channels=[useq.Channel(config="FITC", exposure=10)],
+        time_plan=useq.TIntervalLoops(interval=0, loops=5),
+        autofocus_plan={"autofocus_motor_offset": 25, "axes": ("p",)},
+    )
+    EXPECTED_SEQUENCES = 4  # 2 autofocus actions and 2 timeseries
+
+    core_mock = cast("CMMCorePlus", MagicMock(wraps=core))
+    engine = MDAEngine(mmc=core_mock)
+    engine.use_hardware_sequencing = True
+    events = list(engine.event_iterator(mda))
+    assert len(events) == EXPECTED_SEQUENCES
