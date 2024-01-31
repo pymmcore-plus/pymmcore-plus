@@ -91,6 +91,9 @@ class MDAEngine(PMDAEngine):
 
     def setup_sequence(self, sequence: MDASequence) -> Mapping[str, Any]:
         """Setup the hardware for the entire sequence."""
+        # clear z_correction for new sequence
+        self._z_correction.clear()
+
         if not self._mmc:  # pragma: no cover
             from pymmcore_plus.core import CMMCorePlus
 
@@ -148,7 +151,9 @@ class MDAEngine(PMDAEngine):
             else:
                 # store correction for this position index
                 p_idx = event.index.get("p", None)
-                self._z_correction[p_idx] = new_correction + self._z_correction.get(p_idx, 0.0)
+                self._z_correction[p_idx] = new_correction + self._z_correction.get(
+                    p_idx, 0.0
+                )
             return ()
 
         if isinstance(event, SequencedEvent):
@@ -249,9 +254,7 @@ class MDAEngine(PMDAEngine):
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
-        # reset _z_correction
-        self._z_correction = {}
-
+        pass
 
     # ===================== Sequenced Events =====================
 
