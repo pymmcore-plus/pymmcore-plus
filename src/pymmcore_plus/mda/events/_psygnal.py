@@ -10,3 +10,4 @@ class MDASignaler:
     sequenceFinished = Signal(MDASequence)  # when mda is done (whether canceled or not)
     frameReady = Signal(np.ndarray, MDAEvent, dict)  # img, MDAEvent, metadata
     awaitingEvent = Signal(MDAEvent, float)  # MDAEvent, remaining_sec
+    eventStarted = Signal(MDAEvent)  # MDAEvent
