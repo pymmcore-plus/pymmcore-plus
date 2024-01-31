@@ -3,7 +3,7 @@ from __future__ import annotations
 from itertools import product
 from typing import TYPE_CHECKING, Literal, Sequence, Tuple, overload
 
-from useq import MDAEvent
+from useq import AcquireImage, MDAEvent
 
 from pymmcore_plus.core._constants import DeviceType
 
@@ -227,6 +227,12 @@ def can_sequence_events(
 
     def _nope(reason: str) -> tuple[bool, str] | bool:
         return (False, reason) if return_reason else False
+
+    # Action
+    if (e1.action is None or not isinstance(e1.action, AcquireImage)) or (
+        e2.action is None or not isinstance(e2.action, AcquireImage)
+    ):
+        return _nope("Cannot sequence non-'AcquireImage' events.")
 
     # channel
     if e1.channel and e1.channel != e2.channel:
