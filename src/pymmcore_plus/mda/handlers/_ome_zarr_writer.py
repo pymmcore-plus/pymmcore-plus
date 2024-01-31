@@ -234,6 +234,7 @@ class OMEZarrWriter:
 
         self._current_sequence = None
         self._sizes = []
+
         if self._minify_metadata:
             self._minify_zattrs_metadata()
 
