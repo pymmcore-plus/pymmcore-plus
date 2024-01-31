@@ -4,7 +4,6 @@ from unittest.mock import MagicMock, call
 
 import pytest
 import useq
-
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.core._sequencing import SequencedEvent, get_all_sequenceable
 from pymmcore_plus.mda import MDAEngine, MDARunner
