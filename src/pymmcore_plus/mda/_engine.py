@@ -148,7 +148,7 @@ class MDAEngine(PMDAEngine):
             else:
                 # store correction for this position index
                 p_idx = event.index.get("p", None)
-                self._z_correction[p_idx] = new_correction
+                self._z_correction[p_idx] = new_correction + self._z_correction.get(p_idx, 0.0)
             return ()
 
         if isinstance(event, SequencedEvent):
@@ -249,7 +249,9 @@ class MDAEngine(PMDAEngine):
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
-        pass
+        # reset _z_correction
+        self._z_correction = {}
+
 
     # ===================== Sequenced Events =====================
 
