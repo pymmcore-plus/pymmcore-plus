@@ -7,3 +7,4 @@ class QMDASignaler(QObject):
     sequenceCanceled = Signal(object)  # when mda is canceled
     sequenceFinished = Signal(object)  # when mda is done (whether canceled or not)
     frameReady = Signal(object, object, dict)  # img, MDAEvent, metadata
+    awaitingEvent = Signal(object, float)  # MDAEvent, remaining_sec
