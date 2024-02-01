@@ -5,6 +5,7 @@ import json
 import os.path
 import shutil
 import tempfile
+from collections import defaultdict
 from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
 if TYPE_CHECKING:
@@ -161,6 +162,7 @@ class OMEZarrWriter:
         # (the group will have a dataset for each position)
         self._arrays: dict[str, zarr.Array] = {}
         self._sizes: list[dict[str, int]] = []
+        self._frame_metas: defaultdict[str, list[dict[str, Any]]] = defaultdict(list)
 
         # set during sequenceStarted and cleared during sequenceFinished
         self._current_sequence: useq.MDASequence | None = None
@@ -221,9 +223,16 @@ class OMEZarrWriter:
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """On sequence started, simply store the sequence."""
         self._set_sequence(seq)
+        self._frame_metas.clear()
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
+        # flush frame metadata to disk
+        while self._frame_metas:
+            key, metas = self._frame_metas.popitem()
+            if key in self._arrays:
+                self._arrays[key].attrs["frame_meta"] = metas
+
         self._current_sequence = None
         self._sizes = []
 
@@ -273,9 +282,7 @@ class OMEZarrWriter:
             meta["Event"] = json.loads(
                 event.json(exclude={"sequence"}, exclude_defaults=True)
             )
-        frame_meta = ary.attrs.get("frame_meta", [])
-        frame_meta.append(meta or {})
-        ary.attrs["frame_meta"] = frame_meta
+        self._frame_metas[key].append(meta or {})
 
     # ------------------------------- private --------------------------------
 
