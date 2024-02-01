@@ -227,12 +227,6 @@ def can_sequence_events(
 
     def _nope(reason: str) -> tuple[bool, str] | bool:
         return (False, reason) if return_reason else False
-    
-    # Actions
-    if (e1.action is None or not isinstance(e1.action, AcquireImage)) or (
-        e2.action is None or not isinstance(e2.action, AcquireImage)
-    ):
-        return _nope("Cannot sequence 'Actions' different then 'AcquireImage'.")
 
     # Action
     if (e1.action is None or not isinstance(e1.action, AcquireImage)) or (
