@@ -229,8 +229,8 @@ def can_sequence_events(
         return (False, reason) if return_reason else False
 
     # Action
-    if (e1.action is None or not isinstance(e1.action, AcquireImage)) or (
-        e2.action is None or not isinstance(e2.action, AcquireImage)
+    if not isinstance(e1.action, (AcquireImage, type(None))) or not isinstance(
+        e2.action, (AcquireImage, type(None))
     ):
         return _nope("Cannot sequence non-'AcquireImage' events.")
 
