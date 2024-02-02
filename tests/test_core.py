@@ -20,7 +20,6 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
-from pymmcore_plus.mda._engine import _summary_meta
 from qtpy.QtCore import QObject
 from qtpy.QtCore import SignalInstance as QSignalInstance
 from useq import MDASequence
@@ -148,7 +147,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
         assert isinstance(_call.args[0], np.ndarray)
         assert _call.args[1] == event
 
-    summary = _summary_meta(core)
+    summary = core.mda.engine.get_summary_metadata()
     summary.pop("DateAndTime", "")
     ss_mock.assert_called_once()
     _seq, _meta = ss_mock.call_args[0]
