@@ -547,6 +547,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         cfg = super().getSystemState()
         return cfg if native else Configuration.from_configuration(cfg)
 
+    @overload
+    def getSystemStateCache(self, *, native: Literal[True]) -> pymmcore.Configuration:
+        ...
+
+    @overload
+    def getSystemStateCache(self, *, native: Literal[False] = False) -> Configuration:
+        ...
+
     def getSystemStateCache(
         self, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
@@ -610,11 +618,13 @@ class CMMCorePlus(pymmcore.CMMCore):
         return (self.fixImage(img) if fix else img, md)
 
     @overload
-    def popNextImageAndMD(self, channel: int, slice: int, *, fix: bool = True) -> Any:
+    def popNextImageAndMD(
+        self, channel: int, slice: int, *, fix: bool = True
+    ) -> tuple[np.ndarray, Metadata]:
         ...
 
     @overload
-    def popNextImageAndMD(self, *, fix: bool = True) -> Any:
+    def popNextImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]:
         ...
 
     @synchronized(_lock)
@@ -1526,7 +1536,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         # you shouldn't have to search the code to find out what keys are available
 
         tags = dict(meta) if meta else {}
-        for dev, label, val in self.getSystemStateCache():  # type: ignore
+        for dev, label, val in self.getSystemStateCache():
             tags[f"{dev}-{label}"] = val
 
         tags["BitDepth"] = self.getImageBitDepth()
