@@ -1536,7 +1536,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         # you shouldn't have to search the code to find out what keys are available
 
         tags = dict(meta) if meta else {}
-        for dev, label, val in self.getSystemStateCache():  # type: ignore
+        for dev, label, val in self.getSystemStateCache():
             tags[f"{dev}-{label}"] = val
 
         tags["BitDepth"] = self.getImageBitDepth()
