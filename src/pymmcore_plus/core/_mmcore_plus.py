@@ -54,6 +54,8 @@ if TYPE_CHECKING:
     from typing_extensions import Literal, TypedDict
     from useq import MDAEvent
 
+    from pymmcore_plus.mda._runner import SingleOutput
+
     from ._state import StateDict
 
     _T = TypeVar("_T")
@@ -1411,7 +1413,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self._mda_runner
 
     def run_mda(
-        self, events: Iterable[MDAEvent], *, output=None, block: bool = False
+        self,
+        events: Iterable[MDAEvent],
+        *,
+        output: SingleOutput | Sequence[SingleOutput] | None = None,
+        block: bool = False,
     ) -> Thread:
         """Run a sequence of [useq.MDAEvent][] on a new thread.
 
@@ -1428,6 +1434,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         events : Iterable[useq.MDAEvent]
             An iterable of [useq.MDAEvent][] to execute.  This may be an instance
             of [useq.MDASequence][], or any other iterable of [useq.MDAEvent][].
+        output : SingleOutput | Sequence[SingleOutput] | None, optional
+            The output handler(s) to use.  If None, no output will be saved.
+            "SingleOutput" can be any of the following:
+
+            - A string or Path to a directory to save images to. A handler will be
+                created automatically based on the extension of the path.
+            - A handler object that implements the `DataHandler` protocol, currently
+                meaning it has a `frameReady` method.  See `mda_listeners_connected`
+                for more details.
+            - A sequence of either of the above. (all will be connected)
         block : bool, optional
             If True, block until the sequence is complete, by default False.
 
