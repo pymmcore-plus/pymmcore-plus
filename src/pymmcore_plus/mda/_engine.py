@@ -327,6 +327,16 @@ class MDAEngine(PMDAEngine):
             if tot >= timeout:
                 raise TimeoutError("Failed to stop running sequence")
 
+    def post_sequence_started(self, event: SequencedEvent) -> None:
+        """Perform any actions after startSequenceAcquisition has been called.
+
+        This method is available to subclasses in case they need to perform any
+        actions after a hardware-triggered sequence has been started (i.e. after
+        core.startSequenceAcquisition has been called).
+
+        The default implementation does nothing.
+        """
+
     def exec_sequenced_event(self, event: SequencedEvent) -> Iterable[PImagePayload]:
         """Execute a sequenced (triggered) event and return the image data.
 
@@ -346,6 +356,8 @@ class MDAEngine(PMDAEngine):
             0,  # intervalMS  # TODO: add support for this
             True,  # stopOnOverflow
         )
+
+        self.post_sequence_started(event)
 
         count = 0
         iter_events = iter(event.events)
