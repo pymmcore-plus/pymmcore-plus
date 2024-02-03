@@ -22,8 +22,6 @@ Not Supported by OME-XML
     L : exposure** (FluoView)
     V : event** (FluoView)
     M : mosaic** (LSM 6)
-    J : column** (NDTiff)
-    K : row** (NDTiff)
 
 Rules:
 - all axes must be one of TZCYXSAPRHEQ
@@ -115,4 +113,4 @@ class OMETiffWriter(OMEWriterBase[np.memmap]):
         # memory map numpy array to data in OME-TIFF file
         mmap = memmap(fname)
         mmap.shape = shape  # handle singletons?
-        return mmap
+        return mmap  # type: ignore

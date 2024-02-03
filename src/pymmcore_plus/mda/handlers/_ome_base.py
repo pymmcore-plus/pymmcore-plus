@@ -109,7 +109,7 @@ class OMEWriterBase(Generic[T]):
     def store_frame_metadata(
         self, key: str, event: useq.MDAEvent, meta: dict | None = None
     ) -> None:
-        # needn't be re-implmented in subclasses
+        # needn't be re-implemented in subclasses
         # default implementation is to store the metadata in self._frame_metas
         # use finalize_metadata to write to disk at the end of the sequence.
         if meta:
