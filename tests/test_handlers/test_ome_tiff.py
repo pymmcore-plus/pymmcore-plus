@@ -47,6 +47,7 @@ def test_ome_tiff_writer(
     ):
         core.mda.run(seq)
 
+    # multi-position sequences will be split into multiple files
     n_positions = seq.sizes.get("p", 1)
     if n_positions > 1:
         files = [
@@ -56,6 +57,7 @@ def test_ome_tiff_writer(
     else:
         files = [str(dest)]
 
+    # check that the files exist and have the correct shape
     for file in files:
         assert Path(file).exists()
         data = cast("np.ndarray", tf.imread(file))

@@ -101,7 +101,7 @@ class OMETiffWriter(OMEWriterBase[np.memmap]):
         # there's a lot we could still capture, but it comes off the microscope
         # over the course of the acquisition (such as stage positions, exposure times)
         # ... one option is to accumulate these things and then use `tifffile.comment`
-        # to update the total metadata in sequenceFinished
+        # to update the total metadata in finalize_metadata
         if seq and seq.sizes.get("p", 1) > 1:
             fname = self._filename.replace(".ome.tif", f"_{position_key}.ome.tif")
         else:
@@ -112,5 +112,8 @@ class OMETiffWriter(OMEWriterBase[np.memmap]):
         # tifffile.memmap doesn't support 6+D arrays,
         # memory map numpy array to data in OME-TIFF file
         mmap = memmap(fname)
-        mmap.shape = shape  # handle singletons?
+
+        # This line is important, as tifffile.memmap appears to lose singleton
+        # dimensions when reading the file back in
+        mmap.shape = shape
         return mmap  # type: ignore
