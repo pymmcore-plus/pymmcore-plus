@@ -14,17 +14,8 @@ sequence = MDASequence(
     stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
     time_plan={"interval": 0.66, "loops": 3},
     z_plan={"range": 4, "step": 0.76},
-    axis_order="ptcz",
+    axis_order="tpcz",
 )
 
-# sequence = MDASequence(
-#     channels=["FITC"],
-#     stage_positions=[(222, 1, 1), (111, 0, 0)],
-#     time_plan={"interval": 0.2, "loops": 5},
-#     axis_order="ptc",
-# )
-
-writer = OMETiffWriter("example.ome.tiff")
-
-with mda_listeners_connected(writer):
+with mda_listeners_connected(OMETiffWriter("example.ome.tiff")):
     core.mda.run(sequence)

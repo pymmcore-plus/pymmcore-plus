@@ -8,9 +8,10 @@ Supported by OME-XML
     X : width** (image width)
     Y : height** (image length)
     Z : depth** (image depth)
-    S : sample** (color space and extra samples)
     T : time** (time series)
     C : channel** (acquisition path or emission wavelength)
+    Modulo axes:
+    S : sample** (color space and extra samples)
     A : angle** (OME)
     P : phase** (OME. In LSM, **P** maps to **position**)
     R : tile** (OME. Region, position, or mosaic)
@@ -111,7 +112,7 @@ class OMETiffWriter(OMEWriterBase[np.memmap]):
         # this is a bit of a hack.
         # tifffile.memmap doesn't support 6+D arrays,
         # memory map numpy array to data in OME-TIFF file
-        mmap = memmap(fname)
+        mmap = memmap(fname, dtype=dtype)
 
         # This line is important, as tifffile.memmap appears to lose singleton
         # dimensions when reading the file back in
