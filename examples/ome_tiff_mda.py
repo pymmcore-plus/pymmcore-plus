@@ -17,7 +17,7 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
-writer = OMETiffWriter("out.ome.tiff")
+writer = OMETiffWriter("example.ome.tiff")
 
 with mda_listeners_connected(writer):
     core.mda.run(sequence)
