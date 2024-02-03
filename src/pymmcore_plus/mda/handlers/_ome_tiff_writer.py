@@ -2,21 +2,51 @@
 
 Borrowed from the pattern shared by Christoph Gohlke:
 https://forum.image.sc/t/how-to-create-an-image-series-ome-tiff-from-python/42730/7
+
+Note, these are the valid axis keys tifffile:
+Supported by OME-XML
+    X : width** (image width)
+    Y : height** (image length)
+    Z : depth** (image depth)
+    S : sample** (color space and extra samples)
+    T : time** (time series)
+    C : channel** (acquisition path or emission wavelength)
+    A : angle** (OME)
+    P : phase** (OME. In LSM, **P** maps to **position**)
+    R : tile** (OME. Region, position, or mosaic)
+    H : lifetime** (OME. Histogram)
+    E : lambda** (OME. Excitation wavelength)
+    Q : other** (OME)
+Not Supported by OME-XML
+    I : sequence** (generic sequence of images, frames, planes, pages)
+    L : exposure** (FluoView)
+    V : event** (FluoView)
+    M : mosaic** (LSM 6)
+    J : column** (NDTiff)
+    K : row** (NDTiff)
+
+Rules:
+- all axes must be one of TZCYXSAPRHEQ
+- len(axes) must equal len(shape)
+- dimensions (order) must end with YX or YXS
+- no axis can be repeated
+- no more than 8 dimensions (or 9 if 'S' is included)
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
+
+import numpy as np
+
+from ._ome_base import OMEWriterBase
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import numpy as np
-    import useq
 
-
-class OMETiffWriter:
+class OMETiffWriter(OMEWriterBase[np.memmap]):
     def __init__(self, filename: Path | str) -> None:
         try:
             import tifffile  # noqa: F401
@@ -26,56 +56,28 @@ class OMETiffWriter:
                 "Please `pip install tifffile`."
             ) from e
 
-        # create an empty OME-TIFF file
-        self._filename = filename
-        self._mmap: None | np.memmap = None
+        self._filename = str(filename)
+        if not self._filename.endswith((".ome.tiff", ".ome.tif")):
+            raise ValueError("filename must end with '.ome.tiff' or '.ome.tif'")
 
-    def sequenceStarted(self, seq: useq.MDASequence) -> None:
-        self._set_sequence(seq)
+        super().__init__()
 
-    def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
-        if self._mmap is None:
-            if not self._current_sequence:
-                # just in case sequenceStarted wasn't called
-                self._set_sequence(event.sequence)  # pragma: no cover
+    def write_frame(
+        self, ary: np.memmap, index: tuple[int, ...], frame: np.ndarray
+    ) -> None:
+        super().write_frame(ary, index, frame)
+        ary.flush()
 
-            if not (seq := self._current_sequence):
-                raise NotImplementedError(
-                    "Writing zarr without a MDASequence not yet implemented"
-                )
-
-            mmap = self._create_seq_memmap(frame, seq, meta)
-        else:
-            mmap = self._mmap
-
-        # WRITE DATA TO DISK
-        index = tuple(event.index.get(k) for k in self._used_axes)
-        mmap[index] = frame
-        mmap.flush()
-
-    # -------------------- private --------------------
-
-    def _set_sequence(self, seq: useq.MDASequence | None) -> None:
-        """Set the current sequence, and update the used axes."""
-        self._current_sequence = seq
-        if seq:
-            self._used_axes = tuple(seq.used_axes)
-
-    def _create_seq_memmap(
-        self, frame: np.ndarray, seq: useq.MDASequence, meta: dict
+    def new_array(
+        self, position_key: str, dtype: np.dtype, sizes: dict[str, int]
     ) -> np.memmap:
         from tifffile import imwrite, memmap
 
-        shape = (
-            *tuple(v for k, v in seq.sizes.items() if k in self._used_axes),
-            *frame.shape,
-        )
-        axes = (*self._used_axes, "y", "x")
-        dtype = frame.dtype
+        dims, shape = zip(*sizes.items())
 
         # see tifffile.tiffile for more metadata options
-        metadata: dict[str, Any] = {"axes": "".join(axes).upper()}
-        if seq:
+        metadata: dict[str, Any] = {"axes": "".join(dims).upper()}
+        if seq := self._current_sequence:
             if seq.time_plan and hasattr(seq.time_plan, "interval"):
                 interval = seq.time_plan.interval
                 if isinstance(interval, timedelta):
@@ -87,21 +89,30 @@ class OMETiffWriter:
                 metadata["PhysicalSizeZUnit"] = "µm"
             if seq.channels:
                 metadata["Channel"] = {"Name": [c.config for c in seq.channels]}
-        if acq_date := meta.get("Time"):
-            metadata["AcquisitionDate"] = acq_date
-        if pix := meta.get("PixelSizeUm"):
-            metadata["PhysicalSizeX"] = pix
-            metadata["PhysicalSizeY"] = pix
-            metadata["PhysicalSizeXUnit"] = "µm"
-            metadata["PhysicalSizeYUnit"] = "µm"
+
+        # TODO
+        # if acq_date := meta.get("Time"):
+        #     metadata["AcquisitionDate"] = acq_date
+        # if pix := meta.get("PixelSizeUm"):
+        #     metadata["PhysicalSizeX"] = pix
+        #     metadata["PhysicalSizeY"] = pix
+        #     metadata["PhysicalSizeXUnit"] = "µm"
+        #     metadata["PhysicalSizeYUnit"] = "µm"
 
         # TODO:
         # there's a lot we could still capture, but it comes off the microscope
         # over the course of the acquisition (such as stage positions, exposure times)
         # ... one option is to accumulate these things and then use `tifffile.comment`
         # to update the total metadata in sequenceFinished
-        imwrite(self._filename, shape=shape, dtype=dtype, metadata=metadata)
+        if seq and seq.sizes.get("p", 1) > 1:
+            fname = self._filename.replace(".ome.tif", f"_{position_key}.ome.tif")
+        else:
+            fname = self._filename
+        imwrite(fname, shape=shape, dtype=dtype, metadata=metadata)
 
+        # this is a bit of a hack.
+        # tifffile.memmap doesn't support 6+D arrays,
         # memory map numpy array to data in OME-TIFF file
-        self._mmap = memmap(self._filename)
-        return cast("np.memmap", self._mmap)
+        mmap = memmap(fname)
+        mmap.shape = shape  # handle singletons?
+        return mmap
