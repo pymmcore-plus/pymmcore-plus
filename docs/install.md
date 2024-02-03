@@ -12,7 +12,7 @@ pip install pymmcore-plus
 pip install "pymmcore-plus[cli]"
 ```
 
-... as well as conda:
+or with conda:
 
 ```bash
 conda install -c conda-forge pymmcore-plus
@@ -20,31 +20,35 @@ conda install -c conda-forge pymmcore-plus
 
 ## Installing Micro-Manager Device Adapters
 
-Just like underlying the [`pymmcore`](https://github.com/micro-manager/pymmcore)
-that this library, `pymmcore-plus` relies on the device adapters and C++ core
-provided by
+Just like the underlying [`pymmcore`](https://github.com/micro-manager/pymmcore) library,
+`pymmcore-plus` also relies on the device adapters and C++ core provided by
 [mmCoreAndDevices](https://github.com/micro-manager/mmCoreAndDevices#mmcoreanddevices).
-There are two ways to do this:
+They can be installed in two ways:
 
 1. **Use the `mmcore` command line tool**
 
-    If you've installed with `pip install "pymmcore-plus[cli]"`,
-    this library provides a quick way to install the latest version of
-    micro-manager:
+    If you've installed with `pip install "pymmcore-plus[cli]"`, this library provides
+    a quick way to install the latest version of micro-manager:
 
     ```bash
     mmcore install
     ```
 
-    This will download the latest release of micro-manager and place it in the
-    pymmcore-plus folder. If you would like to modify the location of the
-    installation, or the release of micro-manager to install, you can use the
-    `--dest` and `--release` flags respectively.
+    This will download the latest release of micro-manager and, by default, place it in
+    a `pymmcore-plus\mm` folder in the user's data directory (e.g. `C:\Users\UserName\AppData\Local\pymmcore-plus\mm`). If you would like to modify
+    the location of the installation, or the release of micro-manager to install, you can use
+    the `--dest` and `--release` flags respectively.
 
-    For more information, run:
+    For more information on the `install` command, run:
 
     ```bash
     mmcore install --help
+    ```
+
+    To explore all the `mmcore` command line tool functionalities, run:
+
+    ```bash
+    mmcore --help
     ```
 
 2. **Download manually from micro-manager.org**
@@ -55,12 +59,18 @@ There are two ways to do this:
 
 !!! danger "Critical"
 
-    The *device interface version* MUST match between pymmcore and the
+    The *device interface version* MUST match between `pymmcore` and the
     Micro-Manager device adapters.
 
-    The device interface version of a given pymmcore version is the
-    fourth part in the version number, and can also be with the following
-    command:
+    The device interface version of a given `pymmcore` version is the
+    fourth part in the version number (e.g. v11.1.1.**71**.0), and can also be
+    identified with the following command:
+
+    ```bash
+    mmcore --version
+    ```
+
+    or, if you didn't install with the `cli` extra:
 
     ```bash
     python -c "print(__import__('pymmcore').CMMCore().getAPIVersionInfo())"
@@ -76,16 +86,17 @@ There are two ways to do this:
     By default, `pymmcore-plus` will look for a `Micro-Manager` folder in the
     default install location. On Windows this is `C:\Program Files\`, on macOS it is
     `/Applications/` and on Linux it is `/usr/local/lib/`. To override these default
-    device adapter search path, set the `MICROMANAGER_PATH` environment variable.
+    device adapter search path, set the `MICROMANAGER_PATH` environment variable
+    (e.g. `export MICROMANAGER_PATH=/path/to/installation`).
 
     To see which micro-manager installation `pymmcore-plus` is using, you
     can run:
 
     ```shell
-    mmcore find
+    mmcore list
     ```
 
-    or... if you didn't install with the `cli` extra:
+    or, if you didn't install with the `cli` extra:
 
     ```shell
     python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"

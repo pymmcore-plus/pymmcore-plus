@@ -58,14 +58,16 @@ docs = [
     # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
 testing = [
+    "msgpack",
     "PySide6",
-    "pytest",
     "pytest-cov",
     "pytest-qt",
+    "pytest",
     "qtpy",
     "rich",
-    "tifffile",
+    "tiffile",
     "typer",
+    "zarr",
 ]
 dev = [
     "black",

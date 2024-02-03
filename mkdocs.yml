@@ -37,6 +37,7 @@ nav:
           - api/constants.md
           - Metadata: api/metadata.md
           - Utilities: api/utils.md
+      - troubleshooting.md
       - contributing.md
   - useq-schema: /useq-schema/
   - pymmcore-widgets: /pymmcore-widgets/

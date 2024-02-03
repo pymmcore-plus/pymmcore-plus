@@ -142,7 +142,12 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
 def _qt_app_is_running() -> bool:
     for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
         if modname in sys.modules:
-            QtWidgets = importlib.import_module(".QtWidgets", modname)
+            try:
+                # in broken environments modname can be a namespace package...
+                # and QtWidgets will still be unavailable
+                QtWidgets = importlib.import_module(".QtWidgets", modname)
+            except ImportError:  # pragma: no cover
+                continue
             return QtWidgets.QApplication.instance() is not None
     return False  # pragma: no cover
 

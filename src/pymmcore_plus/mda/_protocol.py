@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Mapping, Protocol, Sequence, runtime_checkable
+from typing import TYPE_CHECKING, Any, Mapping, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from typing import Iterable, Iterator
@@ -40,7 +40,7 @@ class PMDAEngine(Protocol):
         """
 
     @abstractmethod
-    def exec_event(self, event: MDAEvent) -> Sequence[PImagePayload]:
+    def exec_event(self, event: MDAEvent) -> Iterable[PImagePayload]:
         """Execute `event`.
 
         This method is called after `setup_event` and is responsible for
