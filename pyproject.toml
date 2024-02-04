@@ -53,8 +53,8 @@ cli = ["typer >=0.4.2", "rich >=10.2.0"]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material",
-    "mkdocstrings ==0.22.0",
-    "mkdocstrings-python ==1.1.2",
+    "mkdocstrings ==0.24.0",
+    "mkdocstrings-python ==1.8.0",
     # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
 testing = [

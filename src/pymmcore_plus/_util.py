@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib
 import os
 import sys
+import warnings
 from collections import defaultdict
 from contextlib import contextmanager
 from functools import wraps
@@ -32,7 +33,13 @@ except ImportError:
     from contextlib import nullcontext as no_stdout
 
 
-__all__ = ["find_micromanager", "_qt_app_is_running", "retry", "no_stdout"]
+__all__ = [
+    "find_micromanager",
+    "_qt_app_is_running",
+    "retry",
+    "no_stdout",
+    "signals_backend",
+]
 
 USER_DATA_DIR = Path(appdirs.user_data_dir(appname="pymmcore-plus"))
 USER_DATA_MM_PATH = USER_DATA_DIR / "mm"
@@ -150,6 +157,33 @@ def _qt_app_is_running() -> bool:
                 continue
             return QtWidgets.QApplication.instance() is not None
     return False  # pragma: no cover
+
+
+MMCORE_PLUS_SIGNALS_BACKEND = "MMCORE_PLUS_SIGNALS_BACKEND"
+
+
+def signals_backend() -> Literal["qt", "psygnal"]:
+    """Return the name of the event backend to use."""
+    env_var = os.environ.get(MMCORE_PLUS_SIGNALS_BACKEND, "auto").lower()
+    if env_var not in {"qt", "psygnal", "auto"}:
+        warnings.warn(
+            f"{MMCORE_PLUS_SIGNALS_BACKEND} must be one of ['qt', 'psygnal', 'auto']. "
+            f"not: {env_var!r}. Using 'auto'.",
+            stacklevel=1,
+        )
+        env_var = "auto"
+
+    if env_var == "auto":
+        return "qt" if _qt_app_is_running() else "psygnal"
+    if env_var == "qt":
+        if _qt_app_is_running():
+            return "qt"
+        warnings.warn(
+            f"{MMCORE_PLUS_SIGNALS_BACKEND} set to 'qt', but no Qt app is running. "
+            "Falling back to 'psygnal'.",
+            stacklevel=1,
+        )
+    return "psygnal"
 
 
 @overload
