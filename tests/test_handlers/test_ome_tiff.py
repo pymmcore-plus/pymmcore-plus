@@ -23,23 +23,27 @@ seq1 = useq.MDASequence(
 
 seq2 = useq.MDASequence(
     channels=["FITC"],
-    time_plan={"interval": 0.2, "loops": 5},
+    time_plan={"interval": 0.2, "loops": 3},
     axis_order="tc",
 )
 
 seq3 = useq.MDASequence(
     channels=["FITC"],
     stage_positions=[(222, 1, 1), (111, 0, 0)],
-    time_plan={"interval": 0.2, "loops": 5},
+    time_plan={"interval": 0.2, "loops": 3},
     axis_order="ptc",
 )
 
 
+@pytest.mark.parametrize("ome", [True, False])
 @pytest.mark.parametrize("seq", [seq1, seq2, seq3])
 def test_ome_tiff_writer(
-    tmp_path: Path, core: CMMCorePlus, seq: useq.MDASequence
+    ome: bool, tmp_path: Path, core: CMMCorePlus, seq: useq.MDASequence
 ) -> None:
-    dest = tmp_path / "out.ome.tiff"
+    # whether .ome. appears in the filename determines whether tifffile
+    # will write OME-TIFF or not
+
+    dest = tmp_path / ("out.ome.tiff" if ome else "out.tiff")
     writer = OMETiffWriter(dest)
 
     with mda_listeners_connected(
@@ -61,7 +65,12 @@ def test_ome_tiff_writer(
     for file in files:
         assert Path(file).exists()
         data = cast("np.ndarray", tf.imread(file))
+
+        # the expected shape will depend on whether it's OME or not.
+        # imageJ output is always in "tzcyx" order, while OME will follow the experiment
+        dims = list(seq.sizes) if ome else "tzcyxs"
         seq_shape = tuple(
-            size for ax, size in seq.sizes.items() if ax != "p" and size > 1
+            size for ax in dims if ax != "p" and (size := seq.sizes.get(ax, 0)) > 1
         )
+
         assert data.shape[:-2] == seq_shape
