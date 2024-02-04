@@ -17,3 +17,11 @@ class PMDASignaler(Protocol):
     """Emits `(sequence: MDASequence)` when an acquisition sequence is finished."""
     frameReady: PSignal
     """Emits `(img: np.ndarray, event: MDAEvent, metadata: dict)` after an image is acquired during an acquisition sequence."""  # noqa: E501
+    awaitingEvent: PSignal
+    """Emits `(event: MDAEvent, remaining_sec: float)` when the runner is waiting to start an event.
+
+    Note: Not all events in a sequence will emit this signal. This will only be emitted
+    if the wait time is non-zero.
+    """  # noqa: E501
+    eventStarted: PSignal
+    """Emits `(event: MDAEvent)` immediately before event setup and execution."""

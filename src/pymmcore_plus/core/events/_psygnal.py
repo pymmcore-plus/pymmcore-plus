@@ -1,4 +1,3 @@
-import numpy as np
 from psygnal import Signal, SignalInstance
 
 from pymmcore_plus.mda import MDAEngine
@@ -24,7 +23,7 @@ class CMMCoreSignaler(_DevicePropertyEventMixin):
     SLMExposureChanged = Signal(str, float)
 
     # added for CMMCorePlus
-    imageSnapped = Signal(np.ndarray)  # whenever snap is called
+    imageSnapped = Signal()  # whenever snapImage is called
     mdaEngineRegistered = Signal(MDAEngine, MDAEngine)
     continuousSequenceAcquisitionStarted = Signal()
     sequenceAcquisitionStarted = Signal(str, int, float, bool)

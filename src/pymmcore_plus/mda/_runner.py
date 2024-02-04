@@ -271,6 +271,7 @@ class MDARunner:
             if self._wait_until_event(event) or not self._running:
                 break
 
+            self._signals.eventStarted.emit(event)
             logger.info("%s", event)
             engine.setup_event(event)
 
@@ -365,17 +366,18 @@ class MDARunner:
             go_at = event.min_start_time + self._paused_time
             # We need to enter a loop here checking paused and canceled.
             # otherwise you'll potentially wait a long time to cancel
-            to_go = go_at - self._time_elapsed()
-            while to_go > 0:
+            remaining_wait_time = go_at - self._time_elapsed()
+            while remaining_wait_time > 0:
+                self._signals.awaitingEvent.emit(event, remaining_wait_time)
                 while self._paused and not self._canceled:
                     self._paused_time += self._pause_interval  # fixme: be more precise
-                    to_go += self._pause_interval
+                    remaining_wait_time += self._pause_interval
                     time.sleep(self._pause_interval)
 
                 if self._canceled:
                     break
-                time.sleep(min(to_go, 0.5))
-                to_go = go_at - self._time_elapsed()
+                time.sleep(min(remaining_wait_time, 0.5))
+                remaining_wait_time = go_at - self._time_elapsed()
 
         # check canceled again in case it was canceled
         # during the waiting loop
