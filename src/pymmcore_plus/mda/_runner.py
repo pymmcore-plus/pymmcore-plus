@@ -166,6 +166,7 @@ class MDARunner:
     def run(
         self,
         events: Iterable[MDAEvent],
+        *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
     ) -> None:
         """Run the multi-dimensional acquistion defined by `sequence`.
@@ -181,14 +182,17 @@ class MDARunner:
             An iterable of `useq.MDAEvents` objects to execute.
         output : SingleOutput | Sequence[SingleOutput] | None, optional
             The output handler(s) to use.  If None, no output will be saved.
-            "SingleOutput" can be any of the following:
+            The value may be either a single output or a sequence of outputs,
+            where a "single output" can be any of the following:
 
             - A string or Path to a directory to save images to. A handler will be
                 created automatically based on the extension of the path.
+                - `.zarr` files will be handled by `OMEZarrWriter`
+                - `.ome.tiff` files will be handled by `OMETiffWriter`
+                - A directory with no extension will be handled by `ImageSequenceWriter`
             - A handler object that implements the `DataHandler` protocol, currently
                 meaning it has a `frameReady` method.  See `mda_listeners_connected`
                 for more details.
-            - A sequence of either of the above. (all will be connected)
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
@@ -238,17 +242,16 @@ class MDARunner:
 
         This method picks from the built-in handlers based on the extension of the path.
         """
-        path = str(path)
+        path = str(Path(path).expanduser().resolve())
         if path.endswith(".zarr"):
             from pymmcore_plus.mda.handlers import OMEZarrWriter
 
             return OMEZarrWriter(path)
 
-        if path.endswith(".ome.tiff"):
-            # https://github.com/pymmcore-plus/pymmcore-plus/pull/265
-            raise NotImplementedError("OME-TIFF not yet supported.")
-            # from pymmcore_plus.mda.handlers import OMETiffWriter
-            # return OMETiffWriter(path)
+        if path.endswith((".tiff", ".tif")):
+            from pymmcore_plus.mda.handlers import OMETiffWriter
+
+            return OMETiffWriter(path)
 
         # FIXME: ugly hack for the moment to represent a non-existent directory
         # there are many features that ImageSequenceWriter supports, and it's unclear
