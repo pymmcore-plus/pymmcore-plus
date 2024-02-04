@@ -33,13 +33,7 @@ except ImportError:
     from contextlib import nullcontext as no_stdout
 
 
-__all__ = [
-    "find_micromanager",
-    "_qt_app_is_running",
-    "retry",
-    "no_stdout",
-    "signals_backend",
-]
+__all__ = ["find_micromanager", "retry", "no_stdout", "signals_backend"]
 
 USER_DATA_DIR = Path(appdirs.user_data_dir(appname="pymmcore-plus"))
 USER_DATA_MM_PATH = USER_DATA_DIR / "mm"
