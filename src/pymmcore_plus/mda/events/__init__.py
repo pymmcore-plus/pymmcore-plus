@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pymmcore_plus._util import _qt_app_is_running
+from pymmcore_plus._util import signals_backend
 
 from ._protocol import PMDASignaler
 from ._psygnal import MDASignaler
@@ -19,15 +19,14 @@ __all__ = [
 ]
 
 
-def _get_auto_MDA_callback_class(
-    default: type[PMDASignaler] = MDASignaler,  # type: ignore
-) -> type[PMDASignaler]:
-    if _qt_app_is_running():
+def _get_auto_MDA_callback_class() -> type[PMDASignaler]:
+    if signals_backend() == "qt":
         from ._qsignals import QMDASignaler
 
         return QMDASignaler
 
-    return default
+    # (not sure why this type ignore is needed... apparently isn't matching protocol)
+    return MDASignaler  # type: ignore
 
 
 def __dir__() -> list[str]:  # pragma: no cover

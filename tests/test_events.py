@@ -1,11 +1,40 @@
-from typing import get_args
+from __future__ import annotations
+
+from contextlib import nullcontext
+from typing import TYPE_CHECKING, get_args
 from unittest.mock import Mock, call
 
 import pytest
 from pymmcore import g_Keyword_Label as LABEL
 from pymmcore import g_Keyword_State as STATE
 from pymmcore_plus import CMMCorePlus
+from pymmcore_plus._util import MMCORE_PLUS_SIGNALS_BACKEND
 from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler, QCoreSignaler
+
+if TYPE_CHECKING:
+    from qtpy.QtWidgets import QApplication
+
+
+@pytest.mark.parametrize(
+    "env_var, expect",
+    [
+        ("psygnal", CMMCoreSignaler),
+        ("qt", QCoreSignaler),
+        ("nonsense", QCoreSignaler),
+        ("auto", QCoreSignaler),
+    ],
+)
+def test_signal_backend_selection(
+    env_var: str,
+    expect: type[PCoreSignaler],
+    qapp: QApplication,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setenv(MMCORE_PLUS_SIGNALS_BACKEND, env_var)
+    ctx = pytest.warns(UserWarning) if env_var == "nonsense" else nullcontext()
+    with ctx:
+        core = CMMCorePlus()
+    assert isinstance(core.events, expect)
 
 
 @pytest.mark.parametrize("cls", [CMMCoreSignaler, QCoreSignaler])
