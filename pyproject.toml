@@ -55,7 +55,6 @@ docs = [
     "mkdocs-material",
     "mkdocstrings ==0.24.0",
     "mkdocstrings-python ==1.8.0",
-    # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
 testing = [
     "PySide6",
