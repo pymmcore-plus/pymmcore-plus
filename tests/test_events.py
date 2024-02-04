@@ -13,7 +13,12 @@ from qtpy.QtWidgets import QApplication
 
 @pytest.mark.parametrize(
     "env_var, expect",
-    [("psygnal", CMMCoreSignaler), ("qt", QCoreSignaler), ("nonsense", QCoreSignaler)],
+    [
+        ("psygnal", CMMCoreSignaler),
+        ("qt", QCoreSignaler),
+        ("nonsense", QCoreSignaler),
+        ("auto", QCoreSignaler),
+    ],
 )
 def test_signal_backend_selection(
     env_var: str,
