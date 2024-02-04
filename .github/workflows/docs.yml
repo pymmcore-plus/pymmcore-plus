@@ -18,8 +18,6 @@ jobs:
           python-version: 3.x
       - run: |
           pip install -e .[docs]
-          # bugfix until https://github.com/mkdocstrings/griffe/pull/115
-          pip install git+https://github.com/tlambert03/griffe@recursion#egg=griffe -U
       - run: mkdocs build --strict
 
   deploy:
@@ -32,6 +30,4 @@ jobs:
           python-version: 3.x
       - run: |
           pip install -e .[docs]
-          # bugfix until https://github.com/mkdocstrings/griffe/pull/115
-          pip install git+https://github.com/tlambert03/griffe@recursion#egg=griffe -U
       - run: mkdocs gh-deploy --force
