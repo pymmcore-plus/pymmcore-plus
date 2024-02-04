@@ -1,6 +1,6 @@
 """OME.TIFF writer for MDASequences.
 
-Borrowed from the pattern shared by Christoph Gohlke:
+Borrowed from the pattern shared by Christoph:
 https://forum.image.sc/t/how-to-create-an-image-series-ome-tiff-from-python/42730/7
 
 Note, these are the valid axis keys tifffile:
@@ -39,13 +39,26 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ._ome_base import OMEWriterBase
+from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
     from pathlib import Path
 
 
-class OMETiffWriter(OMEWriterBase[np.memmap]):
+class OMETiffWriter(_5DWriterBase[np.memmap]):
+    """MDA handler that writes to a 5D OME-TIFF file.
+
+    Positions will be split into different files.
+
+    Data is memory-mapped to disk using numpy.memmap via tifffile.  Tifffile handles
+    the OME-TIFF format.
+
+    Parameters
+    ----------
+    filename : Path | str
+        The filename to write to.  Must end with '.ome.tiff' or '.ome.tif'.
+    """
+
     def __init__(self, filename: Path | str) -> None:
         try:
             import tifffile  # noqa: F401
@@ -64,19 +77,42 @@ class OMETiffWriter(OMEWriterBase[np.memmap]):
     def write_frame(
         self, ary: np.memmap, index: tuple[int, ...], frame: np.ndarray
     ) -> None:
+        """Write a frame to the file."""
         super().write_frame(ary, index, frame)
         ary.flush()
 
     def new_array(
         self, position_key: str, dtype: np.dtype, sizes: dict[str, int]
     ) -> np.memmap:
+        """Create a new tifffile file and memmap for this position."""
         from tifffile import imwrite, memmap
 
         dims, shape = zip(*sizes.items())
 
+        metadata: dict[str, Any] = self._sequence_metadata()
+        metadata["axes"] = "".join(dims).upper()
+
+        # append the position key to the filename if there are multiple positions
+        if (seq := self.current_sequence) and seq.sizes.get("p", 1) > 1:
+            fname = self._filename.replace(".ome.tif", f"_{position_key}.ome.tif")
+        else:
+            fname = self._filename
+
+        # write empty file to disk
+        imwrite(fname, shape=shape, dtype=dtype, metadata=metadata)
+
+        # memory-mapped NumPy array of image data stored in TIFF file.
+        mmap = memmap(fname, dtype=dtype)
+        # This line is important, as tifffile.memmap appears to lose singleton dims
+        mmap.shape = shape
+
+        return mmap  # type: ignore
+
+    def _sequence_metadata(self) -> dict:
+        """Create metadata for the sequence, when creating a new file."""
+        metadata: dict = {}
         # see tifffile.tiffile for more metadata options
-        metadata: dict[str, Any] = {"axes": "".join(dims).upper()}
-        if seq := self._current_sequence:
+        if seq := self.current_sequence:
             if seq.time_plan and hasattr(seq.time_plan, "interval"):
                 interval = seq.time_plan.interval
                 if isinstance(interval, timedelta):
@@ -99,22 +135,8 @@ class OMETiffWriter(OMEWriterBase[np.memmap]):
         #     metadata["PhysicalSizeYUnit"] = "µm"
 
         # TODO:
-        # there's a lot we could still capture, but it comes off the microscope
+        # there's a LOT we could still capture, but it comes off the microscope
         # over the course of the acquisition (such as stage positions, exposure times)
         # ... one option is to accumulate these things and then use `tifffile.comment`
         # to update the total metadata in finalize_metadata
-        if seq and seq.sizes.get("p", 1) > 1:
-            fname = self._filename.replace(".ome.tif", f"_{position_key}.ome.tif")
-        else:
-            fname = self._filename
-        imwrite(fname, shape=shape, dtype=dtype, metadata=metadata)
-
-        # this is a bit of a hack.
-        # tifffile.memmap doesn't support 6+D arrays,
-        # memory map numpy array to data in OME-TIFF file
-        mmap = memmap(fname, dtype=dtype)
-
-        # This line is important, as tifffile.memmap appears to lose singleton
-        # dimensions when reading the file back in
-        mmap.shape = shape
-        return mmap  # type: ignore
+        return metadata

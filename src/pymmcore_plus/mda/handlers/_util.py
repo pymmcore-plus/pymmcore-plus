@@ -27,7 +27,7 @@ def position_sizes(seq: useq.MDASequence) -> list[dict[str, int]]:
 
     There will be one dict for each position in the sequence. Each dict will contain
     `{dim: size}` pairs for each dimension in the sequence. Dimensions with no size
-    will be omitted.
+    will be omitted, though singletons will be included.
     """
     main_sizes = seq.sizes.copy()
     main_sizes.pop("p", None)  # remove position

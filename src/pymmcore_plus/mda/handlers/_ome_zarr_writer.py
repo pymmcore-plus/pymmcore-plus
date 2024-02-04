@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
 import zarr
 
-from ._ome_base import OMEWriterBase
+from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
     from os import PathLike
@@ -41,7 +41,7 @@ if TYPE_CHECKING:
 POS_PREFIX = "p"
 
 
-class OMEZarrWriter(OMEWriterBase[zarr.Array]):
+class OMEZarrWriter(_5DWriterBase[zarr.Array]):
     """MDA handler that writes to a zarr file following the ome-ngff spec.
 
     This implements v0.4
@@ -189,10 +189,11 @@ class OMEZarrWriter(OMEWriterBase[zarr.Array]):
     def finalize_metadata(self) -> None:
         """Called by superclass in sequenceFinished.  Flush metadata to disk."""
         # flush frame metadata to disk
-        while self._frame_metas:
-            key, metas = self._frame_metas.popitem()
-            if key in self._arrays:
-                self._arrays[key].attrs["frame_meta"] = metas
+        while self.frame_metadatas:
+            key, metas = self.frame_metadatas.popitem()
+            if key in self.position_arrays:
+                self.position_arrays[key].attrs["frame_meta"] = metas
+
         if self._minify_metadata:
             self._minify_zattrs_metadata()
 
@@ -212,7 +213,7 @@ class OMEZarrWriter(OMEWriterBase[zarr.Array]):
         scales.append(self._multiscales_item(ary.path, ary.path, dims))
         self._group.attrs["multiscales"] = scales
         ary.attrs["_ARRAY_DIMENSIONS"] = dims
-        if seq := self._current_sequence:
+        if seq := self.current_sequence:
             ary.attrs["useq_MDASequence"] = json.loads(seq.json(exclude_unset=True))
         return ary
 
