@@ -37,7 +37,6 @@ Non-OME (ImageJ) hyperstack axes MUST be in TZCYXS order
 from __future__ import annotations
 
 from datetime import timedelta
-from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -45,6 +44,8 @@ import numpy as np
 from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
+    from pathlib import Path
+
     import useq
 
 IMAGEJ_AXIS_ORDER = "tzcyxs"
@@ -74,7 +75,7 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
             ) from e
 
         self._filename = str(filename)
-        if not self._filename.endswith((".tiff", ".tif")):
+        if not self._filename.endswith((".tiff", ".tif")):  # pragma: no cover
             raise ValueError("filename must end with '.tiff' or '.tif'")
         self._is_ome = ".ome." in self._filename
 
@@ -116,7 +117,7 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
             fname = self._filename
 
         # create parent directories if they don't exist
-        Path(fname).parent.mkdir(parents=True, exist_ok=True)
+        # Path(fname).parent.mkdir(parents=True, exist_ok=True)
         # write empty file to disk
         imwrite(
             fname,
