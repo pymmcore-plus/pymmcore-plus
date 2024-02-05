@@ -8,6 +8,7 @@ For example, we use the `on_pre_build` event to generate the markdown table for 
 CMMCorePlus API page.
 
 """
+
 import logging
 from typing import TYPE_CHECKING
 

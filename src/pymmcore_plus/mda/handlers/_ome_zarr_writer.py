@@ -21,8 +21,7 @@ if TYPE_CHECKING:
     from typing_extensions import TypedDict
 
     class ZarrSynchronizer(Protocol):
-        def __getitem__(self, key: str) -> ContextManager:
-            ...
+        def __getitem__(self, key: str) -> ContextManager: ...
 
     class ArrayCreationKwargs(TypedDict, total=False):
         compressor: str | Codec
