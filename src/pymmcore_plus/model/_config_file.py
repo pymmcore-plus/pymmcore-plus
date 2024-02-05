@@ -1,4 +1,5 @@
 """Logic for reading and writing MMCore config files."""
+
 from __future__ import annotations
 
 import datetime

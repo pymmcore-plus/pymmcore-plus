@@ -51,14 +51,12 @@ def test_setting_position(core: CMMCorePlus):
 
 
 class BrokenEngine:
-    def setup_sequence(self, sequence):
-        ...
+    def setup_sequence(self, sequence): ...
 
     def setup_event(self, event):
         raise ValueError("something broke")
 
-    def exec_event(self, event):
-        ...
+    def exec_event(self, event): ...
 
 
 def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):

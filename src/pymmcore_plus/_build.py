@@ -1,4 +1,5 @@
 """Clone the micro-manager source code from GitHub and build dev devices."""
+
 import os
 import platform
 import shutil

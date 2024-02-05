@@ -1,4 +1,5 @@
 """Simple simulator demonstrating event-driven acquisitions with pymmcore-plus."""
+
 import random
 import time
 from queue import Queue

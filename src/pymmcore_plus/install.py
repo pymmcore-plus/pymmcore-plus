@@ -20,8 +20,7 @@ from pymmcore_plus._util import USER_DATA_MM_PATH
 if TYPE_CHECKING:
 
     class _MsgLogger(Protocol):
-        def __call__(self, text: str, color: str = "", emoji: str = "") -> None:
-            ...
+        def __call__(self, text: str, color: str = "", emoji: str = "") -> None: ...
 
 
 try:
@@ -180,8 +179,7 @@ def _download_url(url: str, output_path: Path, show_progress: bool = True) -> No
     else:
         pbar = nullcontext()
 
-        def hook(count: float, block_size: float, total_size: float) -> None:
-            ...
+        def hook(count: float, block_size: float, total_size: float) -> None: ...
 
     with pbar:
         urlretrieve(url=url, filename=output_path, reporthook=hook)

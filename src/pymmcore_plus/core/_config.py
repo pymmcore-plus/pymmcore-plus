@@ -1,4 +1,5 @@
 """pythonic wrapper on pymmcore.Configuration object."""
+
 from __future__ import annotations
 
 from collections import defaultdict
@@ -67,12 +68,10 @@ class Configuration(pymmcore.Configuration):
         return self.size()
 
     @overload
-    def __getitem__(self, key: int) -> pymmcore.PropertySetting:
-        ...
+    def __getitem__(self, key: int) -> pymmcore.PropertySetting: ...
 
     @overload
-    def __getitem__(self, key: DevPropTuple) -> str:
-        ...
+    def __getitem__(self, key: DevPropTuple) -> str: ...
 
     def __getitem__(self, key: int | DevPropTuple) -> str | pymmcore.PropertySetting:
         """Get property setting by index or (devLabel, propLabel) key.
@@ -117,8 +116,10 @@ class Configuration(pymmcore.Configuration):
 
     def extend(
         self,
-        other: pymmcore.Configuration
-        | Iterable[pymmcore.PropertySetting | DevPropValueTuple],
+        other: (
+            pymmcore.Configuration
+            | Iterable[pymmcore.PropertySetting | DevPropValueTuple]
+        ),
     ) -> None:
         """Add all settings from another Configuration."""
         if isinstance(other, pymmcore.Configuration):
@@ -135,10 +136,12 @@ class Configuration(pymmcore.Configuration):
 
     def __contains__(
         self,
-        query: pymmcore.Configuration
-        | pymmcore.PropertySetting
-        | DevPropTuple
-        | DevPropValueTuple,
+        query: (
+            pymmcore.Configuration
+            | pymmcore.PropertySetting
+            | DevPropTuple
+            | DevPropValueTuple
+        ),
     ) -> bool:
         if isinstance(query, pymmcore.Configuration):
             return self.isConfigurationIncluded(query)
