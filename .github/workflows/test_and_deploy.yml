@@ -59,7 +59,7 @@ jobs:
         run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
 
       - name: Coverage
-        uses: codecov/codecov-action@v3
+        uses: codecov/codecov-action@v4
 
   test_widgets:
     name: mmcore-widgets
