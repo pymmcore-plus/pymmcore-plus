@@ -77,7 +77,7 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
         self._filename = str(filename)
         if not self._filename.endswith((".tiff", ".tif")):  # pragma: no cover
             raise ValueError("filename must end with '.tiff' or '.tif'")
-        self._is_ome = ".ome." in self._filename
+        self._is_ome = ".ome.tif" in self._filename
 
         super().__init__()
 
@@ -112,7 +112,8 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
 
         # append the position key to the filename if there are multiple positions
         if (seq := self.current_sequence) and seq.sizes.get("p", 1) > 1:
-            fname = self._filename.replace(".ome.tif", f"_{position_key}.ome.tif")
+            ext = ".ome.tif" if self._is_ome else ".tif"
+            fname = self._filename.replace(ext, f"_{position_key}{ext}")
         else:
             fname = self._filename
 
