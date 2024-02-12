@@ -17,6 +17,7 @@ nav:
       - index.md
       - install.md
       - Guides:
+          - guides/events.md
           - guides/mda_engine.md
           - guides/custom_engine.md
           - guides/event_driven_acquisition.md

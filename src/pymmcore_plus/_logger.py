@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import os
 import sys
-import warnings
 from contextlib import contextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -135,15 +134,6 @@ def configure_logging(
         file_handler.setLevel(file_level)
         file_handler.setFormatter(_FILE_FORMMATTER)
         logger.addHandler(file_handler)
-
-
-def set_log_level(level: int | str = DEFAULT_LOG_LEVEL) -> None:
-    warnings.warn(
-        "set_log_level is deprecated. Use configure_logging instead.",
-        FutureWarning,
-        stacklevel=1,
-    )
-    configure_logging(stderr_level=level)
 
 
 def current_logfile(logger: logging.Logger) -> Path | None:

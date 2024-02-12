@@ -7,13 +7,15 @@ import shutil
 import tempfile
 from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
+import zarr
+
+from ._5d_writer_base import _5DWriterBase
+
 if TYPE_CHECKING:
     from os import PathLike
     from typing import ContextManager, Sequence
 
     import numpy as np
-    import useq
-    import zarr
     from fsspec import FSMap
     from numcodecs.abc import Codec
     from typing_extensions import TypedDict
@@ -39,31 +41,7 @@ if TYPE_CHECKING:
 POS_PREFIX = "p"
 
 
-def position_sizes(seq: useq.MDASequence) -> list[dict[str, int]]:
-    """Return a list of size dicts for each position in the sequence.
-
-    There will be one dict for each position in the sequence. Each dict will contain
-    `{dim: size}` pairs for each dimension in the sequence. Dimensions with no size
-    will be omitted.
-    """
-    main_sizes = seq.sizes.copy()
-    main_sizes.pop("p", None)  # remove position
-
-    if not seq.stage_positions:
-        # this is a simple MDASequence
-        return [{k: v for k, v in main_sizes.items() if v}]
-
-    sizes = []
-    for p in seq.stage_positions:
-        if p.sequence is not None:
-            psizes = {k: v or main_sizes.get(k, 0) for k, v in p.sequence.sizes.items()}
-        else:
-            psizes = main_sizes.copy()
-        sizes.append({k: v for k, v in psizes.items() if v and k != "p"})
-    return sizes
-
-
-class OMEZarrWriter:
+class OMEZarrWriter(_5DWriterBase[zarr.Array]):
     """MDA handler that writes to a zarr file following the ome-ngff spec.
 
     This implements v0.4
@@ -140,6 +118,8 @@ class OMEZarrWriter:
                 "zarr is required to use this handler. Install with `pip install zarr`"
             ) from e
 
+        super().__init__()
+
         # main zarr group
         self._group = zarr.group(
             store,
@@ -157,18 +137,9 @@ class OMEZarrWriter:
                 f"There is already data in {path!r}. Use 'overwrite=True' to overwrite."
             )
 
-        # local cache of {position index -> zarr.Array}
-        # (the group will have a dataset for each position)
-        self._arrays: dict[str, zarr.Array] = {}
-        self._sizes: list[dict[str, int]] = []
-
-        # set during sequenceStarted and cleared during sequenceFinished
-        self._current_sequence: useq.MDASequence | None = None
-
         # passed to zarr.group.create
         self._array_kwargs: ArrayCreationKwargs = array_kwargs or {}
         self._array_kwargs.setdefault("dimension_separator", "/")
-
         self._minify_metadata = minify_attrs_metadata
 
     @classmethod
@@ -215,79 +186,18 @@ class OMEZarrWriter:
         """Read-only access to the zarr group."""
         return self._group
 
-    # The next three methods - `sequenceStarted`, `sequenceFinished`, and `frameReady`
-    # are to be connected directly to the MDA's signals, perhaps via listener_connected
-
-    def sequenceStarted(self, seq: useq.MDASequence) -> None:
-        """On sequence started, simply store the sequence."""
-        self._set_sequence(seq)
-
-    def sequenceFinished(self, seq: useq.MDASequence) -> None:
-        """On sequence finished, clear the current sequence."""
-        self._current_sequence = None
-        self._sizes = []
+    def finalize_metadata(self) -> None:
+        """Called by superclass in sequenceFinished.  Flush metadata to disk."""
+        # flush frame metadata to disk
+        while self.frame_metadatas:
+            key, metas = self.frame_metadatas.popitem()
+            if key in self.position_arrays:
+                self.position_arrays[key].attrs["frame_meta"] = metas
 
         if self._minify_metadata:
             self._minify_zattrs_metadata()
 
-    def frameReady(
-        self, frame: np.ndarray, event: useq.MDAEvent, meta: dict | None = None
-    ) -> None:
-        """Write frame to the zarr array for the appropriate position."""
-        # get the position key to store the array in the group
-        key = f'{POS_PREFIX}{event.index.get("p", 0)}'
-        if key in self._arrays:
-            ary = self._arrays[key]
-        else:
-            # this is the first time we've seen this position
-            # create a new Zarr array in the group for it
-            if not self._current_sequence:
-                # just in case sequenceStarted wasn't called
-                self._set_sequence(event.sequence)
-
-            if not (seq := self._current_sequence):
-                # This needs to be implemented for cases where we're not executing
-                # an MDASequence.  Or, we need to create a better "mock" MDASequence
-                # for generic Iterable[MDAEvent]
-                raise NotImplementedError(
-                    "Writing zarr without a MDASequence not yet implemented"
-                )
-
-            # create the new array, getting XY chunksize from the frame
-            # and total shape from the sequence.
-            sizes = self._sizes[event.index.get("p", 0)]
-            sizes.update({"y": frame.shape[-2], "x": frame.shape[-1]})
-
-            # create the array in the group, store sequence metadata in attrs
-            self._arrays[key] = ary = self._new_array(key, frame.dtype, sizes)
-            ary.attrs["useq_MDASequence"] = json.loads(seq.json(exclude_unset=True))
-
-        # WRITE DATA TO DISK
-        index = tuple(event.index.get(k) for k in ary.attrs["_ARRAY_DIMENSIONS"][:-2])
-        ary[index] = frame  # for zarr, this immediately writes to disk
-
-        # write frame metadata
-        if meta:
-            # fix serialization MDAEvent
-            # XXX: There is already an Event object in meta, this overwrites it.
-            meta["Event"] = json.loads(
-                event.json(exclude={"sequence"}, exclude_defaults=True)
-            )
-        frame_meta = ary.attrs.get("frame_meta", [])
-        frame_meta.append(meta or {})
-        ary.attrs["frame_meta"] = frame_meta
-
-    # ------------------------------- private --------------------------------
-
-    def _set_sequence(self, seq: useq.MDASequence | None) -> None:
-        """Set the current sequence, and update the used axes."""
-        self._current_sequence = seq
-        if seq:
-            self._sizes = position_sizes(seq)
-
-    def _new_array(
-        self, key: str, dtype: np.dtype, sizes: dict[str, int]
-    ) -> zarr.Array:
+    def new_array(self, key: str, dtype: np.dtype, sizes: dict[str, int]) -> zarr.Array:
         """Create a new array in the group, under `key`."""
         dims, shape = zip(*sizes.items())
         ary: zarr.Array = self._group.create(
@@ -303,7 +213,15 @@ class OMEZarrWriter:
         scales.append(self._multiscales_item(ary.path, ary.path, dims))
         self._group.attrs["multiscales"] = scales
         ary.attrs["_ARRAY_DIMENSIONS"] = dims
+        if seq := self.current_sequence:
+            ary.attrs["useq_MDASequence"] = json.loads(seq.json(exclude_unset=True))
         return ary
+
+    # # the superclass implementation is all we need
+    # def write_frame(
+    #     self, ary: zarr.Array, frame: np.ndarray, event: useq.MDAEvent
+    # ) -> None:
+    #     super().write_frame(ary, frame, event)
 
     def _multiscales_item(self, path: str, name: str, axes: Sequence[str]) -> dict:
         """ome-zarr multiscales image metadata.

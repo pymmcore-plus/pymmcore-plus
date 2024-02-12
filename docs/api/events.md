@@ -1,11 +1,13 @@
 # Events
 
-Both the [`CMMCorePlus`][pymmcore_plus.CMMCorePlus] object and the
-[`CMMCorePlus.mda`][pymmcore_plus.CMMCorePlus.mda] (`MDARunner`) objects have
-`events` attributes that can be used to register callbacks for events that occur
-as the state of the microscope changes, or as an acquisition sequences progresses.
+There are two objects that emit events in `pymmcore-plus`:
 
-These events are defined here.
+1. The `CMMCorePlus` object emits events at `CMMCorePlus.events` when the state
+   of the microscope changes.
+2. The `MDARunner` object emits events at `CMMCorePlus.mda.events` as an
+   acquisition sequence progresses.
+
+The events emitted by these two objects are defined by the following protocols:
 
 ::: pymmcore_plus.core.events.PCoreSignaler
     options:

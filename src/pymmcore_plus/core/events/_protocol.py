@@ -119,7 +119,7 @@ class PCoreSignaler(Protocol):
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
     imageSnapped: PSignal
-    """Emits `(np.ndarray)` whenever snap is called.
+    """Emits with no arguments whenever snap is called.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """

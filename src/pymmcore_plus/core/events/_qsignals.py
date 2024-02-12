@@ -26,7 +26,7 @@ class QCoreSignaler(QObject):
     sLMExposureChanged = SLMExposureChanged  # alias
 
     # added for CMMCorePlus
-    imageSnapped = Signal(object)  # after an image is snapped
+    imageSnapped = Signal()  # on snapImage()
     mdaEngineRegistered = Signal(object, object)  # new engine, old engine
     # when continuousSequenceAcquisition is started
     continuousSequenceAcquisitionStarted = Signal()
