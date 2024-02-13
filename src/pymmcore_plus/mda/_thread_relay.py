@@ -24,8 +24,7 @@ def mda_listeners_connected(
     name_map: dict[str, str] | None = ...,
     asynchronous: Literal[False],
     wait_on_exit: bool = ...,
-) -> ContextManager[None]:
-    ...
+) -> ContextManager[None]: ...
 
 
 @overload
@@ -35,8 +34,7 @@ def mda_listeners_connected(
     name_map: dict[str, str] | None = ...,
     asynchronous: Literal[True] = ...,
     wait_on_exit: bool = ...,
-) -> ContextManager[MDARelayThread]:
-    ...
+) -> ContextManager[MDARelayThread]: ...
 
 
 @contextmanager

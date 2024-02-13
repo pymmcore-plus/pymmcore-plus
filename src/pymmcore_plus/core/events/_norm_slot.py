@@ -1,4 +1,5 @@
 """Module vendored from psygnal. Only for internal use."""
+
 from __future__ import annotations
 
 import weakref
