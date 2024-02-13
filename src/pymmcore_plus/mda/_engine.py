@@ -471,6 +471,7 @@ class MDAEngine(PMDAEngine):
         @retry(exceptions=RuntimeError, tries=action.max_retries, logger=logger.warning)
         def _perform_full_focus(previous_z: float) -> float:
             self._mmc.fullFocus()
+            self._mmc.waitForSystem()
             self._mmc.enableContinuousFocus(self._af_engaged)
             self._mmc.waitForSystem()
             return self._mmc.getZPosition() - previous_z
