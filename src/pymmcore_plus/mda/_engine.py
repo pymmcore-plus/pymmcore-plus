@@ -199,10 +199,10 @@ class MDAEngine(PMDAEngine):
             try:
                 # execute hardware autofocus
                 new_correction = self._execute_autofocus(action)
-                self._af_state._replace(re_engage=True)
+                self._af_state = self._af_state._replace(re_engage=True)
             except RuntimeError as e:
                 logger.warning("Hardware autofocus failed. %s", e)
-                self._af_state._replace(re_engage=False)
+                self._af_state = self._af_state._replace(re_engage=False)
             else:
                 # store correction for this position index
                 p_idx = event.index.get("p", None)
