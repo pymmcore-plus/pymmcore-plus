@@ -74,6 +74,10 @@ class MDAEngine(PMDAEngine):
         self._mmc = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
 
+        # used to check if the hardware autofocus is engaged and locked when the
+        # sequence begins. If it is, we will re-engage after the autofocus action.
+        self._af_locked: bool = False
+
         # used for one_shot autofocus to store the z correction for each position index.
         # map of {position_index: z_correction}
         self._z_correction: dict[int | None, float] = {}
@@ -99,6 +103,8 @@ class MDAEngine(PMDAEngine):
             from pymmcore_plus.core import CMMCorePlus
 
             self._mmc = CMMCorePlus.instance()
+
+        self._af_locked = self._mmc.isContinuousFocusLocked()
 
         if px_size := self._mmc.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
@@ -465,6 +471,7 @@ class MDAEngine(PMDAEngine):
         @retry(exceptions=RuntimeError, tries=action.max_retries, logger=logger.warning)
         def _perform_full_focus(previous_z: float) -> float:
             self._mmc.fullFocus()
+            self._mmc.enableContinuousFocus(self._af_locked)
             self._mmc.waitForSystem()
             return self._mmc.getZPosition() - previous_z
 
