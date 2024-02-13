@@ -81,8 +81,7 @@ if TYPE_CHECKING:
         type: str
         properties: dict[str, PropertySchema]
 
-    def synchronized(lock: RLock) -> Callable[[_F], _F]:
-        ...
+    def synchronized(lock: RLock) -> Callable[[_F], _F]: ...
 
 else:
     from wrapt import synchronized
@@ -430,14 +429,12 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def getConfigData(
         self, configGroup: str, configName: str, *, native: Literal[True]
-    ) -> pymmcore.Configuration:
-        ...
+    ) -> pymmcore.Configuration: ...
 
     @overload
     def getConfigData(
         self, configGroup: str, configName: str, *, native: Literal[False] = False
-    ) -> Configuration:
-        ...
+    ) -> Configuration: ...
 
     def getConfigData(
         self, configGroup: str, configName: str, *, native: bool = False
@@ -454,14 +451,12 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def getPixelSizeConfigData(
         self, configName: str, *, native: Literal[True]
-    ) -> pymmcore.Configuration:
-        ...
+    ) -> pymmcore.Configuration: ...
 
     @overload
     def getPixelSizeConfigData(
         self, configName: str, *, native: Literal[False] = False
-    ) -> Configuration:
-        ...
+    ) -> Configuration: ...
 
     def getPixelSizeConfigData(
         self, configName: str, *, native: bool = False
@@ -478,14 +473,12 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def getConfigGroupState(
         self, group: str, *, native: Literal[True]
-    ) -> pymmcore.Configuration:
-        ...
+    ) -> pymmcore.Configuration: ...
 
     @overload
     def getConfigGroupState(
         self, group: str, *, native: Literal[False] = False
-    ) -> Configuration:
-        ...
+    ) -> Configuration: ...
 
     def getConfigGroupState(
         self, group: str, *, native: bool = False
@@ -502,14 +495,12 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def getConfigGroupStateFromCache(
         self, group: str, *, native: Literal[True]
-    ) -> pymmcore.Configuration:
-        ...
+    ) -> pymmcore.Configuration: ...
 
     @overload
     def getConfigGroupStateFromCache(
         self, group: str, *, native: Literal[False] = False
-    ) -> Configuration:
-        ...
+    ) -> Configuration: ...
 
     def getConfigGroupStateFromCache(
         self, group: str, *, native: bool = False
@@ -548,12 +539,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         return cfg if native else Configuration.from_configuration(cfg)
 
     @overload
-    def getSystemStateCache(self, *, native: Literal[True]) -> pymmcore.Configuration:
-        ...
+    def getSystemStateCache(
+        self, *, native: Literal[True]
+    ) -> pymmcore.Configuration: ...
 
     @overload
-    def getSystemStateCache(self, *, native: Literal[False] = False) -> Configuration:
-        ...
+    def getSystemStateCache(
+        self, *, native: Literal[False] = False
+    ) -> Configuration: ...
 
     def getSystemStateCache(
         self, *, native: bool = False
@@ -572,12 +565,10 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def getLastImageAndMD(
         self, channel: int, slice: int, *, fix: bool = True
-    ) -> tuple[np.ndarray, Metadata]:
-        ...
+    ) -> tuple[np.ndarray, Metadata]: ...
 
     @overload
-    def getLastImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]:
-        ...
+    def getLastImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]: ...
 
     @synchronized(_lock)
     def getLastImageAndMD(
@@ -620,12 +611,10 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def popNextImageAndMD(
         self, channel: int, slice: int, *, fix: bool = True
-    ) -> tuple[np.ndarray, Metadata]:
-        ...
+    ) -> tuple[np.ndarray, Metadata]: ...
 
     @overload
-    def popNextImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]:
-        ...
+    def popNextImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]: ...
 
     @synchronized(_lock)
     def popNextImageAndMD(
@@ -730,8 +719,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         adapter_pattern: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
-    ) -> Iterator[DeviceAdapter]:
-        ...
+    ) -> Iterator[DeviceAdapter]: ...
 
     @overload
     def iterDeviceAdapters(
@@ -739,8 +727,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         adapter_pattern: str | re.Pattern | None = ...,
         *,
         as_object: Literal[False],
-    ) -> Iterator[str]:
-        ...
+    ) -> Iterator[str]: ...
 
     def iterDeviceAdapters(
         self,
@@ -791,8 +778,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[False],
-    ) -> Iterator[str]:
-        ...
+    ) -> Iterator[str]: ...
 
     @overload
     def iterDevices(
@@ -802,8 +788,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
-    ) -> Iterator[Device]:
-        ...
+    ) -> Iterator[Device]: ...
 
     def iterDevices(
         self,
@@ -879,8 +864,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         is_read_only: bool | None = None,
         is_sequenceable: bool | None = None,
         as_object: Literal[False],
-    ) -> Iterator[tuple[str, str]]:
-        ...
+    ) -> Iterator[tuple[str, str]]: ...
 
     @overload
     def iterProperties(
@@ -894,8 +878,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         is_read_only: bool | None = None,
         is_sequenceable: bool | None = None,
         as_object: Literal[True] = ...,
-    ) -> Iterator[DeviceProperty]:
-        ...
+    ) -> Iterator[DeviceProperty]: ...
 
     def iterProperties(
         self,
@@ -1353,12 +1336,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self.setPosition(val)
 
     @overload
-    def setPosition(self, position: float) -> None:
-        ...
+    def setPosition(self, position: float) -> None: ...
 
     @overload
-    def setPosition(self, stageLabel: str, position: float) -> None:
-        ...
+    def setPosition(self, stageLabel: str, position: float) -> None: ...
 
     @synchronized(_lock)
     def setPosition(self, *args: Any, **kwargs: Any) -> None:
@@ -1369,12 +1350,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         return super().setPosition(*args, **kwargs)
 
     @overload
-    def setXYPosition(self, x: float, y: float) -> None:
-        ...
+    def setXYPosition(self, x: float, y: float) -> None: ...
 
     @overload
-    def setXYPosition(self, xyStageLabel: str, x: float, y: float) -> None:
-        ...
+    def setXYPosition(self, xyStageLabel: str, x: float, y: float) -> None: ...
 
     @synchronized(_lock)
     def setXYPosition(self, *args: Any, **kwargs: Any) -> None:
@@ -1661,8 +1640,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         numImages: int,
         intervalMs: float,
         stopOnOverflow: bool,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def startSequenceAcquisition(
@@ -1671,8 +1649,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         numImages: int,
         intervalMs: float,
         stopOnOverflow: bool,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def startSequenceAcquisition(self, *args: Any, **kwargs: Any) -> None:
         """Starts streaming camera sequence acquisition.
@@ -1762,12 +1739,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.autoShutterSet.emit(state)
 
     @overload
-    def setShutterOpen(self, state: bool) -> None:
-        ...
+    def setShutterOpen(self, state: bool) -> None: ...
 
     @overload
-    def setShutterOpen(self, shutterLabel: str, state: bool) -> None:
-        ...
+    def setShutterOpen(self, shutterLabel: str, state: bool) -> None: ...
 
     def setShutterOpen(self, *args: Any, **kwargs: Any) -> None:
         """Open or close the currently selected or `shutterLabel` shutter.
@@ -1785,14 +1760,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
     @overload
-    def deleteConfig(self, groupName: str, configName: str) -> None:
-        ...
+    def deleteConfig(self, groupName: str, configName: str) -> None: ...
 
     @overload
     def deleteConfig(
         self, groupName: str, configName: str, deviceLabel: str, propName: str
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def deleteConfig(
         self,
@@ -1820,8 +1793,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.configGroupDeleted.emit(group)
 
     @overload
-    def defineConfig(self, groupName: str, configName: str) -> None:
-        ...
+    def defineConfig(self, groupName: str, configName: str) -> None: ...
 
     @overload
     def defineConfig(
@@ -1831,8 +1803,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         deviceLabel: str,
         propName: str,
         value: str,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def defineConfig(
         self,
@@ -1882,14 +1853,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.pixelSizeChanged.emit(0.0)
 
     @overload
-    def definePixelSizeConfig(self, resolutionID: str) -> None:
-        ...
+    def definePixelSizeConfig(self, resolutionID: str) -> None: ...
 
     @overload
     def definePixelSizeConfig(
         self, resolutionID: str, deviceLabel: str, propName: str, value: str
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def definePixelSizeConfig(self, *args: str, **kwargs: str) -> None:
         """Defines an empty pixel size entry.
@@ -1925,12 +1894,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         return list(xs), list(ys), list(ws), list(hs)
 
     @overload
-    def setROI(self, x: int, y: int, width: int, height: int) -> None:
-        ...
+    def setROI(self, x: int, y: int, width: int, height: int) -> None: ...
 
     @overload
-    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None:
-        ...
+    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None: ...
 
     def setROI(self, *args: Any, **kwargs: Any) -> None:
         """Set the camera Region of Interest (ROI).

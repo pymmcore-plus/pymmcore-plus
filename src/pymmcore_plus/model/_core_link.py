@@ -18,8 +18,7 @@ if TYPE_CHECKING:
 
 class CoreObject(Protocol):
     @abc.abstractmethod
-    def _core_args(self) -> tuple[str, ...]:
-        ...
+    def _core_args(self) -> tuple[str, ...]: ...
 
     __dataclass_fields__: ClassVar[dict[str, Field[Any]]]
     CORE_GETTERS: dict[str, Callable]
@@ -74,8 +73,7 @@ class CoreObject(Protocol):
         exclude: Container[str] = (),
         on_err: ErrCallback | None = None,
         then_update: bool = True,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def __rich_repr__(
         self, *, exclude: Container[str] = (), defaults: bool = False

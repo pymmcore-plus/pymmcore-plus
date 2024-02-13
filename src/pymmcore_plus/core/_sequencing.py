@@ -141,8 +141,7 @@ def can_sequence_events(
     cur_length: int = ...,
     *,
     return_reason: Literal[False] = ...,
-) -> bool:
-    ...
+) -> bool: ...
 
 
 @overload
@@ -153,8 +152,7 @@ def can_sequence_events(
     cur_length: int = ...,
     *,
     return_reason: Literal[True],
-) -> tuple[bool, str]:
-    ...
+) -> tuple[bool, str]: ...
 
 
 def can_sequence_events(
