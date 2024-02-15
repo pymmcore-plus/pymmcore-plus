@@ -4,7 +4,6 @@ from typing import TYPE_CHECKING
 
 import pytest
 import useq
-from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import OMEZarrWriter
 
 if TYPE_CHECKING:
@@ -86,8 +85,7 @@ def test_ome_zarr_writer(
     else:
         writer = OMEZarrWriter(tmp_path / store)
 
-    with mda_listeners_connected(writer, mda_events=core.mda.events):
-        core.mda.run(mda)
+    core.mda.run(mda, output=writer)
 
     if store:
         # ensure that non-memory stores were written to disk
