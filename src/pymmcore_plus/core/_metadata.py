@@ -1,4 +1,5 @@
 """pythonic wrapper on pymmcore.Metadata object."""
+
 from collections.abc import Mapping
 from types import new_class
 from typing import Any, ItemsView, Iterator, KeysView, ValuesView, cast

@@ -6,6 +6,7 @@ This example requires qtpy and an Qt backend installed in the env:
 pip install qtpy pyqt5
 ```
 """
+
 import numpy as np
 from pymmcore_plus import CMMCorePlus
 from qtpy.QtWidgets import QApplication, QPushButton

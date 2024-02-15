@@ -12,8 +12,7 @@ if TYPE_CHECKING:
     import useq
 
     class SupportsSetItem(Protocol):
-        def __setitem__(self, key: tuple[int, ...], value: np.ndarray) -> None:
-            ...
+        def __setitem__(self, key: tuple[int, ...], value: np.ndarray) -> None: ...
 
 
 POS_PREFIX = "p"

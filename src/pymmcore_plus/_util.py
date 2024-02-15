@@ -41,13 +41,11 @@ PYMMCORE_PLUS_PATH = Path(__file__).parent.parent
 
 
 @overload
-def find_micromanager(return_first: Literal[True] = True) -> str | None:
-    ...
+def find_micromanager(return_first: Literal[True] = True) -> str | None: ...
 
 
 @overload
-def find_micromanager(return_first: Literal[False]) -> list[str]:
-    ...
+def find_micromanager(return_first: Literal[False]) -> list[str]: ...
 
 
 def find_micromanager(return_first: bool = True) -> str | None | list[str]:
@@ -187,8 +185,7 @@ def retry(
     exceptions: type[BaseException] | tuple[type[BaseException], ...] = ...,
     delay: float | None = ...,
     logger: Callable[[str], Any] | None = ...,
-) -> Callable[[Callable[P, R]], Callable[P, R]]:
-    ...
+) -> Callable[[Callable[P, R]], Callable[P, R]]: ...
 
 
 @overload
@@ -198,8 +195,7 @@ def retry(
     exceptions: type[BaseException] | tuple[type[BaseException], ...] = ...,
     delay: float | None = ...,
     logger: Callable[[str], Any] | None = ...,
-) -> Callable[P, R]:
-    ...
+) -> Callable[P, R]: ...
 
 
 def retry(
