@@ -16,7 +16,7 @@ if TYPE_CHECKING:
 
 
 def test_tiff_sequence_writer(tmp_path: Path, core: CMMCorePlus) -> None:
-    tf = pytest.importorskip("tifffile")  # noqa
+    tf = pytest.importorskip("tifffile")
     mda = useq.MDASequence(
         channels=["Cy5", "FITC"],
         time_plan={"interval": 0.1, "loops": 3},
@@ -26,12 +26,7 @@ def test_tiff_sequence_writer(tmp_path: Path, core: CMMCorePlus) -> None:
     )
 
     dest = tmp_path / "out"
-    writer = ImageSequenceWriter(dest, prefix="hello")
-
-    with mda_listeners_connected(
-        writer, mda_events=core.mda.events, asynchronous=False
-    ):
-        core.mda.run(mda)
+    core.mda.run(mda, output=dest)
 
     files_written = list(dest.glob("*.tif"))
     assert len(files_written) == prod(mda.shape)
@@ -57,7 +52,7 @@ def test_tiff_sequence_writer(tmp_path: Path, core: CMMCorePlus) -> None:
 
 
 def test_tiff_with_subseries(tmp_path: Path, core: CMMCorePlus) -> None:
-    tf = pytest.importorskip("tifffile")  # noqa
+    tf = pytest.importorskip("tifffile")
     subseq = useq.MDASequence(grid_plan=useq.GridRowsColumns(rows=1, columns=3))
     mda = useq.MDASequence(
         channels=["Cy5"],

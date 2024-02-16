@@ -173,12 +173,10 @@ class ConfigGroup(MutableMapping[str, Configuration]):
         self._mmc.setConfig(self._name, configName)
 
     @overload
-    def getCurrentConfig(self, as_object: Literal[True]) -> Configuration:
-        ...
+    def getCurrentConfig(self, as_object: Literal[True]) -> Configuration: ...
 
     @overload
-    def getCurrentConfig(self, as_object: Literal[False] = False) -> str:
-        ...
+    def getCurrentConfig(self, as_object: Literal[False] = False) -> str: ...
 
     def getCurrentConfig(self, as_object: bool = False) -> str | Configuration:
         """Returns the current configuration for a given group."""
@@ -186,12 +184,10 @@ class ConfigGroup(MutableMapping[str, Configuration]):
         return self[current] if as_object else current
 
     @overload
-    def getCurrentConfigFromCache(self, as_object: Literal[True]) -> Configuration:
-        ...
+    def getCurrentConfigFromCache(self, as_object: Literal[True]) -> Configuration: ...
 
     @overload
-    def getCurrentConfigFromCache(self, as_object: Literal[False] = False) -> str:
-        ...
+    def getCurrentConfigFromCache(self, as_object: Literal[False] = False) -> str: ...
 
     def getCurrentConfigFromCache(self, as_object: bool = False) -> str | Configuration:
         """Returns the current configuration for a given group from the cache."""

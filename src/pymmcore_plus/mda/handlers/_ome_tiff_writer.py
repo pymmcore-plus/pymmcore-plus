@@ -30,6 +30,8 @@ Rules:
 - dimensions (order) must end with YX or YXS
 - no axis can be repeated
 - no more than 8 dimensions (or 9 if 'S' is included)
+
+Non-OME (ImageJ) hyperstack axes MUST be in TZCYXS order
 """
 
 from __future__ import annotations
@@ -43,6 +45,10 @@ from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
     from pathlib import Path
+
+    import useq
+
+IMAGEJ_AXIS_ORDER = "tzcyxs"
 
 
 class OMETiffWriter(_5DWriterBase[np.memmap]):
@@ -69,10 +75,22 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
             ) from e
 
         self._filename = str(filename)
-        if not self._filename.endswith((".ome.tiff", ".ome.tif")):
-            raise ValueError("filename must end with '.ome.tiff' or '.ome.tif'")
+        if not self._filename.endswith((".tiff", ".tif")):  # pragma: no cover
+            raise ValueError("filename must end with '.tiff' or '.tif'")
+        self._is_ome = ".ome.tif" in self._filename
 
         super().__init__()
+
+    def sequenceStarted(self, seq: useq.MDASequence) -> None:
+        super().sequenceStarted(seq)
+        # Non-OME (ImageJ) hyperstack axes MUST be in TZCYXS order
+        # so we reorder the ordered position_sizes dicts.  This will ensure
+        # that the array indices created from event.index are in the correct order.
+        if not self._is_ome:
+            self.position_sizes = [
+                {k: x[k] for k in IMAGEJ_AXIS_ORDER if k.lower() in x}
+                for x in self.position_sizes
+            ]
 
     def write_frame(
         self, ary: np.memmap, index: tuple[int, ...], frame: np.ndarray
@@ -94,12 +112,22 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
 
         # append the position key to the filename if there are multiple positions
         if (seq := self.current_sequence) and seq.sizes.get("p", 1) > 1:
-            fname = self._filename.replace(".ome.tif", f"_{position_key}.ome.tif")
+            ext = ".ome.tif" if self._is_ome else ".tif"
+            fname = self._filename.replace(ext, f"_{position_key}{ext}")
         else:
             fname = self._filename
 
+        # create parent directories if they don't exist
+        # Path(fname).parent.mkdir(parents=True, exist_ok=True)
         # write empty file to disk
-        imwrite(fname, shape=shape, dtype=dtype, metadata=metadata)
+        imwrite(
+            fname,
+            shape=shape,
+            dtype=dtype,
+            metadata=metadata,
+            imagej=not self._is_ome,
+            ome=self._is_ome,
+        )
 
         # memory-mapped NumPy array of image data stored in TIFF file.
         mmap = memmap(fname, dtype=dtype)
@@ -110,6 +138,9 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
 
     def _sequence_metadata(self) -> dict:
         """Create metadata for the sequence, when creating a new file."""
+        if not self._is_ome:
+            return {}
+
         metadata: dict = {}
         # see tifffile.tiffile for more metadata options
         if seq := self.current_sequence:
