@@ -479,7 +479,9 @@ def system_info() -> dict[str, str]:
         info["api-version-info"] = core.getAPIVersionInfo()
 
     if (mm_path := find_micromanager()) is not None:
-        info["mm_devices"] = str(Path(mm_path).resolve())
+        path = str(Path(mm_path).resolve())
+        path = path.replace(os.path.expanduser("~"), "~")  # privacy
+        info["mm_devices"] = path
     else:
         info["mm_devices"] = "not found"
 
