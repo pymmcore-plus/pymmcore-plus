@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import importlib
 import os
+import platform
 import sys
 import warnings
 from collections import defaultdict
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from functools import wraps
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from time import sleep
 from typing import TYPE_CHECKING, cast, overload
@@ -453,3 +455,49 @@ def _is_signal_instance(obj: Any) -> TypeGuard[PSignalInstance]:
 def _is_qt_signal(obj: Any) -> TypeGuard[PSignalInstance]:
     modname = getattr(type(obj), "__module__", "")
     return "Qt" in modname or "Shiboken" in modname
+
+
+def system_info() -> dict[str, str]:
+    """Return a dictionary of system information.
+
+    This backs the `mmcore info` command in the CLI.
+    """
+    import pymmcore
+
+    import pymmcore_plus
+
+    info = {
+        "python": sys.version,
+        "platform": platform.platform(),
+        "pymmcore-plus": getattr(pymmcore_plus, "__version__", "err"),
+        "pymmcore": getattr(pymmcore, "__version__", "err"),
+    }
+
+    with suppress(Exception):
+        core = pymmcore_plus.CMMCorePlus.instance()
+        info["core-version-info"] = core.getVersionInfo()
+        info["api-version-info"] = core.getAPIVersionInfo()
+
+    if (mm_path := find_micromanager()) is not None:
+        info["mm_devices"] = str(Path(mm_path).resolve())
+    else:
+        info["mm_devices"] = "not found"
+
+    for pkg in (
+        "useq-schema",
+        "pymmcore-widgets",
+        "napari-micromanager",
+        "napari",
+        "tifffile",
+        "zarr",
+    ):
+        with suppress(ImportError, PackageNotFoundError):
+            info[pkg] = importlib.metadata.version(pkg)
+
+            if pkg == "pymmcore-widgets":
+                with suppress(ImportError):
+                    from qtpy import API_NAME, QT_VERSION
+
+                    info["qt"] = f"{API_NAME} {QT_VERSION}"
+
+    return info
