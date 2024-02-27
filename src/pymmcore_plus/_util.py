@@ -481,9 +481,9 @@ def system_info() -> dict[str, str]:
     if (mm_path := find_micromanager()) is not None:
         path = str(Path(mm_path).resolve())
         path = path.replace(os.path.expanduser("~"), "~")  # privacy
-        info["mm_devices"] = path
+        info["adapter-path"] = path
     else:
-        info["mm_devices"] = "not found"
+        info["adapter-path"] = "not found"
 
     for pkg in (
         "useq-schema",
