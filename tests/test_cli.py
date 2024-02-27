@@ -294,3 +294,11 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
 #     result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
 #     assert result.exit_code == 0
 #     assert list(tmp_path.iterdir())
+
+
+def test_cli_info() -> None:
+    result = runner.invoke(app, ["info"])
+    assert result.exit_code == 0
+    assert "pymmcore-plus" in result.stdout
+    assert "python" in result.stdout
+    assert "api-version-info" in result.stdout

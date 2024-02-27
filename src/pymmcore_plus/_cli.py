@@ -355,6 +355,17 @@ def logs(
             print(line.strip())
 
 
+@app.command()
+def info() -> None:
+    """Display information about the Micro-Manager and pymmcore install."""
+    from pymmcore_plus._util import system_info
+
+    info = system_info()
+    length = max(len(k) for k in info) + 1
+    for key, value in info.items():
+        typer.secho(f"{key:{length}}: {value}")
+
+
 def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
     with open(file_path) as file:
         # Move the file pointer to the end
