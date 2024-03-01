@@ -70,6 +70,10 @@ jobs:
         if: runner.os != 'Linux'
         run: mmcore install
 
+      - name: Remove Qt
+        if: runner.os == 'Linux'
+        run: pip uninstall -y pytest-qt qtpy PySide2 PyQt5 PyQt6 PySide6
+
       - name: Test
         run: pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
 
