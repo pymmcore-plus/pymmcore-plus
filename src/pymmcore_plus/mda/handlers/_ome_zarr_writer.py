@@ -11,13 +11,12 @@ from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
     from os import PathLike
-    from typing import ContextManager, Sequence
+    from typing import ContextManager, Sequence, TypedDict
 
     import numpy as np
     import zarr
     from fsspec import FSMap
     from numcodecs.abc import Codec
-    from typing_extensions import TypedDict
 
     class ZarrSynchronizer(Protocol):
         def __getitem__(self, key: str) -> ContextManager: ...

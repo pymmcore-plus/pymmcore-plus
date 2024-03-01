@@ -39,7 +39,7 @@ if TYPE_CHECKING:
     import builtins
 
     import numpy as np
-    from typing_extensions import Self
+    from typing_extensions import Self  # py311
 
 __all__ = ["CameraInfo", "Setting", "SettingEvent", "InfoPacket", "decode_image"]
 

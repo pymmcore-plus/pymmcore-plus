@@ -50,8 +50,9 @@ from ._state import core_state
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
+    from typing import Literal, TypedDict
+
     import numpy as np
-    from typing_extensions import Literal, TypedDict
     from useq import MDAEvent
 
     from pymmcore_plus.mda._runner import SingleOutput

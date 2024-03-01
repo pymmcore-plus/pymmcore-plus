@@ -13,14 +13,14 @@ from pathlib import Path
 from time import sleep
 from typing import TYPE_CHECKING, cast, overload
 
-import appdirs
+from platformdirs import user_data_dir
 
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterator, Literal, TypeVar
 
     QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
 
-    from typing_extensions import ParamSpec, TypeGuard
+    from typing_extensions import ParamSpec, TypeGuard  # py310
 
     from .core.events._protocol import PSignalInstance
 
@@ -37,7 +37,8 @@ except ImportError:
 
 __all__ = ["find_micromanager", "retry", "no_stdout", "signals_backend"]
 
-USER_DATA_DIR = Path(appdirs.user_data_dir(appname="pymmcore-plus"))
+APP_NAME = "pymmcore-plus"
+USER_DATA_DIR = Path(user_data_dir(appname=APP_NAME))
 USER_DATA_MM_PATH = USER_DATA_DIR / "mm"
 PYMMCORE_PLUS_PATH = Path(__file__).parent.parent
 
@@ -96,7 +97,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
             return env_path
         full_list.append(env_path)
 
-    # then look in appdirs.user_data_dir
+    # then look in user_data_dir
     _folders = (p for p in USER_DATA_MM_PATH.glob("Micro-Manager*") if p.is_dir())
     user_install = sorted(_folders, reverse=True)
     if user_install:
