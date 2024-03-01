@@ -36,7 +36,7 @@ classifiers = [
 dynamic = ["version"]
 dependencies = [
     "platformdirs >=3.0.0",
-    "numpy >=1.26",
+    "numpy >=1.17.3",
     "psygnal >=0.7",
     "pymmcore >=10.7.0.71.0",
     "typing-extensions",      # not actually required at runtime
