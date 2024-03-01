@@ -51,7 +51,7 @@ dependencies = [
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
 cli = ["typer >=0.4.2", "rich >=10.2.0"]
-io = ["tiffile >=2021.6.14", "zarr >=2.2"]
+io = ["tifffile >=2021.6.14", "zarr >=2.2"]
 test = [
     "msgpack",
     "PySide6",
@@ -61,7 +61,7 @@ test = [
     "qtpy >=2",
     "rich",
     "typer >=0.4.2",
-    "tiffile >=2021.6.14",
+    "tifffile >=2021.6.14",
     "zarr >=2.2",
 ]
 dev = ["black", "ipython", "mypy", "pdbpp", "pre-commit", "ruff"]

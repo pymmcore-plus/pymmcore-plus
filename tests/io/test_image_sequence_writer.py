@@ -31,7 +31,7 @@ def test_tiff_sequence_writer(tmp_path: Path, core: CMMCorePlus) -> None:
     files_written = list(dest.glob("*.tif"))
     assert len(files_written) == prod(mda.shape)
 
-    # we can use tiffile pattern='axes' to load the data in the correct
+    # we can use tifffile pattern='axes' to load the data in the correct
     # shape because write a filename pattern that tifffile recognizes (Leica tiff)
     data = tf.imread(f"{dest}/*.tif", pattern="axes")
     assert isinstance(data, np.ndarray)
@@ -69,7 +69,7 @@ def test_tiff_with_subseries(tmp_path: Path, core: CMMCorePlus) -> None:
 
     files_written = list(dest.glob("*.tif"))
     assert len(files_written) == len(list(mda))
-    # we can use tiffile pattern='axes' to load the data in the correct
+    # we can use tifffile pattern='axes' to load the data in the correct
     # shape because write a filename pattern that tifffile recognizes (Leica tiff)
     # 00004_p001_c01_g000.tif
 
