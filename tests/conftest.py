@@ -5,8 +5,8 @@ from unittest.mock import patch
 import pymmcore_plus
 import pytest
 from pymmcore_plus._logger import logger
-from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
-from pymmcore_plus.mda.events import MDASignaler, QMDASignaler
+from pymmcore_plus.core.events import CMMCoreSignaler
+from pymmcore_plus.mda.events import MDASignaler
 
 
 @pytest.fixture(params=["QSignal", "psygnal"], scope="function")
@@ -16,6 +16,9 @@ def core(request):
         core._events = CMMCoreSignaler()
         core.mda._signals = MDASignaler()
     else:
+        from pymmcore_plus.core.events import QCoreSignaler
+        from pymmcore_plus.mda.events import QMDASignaler
+
         core._events = QCoreSignaler()
         core.mda._signals = QMDASignaler()
     core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(core.events)

@@ -9,21 +9,26 @@ from pymmcore import g_Keyword_Label as LABEL
 from pymmcore import g_Keyword_State as STATE
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus._util import MMCORE_PLUS_SIGNALS_BACKEND
-from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler, QCoreSignaler
+from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler
 
 if TYPE_CHECKING:
     from qtpy.QtWidgets import QApplication
 
+try:
+    from pymmcore_plus.core.events import QCoreSignaler
+except ImportError:
+    QCoreSignaler = None  # type: ignore
 
-@pytest.mark.parametrize(
-    "env_var, expect",
-    [
-        ("psygnal", CMMCoreSignaler),
-        ("qt", QCoreSignaler),
-        ("nonsense", QCoreSignaler),
-        ("auto", QCoreSignaler),
-    ],
-)
+
+PARAMS = [
+    ("psygnal", CMMCoreSignaler),
+    ("qt", QCoreSignaler),
+    ("nonsense", CMMCoreSignaler if QCoreSignaler is None else QCoreSignaler),
+    ("auto", CMMCoreSignaler if QCoreSignaler is None else QCoreSignaler),
+]
+
+
+@pytest.mark.parametrize("env_var, expect", PARAMS)
 def test_signal_backend_selection(
     env_var: str,
     expect: type[PCoreSignaler],
