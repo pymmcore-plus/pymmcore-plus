@@ -88,8 +88,10 @@ from pip
 pip install pymmcore-plus
 
 # or, add the [cli] extra if you wish to use the `mmcore` command line tool:
-
 pip install "pymmcore-plus[cli]"
+
+# add the [io] extra if you wish to use the tiff or zarr writers
+pip install "pymmcore-plus[io]"
 ```
 
 from conda

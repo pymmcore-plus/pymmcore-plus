@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from dataclasses import Field
     from typing import Any, Callable, ClassVar, Container, Iterable, TypeVar
 
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias  # py310
 
     from pymmcore_plus import CMMCorePlus
 

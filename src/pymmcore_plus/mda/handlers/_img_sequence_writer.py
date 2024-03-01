@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     import numpy as np
     import numpy.typing as npt
     import useq
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias  # py310
 
     ImgWriter: TypeAlias = Callable[[str, npt.NDArray], Any]
 

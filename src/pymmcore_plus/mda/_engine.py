@@ -22,8 +22,9 @@ from pymmcore_plus.core._sequencing import SequencedEvent
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
+    from typing import TypedDict
+
     from numpy.typing import NDArray
-    from typing_extensions import TypedDict
 
     from pymmcore_plus.core import CMMCorePlus, Metadata
 
