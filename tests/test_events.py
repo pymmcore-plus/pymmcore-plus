@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from typing import TYPE_CHECKING, get_args
+from typing import get_args
 from unittest.mock import Mock, call
 
 import pytest
@@ -9,35 +9,48 @@ from pymmcore import g_Keyword_Label as LABEL
 from pymmcore import g_Keyword_State as STATE
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus._util import MMCORE_PLUS_SIGNALS_BACKEND
-from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler, QCoreSignaler
+from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler
 
-if TYPE_CHECKING:
-    from qtpy.QtWidgets import QApplication
+Signalers = [CMMCoreSignaler]
+try:
+    from pymmcore_plus.core.events import QCoreSignaler
+
+    Signalers.append(QCoreSignaler)
+except ImportError:
+    QCoreSignaler = None  # type: ignore
 
 
-@pytest.mark.parametrize(
-    "env_var, expect",
-    [
-        ("psygnal", CMMCoreSignaler),
-        ("qt", QCoreSignaler),
-        ("nonsense", QCoreSignaler),
-        ("auto", QCoreSignaler),
-    ],
-)
+PARAMS = [
+    ("psygnal", CMMCoreSignaler),
+    ("qt", Signalers[-1]),
+    ("nonsense", Signalers[-1]),
+    ("auto", Signalers[-1]),
+]
+
+
+@pytest.mark.parametrize("env_var, expect", PARAMS)
 def test_signal_backend_selection(
     env_var: str,
     expect: type[PCoreSignaler],
-    qapp: QApplication,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    if expect == QCoreSignaler and QCoreSignaler is not None:
+        from qtpy.QtWidgets import QApplication
+
+        _ = QApplication.instance() or QApplication([])
+
     monkeypatch.setenv(MMCORE_PLUS_SIGNALS_BACKEND, env_var)
-    ctx = pytest.warns(UserWarning) if env_var == "nonsense" else nullcontext()
+    ctx = (
+        pytest.warns(UserWarning)
+        if (env_var == "nonsense" or (env_var == "qt" and QCoreSignaler is None))
+        else nullcontext()
+    )
     with ctx:
         core = CMMCorePlus()
     assert isinstance(core.events, expect)
 
 
-@pytest.mark.parametrize("cls", [CMMCoreSignaler, QCoreSignaler])
+@pytest.mark.parametrize("cls", Signalers)
 def test_events_protocols(cls):
     obj = cls()
     name = cls.__name__

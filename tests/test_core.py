@@ -20,12 +20,17 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
-from qtpy.QtCore import QObject
-from qtpy.QtCore import SignalInstance as QSignalInstance
 from useq import MDASequence
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
+
+try:
+    from qtpy.QtCore import QObject
+    from qtpy.QtCore import SignalInstance as QSignalInstance
+except ImportError:
+    QObject = None
+    QSignalInstance = None
 
 
 def test_core(core: CMMCorePlus):
@@ -80,6 +85,7 @@ def test_load_system_config(core: CMMCorePlus):
     )
 
 
+@pytest.mark.skipif(QObject is None, reason="Qt not available.")
 def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot: "QtBot"):
     if not isinstance(core.events, QObject):
         pytest.skip(reason="Skip cb exceptions on psygnal.")
@@ -118,6 +124,7 @@ def test_new_position_methods(core: CMMCorePlus):
     assert round(z2, 2) == z1 + 1
 
 
+@pytest.mark.skipif(QObject is None, reason="Qt not available.")
 def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     """Test signal emission during MDA"""
     mda = MDASequence(
@@ -171,6 +178,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
     )
 
 
+@pytest.mark.skipif(QObject is None, reason="Qt not available.")
 def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
     """Test signal emission during MDA with cancelation"""
     mda = MDASequence(
@@ -214,6 +222,7 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
     sf_mock.assert_called_once_with(mda)
 
 
+@pytest.mark.skipif(QObject is None, reason="Qt not available.")
 def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
     orig_engine = core.mda.engine
     assert orig_engine and orig_engine.mmcore is core
@@ -244,6 +253,7 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
     registered_mock.assert_called_once_with(new_engine, orig_engine)
 
 
+@pytest.mark.skipif(QObject is None, reason="Qt not available.")
 def test_not_concurrent_mdas(core, qtbot: "QtBot"):
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
@@ -426,7 +436,8 @@ def test_guess_channel_group(core: CMMCorePlus):
     os.getenv("CI", None) is not None and os.name == "nt",
     reason="CI on windows is broken",
 )
-def test_lock_and_callbacks(core: CMMCorePlus, qtbot):
+@pytest.mark.skipif(QObject is None, reason="Qt not available.")
+def test_lock_and_callbacks(core: CMMCorePlus, qtbot: "QtBot") -> None:
     if not isinstance(core.events, QObject):
         pytest.skip(reason="Skip lock tests on psygnal until we can remove qtbot.")
 
@@ -507,6 +518,7 @@ def test_setContext(core: CMMCorePlus):
     assert core.getAutoShutter()
 
 
+@pytest.mark.skipif(QObject is None, reason="Qt not available.")
 def test_snap_signals(core: CMMCorePlus, qtbot: "QtBot") -> None:
     assert core.getAutoShutter()
 

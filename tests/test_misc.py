@@ -1,13 +1,9 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
 from pymmcore_plus._util import listeners_connected, retry
-
-if TYPE_CHECKING:
-    from pytestqt.qtbot import QtBot
 
 
 def test_retry() -> None:
@@ -32,7 +28,7 @@ def test_retry() -> None:
     mock.assert_called_with("ValueError nope caught, trying 1 more times")
 
 
-def test_listener_connected(qtbot: QtBot) -> None:
+def test_listener_connected() -> None:
     from psygnal import Signal
 
     mock = Mock()
