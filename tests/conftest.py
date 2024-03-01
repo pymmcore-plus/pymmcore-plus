@@ -8,17 +8,22 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler
 
+try:
+    from pymmcore_plus.core.events import QCoreSignaler
+    from pymmcore_plus.mda.events import QMDASignaler
 
-@pytest.fixture(params=["QSignal", "psygnal"], scope="function")
+    PARAMS = ["QSignal", "psygnal"]
+except ImportError:
+    PARAMS = ["psygnal"]
+
+
+@pytest.fixture(params=PARAMS, scope="function")
 def core(request):
     core = pymmcore_plus.CMMCorePlus()
     if request.param == "psygnal":
         core._events = CMMCoreSignaler()
         core.mda._signals = MDASignaler()
     else:
-        from pymmcore_plus.core.events import QCoreSignaler
-        from pymmcore_plus.mda.events import QMDASignaler
-
         core._events = QCoreSignaler()
         core.mda._signals = QMDASignaler()
     core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(core.events)

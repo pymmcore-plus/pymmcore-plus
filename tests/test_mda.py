@@ -15,6 +15,15 @@ if TYPE_CHECKING:
     from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
 
+try:
+    import pytestqt
+except ImportError:
+    pytestqt = None
+
+SKIP_NO_PYTESTQT = pytest.mark.skipif(
+    pytestqt is None, reason="pytest-qt not installed"
+)
+
 
 def test_mda_waiting(core: CMMCorePlus):
     seq = MDASequence(
@@ -59,6 +68,7 @@ class BrokenEngine:
     def exec_event(self, event): ...
 
 
+@SKIP_NO_PYTESTQT
 def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
     mda = MDASequence(
         channels=["Cy5"],
@@ -105,6 +115,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
 AFPlan = {"autofocus_device_name": "Z", "autofocus_motor_offset": 25, "axes": ("p",)}
 
 
+@SKIP_NO_PYTESTQT
 def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus) -> None:
     mda = MDASequence(stage_positions=[{"z": 0}], autofocus_plan=AFPlan)
     with qtbot.waitSignal(core.mda.events.sequenceFinished):
@@ -115,6 +126,7 @@ def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus) -> None:
     assert engine._z_correction[0] == 50
 
 
+@SKIP_NO_PYTESTQT
 def test_autofocus_relative_z_plan(
     core: CMMCorePlus, qtbot: QtBot, mock_fullfocus: Any
 ) -> None:
@@ -143,6 +155,7 @@ def test_autofocus_relative_z_plan(
     assert core.mda.engine._z_correction == {0: 50.0}  # saved the correction
 
 
+@SKIP_NO_PYTESTQT
 def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failure):
     # mock_autofocus sets z=100
     # setting both z pos and autofocus offset to 25 because core does not have a
@@ -162,6 +175,7 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
     assert core.getZPosition() == 25
 
 
+@SKIP_NO_PYTESTQT
 def test_set_mda_fov(core: CMMCorePlus, qtbot: QtBot):
     """Test that the fov size is updated."""
     mda = MDASequence(
@@ -198,6 +212,7 @@ SEQS = [
 ]
 
 
+@SKIP_NO_PYTESTQT
 @pytest.mark.parametrize("seq", SEQS)
 def test_mda_iterable_of_events(
     core: CMMCorePlus, seq: Iterable[MDAEvent], qtbot: QtBot
@@ -342,6 +357,7 @@ def test_engine_protocol(core: CMMCorePlus) -> None:
         core.mda.set_engine(object())  # type: ignore
 
 
+@SKIP_NO_PYTESTQT
 def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
@@ -355,6 +371,7 @@ def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
     engine.setup_event.assert_called_once_with(event1)  # not twice
 
 
+@SKIP_NO_PYTESTQT
 def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
