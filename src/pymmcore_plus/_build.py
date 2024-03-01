@@ -188,7 +188,7 @@ def install_into(
 
         # make and install
         subprocess.run(["./autogen.sh"], check=True)
-        subprocess.run(["./configure", f"--prefix={repo_path.parent}"], check=True)
+        subprocess.run(["./configure", f"--prefix={repo_path.parent}", "--without-java"], check=True)
         subprocess.run(["make"], check=True)
         subprocess.run(["make", "install"], check=True)
 
