@@ -63,7 +63,7 @@ _main.__doc__ = typer.style(
 
 @app.command()
 def clean(
-    glob: str = typer.Argument(default="*", help="glob pattern to clean")
+    glob: str = typer.Argument(default="*", help="glob pattern to clean"),
 ) -> None:
     """Remove all Micro-Manager installs downloaded by pymmcore-plus."""
     if USER_DATA_MM_PATH.exists():
@@ -285,6 +285,9 @@ def run(
 
 @app.command()
 def build_dev(
+    devices: Optional[List[str]] = typer.Argument(
+        None, help="Device adapters to build. Defaults to DemoCamera and Utilities."
+    ),
     dest: Path = typer.Option(
         USER_DATA_MM_PATH,
         "-d",
@@ -303,10 +306,12 @@ def build_dev(
     ),
 ) -> None:  # pragma: no cover
     """Build DemoCamera and Utility adapters from source for apple silicon."""
-    from pymmcore_plus._build import build
+    from pymmcore_plus._build import DEFAULT_PACKAGES, build
 
+    devices = DEFAULT_PACKAGES if not devices else devices
+    print(f"Building {devices}\ninto {str(dest)!r}")
     try:
-        build(dest, overwrite=overwrite)
+        build(dest, overwrite=overwrite, devices=devices)
     except Exception as e:
         print(f":x: [bold red]{e}")
         raise typer.Exit(1) from e

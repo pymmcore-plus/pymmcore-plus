@@ -7,7 +7,7 @@ import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator
+from typing import Iterator, Sequence
 
 from rich import print
 from rich.prompt import Prompt
@@ -19,11 +19,15 @@ MACHINE = platform.machine()
 # DemoCamera and Utilities are currently hard coded in here, but could
 # be made configurable in the future.
 
+DEFAULT_PACKAGES = ["DemoCamera", "Utilities"]
+# using this as a placeholder to be replaced in the configure.ac and Makefile.am files
+# easier than using curly braces or something that need to be escaped
+PACKAGE_LIST = r"<<PACKAGE_LIST>>"
 # https://github.com/micro-manager/mmCoreAndDevices/blob/main/DeviceAdapters/Makefile.am
 _MINIMAL_MAKE = r"""
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I ../m4
-SUBDIRS = DemoCamera Utilities
+SUBDIRS = <<PACKAGE_LIST>>
 """
 
 # https://github.com/micro-manager/mmCoreAndDevices/blob/main/DeviceAdapters/configure.ac
@@ -81,16 +85,17 @@ AC_SUBST(MMPREFIX)
 AC_CHECK_FUNCS([memset])
 
 # This is the list of subdirectories containing a Makefile.am.
-m4_define([device_adapter_dirs], [m4_strip([
-    DemoCamera
-    Utilities
-])])
+m4_define([device_adapter_dirs], [m4_strip([<<PACKAGE_LIST>>])])
 AC_CONFIG_FILES(Makefile m4_map_args_w(device_adapter_dirs, [], [/Makefile], [ ]))
 AC_OUTPUT
 """
 
 
-def build(dest: Path, overwrite: bool | None = None) -> None:
+def build(
+    dest: Path,
+    overwrite: bool | None = None,
+    devices: Sequence[str] = DEFAULT_PACKAGES,
+) -> None:
     """Build Micro-Manager device adapters from the git repo.
 
     Currently only supports Apple Silicon.
@@ -102,11 +107,14 @@ def build(dest: Path, overwrite: bool | None = None) -> None:
         Destination directory for the built adapters.
     overwrite : bool | None
         Whether to overwrite an existing installation. If `None`, will prompt.
+    devices : Sequence[str]
+        List of device adapters to build. Defaults to `["DemoCamera", "Utilities"]`.
+        NOTE: not all device adapters will build successfully currently.
     """
     if SYSTEM == "Darwin" and MACHINE == "arm64":
-        return _build_macos_arm64(dest, overwrite)
+        return _build_macos_arm64(dest, overwrite, devices)
     if SYSTEM == "Linux":
-        return _build_linux(dest, overwrite)
+        return _build_linux(dest, overwrite, devices)
     raise NotImplementedError(
         f"Building on {SYSTEM} {MACHINE} is not currently supported."
     )
@@ -118,7 +126,9 @@ def _require(command: str, link: str = "") -> None:
         return
 
 
-def _build_macos_arm64(dest: Path, overwrite: bool | None = None) -> None:
+def _build_macos_arm64(
+    dest: Path, overwrite: bool | None, devices: Sequence[str]
+) -> None:
     _require("brew", "https://brew.sh")
     _require("git")
 
@@ -136,10 +146,10 @@ def _build_macos_arm64(dest: Path, overwrite: bool | None = None) -> None:
         "LDFLAGS": "-L/opt/homebrew/lib/ -Wl,-rpath,'$ORIGIN'",
         "CPPFLAGS": "-I/opt/homebrew/include/",
     }
-    install_into(dest, overwrite, env_vars=env_vars)
+    _make_install(dest, overwrite, devices, env_vars=env_vars)
 
 
-def _build_linux(dest: Path, overwrite: bool | None = None) -> None:
+def _build_linux(dest: Path, overwrite: bool | None, devices: Sequence[str]) -> None:
     _require("git")
 
     print("sudo will required to install the following packages:")
@@ -167,11 +177,14 @@ def _build_linux(dest: Path, overwrite: bool | None = None) -> None:
         check=True,
     )
 
-    install_into(dest, overwrite)
+    _make_install(dest, overwrite, devices)
 
 
-def install_into(
-    dest: Path, overwrite: bool | None, env_vars: dict | None = None
+def _make_install(
+    dest: Path,
+    overwrite: bool | None,
+    devices: Sequence[str],
+    env_vars: dict | None = None,
 ) -> None:
     with _mm_repo_tmp_path() as repo_path:
         sub_dest = _ensure_subdir(dest, repo_path, overwrite)
@@ -180,8 +193,11 @@ def install_into(
 
         # update the configure.ac and Makefile.am files
         devAdapters = repo_path / "mmCoreAndDevices" / "DeviceAdapters"
-        (devAdapters / "configure.ac").write_text(_MINIMAL_CONFIG)
-        (devAdapters / "Makefile.am").write_text(_MINIMAL_MAKE)
+        dev_list = " ".join(devices)
+        conf = _MINIMAL_CONFIG.replace(PACKAGE_LIST, dev_list)
+        make = _MINIMAL_MAKE.replace(PACKAGE_LIST, dev_list)
+        (devAdapters / "configure.ac").write_text(conf)
+        (devAdapters / "Makefile.am").write_text(make)
 
         if env_vars:
             os.environ.update(env_vars)
