@@ -21,7 +21,7 @@ environments**.
   [CMMCorePlus
   documentation](https://pymmcore-plus.github.io/pymmcore-plus/api/cmmcoreplus/)
   for details.
-- `pymmcore-plus` includes an [acquisition engine](https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_engine/)
+- `pymmcore-plus` includes an [acquisition engine](https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_engine/) 
   that drives micro-manager for conventional multi-dimensional experiments. It accepts an
   [MDASequence](https://pymmcore-plus.github.io/useq-schema/schema/sequence/)
   from [useq-schema](https://pymmcore-plus.github.io/useq-schema/) for
@@ -34,7 +34,7 @@ environments**.
 
 ## Documentation
 
-<https://pymmcore-plus.github.io/pymmcore-plus/>
+https://pymmcore-plus.github.io/pymmcore-plus/
 
 ## Why not just use `pymmcore` directly?
 
@@ -86,6 +86,9 @@ from pip
 ```sh
 pip install pymmcore-plus
 
+# or, add the [cli] extra if you wish to use the `mmcore` command line tool:
+pip install "pymmcore-plus[cli]"
+
 # add the [io] extra if you wish to use the tiff or zarr writers
 pip install "pymmcore-plus[io]"
 ```
@@ -99,13 +102,11 @@ conda install -c conda-forge pymmcore-plus
 dev version from github
 
 ```sh
-pip install 'pymmcore-plus[io] @ git+https://github.com/pymmcore-plus/pymmcore-plus'
+pip install 'pymmcore-plus[cli] @ git+https://github.com/pymmcore-plus/pymmcore-plus'
 ```
 
-### Device Adapters
-
-Usually, you'll then want to install the device adapters.  Pymmcrore-plus
-makes this easy with:
+Usually, you'll then want to install the device adapters. Assuming you've
+installed with `pip install "pymmcore-plus[cli]"`, you can run:
 
 ```sh
 mmcore install
@@ -113,7 +114,7 @@ mmcore install
 
 (you can also download these manually from [micro-manager.org](https://micro-manager.org/Micro-Manager_Nightly_Builds))
 
-_See [installation documentation](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details._
+_See [installation documentation ](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details._
 
 ### Usage
 
