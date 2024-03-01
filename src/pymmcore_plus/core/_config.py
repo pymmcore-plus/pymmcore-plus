@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING, Any, Iterable, Iterator, Tuple, overload
 import pymmcore
 
 if TYPE_CHECKING:
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias  # py310
 
 DevPropValueTuple: TypeAlias = Tuple[str, str, str]
 DevPropTuple: TypeAlias = Tuple[str, str]

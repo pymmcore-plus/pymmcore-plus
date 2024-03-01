@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Callable, Union
 if TYPE_CHECKING:
     from typing import Tuple
 
-    from typing_extensions import TypeGuard
+    from typing_extensions import TypeGuard  # py310
 
     MethodRef = Tuple[weakref.ReferenceType[object], str, Callable | None]
     NormedCallback = Union[MethodRef, Callable]
