@@ -57,9 +57,21 @@ AC_OUTPUT
 """
 
 MM_REPO = "https://github.com/micro-manager/micro-manager.git"
+SYSTEM = platform.system()
+MACHINE = platform.machine()
 
 
 def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> None:
+    if SYSTEM == "Darwin" and MACHINE == "arm64":
+        return _build_macos_arm64(dest, repo, overwrite)
+    raise NotImplementedError(
+        f"Building on {SYSTEM} {MACHINE} is not currently supported."
+    )
+
+
+def _build_macos_arm64(
+    dest: Path, repo: str = MM_REPO, overwrite: bool | None = None
+) -> None:
     """Build Micro-Manager device adapters from the git repo.
 
     Currently only supports Apple Silicon.
@@ -74,10 +86,6 @@ def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> Non
     overwrite : bool | None
         Whether to overwrite an existing installation. If `None`, will prompt.
     """
-    if not (platform.system() == "Darwin" and platform.machine() == "arm64"):
-        print("Sorry, only Apple Silicon is supported at this time.")
-        return
-
     if not shutil.which("brew"):
         print("Homebrew is required but not found. Please install it: https://brew.sh")
         return
