@@ -142,7 +142,7 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
             return {}
 
         metadata: dict = {}
-        # see tifffile.tiffile for more metadata options
+        # see tifffile.tifffile for more metadata options
         if seq := self.current_sequence:
             if seq.time_plan and hasattr(seq.time_plan, "interval"):
                 interval = seq.time_plan.interval
