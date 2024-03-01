@@ -90,7 +90,7 @@ AC_OUTPUT
 """
 
 
-def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> None:
+def build(dest: Path, overwrite: bool | None = None) -> None:
     """Build Micro-Manager device adapters from the git repo.
 
     Currently only supports Apple Silicon.
@@ -100,13 +100,11 @@ def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> Non
     ----------
     dest : Path
         Destination directory for the built adapters.
-    repo : str
-        URL of the Micro-Manager git repo.
     overwrite : bool | None
         Whether to overwrite an existing installation. If `None`, will prompt.
     """
     if SYSTEM == "Darwin" and MACHINE == "arm64":
-        return _build_macos_arm64(dest, repo, overwrite)
+        return _build_macos_arm64(dest, overwrite)
     if SYSTEM == "Linux":
         return _build_linux(dest, overwrite)
     raise NotImplementedError(
@@ -120,9 +118,7 @@ def _require(command: str, link: str = "") -> None:
         return
 
 
-def _build_macos_arm64(
-    dest: Path, repo: str = MM_REPO, overwrite: bool | None = None
-) -> None:
+def _build_macos_arm64(dest: Path, overwrite: bool | None = None) -> None:
     _require("brew", "https://brew.sh")
     _require("git")
 
@@ -136,60 +132,11 @@ def _build_macos_arm64(
                 print("Aborting.")
                 return
 
-    with tempfile.TemporaryDirectory() as tmpdir:
-        tmp_path = Path(tmpdir)
-        cmd = ["git", "clone", "--recurse-submodules", repo]
-        subprocess.run(cmd, cwd=tmpdir, check=True)
-
-        repo_path = tmp_path / "micro-manager"
-        devAdapters = repo_path / "mmCoreAndDevices" / "DeviceAdapters"
-        os.chdir(repo_path)
-
-        # get sha to determine destination path
-        cmd = ["git", "rev-parse", "--short", "HEAD"]
-        sha = subprocess.check_output(cmd, cwd=repo_path)
-        dest = dest / f"Micro-Manager-{sha.decode().strip()}"
-
-        # check if dest exists and maybe overwrite
-        if dest.exists():
-            if overwrite is False:
-                print(f"{dest!r} already exists and overwrite is False. Aborting.")
-                return
-            elif overwrite:
-                shutil.rmtree(dest)
-            else:
-                delete = Prompt.ask(
-                    f"{dest!r} already exists. Delete?", choices=["y", "n"], default="n"
-                )
-                if delete.lower() in ("y", "yes"):
-                    shutil.rmtree(dest)
-                else:
-                    print("[red]Aborting.")
-                    return
-
-        # update the configure.ac and Makefile.am files
-        (devAdapters / "configure.ac").write_text(_MINIMAL_CONFIG)
-        (devAdapters / "Makefile.am").write_text(_MINIMAL_MAKE)
-
-        # add homebrew paths to env vars
-        os.environ["LDFLAGS"] = "-L/opt/homebrew/lib/ -Wl,-rpath,'$ORIGIN'"
-        os.environ["CPPFLAGS"] = "-I/opt/homebrew/include/"
-
-        # make and install
-        subprocess.run(["./autogen.sh"], check=True)
-        subprocess.run(["./configure", f"--prefix={tmpdir}"], check=True)
-        subprocess.run(["make"], check=True)
-        subprocess.run(["make", "install"], check=True)
-
-        # copy the built adapters to the destination
-        built_libs = tmp_path / "lib" / "micro-manager"
-        shutil.copytree(built_libs, dest)
-
-        # grab the demo config file to dest
-        demo_cfg = repo_path / "bindist" / "any-platform" / "MMConfig_demo.cfg"
-        shutil.copy(demo_cfg, dest)
-
-    print(f":sparkles: [bold green]Installed to {dest}[/bold green] :sparkles:")
+    env_vars = {
+        "LDFLAGS": "-L/opt/homebrew/lib/ -Wl,-rpath,'$ORIGIN'",
+        "CPPFLAGS": "-I/opt/homebrew/include/",
+    }
+    install_into(dest, overwrite, env_vars=env_vars)
 
 
 def _build_linux(dest: Path, overwrite: bool | None = None) -> None:
@@ -222,12 +169,14 @@ def _build_linux(dest: Path, overwrite: bool | None = None) -> None:
 
     install_into(dest, overwrite)
 
-    print(f":sparkles: [bold green]Installed to {dest}[/bold green] :sparkles:")
 
-
-def install_into(dest: Path, overwrite: bool, env_vars: dict | None = None) -> None:
-    with mm_repo_tmp_path() as repo_path:
-        sub_dest = get_subdir(dest, repo_path, overwrite)
+def install_into(
+    dest: Path, overwrite: bool | None, env_vars: dict | None = None
+) -> None:
+    with _mm_repo_tmp_path() as repo_path:
+        sub_dest = _ensure_subdir(dest, repo_path, overwrite)
+        if sub_dest is None:
+            return
 
         # update the configure.ac and Makefile.am files
         devAdapters = repo_path / "mmCoreAndDevices" / "DeviceAdapters"
@@ -251,9 +200,11 @@ def install_into(dest: Path, overwrite: bool, env_vars: dict | None = None) -> N
         demo_cfg = repo_path / "bindist" / "any-platform" / "MMConfig_demo.cfg"
         shutil.copy(demo_cfg, sub_dest)
 
+    print(f":sparkles: [bold green]Installed to {dest}[/bold green] :sparkles:")
+
 
 @contextmanager
-def mm_repo_tmp_path() -> Iterator[Path]:
+def _mm_repo_tmp_path() -> Iterator[Path]:
     with tempfile.TemporaryDirectory() as tmpdir:
         tmp_path = Path(tmpdir)
         cmd = ["git", "clone", "--recurse-submodules", MM_REPO]
@@ -264,7 +215,7 @@ def mm_repo_tmp_path() -> Iterator[Path]:
         yield repo_path
 
 
-def get_subdir(
+def _ensure_subdir(
     dest: Path, repo_path: Path, overwrite: bool | None = None
 ) -> Path | None:
     # get sha to determine destination path
@@ -276,7 +227,7 @@ def get_subdir(
     if subdest.exists():
         if overwrite is False:
             print(f"{subdest!r} already exists and overwrite is False. Aborting.")
-            return
+            return None
         elif overwrite:
             shutil.rmtree(subdest)
         else:
@@ -287,5 +238,5 @@ def get_subdir(
                 shutil.rmtree(subdest)
             else:
                 print("[red]Aborting.")
-                return
+                return None
     return subdest

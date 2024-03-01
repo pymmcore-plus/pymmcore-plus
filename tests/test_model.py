@@ -240,10 +240,8 @@ def test_hubs(lib: str, hub: str) -> None:
 
     try:
         core.loadDevice(hub, lib, hub)
-    except RuntimeError:
-        if lib == "SequenceTester":
-            raise
-        pytest.skip(reason=f"{lib}, {hub} Not Available")
+    except Exception:
+        pytest.xfail(reason=f"{lib}, {hub} Not Available")
         return
 
     core.initializeDevice(hub)

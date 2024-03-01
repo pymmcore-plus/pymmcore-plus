@@ -34,6 +34,8 @@ jobs:
           - platform: windows-latest
             python-version: "3.11"
             pydantic: "'pydantic<2'"
+          - platform: ubuntu-latest
+            python-version: "3.11"
 
     steps:
       - uses: actions/checkout@v4
@@ -52,7 +54,20 @@ jobs:
         if: ${{ matrix.pydantic }}
         run: pip install ${{ matrix.pydantic }}
 
+      - name: Cache Linux Build
+        id: cache-mm-build
+        if: runner.os == 'Linux'
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pymmcore-plus/
+          key: ${{ runner.os }}-mmbuild-${{ hashFiles('src/pymmcore-plus/_build.py') }}
+
+      - name: Build Micro-Manager
+        if: runner.os == 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
+        run: mmcore build-dev
+
       - name: Install Micro-Manager
+        if: runner.os != 'Linux'
         run: mmcore install
 
       - name: Test
