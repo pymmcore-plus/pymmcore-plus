@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Sequence, TypedDict, cast
+from typing import TYPE_CHECKING, Any, Literal, Sequence, TypedDict, cast
 
 if TYPE_CHECKING:
-    from typing_extensions import Literal
 
     from pymmcore_plus import CMMCorePlus
 

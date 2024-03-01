@@ -14,7 +14,7 @@ from ._property import Property
 if TYPE_CHECKING:
     from typing import Any, Callable, Container, Iterable
 
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias  # py310
 
     from ._core_link import ErrCallback
     from ._microscope import Microscope

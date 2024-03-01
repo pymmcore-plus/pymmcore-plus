@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence, TypedDict
 
 from pymmcore import g_Keyword_Label, g_Keyword_State
-from typing_extensions import TypedDict
 
 from ._constants import DeviceType, PropertyType
 from .events._device_signal_view import _DevicePropValueSignal

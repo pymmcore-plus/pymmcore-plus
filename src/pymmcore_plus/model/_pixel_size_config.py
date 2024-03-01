@@ -8,7 +8,7 @@ from ._config_group import ConfigGroup, ConfigPreset, Setting
 if TYPE_CHECKING:
     from typing import Final
 
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias  # py310
 
     from pymmcore_plus import CMMCorePlus
 
