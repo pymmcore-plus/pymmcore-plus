@@ -309,7 +309,7 @@ def build_dev(
         build(dest, overwrite=overwrite)
     except Exception as e:
         print(f":x: [bold red]{e}")
-        raise typer.Exit(1)
+        raise typer.Exit(1) from e
 
 
 @app.command()

@@ -12,14 +12,21 @@ from typing import Iterator
 from rich import print
 from rich.prompt import Prompt
 
+MM_REPO = "https://github.com/micro-manager/micro-manager.git"
+SYSTEM = platform.system()
+MACHINE = platform.machine()
+
 # DemoCamera and Utilities are currently hard coded in here, but could
 # be made configurable in the future.
+
+# https://github.com/micro-manager/mmCoreAndDevices/blob/main/DeviceAdapters/Makefile.am
 _MINIMAL_MAKE = r"""
 AUTOMAKE_OPTIONS = foreign
 ACLOCAL_AMFLAGS = -I ../m4
 SUBDIRS = DemoCamera Utilities
 """
 
+# https://github.com/micro-manager/mmCoreAndDevices/blob/main/DeviceAdapters/configure.ac
 _MINIMAL_CONFIG = r"""
 AC_PREREQ([2.69])
 AC_INIT([Micro-Manager], [2])
@@ -32,16 +39,36 @@ LT_INIT([disable-static])
 AC_PROG_CC([cc gcc clang])
 AC_PROG_CXX([c++ g++ clang++])
 AX_CXX_COMPILE_STDCXX([14], [noext])
+
+# Find Micro-Manager headers
 micromanager_cpp_path=${ac_pwd}/..
 micromanager_path=${micromanager_cpp_path}/..
 MMDEVAPI_CXXFLAGS="-I${micromanager_cpp_path}/MMDevice ${BOOST_CPPFLAGS}"
 AC_SUBST(MMDEVAPI_CXXFLAGS)
+
+# Find Micro-Mana:ger static device library
 MMDEVAPI_LIBADD="${micromanager_cpp_path}/MMDevice/libMMDevice.la"
 AC_SUBST(MMDEVAPI_LIBADD)
+
+# Apply appropriate libtool options for the Micro-Manager device API
 MMDEVAPI_LDFLAGS="-module -avoid-version -shrext \"\$(MMSUFFIX)\""
 AC_SUBST(MMDEVAPI_LDFLAGS)
 
 MM_INSTALL_DIRS
+
+# Micro-Manager libraries have a prefix & suffix to make them unique
+case $host in
+   *-*-linux*)
+   MMSUFFIX=".so.0"
+   MMPREFIX="libmmgr_dal_"
+   ;;
+esac
+if test -z "$MMSUFFIX"; then
+  MMSUFFIX=""
+fi
+if test -z "$MMPREFIX"; then
+  MMPREFIX="mmgr_dal_"
+fi
 
 AC_MSG_CHECKING(library suffix)
 AC_MSG_RESULT($MMSUFFIX)
@@ -49,7 +76,11 @@ AC_SUBST(MMSUFFIX)
 AC_MSG_CHECKING(library prefix)
 AC_MSG_RESULT($MMPREFIX)
 AC_SUBST(MMPREFIX)
+
+# Checks for library functions.
 AC_CHECK_FUNCS([memset])
+
+# This is the list of subdirectories containing a Makefile.am.
 m4_define([device_adapter_dirs], [m4_strip([
     DemoCamera
     Utilities
@@ -57,10 +88,6 @@ m4_define([device_adapter_dirs], [m4_strip([
 AC_CONFIG_FILES(Makefile m4_map_args_w(device_adapter_dirs, [], [/Makefile], [ ]))
 AC_OUTPUT
 """
-
-MM_REPO = "https://github.com/micro-manager/micro-manager.git"
-SYSTEM = platform.system()
-MACHINE = platform.machine()
 
 
 def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> None:
@@ -168,9 +195,6 @@ def _build_macos_arm64(
 def _build_linux(dest: Path, overwrite: bool | None = None) -> None:
     _require("git")
 
-    # now perform the following commands:
-    # sudo apt-get update
-    # sudo apt-get -y install build-essential autoconf automake libtool autoconf-archive pkg-config libboost-all-dev swig3.0
     print("sudo will required to install the following packages:")
     print(
         "  build-essential autoconf automake libtool autoconf-archive pkg-config "
@@ -205,7 +229,6 @@ def install_into(dest: Path, overwrite: bool, env_vars: dict | None = None) -> N
     with mm_repo_tmp_path() as repo_path:
         sub_dest = get_subdir(dest, repo_path, overwrite)
 
-        breakpoint()
         # update the configure.ac and Makefile.am files
         devAdapters = repo_path / "mmCoreAndDevices" / "DeviceAdapters"
         (devAdapters / "configure.ac").write_text(_MINIMAL_CONFIG)
@@ -217,10 +240,9 @@ def install_into(dest: Path, overwrite: bool, env_vars: dict | None = None) -> N
         # make and install
         subprocess.run(["./autogen.sh"], check=True)
         subprocess.run(["./configure", f"--prefix={repo_path.parent}"], check=True)
-        breakpoint()
         subprocess.run(["make"], check=True)
         subprocess.run(["make", "install"], check=True)
-        breakpoint()
+
         # copy the built adapters to the destination
         built_libs = repo_path.parent / "lib" / "micro-manager"
         shutil.copytree(built_libs, sub_dest)
