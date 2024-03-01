@@ -151,7 +151,7 @@ show_error_codes = true
 pretty = true
 plugins = "pydantic.mypy"
 
-[tool.mypy.overrides]
+[[tool.mypy.overrides]]
 module = ["tests.*"]
 disallow_untyped_defs = false
 
