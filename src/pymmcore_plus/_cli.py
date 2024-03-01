@@ -305,7 +305,11 @@ def build_dev(
     """Build DemoCamera and Utility adapters from source for apple silicon."""
     from pymmcore_plus._build import build
 
-    build(dest, overwrite=overwrite)
+    try:
+        build(dest, overwrite=overwrite)
+    except Exception as e:
+        print(f":x: [bold red]{e}")
+        raise typer.Exit(1)
 
 
 @app.command()

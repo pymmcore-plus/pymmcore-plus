@@ -5,7 +5,9 @@ import platform
 import shutil
 import subprocess
 import tempfile
+from contextlib import contextmanager
 from pathlib import Path
+from typing import Iterator
 
 from rich import print
 from rich.prompt import Prompt
@@ -62,16 +64,6 @@ MACHINE = platform.machine()
 
 
 def build(dest: Path, repo: str = MM_REPO, overwrite: bool | None = None) -> None:
-    if SYSTEM == "Darwin" and MACHINE == "arm64":
-        return _build_macos_arm64(dest, repo, overwrite)
-    raise NotImplementedError(
-        f"Building on {SYSTEM} {MACHINE} is not currently supported."
-    )
-
-
-def _build_macos_arm64(
-    dest: Path, repo: str = MM_REPO, overwrite: bool | None = None
-) -> None:
     """Build Micro-Manager device adapters from the git repo.
 
     Currently only supports Apple Silicon.
@@ -86,13 +78,26 @@ def _build_macos_arm64(
     overwrite : bool | None
         Whether to overwrite an existing installation. If `None`, will prompt.
     """
-    if not shutil.which("brew"):
-        print("Homebrew is required but not found. Please install it: https://brew.sh")
+    if SYSTEM == "Darwin" and MACHINE == "arm64":
+        return _build_macos_arm64(dest, repo, overwrite)
+    if SYSTEM == "Linux":
+        return _build_linux(dest, overwrite)
+    raise NotImplementedError(
+        f"Building on {SYSTEM} {MACHINE} is not currently supported."
+    )
+
+
+def _require(command: str, link: str = "") -> None:
+    if not shutil.which(command):
+        print(f"{command!r} is required but not found. Please install it first. {link}")
         return
 
-    if not shutil.which("git"):
-        print("git is required but not found. Please install it first.")
-        return
+
+def _build_macos_arm64(
+    dest: Path, repo: str = MM_REPO, overwrite: bool | None = None
+) -> None:
+    _require("brew", "https://brew.sh")
+    _require("git")
 
     for dep in ("autoconf", "automake", "libtool", "boost"):
         output = subprocess.run(["brew", "ls", "--versions", dep], capture_output=True)
@@ -158,3 +163,107 @@ def _build_macos_arm64(
         shutil.copy(demo_cfg, dest)
 
     print(f":sparkles: [bold green]Installed to {dest}[/bold green] :sparkles:")
+
+
+def _build_linux(dest: Path, overwrite: bool | None = None) -> None:
+    _require("git")
+
+    # now perform the following commands:
+    # sudo apt-get update
+    # sudo apt-get -y install build-essential autoconf automake libtool autoconf-archive pkg-config libboost-all-dev swig3.0
+    print("sudo will required to install the following packages:")
+    print(
+        "  build-essential autoconf automake libtool autoconf-archive pkg-config "
+        "libboost-all-dev swig3.0"
+    )
+
+    subprocess.run(["sudo", "apt-get", "update"], check=True)
+    subprocess.run(
+        [
+            "sudo",
+            "apt-get",
+            "-y",
+            "install",
+            "build-essential",
+            "autoconf",
+            "automake",
+            "libtool",
+            "autoconf-archive",
+            "pkg-config",
+            "libboost-all-dev",
+            "swig3.0",
+        ],
+        check=True,
+    )
+
+    install_into(dest, overwrite)
+
+    print(f":sparkles: [bold green]Installed to {dest}[/bold green] :sparkles:")
+
+
+def install_into(dest: Path, overwrite: bool, env_vars: dict | None = None) -> None:
+    with mm_repo_tmp_path() as repo_path:
+        sub_dest = get_subdir(dest, repo_path, overwrite)
+
+        breakpoint()
+        # update the configure.ac and Makefile.am files
+        devAdapters = repo_path / "mmCoreAndDevices" / "DeviceAdapters"
+        (devAdapters / "configure.ac").write_text(_MINIMAL_CONFIG)
+        (devAdapters / "Makefile.am").write_text(_MINIMAL_MAKE)
+
+        if env_vars:
+            os.environ.update(env_vars)
+
+        # make and install
+        subprocess.run(["./autogen.sh"], check=True)
+        subprocess.run(["./configure", f"--prefix={repo_path.parent}"], check=True)
+        breakpoint()
+        subprocess.run(["make"], check=True)
+        subprocess.run(["make", "install"], check=True)
+        breakpoint()
+        # copy the built adapters to the destination
+        built_libs = repo_path.parent / "lib" / "micro-manager"
+        shutil.copytree(built_libs, sub_dest)
+
+        # grab the demo config file to sub_dest
+        demo_cfg = repo_path / "bindist" / "any-platform" / "MMConfig_demo.cfg"
+        shutil.copy(demo_cfg, sub_dest)
+
+
+@contextmanager
+def mm_repo_tmp_path() -> Iterator[Path]:
+    with tempfile.TemporaryDirectory() as tmpdir:
+        tmp_path = Path(tmpdir)
+        cmd = ["git", "clone", "--recurse-submodules", MM_REPO]
+        subprocess.run(cmd, cwd=tmpdir, check=True)
+
+        repo_path = tmp_path / "micro-manager"
+        os.chdir(repo_path)
+        yield repo_path
+
+
+def get_subdir(
+    dest: Path, repo_path: Path, overwrite: bool | None = None
+) -> Path | None:
+    # get sha to determine destination path
+    cmd = ["git", "rev-parse", "--short", "HEAD"]
+    sha = subprocess.check_output(cmd, cwd=repo_path)
+    subdest = dest / f"Micro-Manager-{sha.decode().strip()}"
+
+    # check if dest exists and maybe overwrite
+    if subdest.exists():
+        if overwrite is False:
+            print(f"{subdest!r} already exists and overwrite is False. Aborting.")
+            return
+        elif overwrite:
+            shutil.rmtree(subdest)
+        else:
+            delete = Prompt.ask(
+                f"{subdest!r} already exists. Delete?", choices=["y", "n"], default="n"
+            )
+            if delete.lower() in ("y", "yes"):
+                shutil.rmtree(subdest)
+            else:
+                print("[red]Aborting.")
+                return
+    return subdest
