@@ -5,11 +5,19 @@ from unittest.mock import patch
 import pymmcore_plus
 import pytest
 from pymmcore_plus._logger import logger
-from pymmcore_plus.core.events import CMMCoreSignaler, QCoreSignaler
-from pymmcore_plus.mda.events import MDASignaler, QMDASignaler
+from pymmcore_plus.core.events import CMMCoreSignaler
+from pymmcore_plus.mda.events import MDASignaler
+
+try:
+    from pymmcore_plus.core.events import QCoreSignaler
+    from pymmcore_plus.mda.events import QMDASignaler
+
+    PARAMS = ["QSignal", "psygnal"]
+except ImportError:
+    PARAMS = ["psygnal"]
 
 
-@pytest.fixture(params=["QSignal", "psygnal"], scope="function")
+@pytest.fixture(params=PARAMS, scope="function")
 def core(request):
     core = pymmcore_plus.CMMCorePlus()
     if request.param == "psygnal":
