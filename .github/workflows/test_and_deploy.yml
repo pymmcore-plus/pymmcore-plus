@@ -167,7 +167,7 @@ jobs:
         run: |
           python -m pip install -e .[test]
           python -m pip install pytest-codspeed
-          python -m pip uninstall -y qtpy PySide6 PySide2 PyQt5 PyQt6
+          python -m pip uninstall -y pytest-qt qtpy PySide2 PyQt5 PyQt6 PySide6
 
       - name: Cache Linux Build
         id: cache-mm-build
