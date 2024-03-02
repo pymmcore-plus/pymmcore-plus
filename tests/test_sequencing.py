@@ -127,7 +127,11 @@ def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:
 @pytest.fixture
 def sequence_tester() -> CMMCorePlus:
     core = CMMCorePlus()
-    core.loadDevice("THub", "SequenceTester", "THub")
+    try:
+        core.loadDevice("THub", "SequenceTester", "THub")
+    except RuntimeError:
+        pytest.xfail("Cannot load SequenceTester library")
+
     core.initializeDevice("THub")
     core.loadDevice("TCamera", "SequenceTester", "TCamera")
     core.setParentLabel("TCamera", "THub")
