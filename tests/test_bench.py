@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import sys
 from typing import Callable
 
@@ -30,26 +31,32 @@ Z40 = useq.ZRangeAround(range=40, step=1)
 Z200 = useq.ZRangeAround(range=200, step=1)
 
 
-MDAS = {
+CI_MDAS = {
     "z10": useq.MDASequence(z_plan=Z10),
     "t10": useq.MDASequence(time_plan=T10),
     "c4": useq.MDASequence(channels=C4),
     "p10": useq.MDASequence(stage_positions=P10),
-    "t10p10c4z10": useq.MDASequence(
-        z_plan=Z10, time_plan=T10, channels=C4, stage_positions=P10, axis_order="tpcz"
+    "t10p1c4z10": useq.MDASequence(
+        z_plan=Z10, time_plan=T10, channels=C4, stage_positions=P1, axis_order="tpcz"
     ),
-    # some of these are too slow to run in a reasonable amount of time on CI
-    # "z200": useq.MDASequence(z_plan=Z200),
-    # "t200": useq.MDASequence(time_plan=T200),
-    # "c1": useq.MDASequence(channels=C1),
-    # "p1": useq.MDASequence(stage_positions=P1),
-    # "z10c1p1t10": useq.MDASequence(
-    #     z_plan=Z10, time_plan=T10, channels=C1, stage_positions=P1, axis_order="zcpt"
-    # ),
-    # "t40p10c4z40": useq.MDASequence(
-    #     z_plan=Z40, time_plan=T20, channels=C4, stage_positions=P10, axis_order="tpcz"
-    # ),
 }
+# some of these are too slow to run in a reasonable amount of time on CI
+ALL_MDAS = {
+    **CI_MDAS,
+    "z200": useq.MDASequence(z_plan=Z200),
+    "t200": useq.MDASequence(time_plan=T200),
+    "c1": useq.MDASequence(channels=C1),
+    "p1": useq.MDASequence(stage_positions=P1),
+    "z10c1p1t10": useq.MDASequence(
+        z_plan=Z10, time_plan=T10, channels=C1, stage_positions=P1, axis_order="zcpt"
+    ),
+    "t40p10c4z40": useq.MDASequence(
+        z_plan=Z40, time_plan=T20, channels=C4, stage_positions=P10, axis_order="tpcz"
+    ),
+}
+
+
+MDAS = CI_MDAS if os.getenv("CI") else ALL_MDAS
 
 
 @pytest.fixture
