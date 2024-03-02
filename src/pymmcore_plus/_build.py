@@ -20,7 +20,7 @@ MMCORE_AND_DEV = "micro-manager/mmCoreAndDevices"
 MM_REPO_URL = f"https://github.com/{MM_REPO}.git"
 SYSTEM = platform.system()
 MACHINE = platform.machine()
-DEFAULT_PACKAGES = ["DemoCamera", "Utilities"]
+DEFAULT_PACKAGES = ["DemoCamera", "Utilities", "SequenceTester"]
 M4_DEV_PATTERN = re.compile(
     r"m4_define\(\[device_adapter_dirs\],\s?\[m4_strip\(\[(.*)\]\)\]\)", re.DOTALL
 )
