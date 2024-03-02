@@ -156,7 +156,7 @@ jobs:
         working-directory: napari-micromanager
 
   benchmarks:
-    runs-on: macos-latest
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -169,8 +169,16 @@ jobs:
           python -m pip install pytest-codspeed
           python -m pip uninstall -y qtpy PySide6 PySide2 PyQt5 PyQt6
 
-      - name: Install Micro-Manager
-        run: mmcore install
+      - name: Cache Linux Build
+        id: cache-mm-build
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pymmcore-plus/
+          key: ${{ runner.os }}-mmbuild-${{ hashFiles('src/pymmcore_plus/_build.py') }}
+
+      - name: Build Micro-Manager
+        if: steps.cache-mm-build.outputs.cache-hit != 'true'
+        run: mmcore build-dev
 
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v2
