@@ -309,7 +309,6 @@ def build_dev(
     from pymmcore_plus._build import DEFAULT_PACKAGES, build
 
     devices = DEFAULT_PACKAGES if not devices else devices
-    print(f"Building {devices}\ninto {str(dest)!r}")
     try:
         build(dest, overwrite=overwrite, devices=devices)
     except Exception as e:
