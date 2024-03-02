@@ -55,6 +55,7 @@ jobs:
         run: pip install ${{ matrix.pydantic }}
 
       - name: Set cache path
+        shell: bash
         run: |
           echo "CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')" >> $GITHUB_ENV
 
