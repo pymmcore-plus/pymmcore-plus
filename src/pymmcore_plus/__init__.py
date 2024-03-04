@@ -1,3 +1,5 @@
+"""pymmcore superset providing improved APIs, event handling, and a pure python acquisition engine."""  # noqa: E501
+
 from importlib.metadata import PackageNotFoundError, version
 
 try:

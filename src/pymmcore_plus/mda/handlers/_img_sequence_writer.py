@@ -51,11 +51,13 @@ class ImageSequenceWriter:
 
         ```python
         from tifffile import imread
+
         data = imread("my_folder/*.tif", pattern="axes")
 
         # or with zarr
         import zarr
-        store = imread('data_folder/*.tif', pattern='axes', aszarr=True)
+
+        store = imread("data_folder/*.tif", pattern="axes", aszarr=True)
         data = zarr.open(store)
         ```
 

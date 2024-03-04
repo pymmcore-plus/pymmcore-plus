@@ -69,8 +69,10 @@ class PCoreSignaler(Protocol):
 
     core = CMMCorePlus()
 
+
     def on_exposure_changed(device: str, new_exposure: float):
         print(f"Exposure changed for {device} to {new_exposure}")
+
 
     core.events.exposureChanged.connect(my_callback)
     ```
@@ -79,8 +81,7 @@ class PCoreSignaler(Protocol):
 
     ```python
     @core.events.exposureChanged.connect
-    def on_exposure_changed(device: str, new_exposure: float):
-        ...
+    def on_exposure_changed(device: str, new_exposure: float): ...
     ```
 
     ------
@@ -194,6 +195,6 @@ class PCoreSignaler(Protocol):
 
         Examples
         --------
-        >>> core.events.devicePropertyChanged('Camera', 'Gain').connect(callback)
-        >>> core.events.devicePropertyChanged('Camera').connect(callback)
+        >>> core.events.devicePropertyChanged("Camera", "Gain").connect(callback)
+        >>> core.events.devicePropertyChanged("Camera").connect(callback)
         """
