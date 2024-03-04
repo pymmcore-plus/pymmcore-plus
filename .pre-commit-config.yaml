@@ -5,20 +5,16 @@ ci:
 
 repos:
   - repo: https://github.com/crate-ci/typos
-    rev: v1.18.1
+    rev: v1.19.0
     hooks:
       - id: typos
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.2.0
+    rev: v0.3.0
     hooks:
       - id: ruff
-        args: [--fix]
-
-  - repo: https://github.com/psf/black
-    rev: 24.1.1
-    hooks:
-      - id: black
+        args: [--fix, --unsafe-fixes]
+      - id: ruff-format
 
   - repo: https://github.com/abravalheri/validate-pyproject
     rev: v0.16
@@ -29,9 +25,9 @@ repos:
     rev: v1.8.0
     hooks:
       - id: mypy
+        files: "^src/"
         additional_dependencies:
           - pymmcore >=10.7.0.71.0
           - useq-schema >= 0.4.7
           - psygnal
           - typer
-        files: "^src/"

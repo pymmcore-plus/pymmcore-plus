@@ -1,10 +1,9 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Sequence
+from typing import TYPE_CHECKING, Any, Sequence, TypedDict
 
 from pymmcore import g_Keyword_Label, g_Keyword_State
-from typing_extensions import TypedDict
 
 from ._constants import DeviceType, PropertyType
 from .events._device_signal_view import _DevicePropValueSignal
@@ -44,10 +43,10 @@ class DeviceProperty:
     Examples
     --------
     >>> core = CMMCorePlus()
-    >>> prop = DeviceProperty('Objective', 'Label', core)
+    >>> prop = DeviceProperty("Objective", "Label", core)
     >>> prop.isValid()  # points to a loaded device property in core
     >>> prop.value
-    >>> prop.value = 'Objective-2'  # setter
+    >>> prop.value = "Objective-2"  # setter
     >>> prop.isReadOnly()
     >>> prop.hasLimits()
     >>> prop.range()

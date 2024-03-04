@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import platform
 import shutil
 import subprocess
 import time
@@ -66,6 +67,7 @@ def _mock_run(dest: Path) -> Callable:
     return runner
 
 
+@pytest.mark.skipif(platform.system() == "Linux", reason="Not supported on Linux")
 def test_install_app(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
@@ -76,6 +78,7 @@ def test_install_app(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
+@pytest.mark.skipif(platform.system() == "Linux", reason="Not supported on Linux")
 def test_basic_install(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
@@ -87,6 +90,7 @@ def test_basic_install(tmp_path: Path) -> None:
     assert mock.call_args_list[-1][0][0].startswith("Installed")
 
 
+@pytest.mark.skipif(platform.system() == "Linux", reason="Not supported on Linux")
 def test_available_versions(tmp_path: Path) -> None:
     """installing with an erroneous version should fail and show available versions."""
     result = runner.invoke(app, ["install", "-r", "xxxx"])
@@ -288,9 +292,9 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         assert not TEST_LOG.exists()
 
 
-# @pytest.mark.skipif("CI" not in os.environ, reason="only on CI")
-# def test_install(tmp_path: Path) -> None:
-#     assert not list(tmp_path.iterdir())
-#     result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
-#     assert result.exit_code == 0
-#     assert list(tmp_path.iterdir())
+def test_cli_info() -> None:
+    result = runner.invoke(app, ["info"])
+    assert result.exit_code == 0
+    assert "pymmcore-plus" in result.stdout
+    assert "python" in result.stdout
+    assert "api-version-info" in result.stdout

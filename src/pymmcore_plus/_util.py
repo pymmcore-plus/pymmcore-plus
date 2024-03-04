@@ -2,23 +2,25 @@ from __future__ import annotations
 
 import importlib
 import os
+import platform
 import sys
 import warnings
 from collections import defaultdict
-from contextlib import contextmanager
+from contextlib import contextmanager, suppress
 from functools import wraps
+from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from time import sleep
 from typing import TYPE_CHECKING, cast, overload
 
-import appdirs
+from platformdirs import user_data_dir
 
 if TYPE_CHECKING:
     from typing import Any, Callable, Iterator, Literal, TypeVar
 
     QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
 
-    from typing_extensions import ParamSpec, TypeGuard
+    from typing_extensions import ParamSpec, TypeGuard  # py310
 
     from .core.events._protocol import PSignalInstance
 
@@ -35,7 +37,8 @@ except ImportError:
 
 __all__ = ["find_micromanager", "retry", "no_stdout", "signals_backend"]
 
-USER_DATA_DIR = Path(appdirs.user_data_dir(appname="pymmcore-plus"))
+APP_NAME = "pymmcore-plus"
+USER_DATA_DIR = Path(user_data_dir(appname=APP_NAME))
 USER_DATA_MM_PATH = USER_DATA_DIR / "mm"
 PYMMCORE_PLUS_PATH = Path(__file__).parent.parent
 
@@ -94,7 +97,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
             return env_path
         full_list.append(env_path)
 
-    # then look in appdirs.user_data_dir
+    # then look in user_data_dir
     _folders = (p for p in USER_DATA_MM_PATH.glob("Micro-Manager*") if p.is_dir())
     user_install = sorted(_folders, reverse=True)
     if user_install:
@@ -237,11 +240,14 @@ def retry(
     mmc = CMMCorePlus()
     mmc.loadSystemConfiguration()
 
+
     @retry(exceptions=RuntimeError, delay=0.5, logger=print)
     def snap_image():
         return mmc.snap()
 
+
     snap_image()
+    ```
     """
 
     def deco(_func: Callable[P, R]) -> Callable[P, R]:
@@ -384,15 +390,19 @@ def listeners_connected(
     --------
     ```python
     from qtpy.QtCore import Signal
+
     # OR
     from psygnal import Signal
+
 
     class Emitter:
         signalName = Signal(int)
 
+
     class Listener:
         def signalName(self, value: int):
             print(value)
+
 
     emitter = Emitter()
     listener = Listener()
@@ -453,3 +463,51 @@ def _is_signal_instance(obj: Any) -> TypeGuard[PSignalInstance]:
 def _is_qt_signal(obj: Any) -> TypeGuard[PSignalInstance]:
     modname = getattr(type(obj), "__module__", "")
     return "Qt" in modname or "Shiboken" in modname
+
+
+def system_info() -> dict[str, str]:
+    """Return a dictionary of system information.
+
+    This backs the `mmcore info` command in the CLI.
+    """
+    import pymmcore
+
+    import pymmcore_plus
+
+    info = {
+        "python": sys.version,
+        "platform": platform.platform(),
+        "pymmcore-plus": getattr(pymmcore_plus, "__version__", "err"),
+        "pymmcore": getattr(pymmcore, "__version__", "err"),
+    }
+
+    with suppress(Exception):
+        core = pymmcore_plus.CMMCorePlus.instance()
+        info["core-version-info"] = core.getVersionInfo()
+        info["api-version-info"] = core.getAPIVersionInfo()
+
+    if (mm_path := find_micromanager()) is not None:
+        path = str(Path(mm_path).resolve())
+        path = path.replace(os.path.expanduser("~"), "~")  # privacy
+        info["adapter-path"] = path
+    else:
+        info["adapter-path"] = "not found"
+
+    for pkg in (
+        "useq-schema",
+        "pymmcore-widgets",
+        "napari-micromanager",
+        "napari",
+        "tifffile",
+        "zarr",
+    ):
+        with suppress(ImportError, PackageNotFoundError):
+            info[pkg] = importlib.metadata.version(pkg)
+
+            if pkg == "pymmcore-widgets":
+                with suppress(ImportError):
+                    from qtpy import API_NAME, QT_VERSION
+
+                    info["qt"] = f"{API_NAME} {QT_VERSION}"
+
+    return info

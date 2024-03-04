@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     import numpy as np
     import numpy.typing as npt
     import useq
-    from typing_extensions import TypeAlias
+    from typing_extensions import TypeAlias  # py310
 
     ImgWriter: TypeAlias = Callable[[str, npt.NDArray], Any]
 
@@ -51,11 +51,13 @@ class ImageSequenceWriter:
 
         ```python
         from tifffile import imread
+
         data = imread("my_folder/*.tif", pattern="axes")
 
         # or with zarr
         import zarr
-        store = imread('data_folder/*.tif', pattern='axes', aszarr=True)
+
+        store = imread("data_folder/*.tif", pattern="axes", aszarr=True)
         data = zarr.open(store)
         ```
 

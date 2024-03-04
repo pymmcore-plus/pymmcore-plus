@@ -105,7 +105,7 @@ class _DevicePropertyEventMixin(PCoreSignaler):
 
         Examples
         --------
-        >>> core.events.devicePropertyChanged('Camera', 'Gain').connect(callback)
-        >>> core.events.devicePropertyChanged('Camera').connect(callback)
+        >>> core.events.devicePropertyChanged("Camera", "Gain").connect(callback)
+        >>> core.events.devicePropertyChanged("Camera").connect(callback)
         """
         return _PropertySignal(self, device, property)

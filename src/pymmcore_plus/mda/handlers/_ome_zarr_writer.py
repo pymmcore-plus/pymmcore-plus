@@ -7,18 +7,16 @@ import shutil
 import tempfile
 from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
-import zarr
-
 from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
     from os import PathLike
-    from typing import ContextManager, Sequence
+    from typing import ContextManager, Sequence, TypedDict
 
     import numpy as np
+    import zarr
     from fsspec import FSMap
     from numcodecs.abc import Codec
-    from typing_extensions import TypedDict
 
     class ZarrSynchronizer(Protocol):
         def __getitem__(self, key: str) -> ContextManager: ...
@@ -40,7 +38,7 @@ if TYPE_CHECKING:
 POS_PREFIX = "p"
 
 
-class OMEZarrWriter(_5DWriterBase[zarr.Array]):
+class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
     """MDA handler that writes to a zarr file following the ome-ngff spec.
 
     This implements v0.4
