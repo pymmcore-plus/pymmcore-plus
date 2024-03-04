@@ -240,11 +240,14 @@ def retry(
     mmc = CMMCorePlus()
     mmc.loadSystemConfiguration()
 
+
     @retry(exceptions=RuntimeError, delay=0.5, logger=print)
     def snap_image():
         return mmc.snap()
 
+
     snap_image()
+    ```
     """
 
     def deco(_func: Callable[P, R]) -> Callable[P, R]:
@@ -387,15 +390,19 @@ def listeners_connected(
     --------
     ```python
     from qtpy.QtCore import Signal
+
     # OR
     from psygnal import Signal
+
 
     class Emitter:
         signalName = Signal(int)
 
+
     class Listener:
         def signalName(self, value: int):
             print(value)
+
 
     emitter = Emitter()
     listener = Listener()

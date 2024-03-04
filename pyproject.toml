@@ -64,7 +64,7 @@ test = [
     "tifffile >=2021.6.14",
     "zarr >=2.2",
 ]
-dev = ["black", "ipython", "mypy", "pdbpp", "pre-commit", "ruff"]
+dev = ["ipython", "mypy", "pdbpp", "pre-commit", "ruff"]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material",
@@ -100,7 +100,9 @@ sources = ["src"]
 [tool.ruff]
 line-length = 88
 target-version = "py38"
+
 [tool.ruff.lint]
+pydocstyle = { convention = "numpy" }
 select = [
     "E",    # style errors
     "F",    # flakes
@@ -119,14 +121,7 @@ select = [
 ignore = [
     "D100", # Missing docstring in public module
     "D104", # Missing docstring in public package
-    "D107", # Missing docstring in __init__
-    "D203", # 1 blank line required before class docstring
-    "D212", # Multi-line docstring summary should start at the first line
-    "D213", # Multi-line docstring summary should start at the second line
-    "D400", # First line should end with a period
-    "D401", # First line should be in imperative mood
-    "D413", # Missing blank line after last section
-    "D416", # Section name should end with a colon
+    "D401", # First line should be in imperative mood (remove to opt in)
 ]
 
 [tool.ruff.lint.per-file-ignores]
@@ -134,6 +129,10 @@ ignore = [
 "examples/*.py" = ["D"]
 "_cli.py" = ["B008"]
 "docs/*.py" = ["A", "D"]
+
+# https://docs.astral.sh/ruff/formatter/
+[tool.ruff.format]
+docstring-code-format = true
 
 # https://docs.pytest.org/en/6.2.x/customize.html
 [tool.pytest.ini_options]

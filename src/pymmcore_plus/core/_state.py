@@ -4,7 +4,6 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal, Sequence, TypedDict, cast
 
 if TYPE_CHECKING:
-
     from pymmcore_plus import CMMCorePlus
 
 

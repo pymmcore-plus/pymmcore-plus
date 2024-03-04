@@ -29,12 +29,12 @@ class Device:
     Examples
     --------
     >>> core = CMMCorePlus()
-    >>> device = Device('Camera', core)
+    >>> device = Device("Camera", core)
     >>> device.isLoaded()
-    >>> device.load('NotALib', 'DCam')  # useful error
-    >>> device.load('DemoCamera', 'DCam')
+    >>> device.load("NotALib", "DCam")  # useful error
+    >>> device.load("DemoCamera", "DCam")
     >>> device.initialize()
-    >>> device.load('DemoCamera', 'DCam')  # no-op w/ useful warning
+    >>> device.load("DemoCamera", "DCam")  # no-op w/ useful warning
     >>> device.properties  # tuple of DeviceProperty objects
     >>> device.description()
     >>> device.isBusy()

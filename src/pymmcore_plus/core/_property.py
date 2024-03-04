@@ -43,10 +43,10 @@ class DeviceProperty:
     Examples
     --------
     >>> core = CMMCorePlus()
-    >>> prop = DeviceProperty('Objective', 'Label', core)
+    >>> prop = DeviceProperty("Objective", "Label", core)
     >>> prop.isValid()  # points to a loaded device property in core
     >>> prop.value
-    >>> prop.value = 'Objective-2'  # setter
+    >>> prop.value = "Objective-2"  # setter
     >>> prop.isReadOnly()
     >>> prop.hasLimits()
     >>> prop.range()
