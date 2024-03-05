@@ -27,7 +27,7 @@ jobs:
         platform: [windows-latest, macos-latest]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         pydantic: [""]
-        qt-backend: ["PySide6"]
+        qt: ["PySide6"]
         include:
           - platform: windows-latest
             python-version: "3.8"
@@ -35,10 +35,10 @@ jobs:
           - platform: windows-latest
             python-version: "3.9"
             pydantic: "'pydantic<2'"
-            qt-backend: "PySide2"
+            qt: "PySide2"
           - platform: windows-latest
             python-version: "3.11"
-            qt-backend: "PyQt6"
+            qt: "PyQt6"
           - platform: windows-latest
             python-version: "3.11"
             pydantic: "'pydantic<2'"
@@ -56,7 +56,7 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[test,${{ matrix.qt-backend }}]
+          pip install -e .[test,${{ matrix.qt }}]
 
       - name: Downgrade pydantic
         if: ${{ matrix.pydantic }}
