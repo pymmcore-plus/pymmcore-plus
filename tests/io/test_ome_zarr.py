@@ -120,6 +120,7 @@ def test_ome_zarr_writer_pos_name(tmp_path: Path, core: CMMCorePlus) -> None:
         channels=["FITC"],
         stage_positions=[
             {"x": 222, "y": 1, "z": 1, "name": "test_name_000"},
+            {"x": 111, "y": 0, "z": 0, "name": ""},
             {"x": 111, "y": 0, "z": 0},
         ],
     )
@@ -128,3 +129,4 @@ def test_ome_zarr_writer_pos_name(tmp_path: Path, core: CMMCorePlus) -> None:
 
     assert (dest / "test_name_000").exists()
     assert (dest / "p1").exists()
+    assert (dest / "p2").exists()

@@ -84,6 +84,7 @@ def test_ome_tiff_writer_pos_name(tmp_path: Path, core: CMMCorePlus) -> None:
         channels=["FITC"],
         stage_positions=[
             {"x": 222, "y": 1, "z": 1, "name": "test_name_000"},
+            {"x": 111, "y": 0, "z": 0, "name": ""},
             {"x": 111, "y": 0, "z": 0},
         ],
     )
@@ -92,3 +93,4 @@ def test_ome_tiff_writer_pos_name(tmp_path: Path, core: CMMCorePlus) -> None:
 
     assert Path(str(dest).replace(".ome.tiff", "_test_name_000.ome.tiff")).exists()
     assert Path(str(dest).replace(".ome.tiff", "_p1.ome.tiff")).exists()
+    assert Path(str(dest).replace(".ome.tiff", "_p2.ome.tiff")).exists()
