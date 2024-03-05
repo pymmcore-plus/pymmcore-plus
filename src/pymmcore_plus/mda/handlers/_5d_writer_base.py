@@ -95,7 +95,10 @@ class _5DWriterBase(Generic[T]):
         """Write frame to the zarr array for the appropriate position."""
         # get the position key to store the array in the group
         p_index = event.index.get("p", 0)
-        key = f"{POS_PREFIX}{p_index}"
+        pos_key = f"{POS_PREFIX}{p_index}"
+        # get position name from the event if it exists
+        pos_name = event.pos_name
+        key = pos_key if pos_name is None else pos_name
         pos_sizes = self.position_sizes[p_index]
         if key in self.position_arrays:
             ary = self.position_arrays[key]
