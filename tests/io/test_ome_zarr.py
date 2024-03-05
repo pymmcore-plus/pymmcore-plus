@@ -4,12 +4,14 @@ from typing import TYPE_CHECKING
 
 import pytest
 import useq
+
 from pymmcore_plus.mda.handlers import OMEZarrWriter
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import zarr
+
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")
@@ -107,3 +109,22 @@ def test_ome_zarr_writer(
     for _, v in data.arrays():
         stored_seq = useq.MDASequence.parse_obj(v.attrs["useq_MDASequence"])
         assert stored_seq == mda
+
+
+def test_ome_zarr_writer_pos_name(tmp_path: Path, core: CMMCorePlus) -> None:
+    dest = tmp_path / "out.ome.zarr"
+    writer = OMEZarrWriter(dest)
+
+    seq = useq.MDASequence(
+        axis_order="pc",
+        channels=["FITC"],
+        stage_positions=[
+            {"x": 222, "y": 1, "z": 1, "name": "test_name_000"},
+            {"x": 111, "y": 0, "z": 0},
+        ],
+    )
+
+    core.mda.run(seq, output=writer)
+
+    assert (dest / "test_name_000").exists()
+    assert (dest / "p1").exists()

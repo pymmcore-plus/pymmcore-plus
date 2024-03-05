@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 import useq
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import OMETiffWriter
@@ -72,3 +73,22 @@ def test_ome_tiff_writer(
         )
 
         assert data.shape[:-2] == seq_shape
+
+
+def test_ome_tiff_writer_pos_name(tmp_path: Path, core: CMMCorePlus) -> None:
+    dest = tmp_path / "out.ome.tiff"
+    writer = OMETiffWriter(dest)
+
+    seq = useq.MDASequence(
+        axis_order="pc",
+        channels=["FITC"],
+        stage_positions=[
+            {"x": 222, "y": 1, "z": 1, "name": "test_name_000"},
+            {"x": 111, "y": 0, "z": 0},
+        ],
+    )
+
+    core.mda.run(seq, output=writer)
+
+    assert Path(str(dest).replace(".ome.tiff", "_test_name_000.ome.tiff")).exists()
+    assert Path(str(dest).replace(".ome.tiff", "_p1.ome.tiff")).exists()
