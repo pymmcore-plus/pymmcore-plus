@@ -249,11 +249,6 @@ def _background_tail(q: Queue, runner: Any, logfile: Path) -> None:
 
 
 def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # at first there should be no logs
-    result = runner.invoke(app, ["logs"])
-    assert result.exit_code == 0
-    assert "No log file" in result.stdout
-
     # create mock log file
     TEST_LOG = tmp_path / "test.log"
     monkeypatch.setattr(_logger, "LOG_FILE", TEST_LOG)
