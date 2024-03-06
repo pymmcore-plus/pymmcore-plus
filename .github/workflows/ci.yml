@@ -99,7 +99,7 @@ jobs:
   test-dependents:
     uses: pyapp-kit/workflows/.github/workflows/test-dependents.yml@v1
     with:
-      os: macos-latest
+      os: ubuntu-latest
       python-version: "3.11"
       dependency-repo: ${{ matrix.repo }}
       dependency-extras: "test"
