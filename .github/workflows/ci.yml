@@ -97,13 +97,13 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
   test-dependents:
-    uses: pyapp-kit/workflows/.github/workflows/test-dependents.yml@v1
+    uses: pyapp-kit/workflows/.github/workflows/test-dependents.yml@main
     with:
-      os: ubuntu-latest
+      os: windows-latest
       python-version: "3.11"
       dependency-repo: ${{ matrix.repo }}
       dependency-extras: "test"
-      post-install-cmd: "mmcore build-dev"
+      post-install-cmd: "mmcore install"
       qt: ${{ matrix.qt }}
     strategy:
       fail-fast: false
