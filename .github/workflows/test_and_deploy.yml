@@ -37,7 +37,7 @@ jobs:
             python-version: "3.9"
             pydantic: "'pydantic<2'"
             qt: "PySide2"
-          - platform: windows-latest
+          - platform: macos-latest
             python-version: "3.11"
             qt: "PyQt6"
           - platform: windows-latest
