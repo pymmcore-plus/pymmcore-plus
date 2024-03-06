@@ -13,15 +13,13 @@ __all__ = ["logger"]
 
 logger = logging.getLogger("pymmcore-plus")
 
-
+PYMM_LOG_FILE = os.getenv("PYMM_LOG_FILE", "")
 DEFAULT_LOG_LEVEL: str = os.getenv("PYMM_LOG_LEVEL", "INFO").upper()
-if any(x.endswith("pytest") for x in sys.argv):
+
+if "PYTEST_RUNNING" in os.environ:
     LOG_FILE = None
-elif "PYMM_LOG_FILE" in os.environ:
-    if os.environ["PYMM_LOG_FILE"].lower() in ("", "0", "false", "no", "none"):
-        LOG_FILE = None
-    else:
-        LOG_FILE = Path(os.environ["PYMM_LOG_FILE"]).expanduser().resolve()
+elif PYMM_LOG_FILE not in ("", "0", "false", "no", "none"):
+    LOG_FILE = Path(PYMM_LOG_FILE).expanduser().resolve()
 else:
     from ._util import USER_DATA_DIR
 

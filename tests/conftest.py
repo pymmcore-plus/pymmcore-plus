@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import os
 from unittest.mock import patch
 
-import pymmcore_plus
-import pytest
-from pymmcore_plus._logger import logger
-from pymmcore_plus.core.events import CMMCoreSignaler
-from pymmcore_plus.mda.events import MDASignaler
+os.environ["PYTEST_RUNNING"] = "1"
+
+import pymmcore_plus  # noqa: E402
+import pytest  # noqa: E402
+from pymmcore_plus._logger import logger  # noqa: E402
+from pymmcore_plus.core.events import CMMCoreSignaler  # noqa: E402
+from pymmcore_plus.mda.events import MDASignaler  # noqa: E402
 
 try:
     from pymmcore_plus.core.events import QCoreSignaler
