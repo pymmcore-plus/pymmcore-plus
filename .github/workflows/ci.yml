@@ -103,7 +103,7 @@ jobs:
       python-version: "3.11"
       dependency-repo: ${{ matrix.repo }}
       dependency-extras: "test"
-      post-install-cmd: "mmcore install"
+      post-install-cmd: "mmcore build-dev"
       qt: ${{ matrix.qt }}
     strategy:
       fail-fast: false
