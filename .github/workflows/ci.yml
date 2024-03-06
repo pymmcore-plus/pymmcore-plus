@@ -6,16 +6,12 @@ concurrency:
 
 on:
   push:
-    branches:
-      - main
-    tags:
-      - "v*" # Push events to matching v*, i.e. v1.0, v20.15.10
-  pull_request:
-    branches:
-      - main
+    branches: [main]
+    tags: [v*]
+  pull_request: {}
+  workflow_dispatch:
   schedule:
     - cron: "0 16 * * 1" # monday at noon est
-  workflow_dispatch:
 
 jobs:
   test:
@@ -100,78 +96,23 @@ jobs:
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
 
-  test_widgets:
-    name: mmcore-widgets
-    runs-on: macos-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - uses: actions/checkout@v4
-        with:
-          repository: pymmcore-plus/pymmcore-widgets
-          path: pymmcore-widgets
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Install pymmcore-widgets
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install .[test,image,pyside6]
-        working-directory: pymmcore-widgets
-
-      - name: Install core
-        run: python -m pip install -e .[test] -U
-
-      - name: Install Micro-Manager
-        run: mmcore install
-
-      - name: Run pymmcore-widgets tests
-        run: python -m pytest -v --color=yes -W default
-        working-directory: pymmcore-widgets
-
-  test-napari-micro:
-    name: test napari-micromanager
-    runs-on: windows-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          path: pymmcore-plus
-          fetch-depth: 0
-
-      - uses: actions/checkout@v4
-        with:
-          repository: pymmcore-plus/napari-micromanager
-          path: napari-micromanager
-          fetch-depth: 0
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.10"
-
-      - name: Install Windows OpenGL
-        if: runner.os == 'Windows'
-        run: |
-          git clone --depth 1 https://github.com/pyvista/gl-ci-helpers.git
-          powershell gl-ci-helpers/appveyor/install_opengl.ps1
-
-      - name: Install dependencies
-        run: |
-          python -m pip install -U pip
-          python -m pip install -e ./napari-micromanager[testing]
-          python -m pip install -e ./pymmcore-plus[cli]
-          python -m pip install PySide2
-
-      - name: Install Micro-Manager
-        run: mmcore install
-
-      - name: Run napari-micromanager tests
-        run: python -m pytest -v --color=yes -W default
-        working-directory: napari-micromanager
+  test-dependents:
+    uses: pyapp-kit/workflows/.github/workflows/test-dependents.yml@v1
+    with:
+      os: macos-latest
+      python-version: "3.11"
+      dependency-repo: ${{ matrix.repo }}
+      dependency-extras: "test"
+      post-install-cmd: "mmcore install"
+      qt: ${{ matrix.qt }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - repo: pymmcore-plus/pymmcore-widgets
+            qt: "pyside6"
+          - repo: pymmcore-plus/napari-micromanager
+            qt: "pyside2"
 
   benchmarks:
     runs-on: ubuntu-latest
@@ -205,25 +146,23 @@ jobs:
 
   deploy:
     needs: test
+    if: ${{ github.repository == 'pymmcore-plus/useq-schema' && contains(github.ref, 'tags') }}
     runs-on: ubuntu-latest
-    if: ${{ github.repository == 'pymmcore-plus/pymmcore-plus' && contains(github.ref, 'tags') }}
+    permissions:
+      id-token: write
+      contents: write
     steps:
       - uses: actions/checkout@v4
-      - name: Set up Python
-        uses: actions/setup-python@v5
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install build twine
-      - name: Build and publish
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TWINE_API_KEY }}
-        run: |
-          git tag
-          python -m build
-          twine check dist/*
-          twine upload dist/*
+        with:
+          fetch-depth: 0
+
+      - name: 👷 Build
+        run: pipx run build
+
+      - name: 🚢 Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+
       - uses: softprops/action-gh-release@v1
         with:
           generate_release_notes: true
+          files: './dist/*'
