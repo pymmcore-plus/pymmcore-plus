@@ -39,6 +39,7 @@ from ._constants import (
     DeviceDetectionStatus,
     DeviceInitializationState,
     DeviceType,
+    Keyword,
     PixelType,
     PropertyType,
 )
@@ -205,6 +206,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         if adapter_paths:
             self.setDeviceAdapterSearchPaths(adapter_paths)
 
+        # this is a dict of device label -> PyDevice objects
+        # where a PyDevice is an instance of a python class that implements some
+        # yet to be defined interface
+        self._py_devices: dict[str, Any] = {}
+        self._py_device_types: dict[str, DeviceType] = {}
+
         self._events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
         self.registerCallback(self._callback_relay)
@@ -254,6 +261,15 @@ class CMMCorePlus(pymmcore.CMMCore):
         `events.propertyChanged` is *always* emitted when `setProperty` has been called
         and the property Value has actually changed.
         """
+        # circumvent CorePropertyCollection::Execute method in MMCore so that we
+        # call our own methods.  (allows for PyDevices to be set via config)
+        # CorePropertyCollection::Execute doesn't really do much besides call
+        # call these methods anyway
+        if label == Keyword.CoreDevice:
+            if method := getattr(self, "set" + propName + "Device", None):
+                method(propValue)
+                return
+
         with self._property_change_emission_ensured(label, (propName,)):
             super().setProperty(label, propName, propValue)
 
@@ -306,6 +322,54 @@ class CMMCorePlus(pymmcore.CMMCore):
         logger.debug("setting adapter search paths: %s", paths)
         super().setDeviceAdapterSearchPaths(paths)
 
+    def load_py_device(self, label: str, module_name: str, class_name: str) -> None:
+        import importlib
+
+        try:
+            module = importlib.import_module(module_name)
+            DeviceCls = getattr(module, class_name)
+        except Exception as e:
+            raise RuntimeError(f"Failed to import {module_name}.{class_name}") from e
+
+        try:
+            obj = DeviceCls()
+        except Exception as e:
+            raise RuntimeError(
+                f"Failed to instantiate {module_name}.{class_name}"
+            ) from e
+
+        self._py_devices[label] = obj
+        self._py_device_types[label] = getattr(obj, "device_type", DeviceType.Unknown)
+        logger.info("Loaded PyDevice %r from %s.%s", label, module_name, class_name)
+
+    def _assert_pydevice_type(self, label: str, expected_type: DeviceType) -> None:
+        if self._py_device_types[label] != expected_type:
+            raise RuntimeError(
+                "Device {cameraLabel!r} is of the wrong type for the requested "
+                f"operation. Expected {expected_type!r} but got "
+                f"{self._py_device_types[label]!r}"
+            )
+
+    def setCameraDevice(self, cameraLabel: str) -> None:
+        """Sets the current camera device.
+
+        **Why Override?**  To support python-based camera devices.
+        """
+        if cameraLabel in self._py_devices:
+            self._assert_pydevice_type(cameraLabel, DeviceType.Camera)
+            self._current_camera_device = cameraLabel
+            cameraLabel = ""  # reset camera in core
+        super().setCameraDevice(cameraLabel)
+
+    def getCameraDevice(self) -> str:
+        """Return the current camera device.
+
+        **Why Override?**  To support python-based camera devices.
+        """
+        if dev := getattr(self, "_current_camera_device", ""):
+            return dev
+        return super().getCameraDevice()
+
     def loadDevice(self, label: str, moduleName: str, deviceName: str) -> None:
         """Load a device from the plugin library.
 
@@ -355,7 +419,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @synchronized(_lock)
     def loadSystemConfiguration(
-        self, fileName: str | Path = "MMConfig_demo.cfg"
+        self, fileName: str | Path = "MMConfig_demo.cfg", pydevices: bool = True
     ) -> None:
         """Load a system config file conforming to the MM `.cfg` format.
 
@@ -374,7 +438,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         if not fpath.exists():
             raise FileNotFoundError(f"Path does not exist: {fpath}")
         self._last_config = str(fpath.resolve())
-        super().loadSystemConfiguration(self._last_config)
+        if pydevices:
+            from ._py_config import load_system_config
+
+            load_system_config(self, self._last_config)
+        else:
+            super().loadSystemConfiguration(self._last_config)
 
     def systemConfigurationFile(self) -> str | None:
         """Return the path to the last loaded system configuration file, or `None`.
