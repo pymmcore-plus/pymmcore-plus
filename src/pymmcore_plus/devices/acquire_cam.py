@@ -1,45 +1,38 @@
-"""Questions for nathan.
-
-- Is there a runtime singleton?
-    acquire.Runtime() is acquire.Runtime()  # False
-    Is the user expected to manage the lifetime of the runtime?
-    What happens if the runtime is garbage collected?
-    How do devices handle being managed by multiple runtimes?
-
-- Is there a device_manager singleton?
-    runtime.device_manager() is runtime.device_manager()  # False
-    are identifiers tied to a specific device_manager, or to the runtime?
-
-- where does one look to find all the valid strings for dm.select?
-- CameraProperties.offset is confusing, could be conflated with camera amplifier offset
-  rather than the ROI offset.
-- enums like SampleType should be proper enums; or at least have a __members__
-  attribute for introspection, a __getitem__ method for reverse lookup, and
-  a __call__ method for conversion.
-- RuntimeError: Failed acquire api status check
-    could be more informative?
-- somewhat confusing that you set the shape as (width, height) but receive data
-  as (height, width)
-"""
-
 from __future__ import annotations
 
 import logging
 import time
 from concurrent.futures import Future
-from typing import TYPE_CHECKING, Any, Literal
+from typing import TYPE_CHECKING, Literal, TypedDict, cast
 
 import acquire
 from rich import print
 
 if TYPE_CHECKING:
+    import acquire.acquire as acq
     import numpy.typing as npt
+    from typing_extensions import Unpack
+
+    class CameraPropertiesDict(TypedDict, total=False):
+        """Settings for the camera."""
+
+        exposure_time_us: float
+        line_interval_us: float
+        binning: float
+        pixel_type: acq.SampleType
+        readout_direction: acq.Direction
+        offset: tuple[int, int]
+        shape: tuple[int, int]
+        input_triggers: acq.InputTriggers
+        output_triggers: acq.OutputTriggers
+
 
 RT: acquire.Runtime | None = None
 DM: acquire.acquire.DeviceManager | None = None
 
 
 def get_runtime() -> acquire.Runtime:
+    """Return the runtime singleton."""
     global RT
     if RT is None:
         logging.getLogger("acquire").setLevel(logging.CRITICAL)
@@ -49,80 +42,119 @@ def get_runtime() -> acquire.Runtime:
 
 
 class AcquireCamera:
+    """A wrapper around a camera device in the acquire-python library."""
+
     def __init__(
-        self, stream_id: Literal[0, 1] = 0, source: str = "simulated: radial sin"
+        self,
+        stream_id: Literal[0, 1] = 0,
+        device_name: str | None = "simulated: radial sin",
+        storage_name: str | None = None,
     ):
         self._stream_id = stream_id
         self.rt = get_runtime()
-        self.source = source
+        self._storage_name: str = ""
+        self._device_name: str = ""
+
+        self.set_storage(storage_name)
+        self.set_device_name(device_name)
 
     @property
-    def source(self) -> str:
+    def device_name(self) -> str:
         """Return the source of the camera."""
-        return self._source
-
-    @source.setter
-    def source(self, source: str) -> None:
-        cfg = self.rt.get_configuration()
-        dm = self.rt.device_manager()
-
-        stream = cfg.video[self._stream_id]
-        stream.camera.identifier = dm.select(acquire.DeviceKind.Camera, source)
-        stream.storage.identifier = dm.select(acquire.DeviceKind.Storage, "Trash")
-
-        self.rt.set_configuration(cfg)
-        self._source = source
-
-    @property
-    def exposure_time(self) -> float:
-        """Return the exposure time of the camera in microseconds."""
-        return self.properties.exposure_time_us
+        return self._device_name
 
     @property
     def properties(self) -> acquire.acquire.CameraProperties:
         """Return the properties of the camera."""
         return self.rt.get_configuration().video[self._stream_id].camera.settings
 
+    def set_device_name(self, name: str | None) -> None:
+        """Set a camera device from the device manager by name."""
+        dm = self.rt.device_manager()
+
+        if not (ident := dm.select(acquire.DeviceKind.Camera, name)):
+            options = {
+                d.name for d in dm.devices() if d.kind == acquire.DeviceKind.Camera
+            }
+            raise ValueError(f"Camera device {name!r} not found. Options: {options}.")
+
+        cfg = self.rt.get_configuration()
+        cfg.video[self._stream_id].camera.identifier = ident
+
+        self.rt.set_configuration(cfg)
+        self._device_name = ident.name
+
+    def set_storage(self, name: str | None) -> None:
+        """Set the storage device for this camera."""
+        dm = self.rt.device_manager()
+
+        # override with trash if None
+        # acquire's default behavior is to use the first one available, which is "raw"
+        # i think it makes more sense to use "trash" for "storage = None"
+        name = name or "trash"
+        if not (ident := dm.select(acquire.DeviceKind.Storage, name)):
+            options = {
+                d.name for d in dm.devices() if d.kind == acquire.DeviceKind.Storage
+            }
+            raise ValueError(f"Camera device {name!r} not found. Options: {options}.")
+
+        cfg = self.rt.get_configuration()
+        cfg.video[self._stream_id].storage.identifier = ident
+        self.rt.set_configuration(cfg)
+
+        self._storage_name = ident.name
+
     def set_exposure_time_ms(self, exposure_time_ms: float) -> None:
         """Set the exposure time of the camera in milliseconds."""
-        self._set_property("exposure_time_us", exposure_time_ms * 1e3)
+        self.update_settings(exposure_time_us=exposure_time_ms * 1e3)
 
-    def set_shape(self, shape: tuple[int, int]) -> None:
-        """Set the shape (ROI) of the camera."""
-        self._set_property("shape", shape)
+    def update_settings(self, **settings: Unpack[CameraPropertiesDict]) -> None:
+        """Update the settings of the camera.
 
-    def set_pixel_type(self, pixel_type: acquire.acquire.SampleType) -> None:
-        """Set the pixel type of the camera."""
-        self._set_property("pixel_type", pixel_type)
-
-    def _set_property(self, name: str, value: Any) -> None:
+        Keywords may be any field from acquire.CameraProperties
+        """
         cfg = self.rt.get_configuration()
-        setattr(cfg.video[self._stream_id].camera.settings, name, value)
+        for key, value in settings.items():
+            setattr(cfg.video[self._stream_id].camera.settings, key, value)
         self.rt.set_configuration(cfg)
 
-    def snap_image(self) -> Future[npt.NDArray]:
-        """Snap an image and return a future with the image data."""
+    def snap_image_blocking(self) -> npt.NDArray:
+        """Snap a single image and return the image data, blocks the thread."""
+        # this seems a bit ugly
+        # i'm not sure acquire is designed to be used to "snap" a single image
         cfg = self.rt.get_configuration()
-        cfg.video[self._stream_id].max_frame_count = 2
-        self.rt.set_configuration(cfg)
+        if cfg.video[self._stream_id].max_frame_count != 1:
+            cfg.video[self._stream_id].max_frame_count = 1
+            self.rt.set_configuration(cfg)
+
         self.rt.start()
-
-        result: Future[npt.NDArray] = Future()
-
         while self.rt.get_state() == acquire.acquire.DeviceState.Running:
+            # is there a better way?
             time.sleep(0.01)
 
         with self.rt.get_available_data(self._stream_id) as data:
-            frame = next(data.frames())
-            result.set_result(frame.data().squeeze())
+            if (frame := next(data.frames(), None)) is not None:
+                return cast("npt.NDArray", frame.data().squeeze())
+        raise RuntimeError("No frame available.")
 
+    def snap_image(self) -> Future[npt.NDArray]:
+        """Snap a single image and return a Future with the image data."""
+        result: Future[npt.NDArray] = Future()
+        # NOTE: ask Nathan about threading here
+        result.set_result(self.snap_image_blocking())
         return result
 
+    def prepare_sequence(self, nframes: int) -> None:
+        """Prepare for a sequence of nframes."""
 
-cam = AcquireCamera()
-cam.set_exposure_time_ms(5)
-cam.set_shape((256, 356))
-# cam.set_pixel_type(acquire.acquire.SampleType.U12)
-print(cam.properties)
-fut = cam.snap_image()
-print(fut.result().shape)
+    def start_sequence(self) -> None:
+        """Start the sequence of frames."""
+
+
+if __name__ == "__main__":
+    cam = AcquireCamera()
+    cam.update_settings(exposure_time_us=50e3, shape=(256, 256))
+    print(cam.properties)
+    fut = cam.snap_image()
+    result = fut.result()
+    print(result.shape, result.mean())
