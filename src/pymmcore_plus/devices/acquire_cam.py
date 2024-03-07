@@ -28,7 +28,6 @@ if TYPE_CHECKING:
 
 
 RT: acquire.Runtime | None = None
-DM: acquire.acquire.DeviceManager | None = None
 
 
 def get_runtime() -> acquire.Runtime:
