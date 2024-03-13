@@ -54,7 +54,6 @@ cli = ["typer >=0.4.2", "rich >=10.2.0"]
 io = ["tifffile >=2021.6.14", "zarr >=2.2"]
 test = [
     "msgpack",
-    "PySide6",
     "pytest-cov >=4",
     "pytest-qt >=4",
     "pytest >=7.3.2",

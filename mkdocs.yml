@@ -42,6 +42,7 @@ nav:
       - contributing.md
   - useq-schema: /useq-schema/
   - pymmcore-widgets: /pymmcore-widgets/
+  - napari-micromanager: /napari-micromanager/
 
 theme:
   name: "material"

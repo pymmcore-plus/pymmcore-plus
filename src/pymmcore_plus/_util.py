@@ -440,9 +440,13 @@ def listeners_connected(
 
                         ctype = getattr(Qt.ConnectionType, qt_connection_type)
                         token = signal.connect(slot, ctype)  # type: ignore
-                        tokens[attr_name].add(token)
                     else:
-                        tokens[attr_name].add(signal.connect(slot))
+                        token = signal.connect(slot)
+
+                    # This only seems to happen on PySide2
+                    if token is None or isinstance(token, bool):
+                        token = slot
+                    tokens[attr_name].add(token)
 
     try:
         yield
