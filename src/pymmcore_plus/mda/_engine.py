@@ -285,10 +285,18 @@ class MDAEngine(PMDAEngine):
             return ()
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
-        yield ImagePayload(self._mmc.getImage(), event, self.get_frame_metadata())
+
+        for cam in range(self._mmc.getNumberOfCameraChannels()):
+            data, meta = self._mmc.getTaggedImage(cam)
+            yield ImagePayload(
+                data,
+                event,
+                self.get_frame_metadata(meta, channel_index=cam),
+            )
+        # yield ImagePayload(self._mmc.getImage(), event, self.get_frame_metadata())
 
     def get_frame_metadata(
-        self, meta: Metadata | None = None, channel_index: int | None = None
+        self, meta: Metadata | dict | None = None, channel_index: int | None = None
     ) -> dict[str, Any]:
         # TODO:
 
@@ -313,6 +321,11 @@ class MDAEngine(PMDAEngine):
 
         # used by Runner
         tags["PerfCounter"] = time.perf_counter()
+
+        # if the key "Camera" is in the metadata, it will be used as the camera name;
+        # this key is present only if there are multiple cameras
+        if camera := tags.get("Camera"):
+            tags["Camera"] = camera
         return tags
 
     def teardown_event(self, event: MDAEvent) -> None:
