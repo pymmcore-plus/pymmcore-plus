@@ -288,11 +288,7 @@ class MDAEngine(PMDAEngine):
 
         for cam in range(self._mmc.getNumberOfCameraChannels()):
             data, meta = self._mmc.getTaggedImage(cam)
-            yield ImagePayload(
-                data,
-                event,
-                self.get_frame_metadata(meta, channel_index=cam),
-            )
+            yield ImagePayload(data, event, self.get_frame_metadata(meta))
         # yield ImagePayload(self._mmc.getImage(), event, self.get_frame_metadata())
 
     def get_frame_metadata(
