@@ -45,7 +45,7 @@ try:
             yield pbar
 
 except ImportError:  # pragma: no cover
-    progress = None
+    progress = None  # type: ignore
 
     def _pretty_print(text: str, color: str = "", emoji: str = "") -> None:
         print(text)
@@ -70,7 +70,7 @@ def _get_download_name(url: str) -> str:
     return ""
 
 
-def _get_spinner(log_msg: _MsgLogger) -> Callable[[str], ContextManager[None]]:
+def _get_spinner(log_msg: _MsgLogger) -> Callable[[str], ContextManager]:
     if log_msg is _pretty_print:
         spinner = _spinner
     else:
@@ -177,7 +177,7 @@ def _download_url(url: str, output_path: Path, show_progress: bool = True) -> No
             pbar.update(task_id, advance=block_size)
 
     else:
-        pbar = nullcontext()
+        pbar = nullcontext()  # type: ignore
 
         def hook(count: float, block_size: float, total_size: float) -> None: ...
 
