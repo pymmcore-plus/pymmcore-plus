@@ -6,7 +6,7 @@ import os.path
 import shutil
 import tempfile
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Container, Literal, MutableMapping, Protocol
+from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
 import numpy as np
 
@@ -198,7 +198,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         if self._minify_metadata:
             self._minify_zattrs_metadata()
 
-    def _populate_xarray_coords(self, dims: Container[str] | None = None) -> None:
+    def _populate_xarray_coords(self) -> None:
         # FIXME:
         # This provides support for xarray coordinates... but it's not obvious
         # how we should deal with positions that have different shapes, etc...
@@ -219,7 +219,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
                     sizes.update(y=shape[-2], x=shape[-1])
 
         for dim, size in sizes.items():
-            if size == 0 or (dims and dim not in dims):
+            if size == 0:
                 continue
 
             # TODO: this could be much cleaner
@@ -243,8 +243,9 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
             elif dim in "yx":
                 coords = np.arange(size, dtype="float") * px
                 attrs["units"] = "um"
-            # elif dim == "g" and seq.grid_plan:
-            # TODO
+            elif dim == "g":
+                coords = np.arange(size)
+                # TODO
             else:
                 continue
 

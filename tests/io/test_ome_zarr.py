@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 import useq
 from pymmcore_plus.mda.handlers import OMEZarrWriter
@@ -13,6 +14,11 @@ if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")
+
+try:
+    import xarray as xr
+except ImportError:
+    xr = None
 
 
 SIMPLE_MDA = useq.MDASequence(
@@ -109,3 +115,16 @@ def test_ome_zarr_writer(
         # check that the MDASequence was stored
         stored_seq = useq.MDASequence.parse_obj(v.attrs["useq_MDASequence"])
         assert stored_seq == mda
+
+        if xr is not None:
+            # check that the xarray was written
+            ds = writer.as_xarray()
+            assert isinstance(ds, xr.Dataset)
+            assert ds[k].sizes == expected_shapes[k]
+            # check that *most* dimensions have coordinates
+            for dim_name in ds.dims:
+                if dim_name != "g":
+                    assert dim_name in ds.coords
+
+    # smoke test the isel method
+    assert isinstance(writer.isel(p=0, t=0, x=slice(0, 100)), np.ndarray)
