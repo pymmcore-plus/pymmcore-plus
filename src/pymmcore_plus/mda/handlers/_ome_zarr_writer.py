@@ -189,7 +189,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
     def finalize_metadata(self) -> None:
         """Called by superclass in sequenceFinished.  Flush metadata to disk."""
         # flush frame metadata to disk
-        self._populate_xarray_coords(dims={"t", "y", "x"})
+        self._populate_xarray_coords()
         while self.frame_metadatas:
             key, metas = self.frame_metadatas.popitem()
             if key in self.position_arrays:
@@ -198,9 +198,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         if self._minify_metadata:
             self._minify_zattrs_metadata()
 
-    def _populate_xarray_coords(
-        self, shape: Sequence[int] | None = None, dims: Container[str] | None = None
-    ) -> None:
+    def _populate_xarray_coords(self, dims: Container[str] | None = None) -> None:
         # FIXME:
         # This provides support for xarray coordinates... but it's not obvious
         # how we should deal with positions that have different shapes, etc...
@@ -218,7 +216,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
                 shape = self.position_arrays[key].shape
                 px = metas[-1].get("PixelSizeUm", 1)
                 with suppress(IndexError):
-                    sizes.update(y=shape[-2], x=shape[-1])  # type: ignore
+                    sizes.update(y=shape[-2], x=shape[-1])
 
         for dim, size in sizes.items():
             if size == 0 or (dims and dim not in dims):
@@ -276,7 +274,6 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         ary.attrs["_ARRAY_DIMENSIONS"] = dims
         if seq := self.current_sequence:
             ary.attrs["useq_MDASequence"] = json.loads(seq.json(exclude_unset=True))
-        self._populate_xarray_coords(shape=shape)
         return ary
 
     # # the superclass implementation is all we need

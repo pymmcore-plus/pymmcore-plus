@@ -90,10 +90,11 @@ def test_ome_zarr_writer(
     if store:
         # ensure that non-memory stores were written to disk
         data = zarr.open(writer.group.store.path)
-        for _, ary in data.arrays():
-            # ensure real data was written
-            assert ary.nchunks_initialized > 0
-            assert ary[0, 0].mean() > ary.fill_value
+        for k, ary in data.arrays():
+            if k in writer.position_arrays:
+                # ensure real data was written
+                assert ary.nchunks_initialized > 0
+                assert ary[0, 0].mean() > ary.fill_value
     else:
         data = writer.group
 
