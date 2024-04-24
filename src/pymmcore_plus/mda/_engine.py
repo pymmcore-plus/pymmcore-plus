@@ -310,6 +310,10 @@ class MDAEngine(PMDAEngine):
         # these are added by AcqEngJ
         # yyyy-MM-dd HH:mm:ss.mmmmmm  # NOTE AcqEngJ omits microseconds
         tags["Time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        tags["PixelSizeUm"] = self._mmc.getPixelSizeUm(True)  # true == cached
+        tags["XPositionUm"] = self._mmc.getXPosition()
+        tags["YPositionUm"] = self._mmc.getYPosition()
+        tags["ZPositionUm"] = self._mmc.getZPosition()
 
         # used by Runner
         tags["PerfCounter"] = time.perf_counter()
