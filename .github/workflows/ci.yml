@@ -146,7 +146,7 @@ jobs:
 
   deploy:
     needs: test
-    if: ${{ github.repository == 'pymmcore-plus/useq-schema' && contains(github.ref, 'tags') }}
+    if: ${{ github.repository == 'pymmcore-plus/pymmcore-plus' && contains(github.ref, 'tags') }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
