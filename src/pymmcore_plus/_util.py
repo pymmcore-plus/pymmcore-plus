@@ -141,16 +141,21 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     return full_list
 
 
-def _qt_app_is_running() -> bool:
+def _imported_qt_modules() -> Iterator[str]:
     for modname in {"PyQt5", "PySide2", "PyQt6", "PySide6"}:
         if modname in sys.modules:
-            try:
-                # in broken environments modname can be a namespace package...
-                # and QtWidgets will still be unavailable
-                QtWidgets = importlib.import_module(".QtWidgets", modname)
-            except ImportError:  # pragma: no cover
-                continue
-            return QtWidgets.QApplication.instance() is not None
+            yield modname
+
+
+def _qt_app_is_running() -> bool:
+    for modname in _imported_qt_modules():
+        try:
+            # in broken environments modname can be a namespace package...
+            # and QtWidgets will still be unavailable
+            QtWidgets = importlib.import_module(".QtWidgets", modname)
+        except ImportError:  # pragma: no cover
+            continue
+        return QtWidgets.QApplication.instance() is not None
     return False  # pragma: no cover
 
 
@@ -168,10 +173,11 @@ def signals_backend() -> Literal["qt", "psygnal"]:
         )
         env_var = "auto"
 
+    qt_app_running = _qt_app_is_running()
     if env_var == "auto":
-        return "qt" if _qt_app_is_running() else "psygnal"
+        return "qt" if qt_app_running else "psygnal"
     if env_var == "qt":
-        if _qt_app_is_running():
+        if qt_app_running or list(_imported_qt_modules()):
             return "qt"
         warnings.warn(
             f"{MMCORE_PLUS_SIGNALS_BACKEND} set to 'qt', but no Qt app is running. "
