@@ -87,7 +87,7 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
         # so we reorder the ordered position_sizes dicts.  This will ensure
         # that the array indices created from event.index are in the correct order.
         if not self._is_ome:
-            self.position_sizes = [
+            self._position_sizes = [
                 {k: x[k] for k in IMAGEJ_AXIS_ORDER if k.lower() in x}
                 for x in self.position_sizes
             ]
