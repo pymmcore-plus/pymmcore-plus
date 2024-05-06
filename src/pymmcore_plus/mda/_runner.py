@@ -89,7 +89,7 @@ class MDARunner:
         if self.is_running():  # pragma: no cover
             raise RuntimeError(
                 "Cannot register a new engine when the current engine is running "
-                "an acquistion. Please cancel the current engine's acquistion "
+                "an acquisition. Please cancel the current engine's acquisition "
                 "before registering"
             )
 
@@ -115,7 +115,7 @@ class MDARunner:
         return self._signals
 
     def is_running(self) -> bool:
-        """Return True if an acquistion is currently underway.
+        """Return True if an acquisition is currently underway.
 
         This will return True at any point between the emission of the
         [`sequenceStarted`][pymmcore_plus.mda.PMDASignaler.sequenceStarted] and
@@ -125,19 +125,19 @@ class MDARunner:
         Returns
         -------
         bool
-            Whether an acquistion is underway.
+            Whether an acquisition is underway.
         """
         return self._running
 
     def is_paused(self) -> bool:
-        """Return True if the acquistion is currently paused.
+        """Return True if the acquisition is currently paused.
 
         Use `toggle_pause` to change the paused state.
 
         Returns
         -------
         bool
-            Whether the current acquistion is paused.
+            Whether the current acquisition is paused.
         """
         return self._paused
 
@@ -145,7 +145,7 @@ class MDARunner:
         """Cancel the currently running acquisition.
 
         This is a no-op if no acquisition is currently running.
-        If an acquisition is running then this will cancel the acquistion and
+        If an acquisition is running then this will cancel the acquisition and
         a sequenceCanceled signal, followed by a sequenceFinished signal will
         be emitted.
         """
@@ -157,7 +157,7 @@ class MDARunner:
 
         To get whether the acquisition is currently paused use the
         [`is_paused`][pymmcore_plus.mda.MDARunner.is_paused] method. This method is a
-        no-op if no acquistion is currently underway.
+        no-op if no acquisition is currently underway.
         """
         if self.is_running():
             self._paused = not self._paused
@@ -169,7 +169,7 @@ class MDARunner:
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
     ) -> None:
-        """Run the multi-dimensional acquistion defined by `sequence`.
+        """Run the multi-dimensional acquisition defined by `sequence`.
 
         Most users should not use this directly as it will block further
         execution. Instead, use the
@@ -187,8 +187,8 @@ class MDARunner:
 
             - A string or Path to a directory to save images to. A handler will be
                 created automatically based on the extension of the path.
-                - `.zarr` files will be handled by `OMEZarrWriter`
-                - `.ome.tiff` files will be handled by `OMETiffWriter`
+                - `.zarr` files will be handled by `SOMEZarrWriter`
+                - `.some.tiff` files will be handled by `SOMETiffWriter`
                 - A directory with no extension will be handled by `ImageSequenceWriter`
             - A handler object that implements the `DataHandler` protocol, currently
                 meaning it has a `frameReady` method.  See `mda_listeners_connected`
@@ -244,14 +244,14 @@ class MDARunner:
         """
         path = str(Path(path).expanduser().resolve())
         if path.endswith(".zarr"):
-            from pymmcore_plus.mda.handlers import OMEZarrWriter
+            from pymmcore_plus.mda.handlers import SOMEZarrWriter
 
-            return OMEZarrWriter(path)
+            return SOMEZarrWriter(path)
 
         if path.endswith((".tiff", ".tif")):
-            from pymmcore_plus.mda.handlers import OMETiffWriter
+            from pymmcore_plus.mda.handlers import SOMETiffWriter
 
-            return OMETiffWriter(path)
+            return SOMETiffWriter(path)
 
         # FIXME: ugly hack for the moment to represent a non-existent directory
         # there are many features that ImageSequenceWriter supports, and it's unclear

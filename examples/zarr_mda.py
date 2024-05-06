@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
-from pymmcore_plus.mda.handlers import OMEZarrWriter
+from pymmcore_plus.mda.handlers import SOMEZarrWriter
 from useq import MDASequence
 
 core = CMMCorePlus.instance()
@@ -16,10 +16,10 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
-# use OMEZarrHandler("file.zarr") to write to a directory
-# use OMEZarrHandler.in_tmpdir() to write to a temporary directory
+# use SOMEZarrHandler("file.zarr") to write to a directory
+# use SOMEZarrHandler.in_tmpdir() to write to a temporary directory
 # pass None or no arguments to write to Memory
-writer = OMEZarrWriter("example.zarr", overwrite=True, minify_attrs_metadata=True)
+writer = SOMEZarrWriter("example.zarr", overwrite=True, minify_attrs_metadata=True)
 
 with mda_listeners_connected(writer):
     core.mda.run(sequence)

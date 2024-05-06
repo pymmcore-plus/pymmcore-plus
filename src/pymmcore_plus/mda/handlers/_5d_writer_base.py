@@ -23,7 +23,7 @@ class _5DWriterBase(Generic[T]):
     """Base class for writers that write 5D data to disk.
 
     This is a general-purpose writer that can be used for writers that deal strictly
-    with a 5D data model (i.e. "tzcyx") such as the OME data model.  On each frameReady
+    with a 5D data model (i.e. "tzcyx") such as the SOME data model.  On each frameReady
     event, it:
 
         1. Determines the position being acquired
@@ -131,7 +131,7 @@ class _5DWriterBase(Generic[T]):
                 # an MDASequence.  Or, we need to create a better "mock" MDASequence
                 # for generic Iterable[MDAEvent]
                 raise NotImplementedError(
-                    "Writing OME file without a MDASequence not yet implemented"
+                    "Writing SOME file without a MDASequence not yet implemented"
                 )
 
             # create the new array, getting XY chunksize from the frame
@@ -164,7 +164,7 @@ class _5DWriterBase(Generic[T]):
             The dtype for the array.
         dim_sizes : dict[str, int]
             Ordered mapping of dimension names to sizes.  This will not be more than 5D
-            for OME, and should only include the axis keys "tzcyx".
+            for SOME, and should only include the axis keys "tzcyx".
             Example: `{"t": 10, "z": 3, "c": 2, "y": 512, "x": 512}`
         """
         raise NotImplementedError("Subclasses must implement this method")

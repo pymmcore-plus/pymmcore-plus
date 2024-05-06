@@ -1,5 +1,5 @@
 from ._img_sequence_writer import ImageSequenceWriter
-from ._ome_tiff_writer import OMETiffWriter
-from ._ome_zarr_writer import OMEZarrWriter
+from ._some_tiff_writer import SOMETiffWriter
+from ._some_zarr_writer import SOMEZarrWriter
 
-__all__ = ["ImageSequenceWriter", "OMEZarrWriter", "OMETiffWriter"]
+__all__ = ["ImageSequenceWriter", "SOMEZarrWriter", "SOMETiffWriter"]
