@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+import numpy as np
 import pytest
 import useq
 from pymmcore_plus.mda.handlers import OMEZarrWriter
@@ -13,6 +14,11 @@ if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")
+
+try:
+    import xarray as xr
+except ImportError:
+    xr = None
 
 
 SIMPLE_MDA = useq.MDASequence(
@@ -90,20 +96,35 @@ def test_ome_zarr_writer(
     if store:
         # ensure that non-memory stores were written to disk
         data = zarr.open(writer.group.store.path)
-        for _, ary in data.arrays():
-            # ensure real data was written
-            assert ary.nchunks_initialized > 0
-            assert ary[0, 0].mean() > ary.fill_value
+        for k, ary in data.arrays():
+            if k in writer.position_arrays:
+                # ensure real data was written
+                assert ary.nchunks_initialized > 0
+                assert ary[0, 0].mean() > ary.fill_value
     else:
         data = writer.group
 
     # check that arrays have expected shape and dimensions
-    actual_shapes = {
-        k: dict(zip(v.attrs["_ARRAY_DIMENSIONS"], v.shape)) for k, v in data.arrays()
-    }
-    assert actual_shapes == expected_shapes
+    for k, v in data.arrays():
+        if k not in writer.position_arrays:
+            continue  # not a position array
 
-    # check that the MDASequence was stored
-    for _, v in data.arrays():
+        actual_shape = dict(zip(v.attrs["_ARRAY_DIMENSIONS"], v.shape))
+        assert expected_shapes[k] == actual_shape
+
+        # check that the MDASequence was stored
         stored_seq = useq.MDASequence.parse_obj(v.attrs["useq_MDASequence"])
         assert stored_seq == mda
+
+        if xr is not None:
+            # check that the xarray was written
+            ds = writer.as_xarray()
+            assert isinstance(ds, xr.Dataset)
+            assert ds[k].sizes == expected_shapes[k]
+            # check that *most* dimensions have coordinates
+            for dim_name in ds.dims:
+                if dim_name != "g":
+                    assert dim_name in ds.coords
+
+    # smoke test the isel method
+    assert isinstance(writer.isel(p=0, t=0, x=slice(0, 100)), np.ndarray)

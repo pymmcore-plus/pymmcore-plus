@@ -144,5 +144,5 @@ docs/_includes/_cmmcore_members.md
 docs/_includes/_cmmcore_table.md
 docs/_includes/_cmmcoreplus_members.md
 
-example_*.ome.tiff
+example_*.some.tiff
 example.zarr
