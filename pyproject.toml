@@ -181,3 +181,6 @@ ignore = [
     "tests/**/*",
     "tox.ini",
 ]
+
+[tool.typos.default]
+extend-ignore-identifiers-re = ["(?i)nd2?.*", "(?i)ome"]
