@@ -70,7 +70,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
     │               └── y
     │                   └── x   # chunks will be each XY plane
     ├── ...
-    ├── pn
+    ├── p<n>
     │   ├── .zarray
     │   ├── .zattrs
     │   └── t...
