@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Mapping
 
 import tensorstore as ts
 
@@ -11,18 +11,19 @@ if TYPE_CHECKING:
 
 
 class TensorStoreWriter:
-    def __init__(self, path: str, overwrite: bool = False) -> None:
+    def __init__(self, path: str | None = None, overwrite: bool = False) -> None:
         # storage of individual frame metadata
         # maps position key to list of frame metadata
         self.frame_metadatas: list[tuple[useq.MDAEvent, dict]] = []
         self.resize_at = 100
         self.delete_existing = overwrite
-        self.path = path
-        self.driver = "file"
+        self.driver = "file" if path else "memory"
+        self.path = path or ""
         self.compressor = None
         self._store: ts.TensorStore | None = None
         self._counter = 0
         self._futures: list[ts.Future] = []
+        self._indices: dict[frozenset[tuple[str, int]], int] = {}
 
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """On sequence started, simply store the sequence."""
@@ -57,9 +58,20 @@ class TensorStoreWriter:
                 exclusive_max=(self._counter + self.resize_at, *self._store.shape[-2:])
             ).result()
 
+        self._indices[frozenset(event.index.items())] = self._counter
         self._futures.append(self._store[self._counter].write(frame))
         self.frame_metadatas.append((event, meta))
         self._counter += 1
+
+    def isel(
+        self,
+        indexers: Mapping[str, int | slice] | None = None,
+        **indexers_kwargs: int | slice,
+    ) -> np.ndarray:
+        """Select data from the array."""
+        # FIXME: will fail on slices
+        index = self._indices[frozenset(indexers.items())]
+        return self._store[index].read().result()
 
     def _make_spec(self, frame: np.ndarray) -> dict:
         return {
