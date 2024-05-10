@@ -1,17 +1,21 @@
 from __future__ import annotations
 
 import json
-from typing import TYPE_CHECKING, Mapping
-
-import tensorstore as ts
+from typing import TYPE_CHECKING, Any, Mapping
 
 if TYPE_CHECKING:
     import numpy as np
     import useq
 
 
-class TensorStoreWriter:
+class TensorStoreHandler:
     def __init__(self, path: str | None = None, overwrite: bool = False) -> None:
+        try:
+            import tensorstore as ts
+        except ImportError as e:
+            raise ImportError("Tensorstore is required to use this handler.") from e
+
+        self.ts = ts
         # storage of individual frame metadata
         # maps position key to list of frame metadata
         self.frame_metadatas: list[tuple[useq.MDAEvent, dict]] = []
@@ -20,7 +24,7 @@ class TensorStoreWriter:
         self.driver = "file" if path else "memory"
         self.path = path or ""
         self.compressor = None
-        self._store: ts.TensorStore | None = None
+        self._store: Any = None  # tensorstore doesn't have typing.
         self._counter = 0
         self._futures: list[ts.Future] = []
         self._indices: dict[frozenset[tuple[str, int]], int] = {}
@@ -52,7 +56,7 @@ class TensorStoreWriter:
     def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
         """Write frame to the zarr array for the appropriate position."""
         if self._store is None:
-            self._store = self._make_tensorstore(self._make_spec(frame))
+            self._store = self._new_tensorstore(self._make_spec(frame))
         elif self._counter >= self._store.shape[0]:
             self._store = self._store.resize(
                 exclusive_max=(self._counter + self.resize_at, *self._store.shape[-2:])
@@ -90,5 +94,5 @@ class TensorStoreWriter:
             },
         }
 
-    def _make_tensorstore(self, spec: dict) -> ts.TensorStore:
-        return ts.open(spec).result()
+    def _new_tensorstore(self, spec: dict) -> Any:
+        return self.ts.open(spec).result()
