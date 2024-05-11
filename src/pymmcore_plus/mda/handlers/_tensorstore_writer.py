@@ -233,7 +233,9 @@ class TensorStoreHandler:
         new_shape = [self._frame_index + self._size_increment, *store.shape[-2:]]
         return store.resize(exclusive_max=new_shape, expand_only=True)
 
-    def _event_index_to_store_index(self, index: Mapping) -> ts.DimExpression:
+    def _event_index_to_store_index(
+        self, index: Mapping[str, int | slice]
+    ) -> ts.DimExpression:
         """Convert event index to store index.
 
         The return value is safe to use as an index to self._store[...]
@@ -245,7 +247,7 @@ class TensorStoreHandler:
             idx: list | int | ts.DimExpression = self._get_frame_indices(index)
         else:
             try:
-                idx = self._frame_indices[frozenset(index.items())]
+                idx = self._frame_indices[frozenset(index.items())]  # type: ignore
             except KeyError as e:
                 raise KeyError(f"Index {index} not found in frame_indices.") from e
         return self._ts.d[FRAME_DIM][idx]
