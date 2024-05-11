@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import useq
-from pymmcore_plus.mda.handlers import OMEZarrWriter
+from pymmcore_plus.mda.handlers import OMEZarrWriter, TensorStoreHandler
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -65,18 +65,18 @@ COMPLEX_EXPECTATION = {
 }
 
 
-@pytest.mark.parametrize(
-    "store, mda, expected_shapes",
-    [
-        (None, SIMPLE_MDA, SIMPLE_EXPECTATION),
-        (None, MULTIPOINT_MDA, MULTIPOINT_EXPECTATION),
-        (None, FULL_MDA, FULL_EXPECTATION),
-        ("out.zarr", FULL_MDA, FULL_EXPECTATION),
-        (None, FULL_MDA, FULL_EXPECTATION),
-        ("tmp", FULL_MDA, FULL_EXPECTATION),
-        (None, COMPLEX_MDA, COMPLEX_EXPECTATION),
-    ],
-)
+CASES: list[str | None, useq.MDASequence, dict[str, dict]] = [
+    (None, SIMPLE_MDA, SIMPLE_EXPECTATION),
+    (None, MULTIPOINT_MDA, MULTIPOINT_EXPECTATION),
+    (None, FULL_MDA, FULL_EXPECTATION),
+    ("out.zarr", FULL_MDA, FULL_EXPECTATION),
+    (None, FULL_MDA, FULL_EXPECTATION),
+    ("tmp", FULL_MDA, FULL_EXPECTATION),
+    (None, COMPLEX_MDA, COMPLEX_EXPECTATION),
+]
+
+
+@pytest.mark.parametrize("store, mda, expected_shapes", CASES)
 def test_ome_zarr_writer(
     store: str | None,
     mda: useq.MDASequence,
@@ -128,3 +128,45 @@ def test_ome_zarr_writer(
 
     # smoke test the isel method
     assert isinstance(writer.isel(p=0, t=0, x=slice(0, 100)), np.ndarray)
+
+
+@pytest.mark.parametrize("store, mda, expected_shapes", CASES)
+def test_tensorstore_writer(
+    store: str | None,
+    mda: useq.MDASequence,
+    expected_shapes: dict[str, dict],
+    tmp_path: Path,
+    core: CMMCorePlus,
+) -> None:
+    if store == "tmp":
+        writer = TensorStoreHandler.in_tmpdir()
+    elif store is None:
+        writer = TensorStoreHandler()
+    else:
+        writer = TensorStoreHandler(path=tmp_path / store)
+
+    core.mda.run(mda, output=writer)
+
+    assert writer.store is not None
+
+    expected_sizes = {}
+    for sizes in expected_shapes.values():
+        for dim, size in sizes.items():
+            expected_sizes[dim] = max(sizes.get(dim, 0), size)
+    if len(expected_shapes) > 1:
+        expected_sizes["p"] = len(expected_shapes)
+
+    sizes = dict(zip(writer.store.domain.labels, writer.store.shape))
+    assert sizes == expected_sizes
+
+    if store:
+        # ensure that non-memory stores were written to disk
+        ary = zarr.open(writer.store.kvstore.path)
+        # ensure real data was written
+        assert ary.nchunks_initialized > 0
+        assert ary[0, 0].mean() > (ary.fill_value or 0)
+
+    # smoke test the isel method
+    x = writer.isel(t=0, c=0, x=slice(0, 100))
+    assert isinstance(x, np.ndarray)
+    assert x.shape[-1] == 100

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
-from pymmcore_plus.mda.handlers._tensorstore_writer import TensorStoreHandler
+from pymmcore_plus.mda.handlers import TensorStoreHandler
 from useq import MDASequence
 
 core = CMMCorePlus.instance()

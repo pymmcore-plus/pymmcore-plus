@@ -1,12 +1,19 @@
 from __future__ import annotations
 
+import atexit
 import json
+import os
+import shutil
+import tempfile
 import warnings
 from itertools import product
-from typing import TYPE_CHECKING, cast
+from os import PathLike
+from typing import TYPE_CHECKING, Any, cast
+
+from ._util import position_sizes
 
 if TYPE_CHECKING:
-    from typing import Literal, Mapping, Sequence, TypeAlias
+    from typing import Literal, Mapping, Self, Sequence, TypeAlias
 
     import numpy as np
     import tensorstore as ts
@@ -59,7 +66,7 @@ class TensorStoreHandler:
         *,
         driver: TsDriver = "zarr",
         kvstore: str | dict | None = "memory://",
-        path: str | None = None,
+        path: str | PathLike | None = None,
         delete_existing: bool = False,
         spec: Mapping | None = None,
     ) -> None:
@@ -95,6 +102,50 @@ class TensorStoreHandler:
 
         # the highest index seen for each axis
         self._axis_max: dict[str, int] = {}
+
+    @property
+    def store(self) -> ts.TensorStore | None:
+        """The current tensorstore."""
+        return self._store
+
+    @classmethod
+    def in_tmpdir(
+        cls,
+        suffix: str | None = "",
+        prefix: str | None = "pymmcore_zarr_",
+        dir: str | PathLike[str] | None = None,
+        cleanup_atexit: bool = True,
+        **kwargs: Any,
+    ) -> Self:
+        """Create TensorStoreHandler that writes to a temporary directory.
+
+        Parameters
+        ----------
+        suffix : str, optional
+            If suffix is specified, the file name will end with that suffix, otherwise
+            there will be no suffix.
+        prefix : str, optional
+            If prefix is specified, the file name will begin with that prefix, otherwise
+            a default prefix is used.
+        dir : str or PathLike, optional
+            If dir is specified, the file will be created in that directory, otherwise
+            a default directory is used (tempfile.gettempdir())
+        cleanup_atexit : bool, optional
+            Whether to automatically cleanup the temporary directory when the python
+            process exits. Default is True.
+        **kwargs
+            Remaining kwargs are passed to `TensorStoreHandler.__init__`
+        """
+        # same as zarr.storage.TempStore, but with option not to cleanup
+        path = tempfile.mkdtemp(suffix=suffix, prefix=prefix, dir=dir)
+        if cleanup_atexit:
+
+            @atexit.register
+            def _atexit_rmtree(_path: str = path) -> None:
+                if os.path.isdir(_path):
+                    shutil.rmtree(_path)
+
+        return cls(path=path, **kwargs)
 
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """On sequence started, simply store the sequence."""
@@ -174,8 +225,16 @@ class TensorStoreHandler:
     ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[str, ...]]:
         labels: tuple[str, ...]
         if seq is not None and seq.sizes:
+            # expand the sizes to include the largest size we encounter for each axis
+            # in the case of positions with subsequences, we'll still end up with a
+            # jagged array, but it won't take extra space, and we won't get index errors
+            max_sizes = seq.sizes.copy()
+            for psize in position_sizes(seq):
+                for k, v in psize.items():
+                    max_sizes[k] = max(max_sizes.get(k, 0), v)
+
             # remove axes with length 0
-            labels, sizes = zip(*(x for x in seq.sizes.items() if x[1]))
+            labels, sizes = zip(*(x for x in max_sizes.items() if x[1]))
             full_shape: tuple[int, ...] = (*sizes, *frame_shape)
         else:
             labels = (FRAME_DIM,)
