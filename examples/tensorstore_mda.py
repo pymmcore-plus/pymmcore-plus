@@ -10,13 +10,13 @@ core.loadSystemConfiguration()
 
 sequence = MDASequence(
     channels=["DAPI", {"config": "FITC", "exposure": 1}],
-    # stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
+    stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
     time_plan={"interval": 2, "loops": 3},
     z_plan={"range": 4, "step": 0.5},
     axis_order="tpcz",
 )
 
-writer = TensorStoreHandler("dataset", overwrite=True)
+writer = TensorStoreHandler(path="example_ts", delete_existing=True, driver="zarr")
 
 with mda_listeners_connected(writer):
     core.mda.run(sequence)
