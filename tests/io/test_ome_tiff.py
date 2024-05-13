@@ -3,6 +3,7 @@ from typing import TYPE_CHECKING, cast
 
 import pytest
 import useq
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import OMETiffWriter
@@ -55,12 +56,19 @@ def test_ome_tiff_writer(
     n_positions = seq.sizes.get("p", 1)
     if n_positions > 1:
         ext = ".ome.tif" if ome else ".tif"
-        files = [str(dest).replace(ext, f"_p{i}{ext}") for i in range(n_positions)]
+        folder = Path(dest)
+        files = [folder.name.replace(ext, f"_p{i}{ext}") for i in range(n_positions)]
     else:
         files = [str(dest)]
 
     # check that the files exist and have the correct shape
+    if n_positions > 1:
+        assert dest.is_dir()
+        assert dest.exists()
+        assert set(files) == {f.name for f in dest.iterdir()}
+
     for file in files:
+        file = dest / file if n_positions > 1 else file
         assert Path(file).exists()
         data = cast("np.ndarray", tf.imread(file))
 
