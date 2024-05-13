@@ -7,7 +7,7 @@ import sys
 import warnings
 from collections import defaultdict
 from contextlib import contextmanager, suppress
-from functools import wraps
+from functools import lru_cache, wraps
 from importlib.metadata import PackageNotFoundError
 from pathlib import Path
 from time import sleep
@@ -475,6 +475,7 @@ def _is_qt_signal(obj: Any) -> TypeGuard[PSignalInstance]:
     return "Qt" in modname or "Shiboken" in modname
 
 
+@lru_cache(maxsize=None)
 def system_info() -> dict[str, str]:
     """Return a dictionary of system information.
 

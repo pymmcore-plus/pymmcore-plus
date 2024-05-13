@@ -1,15 +1,15 @@
 from __future__ import annotations
 
 import time
-from contextlib import suppress
-from datetime import datetime
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     Iterable,
     Iterator,
-    Mapping,
+    MutableMapping,
     NamedTuple,
+    Sequence,
     cast,
 )
 
@@ -17,39 +17,18 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
-from pymmcore_plus.core._constants import PixelType
 from pymmcore_plus.core._sequencing import SequencedEvent
+from pymmcore_plus.core.metadata import Format, get_metadata_function
 
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
-    from typing import TypedDict
-
     from numpy.typing import NDArray
 
-    from pymmcore_plus.core import CMMCorePlus, Metadata
+    from pymmcore_plus.core import CMMCorePlus
+    from pymmcore_plus.core._metadata import Metadata
 
     from ._protocol import PImagePayload
-
-    # currently matching keys from metadata from AcqEngJ
-    SummaryMetadata = TypedDict(
-        "SummaryMetadata",
-        {
-            "DateAndTime": str,
-            "PixelType": str,
-            "PixelSize_um": float,
-            "PixelSizeAffine": str,
-            "Core-XYStage": str,
-            "Core-Focus": str,
-            "Core-Autofocus": str,
-            "Core-Camera": str,
-            "Core-Galvo": str,
-            "Core-ImageProcessor": str,
-            "Core-SLM": str,
-            "Core-Shutter": str,
-            "AffineTransform": str,
-        },
-    )
 
 
 class MDAEngine(PMDAEngine):
@@ -72,9 +51,25 @@ class MDAEngine(PMDAEngine):
         set to `True` to improve performance.
     """
 
-    def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = False) -> None:
+    _get_summary_meta: Callable[[CMMCorePlus], MutableMapping]
+    _get_frame_meta: Callable[[CMMCorePlus], MutableMapping]
+
+    def __init__(
+        self,
+        mmc: CMMCorePlus,
+        *,
+        use_hardware_sequencing: bool = False,
+        summary_metadata_format: str = Format.SUMMARY_FULL,
+        summary_metadata_version: str = "1.0",
+        frame_metadata_format: str = Format.FRAME,
+        frame_metadata_version: str = "1.0",
+    ) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
+        self.set_summary_metadata_format(
+            summary_metadata_format, summary_metadata_version
+        )
+        self.set_frame_metadata_format(frame_metadata_format, frame_metadata_version)
 
         # used to check if the hardware autofocus is engaged when the sequence begins.
         # if it is, we will re-engage it after the autofocus action (if successful).
@@ -91,14 +86,29 @@ class MDAEngine(PMDAEngine):
         # Note: getAutoShutter() is True when no config is loaded at all
         self._autoshutter_was_set: bool = self._mmc.getAutoShutter()
 
+        # -----
+        # The following values are stored during setup_sequence simply to speed up
+        # retrieval of metadata during each frame.
+        # sequence of (device, property) of all properties used in any of the presets
+        # in the channel group.
+        self._config_device_props: dict[str, Sequence[tuple[str, str]]] = {}
+
     @property
     def mmcore(self) -> CMMCorePlus:
         """The `CMMCorePlus` instance to use for hardware control."""
         return self._mmc
 
+    def set_summary_metadata_format(self, format: str, version: str) -> None:
+        """Set the format and version for the summary metadata."""
+        self._get_summary_meta = get_metadata_function(format, version)
+
+    def set_frame_metadata_format(self, format: str, version: str) -> None:
+        """Set the format and version for the frame metadata."""
+        self._get_frame_meta = get_metadata_function(format, version)
+
     # ===================== Protocol Implementation =====================
 
-    def setup_sequence(self, sequence: MDASequence) -> Mapping[str, Any]:
+    def setup_sequence(self, sequence: MDASequence) -> MutableMapping[str, Any]:
         """Setup the hardware for the entire sequence."""
         # clear z_correction for new sequence
         self._z_correction.clear()
@@ -108,6 +118,7 @@ class MDAEngine(PMDAEngine):
 
             self._mmc = CMMCorePlus.instance()
 
+        self._update_config_device_props()
         # get if the autofocus is engaged at the start of the sequence
         self._af_was_engaged = self._mmc.isContinuousFocusLocked()
 
@@ -117,28 +128,9 @@ class MDAEngine(PMDAEngine):
         self._autoshutter_was_set = self._mmc.getAutoShutter()
         return self.get_summary_metadata()
 
-    def get_summary_metadata(self) -> SummaryMetadata:
+    def get_summary_metadata(self) -> MutableMapping:
         """Get the summary metadata for the sequence."""
-        pt = PixelType.for_bytes(
-            self._mmc.getBytesPerPixel(), self._mmc.getNumberOfComponents()
-        )
-        affine = self._mmc.getPixelSizeAffine(True)  # true == cached
-
-        return {
-            "DateAndTime": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
-            "PixelType": str(pt),
-            "PixelSize_um": self._mmc.getPixelSizeUm(),
-            "PixelSizeAffine": ";".join(str(x) for x in affine),
-            "Core-XYStage": self._mmc.getXYStageDevice(),
-            "Core-Focus": self._mmc.getFocusDevice(),
-            "Core-Autofocus": self._mmc.getAutoFocusDevice(),
-            "Core-Camera": self._mmc.getCameraDevice(),
-            "Core-Galvo": self._mmc.getGalvoDevice(),
-            "Core-ImageProcessor": self._mmc.getImageProcessorDevice(),
-            "Core-SLM": self._mmc.getSLMDevice(),
-            "Core-Shutter": self._mmc.getShutterDevice(),
-            "AffineTransform": "Undefined",
-        }
+        return self._get_summary_meta(self._mmc)
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()
@@ -286,41 +278,25 @@ class MDAEngine(PMDAEngine):
             return
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
-        yield ImagePayload(self._mmc.getImage(), event, self.get_frame_metadata())
+
+        for cam in range(self._mmc.getNumberOfCameraChannels()):
+            yield ImagePayload(
+                self._mmc.getImage(),
+                event,
+                self.get_frame_metadata(event, cam_index=cam),
+            )
 
     def get_frame_metadata(
-        self, meta: Metadata | None = None, channel_index: int | None = None
+        self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0
     ) -> dict[str, Any]:
-        # TODO:
-
-        # this is not a very fast method, and it is called for every frame.
-        # Nico Stuurman has suggested that it was a mistake for MM to pull so much
-        # metadata for every frame.  So we'll begin with a more conservative approach.
-
-        # while users can now simply re-implement this method,
-        # consider coming up with a user-configurable way to specify needed metadata
-
-        # rather than using self._mmc.getTags (which mimics MM) we pull a smaller
-        # amount of metadata.
-        # If you need more than this, either override or open an issue.
-
-        tags = dict(meta) if meta else {}
-        for dev, label, val in self._mmc.getSystemStateCache():
-            tags[f"{dev}-{label}"] = val
-
-        # these are added by AcqEngJ
-        # yyyy-MM-dd HH:mm:ss.mmmmmm  # NOTE AcqEngJ omits microseconds
-        tags["Time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
-        tags["PixelSizeUm"] = self._mmc.getPixelSizeUm(True)  # true == cached
-        with suppress(RuntimeError):
-            tags["XPositionUm"] = self._mmc.getXPosition()
-            tags["YPositionUm"] = self._mmc.getYPosition()
-        with suppress(RuntimeError):
-            tags["ZPositionUm"] = self._mmc.getZPosition()
-
-        # used by Runner
-        tags["PerfCounter"] = time.perf_counter()
-        return tags
+        meta_: dict = dict(meta) if meta else {}
+        meta_.update(self._get_frame_meta(self._mmc))
+        if event.channel and (
+            info := self._get_config_group_state(event.channel.group)
+        ):
+            meta_["ConfigGroups"] = {event.channel.group: info}
+        meta_["PhysicalCameraDevice"] = self._mmc.getPhysicalCameraDevice(cam_index)
+        return meta_
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
@@ -464,8 +440,8 @@ class MDAEngine(PMDAEngine):
     def _next_img_payload(self, event: MDAEvent) -> PImagePayload:
         """Grab next image from the circular buffer and return it as an ImagePayload."""
         img, meta = self._mmc.popNextImageAndMD()
-        tags = self.get_frame_metadata(meta)
-        return ImagePayload(img, event, tags)
+        _meta = self.get_frame_metadata(event, meta)
+        return ImagePayload(img, event, _meta)
 
     # ===================== EXTRA =====================
 
@@ -515,8 +491,33 @@ class MDAEngine(PMDAEngine):
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self._mmc.setZPosition(cast("float", event.z_pos) + correction)
 
+    def _update_config_device_props(self) -> None:
+        # store devices/props that make up each config group for faster lookup
+        self._config_device_props.clear()
+        for grp in self._mmc.getAvailableConfigGroups():
+            for preset in self._mmc.getAvailableConfigs(grp):
+                # ordered/unique list of (device, property) tuples for each group
+                self._config_device_props[grp] = tuple(
+                    {(i[0], i[1]): None for i in self._mmc.getConfigData(grp, preset)}
+                )
+
+    def _get_config_group_state(self, group: str) -> dict[str, str]:
+        """Faster version of core.getConfigGroupState(group).
+
+        MMCore does some excess iteration that we want to avoid here. It calls
+        GetAvailableConfigs and then calls getConfigData for *every* preset in the
+        group, (not only the one being requested).  We go straight to cached data
+        for the group we want.
+        """
+        state = {}
+        if group in self._config_device_props:
+            for dev, prop in self._config_device_props[group]:
+                dev_dict = state.setdefault(dev, {})
+                dev_dict[prop] = self._mmc.getPropertyFromCache(dev, prop)
+        return state
+
 
 class ImagePayload(NamedTuple):
     image: NDArray
     event: MDAEvent
-    metadata: dict
+    metadata: MutableMapping

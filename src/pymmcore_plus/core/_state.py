@@ -128,6 +128,7 @@ def core_state(
 def get_device_state(
     core: CMMCorePlus, cached: bool = True, error_value: Any = None
 ) -> dict[str, dict[str, Any]]:
+    """Poulate 'Devices' key in StateDict."""
     # this actually appears to be faster than getSystemStateCache
     getProp = core.getPropertyFromCache if cached else core.getProperty
     device_state: dict = {}
@@ -143,6 +144,7 @@ def get_device_state(
 
 
 def get_system_info(core: CMMCorePlus) -> SystemInfoDict:
+    """Populate 'SystemInfo' key in StateDict."""
     return {  # type: ignore
         key: getattr(core, f"get{key}")()
         for key in sorted(SystemInfoDict.__annotations__)
@@ -150,6 +152,7 @@ def get_system_info(core: CMMCorePlus) -> SystemInfoDict:
 
 
 def get_system_status(core: CMMCorePlus) -> SystemStatusDict:
+    """Populate 'SystemStatus' key in StateDict."""
     out = {
         "autoShutter": core.getAutoShutter(),
         "shutterOpen": core.getShutterOpen(),
@@ -169,6 +172,7 @@ def get_config_groups(
     config_groups: bool | Sequence[str | Literal["[Channel]"]],
     cached: bool = True,
 ) -> dict[str, dict[str, Any]]:
+    """Populate 'ConfigGroups' key in StateDict."""
     if not isinstance(config_groups, (list, tuple, set)):
         config_groups = core.getAvailableConfigGroups()
 
@@ -189,6 +193,7 @@ def get_config_groups(
 
 
 def get_image_info(core: CMMCorePlus, error_value: Any = None) -> ImageDict:
+    """Populate 'Image' key in StateDict."""
     img_dict = {}
     for key in sorted(ImageDict.__annotations__):
         try:
@@ -200,6 +205,7 @@ def get_image_info(core: CMMCorePlus, error_value: Any = None) -> ImageDict:
 
 
 def get_position(core: CMMCorePlus, error_value: Any = None) -> PositionDict:
+    """Populate 'Position' key in StateDict."""
     pos: PositionDict = {"X": error_value, "Y": error_value, "Focus": error_value}
     with suppress(Exception):
         pos["X"] = core.getXPosition()
@@ -210,6 +216,7 @@ def get_position(core: CMMCorePlus, error_value: Any = None) -> PositionDict:
 
 
 def get_autofocus(core: CMMCorePlus, error_value: Any = None) -> AutoFocusDict:
+    """Populate 'AutoFocus' key in StateDict."""
     out: AutoFocusDict = {
         "CurrentFocusScore": core.getCurrentFocusScore(),
         "LastFocusScore": core.getLastFocusScore(),
@@ -221,6 +228,7 @@ def get_autofocus(core: CMMCorePlus, error_value: Any = None) -> AutoFocusDict:
 
 
 def get_pix_size_config(core: CMMCorePlus) -> dict[str, str | PixelSizeConfigDict]:
+    """Populate 'PixelSizeConfig' key in StateDict."""
     # the Current value is a string, all the rest are PixelSizeConfigDict
     px: dict = {"Current": core.getCurrentPixelSizeConfig()}
     for px_cfg_name in core.getAvailablePixelSizeConfigs():
@@ -234,6 +242,7 @@ def get_pix_size_config(core: CMMCorePlus) -> dict[str, str | PixelSizeConfigDic
 
 
 def get_device_types(core: CMMCorePlus) -> dict[str, DeviceTypeDict]:
+    """Populate 'DeviceTypes' key in StateDict."""
     return {
         dev_name: {
             "Type": core.getDeviceType(dev_name).name,

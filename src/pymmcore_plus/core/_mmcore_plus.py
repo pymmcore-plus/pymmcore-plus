@@ -1470,7 +1470,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         old_engine = self.mda.set_engine(engine)
         self.events.mdaEngineRegistered.emit(engine, old_engine)
 
-    def fixImage(self, img: np.ndarray, ncomponents: int | None = None) -> np.ndarray:
+    def fixImage(
+        self,
+        img: np.ndarray,
+        ncomponents: int | None = None,
+        numChannel: int | None = None,
+    ) -> np.ndarray:
         """Fix img shape/dtype based on `self.getNumberOfComponents()`.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -1490,6 +1495,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         np.ndarray
             output image (possibly new shape and dtype)
         """
+        if self.getNumberOfCameraChannels() > 1:
+            # we might have multicam
+            ...
+
         if ncomponents is None:
             ncomponents = self.getNumberOfComponents()
         if ncomponents == 4:
@@ -1497,6 +1506,15 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
             img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
         return img
+
+    def getPhysicalCameraDevice(self, channel_index: int = 0) -> str:
+        cam_dev = self.getCameraDevice()
+        prop_name = f"Physical Camera {channel_index+1}"
+        if self.hasProperty(cam_dev, prop_name):
+            return self.getProperty(cam_dev, prop_name)
+        if channel_index > 0:
+            raise ValueError(f"Camera {cam_dev} does not have a property {prop_name}.")
+        return cam_dev
 
     def getTaggedImage(self, channel_index: int = 0) -> TaggedImage:
         """Return getImage as named tuple with metadata.
@@ -1570,15 +1588,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             tags["Binning"] = self.getProperty(self.getCameraDevice(), "Binning")
 
         if channel_index is not None:
-            if "CameraChannelIndex" not in tags:
-                tags["CameraChannelIndex"] = channel_index
-                tags["ChannelIndex"] = channel_index
-            if "Camera" not in tags:
-                core_cam = tags.get("Core-Camera")
-                phys_cam_key = f"{core_cam}-Physical Camera {channel_index+1}"
-                if phys_cam_key in tags:
-                    tags["Camera"] = tags[phys_cam_key]
-                    # tags["Channel"] = tags[phys_cam_key] # ?? why did MMCoreJ do this?
+            tags["CameraChannelIndex"] = channel_index
+            tags["ChannelIndex"] = channel_index
+            tags["Camera"] = self.getPhysicalCameraDevice(channel_index)
 
         # these are added by AcqEngJ
         # yyyy-MM-dd HH:mm:ss.mmmmmm  # NOTE AcqEngJ omits microseconds
@@ -1643,7 +1655,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if numChannel is not None
             else super().getImage()
         )
-        return self.fixImage(img) if fix else img
+        return self.fixImage(img, numChannel=numChannel) if fix else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition.
@@ -2062,13 +2074,13 @@ class CMMCorePlus(pymmcore.CMMCore):
         ):
             properties = STATE_PROPS
 
-        before = [self.getProperty(device, p) for p in properties]
+        # before = [self.getProperty(device, p) for p in properties]
         with _blockSignal(self.events, self.events.propertyChanged):
             yield
-        after = [self.getProperty(device, p) for p in properties]
-        if before != after:
-            for i, val in enumerate(after):
-                self.events.propertyChanged.emit(device, properties[i], val)
+        # after = [self.getProperty(device, p) for p in properties]
+        # if before != after:
+        #     for i, val in enumerate(after):
+        #         self.events.propertyChanged.emit(device, properties[i], val)
 
     @contextmanager
     def setContext(self, **kwargs: Any) -> Iterator[None]:
