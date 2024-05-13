@@ -37,6 +37,7 @@ Non-OME (ImageJ) hyperstack axes MUST be in TZCYXS order
 from __future__ import annotations
 
 from datetime import timedelta
+from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 import numpy as np
@@ -44,8 +45,6 @@ import numpy as np
 from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     import useq
 
 IMAGEJ_AXIS_ORDER = "tzcyxs"
@@ -110,12 +109,19 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
         metadata: dict[str, Any] = self._sequence_metadata()
         metadata["axes"] = "".join(dims).upper()
 
-        # append the position key to the filename if there are multiple positions
+        # if there are multiple positions, create a folder named as the filename
+        # and save each position as a separate file
         if (seq := self.current_sequence) and seq.sizes.get("p", 1) > 1:
+            folder_path = Path(self._filename)
+            # create the parent directory using the filename
+            folder_path.mkdir(parents=True, exist_ok=True)
+            # update the position file name to include the position key
             ext = ".ome.tif" if self._is_ome else ".tif"
-            fname = self._filename.replace(ext, f"_{position_key}{ext}")
+            name = folder_path.name.replace(ext, f"_{position_key}{ext}")
+            # create the full path
+            fname = folder_path / name
         else:
-            fname = self._filename
+            fname = Path(self._filename)
 
         # create parent directories if they don't exist
         # Path(fname).parent.mkdir(parents=True, exist_ok=True)
