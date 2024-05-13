@@ -120,6 +120,7 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
             name = folder_path.name.replace(ext, f"_{position_key}{ext}")
             # create the full path
             fname = folder_path / name
+        # if there is only one position, save the file as the filename
         else:
             fname = Path(self._filename)
 
