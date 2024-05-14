@@ -26,7 +26,7 @@ from typing import (
     TypedDict,
 )
 
-from ._state import core_state
+from . import _state
 
 if TYPE_CHECKING:
     from pymmcore_plus.core import CMMCorePlus
@@ -66,22 +66,18 @@ class Format:
 
 def summary_metadata_full_v1(core: CMMCorePlus) -> SummaryMetaV1:
     """Return full summary metadata for the given core."""
-    return dict(
-        version="1.0",
-        format=Format.SUMMARY_FULL,
-        Time=datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
-        **core_state(  # type: ignore [typeddict-item]
-            core,
-            devices=True,
-            image=True,
-            system_info=True,
-            system_status=True,
-            config_groups=True,
-            pixel_size_configs=True,
-            device_types=True,
-            cached=True,
-        ),
-    )
+    return {
+        "version": "1.0",
+        "format": Format.SUMMARY_FULL,
+        "time": datetime.now().isoformat(),
+        "devices": _state.get_device_info(core),
+        "properties": _state.get_device_state(core, True),
+        "system_info": _state.get_system_info(core),
+        # "system_status": _state.get_system_status(core),
+        # "config_groups": _state.get_config_groups(core, True),
+        "image": _state.get_image_info(core),
+        "pixel_size_config": _state.get_pix_size_config(core),
+    }
 
 
 def frame_metadata_v1(core: CMMCorePlus) -> MetaDict:

@@ -59,9 +59,10 @@ class PixelSizeConfigDict(TypedDict):
 
 
 class DeviceTypeDict(TypedDict):
-    Type: str
-    Description: str
-    Adapter: str
+    type: str
+    description: str
+    library: str
+    name: str
 
 
 class SystemStatusDict(TypedDict):
@@ -121,7 +122,7 @@ def core_state(
     if pixel_size_configs:
         out["PixelSizeConfig"] = get_pix_size_config(core)
     if device_types:
-        out["DeviceTypes"] = get_device_types(core)
+        out["DeviceTypes"] = get_device_info(core)
     return out
 
 
@@ -241,13 +242,22 @@ def get_pix_size_config(core: CMMCorePlus) -> dict[str, str | PixelSizeConfigDic
     return px
 
 
-def get_device_types(core: CMMCorePlus) -> dict[str, DeviceTypeDict]:
+def get_device_info(core: CMMCorePlus) -> dict[str, DeviceTypeDict]:
     """Populate 'DeviceTypes' key in StateDict."""
     return {
         dev_name: {
-            "Type": core.getDeviceType(dev_name).name,
-            "Description": core.getDeviceDescription(dev_name),
-            "Adapter": core.getDeviceName(dev_name),
+            "type": core.getDeviceType(dev_name).name,
+            "description": core.getDeviceDescription(dev_name),
+            "library": core.getDeviceLibrary(dev_name),
+            "name": core.getDeviceName(dev_name),
         }
         for dev_name in core.getLoadedDevices()
     }
+
+
+def get_properties_schema(core: CMMCorePlus) -> dict[str, dict[str, Any]]:
+    """Populate 'Properties' key in StateDict."""
+    properties_dict = {}
+    for dev in core.getLoadedDevices():
+        properties_dict[dev] = core.getDeviceSchema(dev)
+    return properties_dict
