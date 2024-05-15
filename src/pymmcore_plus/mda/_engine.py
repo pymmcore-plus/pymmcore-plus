@@ -176,7 +176,7 @@ class MDAEngine(PMDAEngine):
             # skip if no autofocus device is found
             if not self._mmc.getAutoFocusDevice():
                 logger.warning("No autofocus device found. Cannot execute autofocus.")
-                return ()
+                return
 
             try:
                 # execute hardware autofocus
@@ -191,7 +191,7 @@ class MDAEngine(PMDAEngine):
                 self._z_correction[p_idx] = new_correction + self._z_correction.get(
                     p_idx, 0.0
                 )
-            return ()
+            return
 
         # if the autofocus was engaged at the start of the sequence AND autofocus action
         # did not fail, re-engage it. NOTE: we need to do that AFTER the runner calls
@@ -283,7 +283,7 @@ class MDAEngine(PMDAEngine):
             self._mmc.snapImage()
         except Exception as e:
             logger.warning("Failed to snap image. %s", e)
-            return ()
+            return
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
         yield ImagePayload(self._mmc.getImage(), event, self.get_frame_metadata())
