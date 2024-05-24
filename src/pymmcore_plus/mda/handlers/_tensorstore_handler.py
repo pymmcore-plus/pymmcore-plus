@@ -174,6 +174,7 @@ class TensorStoreHandler:
         """On sequence started, simply store the sequence."""
         self._frame_index = 0
         self._store = None
+        self._futures.clear()
         self.frame_metadatas.clear()
         self.current_sequence = seq
 
@@ -182,8 +183,8 @@ class TensorStoreHandler:
         if self._store is None:
             return  # pragma: no cover
 
-        for f in self._futures:
-            f.result()
+        while self._futures:
+            self._futures.pop().result()
         if not self._nd_storage:
             self._store = self._store.resize(
                 exclusive_max=(self._frame_index, *self._store.shape[-2:])
