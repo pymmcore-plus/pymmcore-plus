@@ -180,7 +180,7 @@ class TensorStoreHandler:
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
         if self._store is None:
-            return
+            return  # pragma: no cover
 
         for f in self._futures:
             f.result()
