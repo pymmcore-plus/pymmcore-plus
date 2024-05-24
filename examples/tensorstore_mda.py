@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import TensorStoreHandler
 from useq import MDASequence
 
@@ -16,7 +15,5 @@ sequence = MDASequence(
     axis_order="tpcz",
 )
 
-writer = TensorStoreHandler(path="example_ts", delete_existing=True, driver="zarr")
-
-with mda_listeners_connected(writer):
-    core.mda.run(sequence)
+writer = TensorStoreHandler(path="example_ts.zarr", delete_existing=True, driver="zarr")
+core.mda.run(sequence, output=writer)
