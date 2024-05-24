@@ -323,7 +323,7 @@ class TensorStoreHandler:
         The return value is safe to use as an index to self._store[...]
         """
         if self._nd_storage:
-            return self._ts.d[*index][*index.values()]
+            return self._ts.d[index][tuple(index.values())]
 
         if any(isinstance(v, slice) for v in index.values()):
             idx: list | int | ts.DimExpression = self._get_frame_indices(index)
