@@ -42,6 +42,7 @@ dependencies = [
     "typing-extensions",      # not actually required at runtime
     "useq-schema >=0.4.7",
     "wrapt >=1.14",
+    "tensorstore",
     # cli requirements included by default for now
     "typer >=0.4.2",
     "rich >=10.2.0",
@@ -64,7 +65,7 @@ test = [
     "zarr >=2.2",
     "xarray",
 ]
-dev = ["ipython", "mypy", "pdbpp", "pre-commit", "ruff"]
+dev = ["ipython", "mypy", "pdbpp", "pre-commit", "ruff", "tensorstore-stubs"]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material",
