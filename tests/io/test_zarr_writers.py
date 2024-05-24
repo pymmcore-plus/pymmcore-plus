@@ -197,5 +197,6 @@ def test_tensorstore_writer_indeterminate(tmp_path: Path, core: CMMCorePlus) -> 
     thread.join()
 
     assert writer.isel(t=1, z=1, c=0).shape == (512, 512)
+    assert writer.isel(t=1, z=slice(None), c=0).shape == (2, 512, 512)
     with pytest.raises(KeyError):
         writer.isel(t=2, z=2, c=0)

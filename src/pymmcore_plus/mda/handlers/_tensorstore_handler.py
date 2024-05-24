@@ -164,9 +164,9 @@ class TensorStoreHandler:
         if cleanup_atexit:
 
             @atexit.register
-            def _atexit_rmtree(_path: str = path) -> None:
+            def _atexit_rmtree(_path: str = path) -> None:  # pragma: no cover
                 if os.path.isdir(_path):
-                    shutil.rmtree(_path)
+                    shutil.rmtree(_path, ignore_errors=True)
 
         return cls(path=path, **kwargs)
 
@@ -285,7 +285,7 @@ class TensorStoreHandler:
     def finalize_metadata(self) -> None:
         """Finalize and flush metadata to storage."""
         if not (store := self._store) or not store.kvstore:
-            return
+            return  # pragma: no cover
 
         data = []
         for event, meta in self.frame_metadatas:
@@ -303,7 +303,7 @@ class TensorStoreHandler:
 
         if self.ts_driver.startswith("zarr"):
             store.kvstore.write(".zattrs", json.dumps(metadata))
-        elif self.ts_driver == "n5":
+        elif self.ts_driver == "n5":  # pragma: no cover
             attrs = json.loads(store.kvstore.read("attributes.json").result().value)
             attrs.update(metadata)
             store.kvstore.write("attributes.json", json.dumps(attrs))
