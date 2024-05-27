@@ -243,6 +243,12 @@ class MDARunner:
         This method picks from the built-in handlers based on the extension of the path.
         """
         path = str(Path(path).expanduser().resolve())
+
+        if path.endswith(".tensorstore.zarr"):
+            from pymmcore_plus.mda.handlers import TensorStoreHandler
+
+            return TensorStoreHandler(path=path, delete_existing=True, driver="zarr")
+
         if path.endswith(".zarr"):
             from pymmcore_plus.mda.handlers import OMEZarrWriter
 
