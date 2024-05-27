@@ -189,6 +189,7 @@ class MDARunner:
                 created automatically based on the extension of the path.
                 - `.zarr` files will be handled by `OMEZarrWriter`
                 - `.ome.tiff` files will be handled by `OMETiffWriter`
+                - `.tensorstore.zarr` files will be handled by `TensorStoreHandler`
                 - A directory with no extension will be handled by `ImageSequenceWriter`
             - A handler object that implements the `DataHandler` protocol, currently
                 meaning it has a `frameReady` method.  See `mda_listeners_connected`
