@@ -129,7 +129,7 @@ def core_state(
 def get_device_state(
     core: CMMCorePlus, cached: bool = True, error_value: Any = None
 ) -> dict[str, dict[str, Any]]:
-    """Poulate 'Devices' key in StateDict."""
+    """Populate 'Devices' key in StateDict."""
     # this actually appears to be faster than getSystemStateCache
     getProp = core.getPropertyFromCache if cached else core.getProperty
     device_state: dict = {}

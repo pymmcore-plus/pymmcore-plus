@@ -2,7 +2,8 @@ from __future__ import annotations
 
 import datetime
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Self
+from dataclasses import dataclass
+from typing import TYPE_CHECKING, Annotated, Any, Callable, Self
 
 import msgspec
 from msgspec import Struct, field
@@ -73,6 +74,30 @@ class ImageInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     roi: list[int]
     camera_device: str
     multi_roi: tuple[list[int], list[int], list[int], list[int]] | None = None
+
+
+def image_info(core: CMMCorePlus) -> ImageInfo:
+    try:
+        multi_roi = core.getMultiROI()
+    except RuntimeError:
+        multi_roi = None
+    return ImageInfo(
+        bytes_per_pixel=core.getBytesPerPixel(),
+        current_pixel_size_config=core.getCurrentPixelSizeConfig(),
+        exposure=core.getExposure(),
+        image_bit_depth=core.getImageBitDepth(),
+        image_buffer_size=core.getImageBufferSize(),
+        image_height=core.getImageHeight(),
+        image_width=core.getImageWidth(),
+        magnification_factor=core.getMagnificationFactor(),
+        number_of_camera_channels=core.getNumberOfCameraChannels(),
+        number_of_components=core.getNumberOfComponents(),
+        pixel_size_affine=core.getPixelSizeAffine(True),  # type: ignore
+        pixel_size_um=core.getPixelSizeUm(True),  # type: ignore
+        roi=core.getROI(),
+        camera_device=core.getCameraDevice(),
+        multi_roi=multi_roi,
+    )
 
 
 class PositionInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):
@@ -193,25 +218,19 @@ def position_info(core: CMMCorePlus) -> PositionInfo:
     return PositionInfo(x=x, y=y, focus=focus)
 
 
-def image_info(core: CMMCorePlus) -> ImageInfo:
-    try:
-        multi_roi = core.getMultiROI()
-    except RuntimeError:
-        multi_roi = None
-    return ImageInfo(
-        bytes_per_pixel=core.getBytesPerPixel(),
-        current_pixel_size_config=core.getCurrentPixelSizeConfig(),
-        exposure=core.getExposure(),
-        image_bit_depth=core.getImageBitDepth(),
-        image_buffer_size=core.getImageBufferSize(),
-        image_height=core.getImageHeight(),
-        image_width=core.getImageWidth(),
-        magnification_factor=core.getMagnificationFactor(),
-        number_of_camera_channels=core.getNumberOfCameraChannels(),
-        number_of_components=core.getNumberOfComponents(),
-        pixel_size_affine=core.getPixelSizeAffine(True),  # type: ignore
-        pixel_size_um=core.getPixelSizeUm(True),  # type: ignore
-        roi=core.getROI(),
-        camera_device=core.getCameraDevice(),
-        multi_roi=multi_roi,
-    )
+@dataclass
+class CoreMeta:
+    func: Callable[[CMMCorePlus], Any]
+
+
+Position = Annotated[PositionInfo, CoreMeta(position_info)]
+
+
+class MetaStruct(Struct):
+    def __init_subclass__(cls, *args, **kwargs) -> None:
+        super().__init_subclass__(**args, **kwargs)
+        breakpoint()
+
+
+class Thing(MetaStruct):
+    p: Position
