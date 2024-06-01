@@ -362,6 +362,7 @@ class MDAEngine(PMDAEngine):
             core.loadStageSequence(zstage, event.z_sequence)
         if prop_seqs := event.property_sequences(core):
             for (dev, prop), value_sequence in prop_seqs.items():
+                core.stopPropertySequence(dev, prop)
                 core.loadPropertySequence(dev, prop, value_sequence)
 
         # TODO: SLM
