@@ -14,6 +14,8 @@ from pymmcore_plus.mda.handlers import (
 NEUROGLANCER = "neuroglancer_precomputed"
 
 inputs = [
+    # path, expected_handler, driver (if applicable)
+    ("./test.tensorstore", TensorStoreHandler, "zarr"),
     ("./test.tensorstore.zarr", TensorStoreHandler, "zarr"),
     ("./test.tensorstore.zarr3", TensorStoreHandler, "zarr3"),
     ("./test.tensorstore.n5", TensorStoreHandler, "n5"),
@@ -26,7 +28,7 @@ inputs = [
 
 
 @pytest.mark.parametrize("input", inputs)
-def test_runner_handler_inference(input: tuple[str, Any]):
+def test_runner_handler_inference(input: tuple[str, Any, str]):
     runner = MDARunner()
     path, expected_handler, driver = input
     handler = runner._handler_for_path(path)
