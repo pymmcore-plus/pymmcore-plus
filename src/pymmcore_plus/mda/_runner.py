@@ -37,8 +37,9 @@ MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
     "length & shape. Iterating over it has no effect."
 )
+
 # variables for handler inference
-TESNSORSTORE = r".tensorstore[.a-zA-Z0-9_]*$"
+TESNSORSTORE = "tensorstore"
 TENSORSTORE_DRIVERS = ["zarr", "zarr3", "n5", "neuroglancer_precomputed"]
 ZARR = ".zarr"
 TIFF = (".tif", ".tiff")
@@ -256,13 +257,13 @@ class MDARunner:
         # drivers. We search for the pattern and if it matches, we create a
         # TensorStoreHandler. We get the driver from the path suffix or we default to
         # zarr and pass it to the handler.
-        if re.search(TESNSORSTORE, path):
+        if re.search(f".{TESNSORSTORE}", path):
             from pymmcore_plus.mda.handlers import TensorStoreHandler
 
             # remove the dot
             suffix = Path(path).suffix[1:]
             # default to zarr (if path ends with .tensorstore) or use the suffix
-            driver = "zarr" if suffix == "tensorstore" else suffix
+            driver = "zarr" if suffix == TESNSORSTORE else suffix
             if driver not in TENSORSTORE_DRIVERS:
                 raise ValueError(
                     f"Unsupported tensorstore driver: '{driver}'. "
