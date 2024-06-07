@@ -278,17 +278,18 @@ class MDARunner:
             logger.info("%s", event)
             engine.setup_event(event)
 
-            output = engine.exec_event(event) or ()  # in case output is None
+            try:
+                output = engine.exec_event(event) or ()  # in case output is None
 
-            for payload in output:
-                img, event, meta = payload
-                if "PerfCounter" in meta:
-                    meta["ElapsedTime-ms"] = (meta["PerfCounter"] - self._t0) * 1000
-                meta["Event"] = event
-                with exceptions_logged():
-                    self._signals.frameReady.emit(img, event, meta)
-
-            teardown_event(event)
+                for payload in output:
+                    img, event, meta = payload
+                    if "PerfCounter" in meta:
+                        meta["ElapsedTime-ms"] = (meta["PerfCounter"] - self._t0) * 1000
+                    meta["Event"] = event
+                    with exceptions_logged():
+                        self._signals.frameReady.emit(img, event, meta)
+            finally:
+                teardown_event(event)
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
