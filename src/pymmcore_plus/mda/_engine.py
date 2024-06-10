@@ -329,6 +329,8 @@ class MDAEngine(PMDAEngine):
         core = self._mmc
         if not event.keep_shutter_open and self._autoshutter_was_set:
             core.setAutoShutter(True)
+        # FIXME: this may not be hitting as intended...
+        # https://github.com/pymmcore-plus/pymmcore-plus/pull/353#issuecomment-2159176491
         if isinstance(event, SequencedEvent):
             if event.exposure_sequence:
                 core.stopExposureSequence(self._mmc.getCameraDevice())
@@ -356,15 +358,23 @@ class MDAEngine(PMDAEngine):
         cam_device = self._mmc.getCameraDevice()
 
         if event.exposure_sequence:
+            with suppress(RuntimeError):
+                core.stopExposureSequence(cam_device)
             core.loadExposureSequence(cam_device, event.exposure_sequence)
         if event.x_sequence:  # y_sequence is implied and will be the same length
             stage = core.getXYStageDevice()
+            with suppress(RuntimeError):
+                core.stopXYStageSequence(stage)
             core.loadXYStageSequence(stage, event.x_sequence, event.y_sequence)
         if event.z_sequence:
             zstage = core.getFocusDevice()
+            with suppress(RuntimeError):
+                core.stopStageSequence(zstage)
             core.loadStageSequence(zstage, event.z_sequence)
         if prop_seqs := event.property_sequences(core):
             for (dev, prop), value_sequence in prop_seqs.items():
+                with suppress(RuntimeError):
+                    core.stopPropertySequence(dev, prop)
                 core.loadPropertySequence(dev, prop, value_sequence)
 
         # TODO: SLM
