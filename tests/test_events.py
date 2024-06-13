@@ -68,7 +68,7 @@ def test_events_protocols(cls):
             )
 
 
-def test_set_property_events(core: CMMCorePlus):
+def test_set_property_events(core: CMMCorePlus) -> None:
     """Test that using setProperty always emits a propertyChanged event."""
     mock = Mock()
     core.events.propertyChanged.connect(mock)
@@ -89,7 +89,7 @@ def test_set_property_events(core: CMMCorePlus):
     mock.assert_called_once_with("Camera", "AllowMultiROI", "1")
 
 
-def test_set_state_events(core: CMMCorePlus):
+def test_set_state_events(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.propertyChanged.connect(mock)
     assert core.getState("Objective") == 1
@@ -111,7 +111,7 @@ def test_set_state_events(core: CMMCorePlus):
     assert core.getState("Dichroic") == 1
 
 
-def test_set_statedevice_property_emits_events(core: CMMCorePlus):
+def test_set_statedevice_property_emits_events(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.propertyChanged.connect(mock)
     assert core.getState("Objective") == 1
@@ -137,7 +137,7 @@ def test_set_statedevice_property_emits_events(core: CMMCorePlus):
     assert core.getProperty("Dichroic", STATE) == "1"
 
 
-def test_device_property_events(core: CMMCorePlus):
+def test_device_property_events(core: CMMCorePlus) -> None:
     mock1 = Mock()
     mock2 = Mock()
     core.events.devicePropertyChanged("Camera", "Gain").connect(mock1)
@@ -162,7 +162,7 @@ def test_device_property_events(core: CMMCorePlus):
     mock2.assert_not_called()
 
 
-def test_sequence_acquisition_events(core: CMMCorePlus):
+def test_sequence_acquisition_events(core: CMMCorePlus) -> None:
     mock1 = Mock()
     mock2 = Mock()
     mock3 = Mock()
@@ -172,124 +172,72 @@ def test_sequence_acquisition_events(core: CMMCorePlus):
     core.events.sequenceAcquisitionStarted.connect(mock3)
 
     core.startContinuousSequenceAcquisition()
-    mock1.assert_has_calls(
-        [
-            call(),
-        ]
-    )
+    mock1.assert_called_once_with()
 
     core.stopSequenceAcquisition()
-    mock2.assert_has_calls(
-        [
-            call(core.getCameraDevice()),
-        ]
-    )
+    mock2.assert_called_once_with(core.getCameraDevice())
 
     # without camera label
     core.startSequenceAcquisition(5, 100.0, True)
-    mock3.assert_has_calls(
-        [
-            call(core.getCameraDevice(), 5, 100.0, True),
-        ]
-    )
+    mock3.assert_called_once_with(core.getCameraDevice(), 5, 100.0, True)
     core.stopSequenceAcquisition()
-    mock2.assert_has_calls(
-        [
-            call(core.getCameraDevice()),
-        ]
-    )
+    mock2.assert_called_once_with(core.getCameraDevice())
 
     # with camera label
     cam = core.getCameraDevice()
     core.startSequenceAcquisition(cam, 5, 100.0, True)
-    mock3.assert_has_calls(
-        [
-            call(cam, 5, 100.0, True),
-        ]
-    )
+    mock3.assert_called_once_with(cam, 5, 100.0, True)
     core.stopSequenceAcquisition(cam)
-    mock2.assert_has_calls(
-        [
-            call(cam),
-        ]
-    )
+    mock2.assert_called_once_with(cam)
 
 
-def test_shutter_device_events(core: CMMCorePlus):
+def test_shutter_device_events(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.propertyChanged.connect(mock)
     core.setShutterOpen("White Light Shutter", True)
-    mock.assert_has_calls(
-        [
-            call("White Light Shutter", STATE, "1"),
-        ]
-    )
+    mock.assert_called_once_with("White Light Shutter", STATE, "1")
     assert core.getShutterOpen("White Light Shutter")
     assert core.getProperty("White Light Shutter", STATE) == "1"
 
 
-def test_autoshutter_device_events(core: CMMCorePlus):
+def test_autoshutter_device_events(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.autoShutterSet.connect(mock)
     core.setAutoShutter(True)
-    mock.assert_has_calls(
-        [
-            call(True),
-        ]
-    )
+    mock.assert_called_once_with(True)
     assert core.getAutoShutter()
 
 
-def test_groups_and_presets_events(core: CMMCorePlus):
-    mock = Mock()
-    core.events.configDeleted.connect(mock)
+def test_groups_and_presets_events(core: CMMCorePlus) -> None:
+    cfg_deleted = Mock()
+    core.events.configDeleted.connect(cfg_deleted)
     core.deleteConfig("Camera", "HighRes")
-    mock.assert_has_calls(
-        [
-            call("Camera", "HighRes"),
-        ]
-    )
+    cfg_deleted.assert_called_once_with("Camera", "HighRes")
     assert "HighRes" not in core.getAvailableConfigs("Camera")
 
-    mock = Mock()
-    core.events.configGroupDeleted.connect(mock)
+    grp_deleted = Mock()
+    core.events.configGroupDeleted.connect(grp_deleted)
     core.deleteConfigGroup("Objective")
-    mock.assert_has_calls(
-        [
-            call("Objective"),
-        ]
-    )
+    grp_deleted.assert_called_once_with("Objective")
     assert "Objective" not in core.getAvailableConfigGroups()
 
-    mock = Mock()
-    core.events.configDefined.connect(mock)
+    cfg_defined = Mock()
+    core.events.configDefined.connect(cfg_defined)
     core.defineConfig("NewGroup", "")
-    mock.assert_has_calls(
-        [
-            call("NewGroup", "NewPreset", "", "", ""),
-        ]
-    )
+    cfg_defined.assert_called_once_with("NewGroup", "NewPreset", "", "", "")
     assert "NewGroup" in core.getAvailableConfigGroups()
     assert "NewPreset" in core.getAvailableConfigs("NewGroup")
 
-    mock = Mock()
-    core.events.configDefined.connect(mock)
+    cfg_defined.reset_mock()
     core.defineConfig("NewGroup_1", "New")
-    mock.assert_has_calls(
-        [
-            call("NewGroup_1", "New", "", "", ""),
-        ]
-    )
+    cfg_defined.assert_called_once_with("NewGroup_1", "New", "", "", "")
     assert "NewGroup_1" in core.getAvailableConfigGroups()
     assert "New" in core.getAvailableConfigs("NewGroup_1")
 
-    mock = Mock()
-    core.events.configDefined.connect(mock)
+    cfg_defined.reset_mock()
     core.defineConfig("NewGroup_2", "New", "Dichroic", "Label", "Q505LP")
-    mock.assert_has_calls(
-        [
-            call("NewGroup_2", "New", "Dichroic", "Label", "Q505LP"),
-        ]
+    cfg_defined.assert_called_once_with(
+        "NewGroup_2", "New", "Dichroic", "Label", "Q505LP"
     )
     assert "NewGroup_2" in core.getAvailableConfigGroups()
     assert "New" in core.getAvailableConfigs("NewGroup_2")
@@ -297,52 +245,48 @@ def test_groups_and_presets_events(core: CMMCorePlus):
     assert ("Dichroic", "Label", "Q505LP") in dpv
 
 
-def test_set_camera_roi_event(core: CMMCorePlus):
+def test_set_camera_roi_event(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.roiSet.connect(mock)
     core.setROI(10, 20, 100, 200)
-    mock.assert_has_calls(
-        [
-            call(core.getCameraDevice(), 10, 20, 100, 200),
-        ]
-    )
+    mock.assert_called_once_with(core.getCameraDevice(), 10, 20, 100, 200)
     assert list(core.getROI()) == [10, 20, 100, 200]
 
 
-def test_pixel_changed_event(core: CMMCorePlus):
+def test_pixel_changed_event(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.pixelSizeChanged.connect(mock)
 
     core.deletePixelSizeConfig("Res10x")
-    mock.assert_has_calls([call(0.0)])
+    mock.assert_called_once_with(0.0)
     assert "Res10x" not in core.getAvailablePixelSizeConfigs()
 
     core.definePixelSizeConfig("test", "Objective", "Label", "Nikon 10X S Fluor")
-    mock.assert_has_calls([call(0.0)])
+    mock.assert_called_once_with(0.0)
     assert "test" in core.getAvailablePixelSizeConfigs()
 
     core.setPixelSizeUm("test", 6.5)
-    mock.assert_has_calls([call(6.5)])
+    mock.assert_called_once_with(6.5)
     assert core.getPixelSizeUmByID("test") == 6.5
 
 
-def test_set_channelgroup(core: CMMCorePlus):
+def test_set_channelgroup(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.channelGroupChanged.connect(mock)
 
     core.setChannelGroup("Camera")
     assert core.getChannelGroup() == "Camera"
-    mock.assert_has_calls([call("Camera")])
+    mock.assert_called_once_with("Camera")
 
 
-def test_set_focus_device(core: CMMCorePlus):
+def test_set_focus_device(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.propertyChanged.connect(mock)
 
     core.setFocusDevice("")
     assert not core.getFocusDevice()
-    mock.assert_has_calls([call("Core", "Focus", "")])
+    mock.assert_called_once_with("Core", "Focus", "")
 
     core.setFocusDevice("Z")
     assert core.getFocusDevice() == "Z"
-    mock.assert_has_calls([call("Core", "Focus", "Z")])
+    mock.assert_called_once_with("Core", "Focus", "Z")
