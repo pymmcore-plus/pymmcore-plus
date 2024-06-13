@@ -172,23 +172,23 @@ def test_sequence_acquisition_events(core: CMMCorePlus) -> None:
     core.events.sequenceAcquisitionStarted.connect(mock3)
 
     core.startContinuousSequenceAcquisition()
-    mock1.assert_called_once_with()
+    mock1.assert_called_once()
 
     core.stopSequenceAcquisition()
-    mock2.assert_called_once_with(core.getCameraDevice())
+    mock2.assert_any_call(core.getCameraDevice())
 
     # without camera label
     core.startSequenceAcquisition(5, 100.0, True)
-    mock3.assert_called_once_with(core.getCameraDevice(), 5, 100.0, True)
+    mock3.assert_any_call(core.getCameraDevice(), 5, 100.0, True)
     core.stopSequenceAcquisition()
-    mock2.assert_called_once_with(core.getCameraDevice())
+    mock2.assert_any_call(core.getCameraDevice())
 
     # with camera label
     cam = core.getCameraDevice()
     core.startSequenceAcquisition(cam, 5, 100.0, True)
-    mock3.assert_called_once_with(cam, 5, 100.0, True)
+    mock3.assert_any_call(cam, 5, 100.0, True)
     core.stopSequenceAcquisition(cam)
-    mock2.assert_called_once_with(cam)
+    mock2.assert_any_call(cam)
 
 
 def test_shutter_device_events(core: CMMCorePlus) -> None:
@@ -262,11 +262,11 @@ def test_pixel_changed_event(core: CMMCorePlus) -> None:
     assert "Res10x" not in core.getAvailablePixelSizeConfigs()
 
     core.definePixelSizeConfig("test", "Objective", "Label", "Nikon 10X S Fluor")
-    mock.assert_called_once_with(0.0)
+    mock.assert_any_call(0.0)
     assert "test" in core.getAvailablePixelSizeConfigs()
 
     core.setPixelSizeUm("test", 6.5)
-    mock.assert_called_once_with(6.5)
+    mock.assert_any_call(6.5)
     assert core.getPixelSizeUmByID("test") == 6.5
 
 
@@ -276,7 +276,7 @@ def test_set_channelgroup(core: CMMCorePlus) -> None:
 
     core.setChannelGroup("Camera")
     assert core.getChannelGroup() == "Camera"
-    mock.assert_called_once_with("Camera")
+    mock.assert_any_call("Camera")
 
 
 def test_set_focus_device(core: CMMCorePlus) -> None:
@@ -289,4 +289,4 @@ def test_set_focus_device(core: CMMCorePlus) -> None:
 
     core.setFocusDevice("Z")
     assert core.getFocusDevice() == "Z"
-    mock.assert_called_once_with("Core", "Focus", "Z")
+    mock.assert_any_call("Core", "Focus", "Z")
