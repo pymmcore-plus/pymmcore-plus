@@ -1,9 +1,9 @@
 import numpy as np
-from psygnal import Signal
+from psygnal import Signal, SignalGroup
 from useq import MDAEvent, MDASequence
 
 
-class MDASignaler:
+class MDASignaler(SignalGroup):
     sequenceStarted = Signal(MDASequence, dict)  # at the start of an MDA sequence
     sequencePauseToggled = Signal(bool)  # when MDA is paused/unpaused
     sequenceCanceled = Signal(MDASequence)  # when mda is canceled

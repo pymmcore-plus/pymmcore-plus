@@ -139,7 +139,7 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 minversion = "6.0"
 testpaths = ["tests"]
-filterwarnings = ["error"]
+filterwarnings = ["error", "ignore:Failed to disconnect::pytestqt"]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]

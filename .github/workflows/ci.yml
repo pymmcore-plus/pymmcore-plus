@@ -23,12 +23,12 @@ jobs:
         platform: [windows-latest, macos-13]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         pydantic: [""]
-        qt: ["'PySide6!=6.7.1'"]
+        qt: ["PySide6"]
         include:
           - platform: windows-latest
             python-version: "3.8"
             pydantic: "'pydantic<2'"
-            qt: "'PySide6!=6.7.1'"
+            qt: "PySide6"
           - platform: windows-latest
             python-version: "3.9"
             pydantic: "'pydantic<2'"
@@ -39,7 +39,7 @@ jobs:
           - platform: windows-latest
             python-version: "3.11"
             pydantic: "'pydantic<2'"
-            qt: "'PySide6!=6.7.1'"
+            qt: "PySide6"
           - platform: ubuntu-latest
             python-version: "3.11"
 
