@@ -4,7 +4,7 @@
 [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/pymmcore-plus)](https://pypi.org/project/pymmcore-plus)
 [![PyPI](https://img.shields.io/pypi/v/pymmcore-plus.svg?color=green)](https://pypi.org/project/pymmcore-plus)
 [![Conda](https://img.shields.io/conda/vn/conda-forge/pymmcore-plus)](https://anaconda.org/conda-forge/pymmcore-plus)
-[![CI](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/test_and_deploy.yml/badge.svg)](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/test_and_deploy.yml)
+[![CI](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/ci.yml/badge.svg)](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/ci.yml)
 [![docs](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/docs.yml/badge.svg)](https://pymmcore-plus.github.io/pymmcore-plus/)
 [![codecov](https://codecov.io/gh/pymmcore-plus/pymmcore-plus/branch/main/graph/badge.svg)](https://codecov.io/gh/pymmcore-plus/pymmcore-plus)
 [![Benchmarks](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://codspeed.io/pymmcore-plus/pymmcore-plus)

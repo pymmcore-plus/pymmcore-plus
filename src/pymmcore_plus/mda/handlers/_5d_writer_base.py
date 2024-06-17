@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from abc import abstractmethod
 from collections import defaultdict
-from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
+from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar
 
 from ._util import position_sizes
 
@@ -72,30 +72,54 @@ class _5DWriterBase(Generic[T]):
         self.current_sequence: useq.MDASequence | None = None
 
         # list of {dim_name: size} map for each position in the sequence
-        self.position_sizes: list[dict[str, int]] = []
+        self._position_sizes: list[dict[str, int]] = []
+
+        # actual timestamps for each frame
+        self._timestamps: list[float] = []
 
     # The next three methods - `sequenceStarted`, `sequenceFinished`, and `frameReady`
     # are to be connected directly to the MDA's signals, perhaps via listener_connected
+
+    @property
+    def position_sizes(self) -> list[dict[str, int]]:
+        """Return sizes of each dimension for each position in the sequence.
+
+        Will be a list of dicts, where each dict maps dimension names to sizes, and
+        the index in the list corresponds to the stage position index.
+
+        This is the preferred way to access both the dimensions present in each position
+        as well as the sizes of those dimensions.
+
+        The dict is ordered, and the order reflects the order of dimensions in the
+        shape of each position.
+        """
+        return self._position_sizes
 
     def sequenceStarted(self, seq: useq.MDASequence) -> None:
         """On sequence started, simply store the sequence."""
         self.frame_metadatas.clear()
         self.current_sequence = seq
         if seq:
-            self.position_sizes = position_sizes(seq)
+            self._position_sizes = position_sizes(seq)
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
         self.finalize_metadata()
         self.frame_metadatas.clear()
-        self.current_sequence = None
-        self.position_sizes = []
+
+    def get_position_key(self, position_index: int) -> str:
+        """Get the position key for a specific position index.
+
+        This key will be used for subclasses like Zarr that need a directory structure
+        for each position.  And may also be used to index into `self.position_arrays`.
+        """
+        return f"{POS_PREFIX}{position_index}"
 
     def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
         """Write frame to the zarr array for the appropriate position."""
         # get the position key to store the array in the group
         p_index = event.index.get("p", 0)
-        key = f"{POS_PREFIX}{p_index}"
+        key = self.get_position_key(p_index)
         pos_sizes = self.position_sizes[p_index]
         if key in self.position_arrays:
             ary = self.position_arrays[key]
@@ -117,6 +141,9 @@ class _5DWriterBase(Generic[T]):
             self.position_arrays[key] = ary = self.new_array(key, frame.dtype, sizes)
 
         index = tuple(event.index[k] for k in pos_sizes)
+        t = event.index.get("t", 0)
+        if t >= len(self._timestamps) and "ElapsedTime-ms" in meta:
+            self._timestamps.append(meta["ElapsedTime-ms"])
         self.write_frame(ary, index, frame)
         self.store_frame_metadata(key, event, meta)
 
@@ -194,3 +221,53 @@ class _5DWriterBase(Generic[T]):
         Subclasses may override this method to flush any accumulated frame metadata to
         disk at the end of the sequence.
         """
+
+    # This syntax is intentionally the same as xarray's isel method.  It's possible
+    # we will use xarray in the future, and this will make it easier to switch.
+    def isel(
+        self,
+        indexers: Mapping[str, int | slice] | None = None,
+        **indexers_kwargs: int | slice,
+    ) -> np.ndarray:
+        """Select data from the array.
+
+        This is a convenience method to select data from the array for a given position
+        key.  It will call the appropriate `__getitem__` method on the array with the
+        given indexers.
+
+        Parameters
+        ----------
+        indexers : Mapping[str, int | slice] | None
+            Mapping of dimension names to indices or slices.  If None, will return the
+            full array.
+        **indexers_kwargs : int | slice
+            Keyword arguments of dimension names to indices or slices.  These will be
+            merged with `indexers`, and allows for a nicer syntax.
+
+        Returns
+        -------
+        np.ndarray
+            The selected data from the array.
+
+        Examples
+        --------
+        >>> data = writer.isel(t=0, z=1, c=0, x=slice(128, 256))
+        """
+        indexers = dict(indexers or {})
+        indexers.update(indexers_kwargs)
+
+        p_index = indexers.get("p", 0)
+        if isinstance(p_index, slice):
+            raise NotImplementedError("Cannot slice over position index")  # TODO
+
+        try:
+            sizes = [*list(self.position_sizes[p_index]), "y", "x"]
+        except IndexError as e:
+            raise IndexError(
+                f"Position index {p_index} out of range for {len(self.position_sizes)}"
+            ) from e
+
+        data = self.position_arrays[self.get_position_key(p_index)]
+        full = slice(None, None)
+        index = tuple(indexers.get(k, full) for k in sizes)
+        return data[index]  # type: ignore

@@ -42,6 +42,7 @@ dependencies = [
     "typing-extensions",      # not actually required at runtime
     "useq-schema >=0.4.7",
     "wrapt >=1.14",
+    "tensorstore",
     # cli requirements included by default for now
     "typer >=0.4.2",
     "rich >=10.2.0",
@@ -62,8 +63,9 @@ test = [
     "typer >=0.4.2",
     "tifffile >=2021.6.14",
     "zarr >=2.2",
+    "xarray",
 ]
-dev = ["ipython", "mypy", "pdbpp", "pre-commit", "ruff"]
+dev = ["ipython", "mypy", "pdbpp", "pre-commit", "ruff", "tensorstore-stubs"]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material",
@@ -137,7 +139,7 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 minversion = "6.0"
 testpaths = ["tests"]
-filterwarnings = ["error"]
+filterwarnings = ["error", "ignore:Failed to disconnect::pytestqt"]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
@@ -180,3 +182,6 @@ ignore = [
     "tests/**/*",
     "tox.ini",
 ]
+
+[tool.typos.default]
+extend-ignore-identifiers-re = ["(?i)nd2?.*", "(?i)ome"]

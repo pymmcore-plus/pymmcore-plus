@@ -5,7 +5,10 @@ import json
 import os.path
 import shutil
 import tempfile
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
+
+import numpy as np
 
 from ._5d_writer_base import _5DWriterBase
 
@@ -13,7 +16,7 @@ if TYPE_CHECKING:
     from os import PathLike
     from typing import ContextManager, Sequence, TypedDict
 
-    import numpy as np
+    import xarray as xr
     import zarr
     from fsspec import FSMap
     from numcodecs.abc import Codec
@@ -67,7 +70,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
     │               └── y
     │                   └── x   # chunks will be each XY plane
     ├── ...
-    ├── pn
+    ├── p<n>
     │   ├── .zarray
     │   ├── .zattrs
     │   └── t...
@@ -186,6 +189,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
     def finalize_metadata(self) -> None:
         """Called by superclass in sequenceFinished.  Flush metadata to disk."""
         # flush frame metadata to disk
+        self._populate_xarray_coords()
         while self.frame_metadatas:
             key, metas = self.frame_metadatas.popitem()
             if key in self.position_arrays:
@@ -193,6 +197,65 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
 
         if self._minify_metadata:
             self._minify_zattrs_metadata()
+
+    def _populate_xarray_coords(self) -> None:
+        # FIXME:
+        # This provides support for xarray coordinates... but it's not obvious
+        # how we should deal with positions that have different shapes, etc...
+        # Also: this whole thing should be generalized to support any kind of
+        # dimension, and should be better about populating the coords as the experiment
+        # progresses.  And it's rather ugly...
+        if not (seq := self.current_sequence):
+            return
+
+        sizes = {**seq.sizes}
+        px = 1
+        if self.frame_metadatas:
+            key, metas = next(iter(self.frame_metadatas.items()))
+            if key in self.position_arrays:
+                shape = self.position_arrays[key].shape
+                px = metas[-1].get("PixelSizeUm", 1)
+                with suppress(IndexError):
+                    sizes.update(y=shape[-2], x=shape[-1])
+
+        for dim, size in sizes.items():
+            if size == 0:
+                continue
+
+            # TODO: this could be much cleaner
+            attrs: dict = {"_ARRAY_DIMENSIONS": [dim]}
+            if dim == "t":
+                if self._timestamps:
+                    coords: Any = list(self._timestamps)
+                elif seq.time_plan:
+                    coords = np.arange(seq.time_plan.num_timepoints(), dtype="float")
+                else:
+                    continue
+                attrs["units"] = "ms"
+            elif dim == "p":
+                # coords = [(p.x, p.y, p.z) for p in seq.stage_positions]
+                coords = np.arange(size)
+            elif dim == "c":
+                coords = [c.config for c in seq.channels]
+            elif dim == "z":
+                coords = list(seq.z_plan) if seq.z_plan else [0]
+                attrs["units"] = "um"
+            elif dim in "yx":
+                coords = np.arange(size, dtype="float") * px
+                attrs["units"] = "um"
+            elif dim == "g":
+                coords = np.arange(size)
+                # TODO
+            else:
+                continue
+
+            # fill_value=None is important to avoid nan where coords == 0
+            if dim in self._group:
+                ds = self._group[dim]
+                ds[:] = coords
+            else:
+                ds = self._group.create_dataset(dim, data=coords, fill_value=None)
+            ds.attrs.update(attrs)
 
     def new_array(self, key: str, dtype: np.dtype, sizes: dict[str, int]) -> zarr.Array:
         """Create a new array in the group, under `key`."""
@@ -249,6 +312,11 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
                 data = json_loads(store[key])
                 # dump minified data back to disk
                 store[key] = json.dumps(data, separators=(",", ":")).encode("ascii")
+
+    def as_xarray(self) -> xr.Dataset:
+        import xarray as xr
+
+        return xr.open_zarr(self.group.store, consolidated=False)
 
 
 # https://ngff.openmicroscopy.org/0.4/index.html#axes-md

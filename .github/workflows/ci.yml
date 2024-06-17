@@ -20,7 +20,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [windows-latest, macos-latest]
+        platform: [windows-latest, macos-13]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         pydantic: [""]
         qt: ["PySide6"]
@@ -33,7 +33,7 @@ jobs:
             python-version: "3.9"
             pydantic: "'pydantic<2'"
             qt: "PySide2"
-          - platform: macos-latest
+          - platform: macos-13
             python-version: "3.11"
             qt: "PyQt6"
           - platform: windows-latest
@@ -146,7 +146,7 @@ jobs:
 
   deploy:
     needs: test
-    if: ${{ github.repository == 'pymmcore-plus/useq-schema' && contains(github.ref, 'tags') }}
+    if: ${{ github.repository == 'pymmcore-plus/pymmcore-plus' && contains(github.ref, 'tags') }}
     runs-on: ubuntu-latest
     permissions:
       id-token: write
@@ -165,4 +165,4 @@ jobs:
       - uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          files: './dist/*'
+          files: "./dist/*"
