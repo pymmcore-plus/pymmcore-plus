@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import suppress
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -18,7 +19,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._sequencing import SequencedEvent
-from pymmcore_plus.core.metadata import Format, get_metadata_function
+from pymmcore_plus.core.metadata import Format, get_metadata_func
 
 from ._protocol import PMDAEngine
 
@@ -51,8 +52,8 @@ class MDAEngine(PMDAEngine):
         set to `True` to improve performance.
     """
 
-    _get_summary_meta: Callable[[CMMCorePlus], MutableMapping]
-    _get_frame_meta: Callable[[CMMCorePlus], MutableMapping]
+    _get_summary_meta: Callable[[CMMCorePlus], Any]
+    _get_frame_meta: Callable[[CMMCorePlus], Any]
 
     def __init__(
         self,
@@ -100,15 +101,15 @@ class MDAEngine(PMDAEngine):
 
     def set_summary_metadata_format(self, format: str, version: str) -> None:
         """Set the format and version for the summary metadata."""
-        self._get_summary_meta = get_metadata_function(format, version)
+        self._get_summary_meta = get_metadata_func(format, version)
 
     def set_frame_metadata_format(self, format: str, version: str) -> None:
         """Set the format and version for the frame metadata."""
-        self._get_frame_meta = get_metadata_function(format, version)
+        self._get_frame_meta = get_metadata_func(format, version)
 
     # ===================== Protocol Implementation =====================
 
-    def setup_sequence(self, sequence: MDASequence) -> MutableMapping[str, Any]:
+    def setup_sequence(self, sequence: MDASequence) -> Any:
         """Setup the hardware for the entire sequence."""
         # clear z_correction for new sequence
         self._z_correction.clear()
@@ -128,7 +129,7 @@ class MDAEngine(PMDAEngine):
         self._autoshutter_was_set = self._mmc.getAutoShutter()
         return self.get_summary_metadata()
 
-    def get_summary_metadata(self) -> MutableMapping:
+    def get_summary_metadata(self) -> Any:
         """Get the summary metadata for the sequence."""
         return self._get_summary_meta(self._mmc)
 

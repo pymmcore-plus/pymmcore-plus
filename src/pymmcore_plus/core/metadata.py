@@ -14,109 +14,37 @@ All metadata payloads are dictionaries with string keys and values of any type.
 
 from __future__ import annotations
 
-from contextlib import suppress
-from datetime import datetime
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Mapping,
-    MutableMapping,
-    NotRequired,
-    TypedDict,
-)
+from typing import TYPE_CHECKING, Callable, Mapping
 
-from . import _state
+from ._structs import Format, FrameMetaV1, PyMMCoreStruct, SummaryMetaV1
 
 if TYPE_CHECKING:
     from pymmcore_plus.core import CMMCorePlus
 
-    from ._state import (
-        AutoFocusDict,
-        DeviceTypeDict,
-        ImageDict,
-        PixelSizeConfigDict,
-        PositionDict,
-        SystemInfoDict,
-        SystemStatusDict,
-    )
-
-    class MetaDict(TypedDict, total=False):
-        format: str
-        version: str
-
-    class SummaryMetaV1(MetaDict, total=False):
-        Devices: dict[str, dict[str, str]]
-        SystemInfo: SystemInfoDict
-        SystemStatus: SystemStatusDict
-        ConfigGroups: dict[str, dict[str, Any]]
-        Image: ImageDict
-        Position: PositionDict
-        AutoFocus: AutoFocusDict
-        PixelSizeConfig: dict[str, str | PixelSizeConfigDict]
-        DeviceTypes: dict[str, DeviceTypeDict]
-        MDASequence: NotRequired[dict]
-        Time: str
+    MetaDataGetter = Callable[[CMMCorePlus], PyMMCoreStruct]
 
 
-class Format:
-    SUMMARY_FULL = "summary"
-    FRAME = "frame"
-
-
-def summary_metadata_full_v1(core: CMMCorePlus) -> SummaryMetaV1:
-    """Return full summary metadata for the given core."""
-    return {
-        "version": "1.0",
-        "format": Format.SUMMARY_FULL,
-        "time": datetime.now().isoformat(),
-        "devices": _state.get_device_info(core),
-        "properties": _state.get_device_state(core, True),
-        "system_info": _state.get_system_info(core),
-        # "system_status": _state.get_system_status(core),
-        # "config_groups": _state.get_config_groups(core, True),
-        "image": _state.get_image_info(core),
-        "pixel_size_config": _state.get_pix_size_config(core),
-    }
-
-
-def frame_metadata_v1(core: CMMCorePlus) -> MetaDict:
-    """Return metadata for a frame during an MDA for the given core."""
-    extra = {}
-    with suppress(RuntimeError):
-        extra["XPositionUm"] = core.getXPosition()
-        extra["YPositionUm"] = core.getYPosition()
-    with suppress(RuntimeError):
-        extra["ZPositionUm"] = core.getZPosition()
-    return {
-        "format": Format.FRAME,
-        "version": "1.0",
-        "Time": datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f"),
-        "ExposureMs": core.getExposure(),  # type: ignore [typeddict-item]
-        "PixelSizeUm": core.getPixelSizeUm(True),  # true == cached
-        **extra,  # type: ignore [typeddict-item]
-    }
-
-
-GET_META: Mapping[str, Mapping[str, Callable[[CMMCorePlus], MutableMapping]]] = {
-    Format.SUMMARY_FULL: {"1.0": summary_metadata_full_v1},
-    Format.FRAME: {"1.0": frame_metadata_v1},
+_METADATA_GETTERS: Mapping[str, Mapping[str, MetaDataGetter]] = {
+    Format.SUMMARY_FULL: {"1.0": SummaryMetaV1.from_core},
+    Format.FRAME: {"1.0": FrameMetaV1.from_core},
 }
 
 
-def get_metadata_function(
+def get_metadata_func(
     format: str | None = None, version: str = "1.0"
-) -> Callable[[CMMCorePlus], MutableMapping]:
+) -> MetaDataGetter:
     """Return a function that can fetch metadata in the specified format and version."""
     fmt = format or Format.SUMMARY_FULL
     if "." not in version and len(version) == 1:
         version += ".0"
 
     try:
-        return GET_META[fmt][version]
+        return _METADATA_GETTERS[fmt][version]
     except KeyError:
         options = ", ".join(
-            f"{fmt}/{ver}" for fmt, versions in GET_META.items() for ver in versions
+            f"{fmt}/{ver}"
+            for fmt, versions in _METADATA_GETTERS.items()
+            for ver in versions
         )
         raise ValueError(
             f"Unsupported metadata format/version: {fmt}/{version}. Options: {options}"
