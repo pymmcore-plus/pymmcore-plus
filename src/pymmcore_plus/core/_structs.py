@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import msgspec
 from msgspec import Struct, field
