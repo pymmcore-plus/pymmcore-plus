@@ -302,8 +302,20 @@ class MDAEngine(PMDAEngine):
         """Teardown state of system (hardware, etc.) after `event`."""
         # autoshutter was set at the beginning of the sequence, and this event
         # doesn't want to leave the shutter open.  Re-enable autoshutter.
+        core = self._mmc
         if not event.keep_shutter_open and self._autoshutter_was_set:
-            self._mmc.setAutoShutter(True)
+            core.setAutoShutter(True)
+        # FIXME: this may not be hitting as intended...
+        # https://github.com/pymmcore-plus/pymmcore-plus/pull/353#issuecomment-2159176491
+        if isinstance(event, SequencedEvent):
+            if event.exposure_sequence:
+                core.stopExposureSequence(self._mmc.getCameraDevice())
+            if event.x_sequence:
+                core.stopXYStageSequence(core.getXYStageDevice())
+            if event.z_sequence:
+                core.stopStageSequence(core.getFocusDevice())
+            for dev, prop in event.property_sequences(core):
+                core.stopPropertySequence(dev, prop)
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
@@ -322,22 +334,23 @@ class MDAEngine(PMDAEngine):
         cam_device = self._mmc.getCameraDevice()
 
         if event.exposure_sequence:
+            with suppress(RuntimeError):
+                core.stopExposureSequence(cam_device)
             core.loadExposureSequence(cam_device, event.exposure_sequence)
         if event.x_sequence:  # y_sequence is implied and will be the same length
             stage = core.getXYStageDevice()
+            with suppress(RuntimeError):
+                core.stopXYStageSequence(stage)
             core.loadXYStageSequence(stage, event.x_sequence, event.y_sequence)
         if event.z_sequence:
-            # these notes are from Nico Stuurman in AcqEngJ
-            # https://github.com/micro-manager/AcqEngJ/pull/108
-            # at least some zStages freak out (in this case, NIDAQ board) when you
-            # try to load a sequence while the sequence is still running.  Nothing in
-            # the engine stops a stage sequence if all goes well.
-            # Stopping a sequence if it is not running hopefully will not harm anyone.
             zstage = core.getFocusDevice()
-            core.stopStageSequence(zstage)
+            with suppress(RuntimeError):
+                core.stopStageSequence(zstage)
             core.loadStageSequence(zstage, event.z_sequence)
         if prop_seqs := event.property_sequences(core):
             for (dev, prop), value_sequence in prop_seqs.items():
+                with suppress(RuntimeError):
+                    core.stopPropertySequence(dev, prop)
                 core.loadPropertySequence(dev, prop, value_sequence)
 
         # TODO: SLM
