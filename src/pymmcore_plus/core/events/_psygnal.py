@@ -1,11 +1,11 @@
-from psygnal import Signal, SignalInstance
+from psygnal import Signal, SignalGroup, SignalInstance
 
 from pymmcore_plus.mda import MDAEngine
 
 from ._prop_event_mixin import _DevicePropertyEventMixin
 
 
-class CMMCoreSignaler(_DevicePropertyEventMixin):
+class CMMCoreSignaler(SignalGroup, _DevicePropertyEventMixin):
     """Signals that will be emitted from CMMCorePlus objects."""
 
     # native MMCore callback events
