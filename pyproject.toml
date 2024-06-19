@@ -43,6 +43,7 @@ dependencies = [
     "useq-schema >=0.4.7",
     "wrapt >=1.14",
     "tensorstore",
+    "msgspec",
     # cli requirements included by default for now
     "typer >=0.4.2",
     "rich >=10.2.0",
