@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 import datetime
+import sys
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, ClassVar, Literal
+from typing import TYPE_CHECKING, Any, Literal
 
 import msgspec
 from msgspec import Struct, field
 
+from pymmcore_plus.mda._runner import TIME_KEY
+
 if TYPE_CHECKING:
     from typing import Self, TypeAlias
+
+    import useq
 
     from pymmcore_plus.core import CMMCorePlus
 
@@ -30,21 +35,49 @@ def _now_isoformat() -> str:
     return datetime.datetime.now().isoformat()
 
 
+def _enc_hook(obj: Any) -> Any:
+    pydantic = sys.modules.get("pydantic")
+    if pydantic and isinstance(obj, pydantic.BaseModel):
+        try:
+            return obj.model_dump(mode="json")
+        except AttributeError:
+            return obj.dict()
+
+    # Raise a NotImplementedError for other types
+    raise NotImplementedError(f"Objects of type {type(obj)!r} are not supported")
+
+
+def _dec_hook(type: type, obj: Any) -> Any:
+    # `type` here is the value of the custom type annotation being decoded.
+    if TYPE_CHECKING:
+        import pydantic
+    else:
+        pydantic = sys.modules.get("pydantic")
+    if pydantic and issubclass(type, pydantic.BaseModel):
+        try:
+            return type.model_validate(obj)
+        except AttributeError:
+            return type.parse_obj(obj)
+
+    # Raise a NotImplementedError for other types
+    raise NotImplementedError(f"Objects of type {type!r} are not supported")
+
+
 class PyMMCoreStruct(Struct):
     """Convenience methods for structs, following Pydantic API (just in case)."""
 
     def model_dump(self) -> dict[str, Any]:
         """Convert the struct to a dictionary."""
-        return msgspec.to_builtins(self)  # type: ignore
+        return msgspec.to_builtins(self, enc_hook=_enc_hook)  # type: ignore
 
     @classmethod
     def model_validate(cls, obj: Any, *, strict: bool = True) -> Self:
         """Create a struct from a dictionary."""
-        return msgspec.convert(obj, cls, strict=strict)
+        return msgspec.convert(obj, cls, strict=strict, dec_hook=_dec_hook)
 
     def model_dump_json(self, *, indent: int | None = None) -> bytes:
         """Convert the struct to a JSON string."""
-        data = msgspec.json.encode(self)
+        data = msgspec.json.encode(self, enc_hook=_enc_hook)
         if indent is not None:
             return msgspec.json.format(data, indent=indent)
         return data
@@ -54,7 +87,9 @@ class PyMMCoreStruct(Struct):
         cls, json_data: bytes | str, *, strict: bool = True
     ) -> Self:
         """Create struct from JSON bytes or string."""
-        return msgspec.json.decode(json_data, type=cls, strict=strict)
+        return msgspec.json.decode(
+            json_data, type=cls, strict=strict, dec_hook=_dec_hook
+        )
 
     @classmethod
     def model_json_schema(cls) -> dict[str, Any]:
@@ -72,7 +107,7 @@ class DeviceInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     label: str | None = None
 
     @classmethod
-    def from_core(cls, core: CMMCorePlus, *, label: str, **kwargs: Any) -> Self:
+    def from_core(cls, core: CMMCorePlus, *, label: str) -> Self:
         return cls(
             type=core.getDeviceType(label).name,
             description=core.getDeviceDescription(label),
@@ -96,7 +131,7 @@ class SystemInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     version_info: str
 
     @classmethod
-    def from_core(cls, core: CMMCorePlus, **kwargs: Any) -> Self:
+    def from_core(cls, core: CMMCorePlus) -> Self:
         return cls(
             api_version_info=core.getAPIVersionInfo(),
             buffer_free_capacity=core.getBufferFreeCapacity(),
@@ -130,7 +165,7 @@ class ImageInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     multi_roi: tuple[list[int], list[int], list[int], list[int]] | None = None
 
     @classmethod
-    def from_core(cls, core: CMMCorePlus, **kwargs: Any) -> Self:
+    def from_core(cls, core: CMMCorePlus) -> Self:
         try:
             multi_roi = core.getMultiROI()
         except RuntimeError:
@@ -166,7 +201,7 @@ class PositionInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):
         return self.focus
 
     @classmethod
-    def from_core(cls, core: CMMCorePlus, **kwargs: Any) -> Self:
+    def from_core(cls, core: CMMCorePlus) -> Self:
         x, y, focus = None, None, None
         with suppress(Exception):
             x = core.getXPosition()
@@ -198,7 +233,7 @@ class PixelSizeConfig(ConfigGroup, **KW_ONLY, **FROZEN):
     pixel_size_affine: tuple[float, float, float, float, float, float]
 
     @classmethod
-    def from_core(cls, core: CMMCorePlus, *, config_name: str, **kwargs: Any) -> Self:
+    def from_core(cls, core: CMMCorePlus, *, config_name: str) -> Self:
         return cls(
             name=config_name,
             settings=tuple(
@@ -219,20 +254,21 @@ class SummaryMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     image_info: ImageInfo
     pixel_size_configs: dict[PresetName, PixelSizeConfig]
     position: PositionInfo
-    time: str = field(default_factory=_now_isoformat)
-
+    mda_sequence: useq.MDASequence | None = None
+    date_time: str = field(default_factory=_now_isoformat)
     format: Literal["summary"] = Format.SUMMARY_FULL
     version: Literal["1.0"] = "1.0"
 
     @classmethod
-    def from_core(cls, core: CMMCorePlus, **kwargs: Any) -> Self:
+    def from_core(cls, core: CMMCorePlus, extra: dict[str, Any]) -> Self:
         return cls(
             devices=_devices_info(core),
-            properties=_properties_state(core, cached=kwargs.get("cached", True)),
+            properties=_properties_state(core, cached=extra.get("cached", True)),
             system_info=SystemInfo.from_core(core),
             image_info=ImageInfo.from_core(core),
             position=PositionInfo.from_core(core),
             pixel_size_configs=_pixel_size_configs(core),
+            mda_sequence=extra.get("mda_sequence"),
         )
 
 
@@ -278,16 +314,29 @@ class FrameMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     exposure_ms: float
     pixel_size_um: float
     position: PositionInfo
-    time: str = field(default_factory=_now_isoformat)
+    mda_event: useq.MDAEvent | None = None
+    seconds_elapsed: float | None = None
+    physical_camera_device: str | None = None
 
     format: Literal["frame"] = Format.FRAME
     version: Literal["1.0"] = "1.0"
 
     @classmethod
-    def from_core(cls, core: CMMCorePlus, **kwargs: Any) -> Self:
-        cached = kwargs.get("cached", True)
-        return cls(
+    def from_core(cls, core: CMMCorePlus, extra: dict[str, Any]) -> Self:
+        if event := extra.get("mda_event"):
+            seconds_elapsed = event.metadata.get(TIME_KEY)
+        else:
+            seconds_elapsed = None
+        x = cls(
             exposure_ms=core.getExposure(),
-            pixel_size_um=core.getPixelSizeUm(cached),  # true == cached
+            pixel_size_um=core.getPixelSizeUm(extra.get("cached", True)),
             position=PositionInfo.from_core(core),
+            mda_event=event,
+            seconds_elapsed=seconds_elapsed,
+            physical_camera_device=extra.get("physical_camera_device"),
         )
+        from rich import print
+
+        print("-----------------")
+        print(x)
+        return x

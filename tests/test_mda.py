@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import useq
+from pymmcore_plus.core._structs import PyMMCoreStruct
 from pymmcore_plus.mda.events import MDASignaler
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
@@ -391,3 +392,44 @@ def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
         thread.join()
     assert engine.setup_event.call_count == 2
     engine.teardown_sequence.assert_called_once()
+
+
+def test_multicam(core: CMMCorePlus) -> None:
+    mc = "MultiCam"
+    core.loadDevice("Camer2", "DemoCamera", "DCam")
+    core.loadDevice(mc, "Utilities", "Multi Camera")
+    core.initializeDevice(mc)
+    core.initializeDevice("Camer2")
+    core.setProperty("Camer2", "BitDepth", "16")
+    core.setProperty(mc, "Physical Camera 1", "Camera")
+    core.setProperty(mc, "Physical Camera 2", "Camer2")
+    core.setCameraDevice(mc)
+
+    mda = MDASequence(
+        channels=["Cy5"],
+        time_plan={"interval": 0, "loops": 2},
+        axis_order="tpcz",
+        # stage_positions=[(222, 1, 1), (111, 0, 0)],
+    )
+
+    summary_mock = Mock()
+    event_mock = Mock()
+
+    core.mda.engine.use_hardware_sequencing = True
+    core.mda.events.sequenceStarted.connect(summary_mock)
+    core.mda.events.frameReady.connect(event_mock)
+    core.mda.run(mda)
+
+    assert summary_mock.call_count == 1
+    assert event_mock.call_count == len(list(mda)) * core.getNumberOfCameraChannels()
+    for call in summary_mock.call_args_list:
+        meta = call.args[1]
+        assert isinstance(meta, PyMMCoreStruct)
+        meta.model_dump_json()
+        from rich import print
+
+        print(meta)
+    for call in event_mock.call_args_list:
+        meta = call.args[2]
+        assert isinstance(meta, PyMMCoreStruct)
+        meta.model_dump_json()

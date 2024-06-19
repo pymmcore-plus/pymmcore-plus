@@ -621,7 +621,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @synchronized(_lock)
     def popNextImageAndMD(
-        self, channel: int | None = None, slice: int | None = None, *, fix: bool = True
+        self, channel: int = 0, slice: int = 0, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
         """Gets and removes the next image (and metadata) from the circular buffer.
 
@@ -651,10 +651,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             Image and metadata
         """
         md = Metadata()
-        if channel is not None and slice is not None:
-            img = super().popNextImageMD(channel, slice, md)
-        else:
-            img = super().popNextImageMD(md)
+        img = super().popNextImageMD(channel, slice, md)
         return (self.fixImage(img) if fix else img, md)
 
     @synchronized(_lock)
@@ -1513,7 +1510,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         if self.hasProperty(cam_dev, prop_name):
             return self.getProperty(cam_dev, prop_name)
         if channel_index > 0:
-            raise ValueError(f"Camera {cam_dev} does not have a property {prop_name}.")
+            warnings.warn(
+                f"Camera {cam_dev} does not have a property {prop_name}. "
+                f"Cannot get channel_index={channel_index}",
+                stacklevel=2,
+            )
         return cam_dev
 
     def getTaggedImage(self, channel_index: int = 0) -> TaggedImage:

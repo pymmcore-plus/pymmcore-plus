@@ -5,7 +5,6 @@ from contextlib import suppress
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Iterable,
     Iterator,
     MutableMapping,
@@ -28,6 +27,7 @@ if TYPE_CHECKING:
 
     from pymmcore_plus.core import CMMCorePlus
     from pymmcore_plus.core._metadata import Metadata
+    from pymmcore_plus.core.metadata import MetaDataGetter
 
     from ._protocol import PImagePayload
 
@@ -52,8 +52,8 @@ class MDAEngine(PMDAEngine):
         set to `True` to improve performance.
     """
 
-    _get_summary_meta: Callable[[CMMCorePlus], Any]
-    _get_frame_meta: Callable[[CMMCorePlus], Any]
+    _get_summary_meta: MetaDataGetter
+    _get_frame_meta: MetaDataGetter
 
     def __init__(
         self,
@@ -127,11 +127,7 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = self._mmc.getAutoShutter()
-        return self.get_summary_metadata()
-
-    def get_summary_metadata(self) -> Any:
-        """Get the summary metadata for the sequence."""
-        return self._get_summary_meta(self._mmc)
+        return self._get_summary_meta(self._mmc, {"sequence": sequence})
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()
@@ -282,21 +278,32 @@ class MDAEngine(PMDAEngine):
 
         for cam in range(self._mmc.getNumberOfCameraChannels()):
             yield ImagePayload(
-                self._mmc.getImage(),
+                self._mmc.getImage(cam),
                 event,
                 self.get_frame_metadata(event, cam_index=cam),
             )
 
     def get_frame_metadata(
         self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0
-    ) -> dict[str, Any]:
+    ) -> Any:
+        if meta:
+            from pymmcore_plus import Keyword
+
+            meta.get(Keyword.Elapsed_Time_ms)
+            physical_camera_device = meta.get(Keyword.CoreCamera)
+        else:
+            physical_camera_device = self._mmc.getPhysicalCameraDevice(cam_index)
+            breakpoint()
+        return self._get_frame_meta(
+            self._mmc,
+            {"mda_event": event, "physical_camera_device": physical_camera_device},
+        )
         meta_: dict = dict(meta) if meta else {}
-        meta_.update(self._get_frame_meta(self._mmc))
+        meta_.update(self._get_frame_meta(self._mmc, {}))
         if event.channel and (
             info := self._get_config_group_state(event.channel.group)
         ):
             meta_["ConfigGroups"] = {event.channel.group: info}
-        meta_["PhysicalCameraDevice"] = self._mmc.getPhysicalCameraDevice(cam_index)
         return meta_
 
     def teardown_event(self, event: MDAEvent) -> None:

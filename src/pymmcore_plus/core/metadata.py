@@ -14,14 +14,23 @@ All metadata payloads are dictionaries with string keys and values of any type.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Callable, Mapping
+from typing import TYPE_CHECKING, Any, Mapping
 
-from ._structs import Format, FrameMetaV1, PyMMCoreStruct, SummaryMetaV1
+from ._structs import Format, FrameMetaV1, SummaryMetaV1
 
 if TYPE_CHECKING:
+    from typing import Protocol
+
     from pymmcore_plus.core import CMMCorePlus
 
-    MetaDataGetter = Callable[[CMMCorePlus], PyMMCoreStruct]
+    class MetaDataGetter(Protocol):
+        """Callable that fetches metadata."""
+
+        def __call__(self, core: CMMCorePlus, extra: dict[str, Any]) -> Any:
+            """Must core and `extra` dict.
+
+            May search for keys in `extra` to modify behavior.
+            """
 
 
 _METADATA_GETTERS: Mapping[str, Mapping[str, MetaDataGetter]] = {

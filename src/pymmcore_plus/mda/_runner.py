@@ -36,6 +36,7 @@ MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
     "length & shape. Iterating over it has no effect."
 )
+TIME_KEY = "seconds_elapsed"
 
 
 class GeneratorMDASequence(MDASequence):
@@ -272,6 +273,7 @@ class MDARunner:
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
         event_iterator = getattr(engine, "event_iterator", iter)
         _events: Iterator[MDAEvent] = event_iterator(events)
+        self._reset_timer()
 
         for event in _events:
             # If cancelled break out of the loop
@@ -283,19 +285,11 @@ class MDARunner:
             engine.setup_event(event)
 
             try:
+                event.metadata[TIME_KEY] = self.seconds_elapsed()
                 output = engine.exec_event(event) or ()  # in case output is None
-                exec_time = self.seconds_elapsed() * 1000
-
                 for payload in output:
                     img, event, meta = payload
-                    if "PerfCounter" in meta:
-                        meta["ElapsedTime-ms"] = (meta["PerfCounter"] - self._t0) * 1000
-                    else:
-                        meta["ElapsedTime-ms"] = exec_time
                     with exceptions_logged():
-                        from rich import print
-
-                        print(event.min_start_time, meta)
                         self._signals.frameReady.emit(img, event, meta)
             finally:
                 teardown_event(event)
@@ -317,13 +311,6 @@ class MDARunner:
         self._sequence = sequence
 
         meta = self._engine.setup_sequence(sequence) or {}
-        try:
-            meta["MDASequence"] = sequence.model_dump(mode="json")  # type: ignore [index]
-        except Exception as e:
-            logger.warning("Failed to get sequence metadata. %s", e)
-
-        self._reset_timer()
-        meta["t0"] = self._t0
         self._signals.sequenceStarted.emit(sequence, meta)
         logger.info("MDA Started: %s", sequence)
         return self._engine
