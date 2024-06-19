@@ -8,7 +8,6 @@ from typing import (
     Any,
     Iterable,
     Iterator,
-    MutableMapping,
     NamedTuple,
     Sequence,
     cast,
@@ -553,4 +552,4 @@ class MDAEngine(PMDAEngine):
 class ImagePayload(NamedTuple):
     image: NDArray
     event: MDAEvent
-    metadata: MutableMapping
+    metadata: Any
