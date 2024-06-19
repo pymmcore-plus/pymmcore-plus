@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 from useq import MDASequence
 
 from pymmcore_plus._logger import exceptions_logged, logger
+from pymmcore_plus.core._constants import PymmcPlusConstants as PPC
 
 from ._protocol import PMDAEngine
 from ._thread_relay import mda_listeners_connected
@@ -36,7 +37,6 @@ MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
     "length & shape. Iterating over it has no effect."
 )
-TIME_KEY = "seconds_elapsed"
 
 
 class GeneratorMDASequence(MDASequence):
@@ -285,7 +285,7 @@ class MDARunner:
             engine.setup_event(event)
 
             try:
-                event.metadata[TIME_KEY] = self.seconds_elapsed()
+                event.metadata[PPC.RUNNER_TIME_SEC.value] = self.seconds_elapsed()
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in output:
                     img, event, meta = payload

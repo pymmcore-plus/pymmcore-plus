@@ -9,6 +9,13 @@ import pymmcore
 # we could do this dynamically, but then we lose IDE type hints
 
 
+class PymmcPlusConstants(Enum):
+    MDA_SEQUENCE = "mda_sequence"
+    MDA_EVENT = "mda_event"
+    RUNNER_TIME_SEC = "runner_time_sec"
+    CONFIG_STATE = "config_state"
+
+
 class Keyword(str, Enum):
     Name = pymmcore.g_Keyword_Name
     Description = pymmcore.g_Keyword_Description

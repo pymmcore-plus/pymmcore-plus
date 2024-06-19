@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from contextlib import suppress
+from itertools import product
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -17,9 +18,10 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
-from pymmcore_plus.core._constants import Keyword
+from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
 from pymmcore_plus.core._sequencing import SequencedEvent
-from pymmcore_plus.core.metadata import Format, get_metadata_func
+from pymmcore_plus.core._structs import FrameMetaV1, SummaryMetaV1
+from pymmcore_plus.core.metadata import ensure_valid_metadata_func, get_metadata_func
 
 from ._protocol import PMDAEngine
 
@@ -64,9 +66,9 @@ class MDAEngine(PMDAEngine):
         mmc: CMMCorePlus,
         *,
         use_hardware_sequencing: bool = False,
-        summary_metadata_format: str = Format.SUMMARY_FULL,
+        summary_metadata_format: str | MetaDataGetter = SummaryMetaV1.from_core,
         summary_metadata_version: str = "1.0",
-        frame_metadata_format: str = Format.FRAME,
+        frame_metadata_format: str | MetaDataGetter = FrameMetaV1.from_core,
         frame_metadata_version: str = "1.0",
     ) -> None:
         self._mmc = mmc
@@ -103,13 +105,23 @@ class MDAEngine(PMDAEngine):
         """The `CMMCorePlus` instance to use for hardware control."""
         return self._mmc
 
-    def set_summary_metadata_format(self, format: str, version: str) -> None:
+    def set_summary_metadata_format(
+        self, format: str | MetaDataGetter, version: str
+    ) -> None:
         """Set the format and version for the summary metadata."""
-        self._get_summary_meta = get_metadata_func(format, version)
+        if isinstance(format, str):
+            self._get_summary_meta = get_metadata_func(format, version)
+        else:
+            self._get_summary_meta = ensure_valid_metadata_func(format)
 
-    def set_frame_metadata_format(self, format: str, version: str) -> None:
+    def set_frame_metadata_format(
+        self, format: str | MetaDataGetter, version: str
+    ) -> None:
         """Set the format and version for the frame metadata."""
-        self._get_frame_meta = get_metadata_func(format, version)
+        if isinstance(format, str):
+            self._get_frame_meta = get_metadata_func(format, version)
+        else:
+            self._get_frame_meta = ensure_valid_metadata_func(format)
 
     # ===================== Protocol Implementation =====================
 
@@ -131,7 +143,9 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = self._mmc.getAutoShutter()
-        return self._get_summary_meta(self._mmc, {"sequence": sequence})
+        return self._get_summary_meta(
+            self._mmc, {PymmcPlusConstants.MDA_SEQUENCE.value: sequence}
+        )
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()
@@ -290,37 +304,17 @@ class MDAEngine(PMDAEngine):
     def get_frame_metadata(
         self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0
     ) -> Any:
-        extra: dict = {"mda_event": event}
+        extra = {} if meta is None else dict(meta)
+        extra[PymmcPlusConstants.MDA_EVENT.value] = event
+
         if (ch := event.channel) and (info := self._get_config_group_state(ch.group)):
-            extra["config_state"] = {ch.group: info}
-
-        from rich import print
-
-        if meta:
-            print(meta)
-            # metadata will be available only when popping from the circular buffer.
-            # there is no defined schema for what can be in here. it's up to the adapter
-            # grep for `md.put("` in mmCoreAndDevices to see things that are likely
-            # to be in this metadata object.
-            # See also: CircularBuffer::InsertMultiChannel in CircularBuffer.cpp
-            # which adds additional tags: Width, Height, BitDepth, TimeReceivedByCore
-            # PixelType {GRAY8, GRAY16, GRAY32, RGB32, RGB64, Unknown}
-
-            # Common keys include:
-            # "Camera"
-            # MM::g_Keyword_Elapsed_Time_ms
-            # MM::g_Keyword_Metadata_ImageNumber
-            # MM::g_Keyword_Metadata_ROI_X
-            # MM::g_Keyword_Metadata_ROI_Y
-            meta.get(Keyword.Elapsed_Time_ms)
-            extra["physical_camera_device"] = meta.get(Keyword.CoreCamera)
-        else:
-            extra["physical_camera_device"] = self._mmc.getPhysicalCameraDevice(
-                cam_index
-            )
-            # tags["ROI"] = "-".join(str(x) for x in self.getROI())
-            # binning = self.getProperty(self.getCameraDevice(), "Binning")
-            print("????????????????", "-".join(str(x) for x in self._mmc.getROI()))
+            extra[PymmcPlusConstants.CONFIG_STATE.value] = {ch.group: info}
+        if (key := Keyword.CoreCamera.value) not in extra:
+            # note, when present in meta, this key is called "Camera".
+            # It's NOT actually Keyword.CoreCamera (but it's the same value)
+            # it is hardcoded in various places in mmCoreAndDevices, see:
+            # see: https://github.com/micro-manager/mmCoreAndDevices/pull/468
+            extra[key] = self._mmc.getPhysicalCameraDevice(cam_index)
         return self._get_frame_meta(self._mmc, extra)
 
     def teardown_event(self, event: MDAEvent) -> None:
@@ -435,7 +429,6 @@ class MDAEngine(PMDAEngine):
         `exec_event`, which *is* part of the protocol), but it is made public
         in case a user wants to subclass this engine and override this method.
         """
-        # TODO: add support for multiple camera devices
         n_events = len(event.events)
 
         # Start sequence
@@ -447,15 +440,15 @@ class MDAEngine(PMDAEngine):
             0,  # intervalMS  # TODO: add support for this
             True,  # stopOnOverflow
         )
-
         self.post_sequence_started(event)
 
+        n_channels = self._mmc.getNumberOfCameraChannels()
         count = 0
-        iter_events = iter(event.events)
+        iter_events = product(event.events, range(n_channels))
         # block until the sequence is done, popping images in the meantime
         while self._mmc.isSequenceRunning():
             if self._mmc.getRemainingImageCount():
-                yield self._next_img_payload(next(iter_events))
+                yield self._next_img_payload(*next(iter_events))
                 count += 1
             else:
                 time.sleep(0.001)
@@ -464,20 +457,22 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while self._mmc.getRemainingImageCount():
-            yield self._next_img_payload(next(iter_events))
+            yield self._next_img_payload(*next(iter_events))
             count += 1
 
-        if count != n_events:
+        expected_images = n_events * n_channels
+        if count != expected_images:
             logger.warning(
                 "Unexpected number of images returned from sequence. "
                 "Expected %s, got %s",
-                n_events,
+                expected_images,
                 count,
             )
 
-    def _next_img_payload(self, event: MDAEvent) -> PImagePayload:
+    def _next_img_payload(self, event: MDAEvent, channel: int = 0) -> PImagePayload:
         """Grab next image from the circular buffer and return it as an ImagePayload."""
-        img, meta = self._mmc.popNextImageAndMD()
+        _slice = 0  # ?
+        img, meta = self._mmc.popNextImageAndMD(channel, _slice)
         _meta = self.get_frame_metadata(event, meta)
         return ImagePayload(img, event, _meta)
 

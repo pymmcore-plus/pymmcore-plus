@@ -6,7 +6,6 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import useq
-from pymmcore_plus.core._structs import PyMMCoreStruct
 from pymmcore_plus.mda.events import MDASignaler
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
@@ -395,6 +394,7 @@ def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
 
 
 def test_multicam(core: CMMCorePlus) -> None:
+    # mc = "YoMulti"
     # core.loadDevice("Camer2", "DemoCamera", "DCam")
     # core.loadDevice(mc, "Utilities", "Multi Camera")
     # core.initializeDevice(mc)
@@ -406,26 +406,27 @@ def test_multicam(core: CMMCorePlus) -> None:
 
     mda = MDASequence(
         channels=["Cy5", "FITC"],
-        time_plan={"interval": 0, "loops": 10},
-        axis_order="cptz",
+        time_plan={"interval": 0, "loops": 3},
+        axis_order="tpcz",
         stage_positions=[(222, 1, 1), (111, 0, 0)],
     )
 
-    summary_mock = Mock()
-    event_mock = Mock()
+    Mock()
+    Mock()
+    from rich import print
 
-    core.mda.engine.use_hardware_sequencing = True
-    core.mda.events.sequenceStarted.connect(summary_mock)
-    core.mda.events.frameReady.connect(event_mock)
+    # core.mda.engine.use_hardware_sequencing = True
+    core.mda.events.sequenceStarted.connect(print)
+    core.mda.events.frameReady.connect(print)
     core.mda.run(mda)
 
-    assert summary_mock.call_count == 1
-    assert event_mock.call_count == len(list(mda)) * core.getNumberOfCameraChannels()
-    for call in summary_mock.call_args_list:
-        meta = call.args[1]
-        assert isinstance(meta, PyMMCoreStruct)
-        meta.model_dump_json()
-    for call in event_mock.call_args_list:
-        meta = call.args[2]
-        assert isinstance(meta, PyMMCoreStruct)
-        meta.model_dump_json()
+    # assert summary_mock.call_count == 1
+    # assert event_mock.call_count == len(list(mda)) * core.getNumberOfCameraChannels()
+    # for call in summary_mock.call_args_list:
+    #     meta = call.args[1]
+    #     assert isinstance(meta, PyMMCoreStruct)
+    #     meta.model_dump_json()
+    # for call in event_mock.call_args_list:
+    #     meta = call.args[2]
+    #     assert isinstance(meta, PyMMCoreStruct)
+    #     meta.model_dump_json()

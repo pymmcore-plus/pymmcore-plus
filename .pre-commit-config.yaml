@@ -32,3 +32,4 @@ repos:
           - useq-schema >= 0.4.7
           - psygnal
           - typer
+          - msgspec

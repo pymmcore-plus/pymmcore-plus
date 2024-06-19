@@ -13,22 +13,6 @@ sequence = MDASequence(
 mmc = CMMCorePlus.instance()  # (2)!
 mmc.loadSystemConfiguration()  #  load demo configuration (3)
 
-mmc.loadDevice("Camer2", "DemoCamera", "DCam")
-mmc.loadDevice("MC", "Utilities", "Multi Camera")
-mmc.initializeDevice("MC")
-mmc.initializeDevice("Camer2")
-mmc.setProperty("Camer2", "BitDepth", "16")
-mmc.setProperty("MC", "Physical Camera 1", "Camera")
-mmc.setProperty("MC", "Physical Camera 2", "Camer2")
-mmc.setCameraDevice("MC")
-
-from rich import print
-
-
-@mmc.mda.events.sequenceStarted.connect
-def on_start(sequence: MDASequence, meta: dict):
-    print(meta)
-
 
 # connect callback using a decorator (4)
 @mmc.mda.events.frameReady.connect

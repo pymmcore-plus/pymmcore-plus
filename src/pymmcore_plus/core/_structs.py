@@ -2,25 +2,22 @@ from __future__ import annotations
 
 import datetime
 import sys
+from abc import abstractmethod
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal
 
 import msgspec
+import useq  # noqa: TCH002
 from msgspec import Struct, field
 
-from pymmcore_plus.mda._runner import TIME_KEY
+from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
 
 if TYPE_CHECKING:
     from typing import Self, TypeAlias
 
-    import useq
-
     from pymmcore_plus.core import CMMCorePlus
 
-
-class Format:
-    SUMMARY_FULL: Literal["summary"] = "summary"
-    FRAME: Literal["frame"] = "frame"
+__all__ = ["FrameMetaV1", "SummaryMetaV1", "MetadataProvider"]
 
 
 DeviceLabel: TypeAlias = str
@@ -36,6 +33,7 @@ def _now_isoformat() -> str:
 
 
 def _enc_hook(obj: Any) -> Any:
+    """Custom encoder for msgspec."""
     pydantic = sys.modules.get("pydantic")
     if pydantic and isinstance(obj, pydantic.BaseModel):
         try:
@@ -48,6 +46,7 @@ def _enc_hook(obj: Any) -> Any:
 
 
 def _dec_hook(type: type, obj: Any) -> Any:
+    """Custom decoder for msgspec."""
     # `type` here is the value of the custom type annotation being decoded.
     if TYPE_CHECKING:
         import pydantic
@@ -95,6 +94,38 @@ class PyMMCoreStruct(Struct):
     def model_json_schema(cls) -> dict[str, Any]:
         """Return the JSON schema for the struct."""
         return msgspec.json.schema(cls)
+
+
+# we don't actually inherit from (ABC) here so as to avoid metaclass conflicts
+# this means the @abstractmethod decorator is not enforced
+class MetadataProvider:
+    """Base class for metadata providers."""
+
+    @classmethod
+    @abstractmethod
+    def from_core(cls, core: CMMCorePlus, extra: dict[str, Any]) -> Any:
+        raise NotImplementedError(f"{cls.__name__} must implement `from_core` method.")
+
+    @classmethod
+    @abstractmethod
+    def provider_key(cls) -> str:
+        raise NotImplementedError(
+            f"{cls.__name__} must implement `provider_key` method."
+        )
+
+    @classmethod
+    @abstractmethod
+    def provider_version(cls) -> str:
+        raise NotImplementedError(
+            f"{cls.__name__} must implement `provider_version` method."
+        )
+
+    @classmethod
+    @abstractmethod
+    def metadata_type(cls) -> Literal["summary", "frame"]:
+        raise NotImplementedError(
+            f"{cls.__name__} must implement `metadata_type` method."
+        )
 
 
 class DeviceInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):
@@ -182,7 +213,7 @@ class ImageInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):
             number_of_camera_channels=core.getNumberOfCameraChannels(),
             number_of_components=core.getNumberOfComponents(),
             pixel_size_affine=core.getPixelSizeAffine(True),  # type: ignore
-            pixel_size_um=core.getPixelSizeUm(True),  # type: ignore
+            pixel_size_um=core.getPixelSizeUm(True),
             roi=core.getROI(),
             camera_device=core.getCameraDevice(),
             multi_roi=multi_roi,
@@ -229,8 +260,8 @@ class ConfigGroup(PyMMCoreStruct, **KW_ONLY, **FROZEN):
 class PixelSizeConfig(ConfigGroup, **KW_ONLY, **FROZEN):
     """A configuration group for pixel size settings."""
 
-    pixel_size_um: float
-    pixel_size_affine: tuple[float, float, float, float, float, float]
+    pixel_size_um: float  # type: ignore [misc]
+    pixel_size_affine: tuple[float, float, float, float, float, float]  # type: ignore [misc]
 
     @classmethod
     def from_core(cls, core: CMMCorePlus, *, config_name: str) -> Self:
@@ -245,7 +276,7 @@ class PixelSizeConfig(ConfigGroup, **KW_ONLY, **FROZEN):
         )
 
 
-class SummaryMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
+class SummaryMetaV1(PyMMCoreStruct, MetadataProvider, **KW_ONLY, **FROZEN):
     """Summary current state of the system. Version 1."""
 
     devices: dict[DeviceLabel, DeviceInfo]
@@ -256,7 +287,7 @@ class SummaryMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     position: PositionInfo
     mda_sequence: useq.MDASequence | None = None
     date_time: str = field(default_factory=_now_isoformat)
-    format: Literal["summary"] = Format.SUMMARY_FULL
+    format: Literal["summary-struct-full"] = "summary-struct-full"
     version: Literal["1.0"] = "1.0"
 
     @classmethod
@@ -268,8 +299,20 @@ class SummaryMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
             image_info=ImageInfo.from_core(core),
             position=PositionInfo.from_core(core),
             pixel_size_configs=_pixel_size_configs(core),
-            mda_sequence=extra.get("mda_sequence"),
+            mda_sequence=extra.get(PymmcPlusConstants.MDA_SEQUENCE.value),
         )
+
+    @classmethod
+    def provider_key(cls) -> str:
+        return "summary-struct-full"
+
+    @classmethod
+    def provider_version(cls) -> str:
+        return "1.0"
+
+    @classmethod
+    def metadata_type(cls) -> Literal["summary"]:
+        return "summary"
 
 
 def _devices_info(core: CMMCorePlus) -> dict[str, DeviceInfo]:
@@ -305,7 +348,7 @@ def _pixel_size_configs(core: CMMCorePlus) -> dict[PresetName, PixelSizeConfig]:
     }
 
 
-class FrameMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
+class FrameMetaV1(PyMMCoreStruct, MetadataProvider, **KW_ONLY, **FROZEN):
     """Metadata for a frame during an MDA. Version 1.
 
     This is intentionally minimal to avoid unnecessary overhead.
@@ -315,25 +358,37 @@ class FrameMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     pixel_size_um: float
     position: PositionInfo
     mda_event: useq.MDAEvent | None = None
-    seconds_elapsed: float | None = None
-    physical_camera_device: str | None = None
+    runner_time: float | None = None
+    camera_device: str | None = None
     config_state: dict[str, dict[str, Any]] | None = None
 
-    format: Literal["frame"] = Format.FRAME
+    format: Literal["frame-struct-minimal"] = "frame-struct-minimal"
     version: Literal["1.0"] = "1.0"
 
     @classmethod
     def from_core(cls, core: CMMCorePlus, extra: dict[str, Any]) -> Self:
-        if event := extra.get("mda_event"):
-            seconds_elapsed = event.metadata.get(TIME_KEY)
+        if mda_event := extra.get(PymmcPlusConstants.MDA_EVENT.value):
+            run_time = mda_event.metadata.get(PymmcPlusConstants.RUNNER_TIME_SEC.value)
         else:
-            seconds_elapsed = None
+            run_time = None
         return cls(
             exposure_ms=core.getExposure(),
             pixel_size_um=core.getPixelSizeUm(extra.get("cached", True)),
             position=PositionInfo.from_core(core),
-            mda_event=event,
-            seconds_elapsed=seconds_elapsed,
-            physical_camera_device=extra.get("physical_camera_device"),
-            config_state=extra.get("config_state"),
+            mda_event=mda_event,
+            runner_time=run_time,
+            camera_device=extra.get(Keyword.CoreCamera.value),
+            config_state=extra.get(PymmcPlusConstants.CONFIG_STATE.value),
         )
+
+    @classmethod
+    def provider_key(cls) -> str:
+        return "frame-struct-minimal"
+
+    @classmethod
+    def provider_version(cls) -> str:
+        return "1.0"
+
+    @classmethod
+    def metadata_type(cls) -> Literal["frame"]:
+        return "frame"

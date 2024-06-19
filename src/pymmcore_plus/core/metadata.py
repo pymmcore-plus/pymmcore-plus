@@ -14,9 +14,11 @@ All metadata payloads are dictionaries with string keys and values of any type.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Mapping
+import warnings
+from inspect import signature
+from typing import TYPE_CHECKING, Any, Callable, cast
 
-from ._structs import Format, FrameMetaV1, SummaryMetaV1
+from ._structs import MetadataProvider
 
 if TYPE_CHECKING:
     from typing import Protocol
@@ -33,22 +35,33 @@ if TYPE_CHECKING:
             """
 
 
-_METADATA_GETTERS: Mapping[str, Mapping[str, MetaDataGetter]] = {
-    Format.SUMMARY_FULL: {"1.0": SummaryMetaV1.from_core},
-    Format.FRAME: {"1.0": FrameMetaV1.from_core},
-}
+_METADATA_GETTERS: dict[str, dict[str, MetaDataGetter]] = {}
+for subcls in MetadataProvider.__subclasses__():
+    try:
+        key = subcls.provider_key()
+        version = subcls.provider_version()
+    except Exception as e:
+        warnings.warn(
+            f"Failed to register pymmcore-plus metadata provider {subcls}: {e}",
+            RuntimeWarning,
+            stacklevel=2,
+        )
+    sub_dict = _METADATA_GETTERS.setdefault(key, {})
+    if version in sub_dict:
+        raise ValueError(
+            f"Duplicate metadata provider: {key}/{version} "
+            f"({subcls} and {sub_dict[version]})"
+        )
+    sub_dict[version] = subcls.from_core
 
 
-def get_metadata_func(
-    format: str | None = None, version: str = "1.0"
-) -> MetaDataGetter:
+def get_metadata_func(key: str, version: str = "1.0") -> MetaDataGetter:
     """Return a function that can fetch metadata in the specified format and version."""
-    fmt = format or Format.SUMMARY_FULL
     if "." not in version and len(version) == 1:
         version += ".0"
 
     try:
-        return _METADATA_GETTERS[fmt][version]
+        return _METADATA_GETTERS[key][version]
     except KeyError:
         options = ", ".join(
             f"{fmt}/{ver}"
@@ -56,5 +69,24 @@ def get_metadata_func(
             for ver in versions
         )
         raise ValueError(
-            f"Unsupported metadata format/version: {fmt}/{version}. Options: {options}"
+            f"Unsupported metadata format/version: {key}/{version}. Options: {options}"
         ) from None
+
+
+def ensure_valid_metadata_func(obj: Callable) -> MetaDataGetter:
+    """Ensure that `obj` is a valid metadata function and return it.
+
+    A valid metadata function is a callable with the following signature:
+    ```python
+    def metadata_func(core: CMMCorePlus, extra: dict[str, Any]) -> Any: ...
+    ```
+    """
+    if not callable(obj):
+        raise TypeError(f"Expected callable, got {type(obj)}")
+    sig = signature(obj)
+    if len(sig.parameters) != 2:
+        raise TypeError(
+            "Metadata function should accept 2 parameters "
+            f"(core: CMMCorePlus, extra: dict), got {len(sig.parameters)}"
+        )
+    return cast("MetaDataGetter", obj)
