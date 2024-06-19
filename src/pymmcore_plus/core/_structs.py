@@ -317,6 +317,7 @@ class FrameMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
     mda_event: useq.MDAEvent | None = None
     seconds_elapsed: float | None = None
     physical_camera_device: str | None = None
+    config_state: dict[str, dict[str, Any]] | None = None
 
     format: Literal["frame"] = Format.FRAME
     version: Literal["1.0"] = "1.0"
@@ -327,16 +328,12 @@ class FrameMetaV1(PyMMCoreStruct, **KW_ONLY, **FROZEN):
             seconds_elapsed = event.metadata.get(TIME_KEY)
         else:
             seconds_elapsed = None
-        x = cls(
+        return cls(
             exposure_ms=core.getExposure(),
             pixel_size_um=core.getPixelSizeUm(extra.get("cached", True)),
             position=PositionInfo.from_core(core),
             mda_event=event,
             seconds_elapsed=seconds_elapsed,
             physical_camera_device=extra.get("physical_camera_device"),
+            config_state=extra.get("config_state"),
         )
-        from rich import print
-
-        print("-----------------")
-        print(x)
-        return x

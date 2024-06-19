@@ -395,21 +395,20 @@ def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
 
 
 def test_multicam(core: CMMCorePlus) -> None:
-    mc = "MultiCam"
-    core.loadDevice("Camer2", "DemoCamera", "DCam")
-    core.loadDevice(mc, "Utilities", "Multi Camera")
-    core.initializeDevice(mc)
-    core.initializeDevice("Camer2")
-    core.setProperty("Camer2", "BitDepth", "16")
-    core.setProperty(mc, "Physical Camera 1", "Camera")
-    core.setProperty(mc, "Physical Camera 2", "Camer2")
-    core.setCameraDevice(mc)
+    # core.loadDevice("Camer2", "DemoCamera", "DCam")
+    # core.loadDevice(mc, "Utilities", "Multi Camera")
+    # core.initializeDevice(mc)
+    # core.initializeDevice("Camer2")
+    # core.setProperty("Camer2", "BitDepth", "16")
+    # core.setProperty(mc, "Physical Camera 1", "Camera")
+    # core.setProperty(mc, "Physical Camera 2", "Camer2")
+    # core.setCameraDevice(mc)
 
     mda = MDASequence(
-        channels=["Cy5"],
+        channels=["Cy5", "FITC"],
         time_plan={"interval": 0, "loops": 2},
         axis_order="tpcz",
-        # stage_positions=[(222, 1, 1), (111, 0, 0)],
+        stage_positions=[(222, 1, 1), (111, 0, 0)],
     )
 
     summary_mock = Mock()
@@ -426,9 +425,6 @@ def test_multicam(core: CMMCorePlus) -> None:
         meta = call.args[1]
         assert isinstance(meta, PyMMCoreStruct)
         meta.model_dump_json()
-        from rich import print
-
-        print(meta)
     for call in event_mock.call_args_list:
         meta = call.args[2]
         assert isinstance(meta, PyMMCoreStruct)

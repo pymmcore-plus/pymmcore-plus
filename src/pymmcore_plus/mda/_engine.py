@@ -17,6 +17,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
+from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent
 from pymmcore_plus.core.metadata import Format, get_metadata_func
 
@@ -286,25 +287,30 @@ class MDAEngine(PMDAEngine):
     def get_frame_metadata(
         self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0
     ) -> Any:
-        if meta:
-            from pymmcore_plus import Keyword
+        extra: dict = {"mda_event": event}
+        if (ch := event.channel) and (info := self._get_config_group_state(ch.group)):
+            extra["config_state"] = {ch.group: info}
 
+        if meta:
+            # metadata will be available only when popping from the circular buffer.
+            # there is no defined schema for what can be in here. it's up to the adapter
+            # grep for `md.put("` in mmCoreAndDevices to see things that are likely
+            # to be in this metadata object. Common keys include:
+            # "Camera"
+            # MM::g_Keyword_Elapsed_Time_ms
+            # MM::g_Keyword_Metadata_ImageNumber
+            # MM::g_Keyword_Metadata_ROI_X
+            # MM::g_Keyword_Metadata_ROI_Y
             meta.get(Keyword.Elapsed_Time_ms)
-            physical_camera_device = meta.get(Keyword.CoreCamera)
+            extra["physical_camera_device"] = meta.get(Keyword.CoreCamera)
         else:
-            physical_camera_device = self._mmc.getPhysicalCameraDevice(cam_index)
-            breakpoint()
-        return self._get_frame_meta(
-            self._mmc,
-            {"mda_event": event, "physical_camera_device": physical_camera_device},
-        )
-        meta_: dict = dict(meta) if meta else {}
-        meta_.update(self._get_frame_meta(self._mmc, {}))
-        if event.channel and (
-            info := self._get_config_group_state(event.channel.group)
-        ):
-            meta_["ConfigGroups"] = {event.channel.group: info}
-        return meta_
+            extra["physical_camera_device"] = self._mmc.getPhysicalCameraDevice(
+                cam_index
+            )
+            # tags["ROI"] = "-".join(str(x) for x in self.getROI())
+            # binning = self.getProperty(self.getCameraDevice(), "Binning")
+            print("????????????????", "-".join(str(x) for x in self._mmc.getROI()))
+        return self._get_frame_meta(self._mmc, extra)
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
@@ -522,7 +528,7 @@ class MDAEngine(PMDAEngine):
                     {(i[0], i[1]): None for i in self._mmc.getConfigData(grp, preset)}
                 )
 
-    def _get_config_group_state(self, group: str) -> dict[str, str]:
+    def _get_config_group_state(self, group: str) -> dict[str, dict[str, str]]:
         """Faster version of core.getConfigGroupState(group).
 
         MMCore does some excess iteration that we want to avoid here. It calls
@@ -530,7 +536,7 @@ class MDAEngine(PMDAEngine):
         group, (not only the one being requested).  We go straight to cached data
         for the group we want.
         """
-        state = {}
+        state: dict[str, dict[str, str]] = {}
         if group in self._config_device_props:
             for dev, prop in self._config_device_props[group]:
                 dev_dict = state.setdefault(dev, {})

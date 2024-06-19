@@ -1505,7 +1505,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         return img
 
     def getPhysicalCameraDevice(self, channel_index: int = 0) -> str:
+        """Return the name of the actual camera device for a given channel index.
+
+        :sparkles: *This method is new in `CMMCorePlus`.* It provides a convenience
+        for accessing the name of the actual camera device when using the multi-camera
+        utility.
+        """
         cam_dev = self.getCameraDevice()
+        # best as I can tell, this is a hard-coded string in Utilities/MultiCamera.cpp
+        # (it also appears in ArduinoCounter.cpp).  This appears to be "the way"
+        # to get at the original camera when using the multi-camera utility.
         prop_name = f"Physical Camera {channel_index+1}"
         if self.hasProperty(cam_dev, prop_name):
             return self.getProperty(cam_dev, prop_name)
