@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import datetime
 import sys
-from abc import abstractmethod
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Literal
 
@@ -12,12 +11,14 @@ from msgspec import Struct, field
 
 from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
 
+from ._base import MetadataProvider
+
 if TYPE_CHECKING:
     from typing import Self, TypeAlias
 
     from pymmcore_plus.core import CMMCorePlus
 
-__all__ = ["FrameMetaV1", "SummaryMetaV1", "MetadataProvider"]
+__all__ = ["FrameMetaV1", "SummaryMetaV1"]
 
 
 DeviceLabel: TypeAlias = str
@@ -94,38 +95,6 @@ class PyMMCoreStruct(Struct):
     def model_json_schema(cls) -> dict[str, Any]:
         """Return the JSON schema for the struct."""
         return msgspec.json.schema(cls)
-
-
-# we don't actually inherit from (ABC) here so as to avoid metaclass conflicts
-# this means the @abstractmethod decorator is not enforced
-class MetadataProvider:
-    """Base class for metadata providers."""
-
-    @classmethod
-    @abstractmethod
-    def from_core(cls, core: CMMCorePlus, extra: dict[str, Any]) -> Any:
-        raise NotImplementedError(f"{cls.__name__} must implement `from_core` method.")
-
-    @classmethod
-    @abstractmethod
-    def provider_key(cls) -> str:
-        raise NotImplementedError(
-            f"{cls.__name__} must implement `provider_key` method."
-        )
-
-    @classmethod
-    @abstractmethod
-    def provider_version(cls) -> str:
-        raise NotImplementedError(
-            f"{cls.__name__} must implement `provider_version` method."
-        )
-
-    @classmethod
-    @abstractmethod
-    def metadata_type(cls) -> Literal["summary", "frame"]:
-        raise NotImplementedError(
-            f"{cls.__name__} must implement `metadata_type` method."
-        )
 
 
 class DeviceInfo(PyMMCoreStruct, **KW_ONLY, **FROZEN):

@@ -19,8 +19,11 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
 from pymmcore_plus.core._sequencing import SequencedEvent
-from pymmcore_plus.core._structs import FrameMetaV1, SummaryMetaV1
-from pymmcore_plus.core.metadata import ensure_valid_metadata_func, get_metadata_func
+from pymmcore_plus.mda.metadata._structs import FrameMetaV1, SummaryMetaV1
+from pymmcore_plus.mda.metadata.metadata import (
+    ensure_valid_metadata_func,
+    get_metadata_func,
+)
 
 from ._protocol import PMDAEngine
 
@@ -29,7 +32,7 @@ if TYPE_CHECKING:
 
     from pymmcore_plus.core import CMMCorePlus
     from pymmcore_plus.core._metadata import Metadata
-    from pymmcore_plus.core.metadata import MetaDataGetter
+    from pymmcore_plus.mda.metadata.metadata import MetaDataGetter
 
     from ._protocol import PImagePayload
 
@@ -142,8 +145,8 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = self._mmc.getAutoShutter()
-        return self._get_summary_meta(
-            self._mmc, {PymmcPlusConstants.MDA_SEQUENCE.value: sequence}
+        return self.get_summary_metadata(
+            {PymmcPlusConstants.MDA_SEQUENCE.value: sequence}
         )
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
@@ -299,6 +302,9 @@ class MDAEngine(PMDAEngine):
                 event,
                 self.get_frame_metadata(event, cam_index=cam),
             )
+
+    def get_summary_metadata(self, extra: dict | None = None) -> Any:
+        return self._get_summary_meta(self._mmc, extra or {})
 
     def get_frame_metadata(
         self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0

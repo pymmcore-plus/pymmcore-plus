@@ -290,6 +290,7 @@ class MDARunner:
                 for payload in output:
                     img, event, meta = payload
                     with exceptions_logged():
+                        event.metadata.pop(PPC.RUNNER_TIME_SEC.value, None)
                         self._signals.frameReady.emit(img, event, meta)
             finally:
                 teardown_event(event)
