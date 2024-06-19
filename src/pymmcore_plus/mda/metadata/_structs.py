@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
     from pymmcore_plus.core import CMMCorePlus
 
-__all__ = ["FrameMetaV1", "SummaryMetaV1"]
+__all__ = ["FrameMetaStructV1", "SummaryMetaStructV1"]
 
 
 DeviceLabel: TypeAlias = str
@@ -245,7 +245,7 @@ class PixelSizeConfig(ConfigGroup, **KW_ONLY, **FROZEN):
         )
 
 
-class SummaryMetaV1(PyMMCoreStruct, MetadataProvider, **KW_ONLY, **FROZEN):
+class SummaryMetaStructV1(PyMMCoreStruct, MetadataProvider, **KW_ONLY, **FROZEN):
     """Summary current state of the system. Version 1."""
 
     devices: dict[DeviceLabel, DeviceInfo]
@@ -317,7 +317,7 @@ def _pixel_size_configs(core: CMMCorePlus) -> dict[PresetName, PixelSizeConfig]:
     }
 
 
-class FrameMetaV1(PyMMCoreStruct, MetadataProvider, **KW_ONLY, **FROZEN):
+class FrameMetaStructV1(PyMMCoreStruct, MetadataProvider, **KW_ONLY, **FROZEN):
     """Metadata for a frame during an MDA. Version 1.
 
     This is intentionally minimal to avoid unnecessary overhead.

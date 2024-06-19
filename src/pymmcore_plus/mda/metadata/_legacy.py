@@ -5,7 +5,7 @@ from contextlib import suppress
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
-from pymmcore_plus.core._constants import PixelType
+from pymmcore_plus.core._constants import PixelType, PymmcPlusConstants
 
 from ._base import MetadataProvider
 
@@ -16,9 +16,11 @@ if TYPE_CHECKING:
 
 
 class LegacySummaryMeta(MetadataProvider):
+    """Initial pymmcore-plus summary metadata provider."""
+
     @classmethod
     def provider_key(cls) -> str:
-        return "legacy"
+        return "legacy-summary"
 
     @classmethod
     def provider_version(cls) -> str:
@@ -52,9 +54,11 @@ class LegacySummaryMeta(MetadataProvider):
 
 
 class LegacyFrameMeta(MetadataProvider):
+    """Initial pymmcore-plus frame metadata provider."""
+
     @classmethod
     def provider_key(cls) -> str:
-        return "legacy"
+        return "legacy-frame"
 
     @classmethod
     def provider_version(cls) -> str:
@@ -67,6 +71,7 @@ class LegacyFrameMeta(MetadataProvider):
     @classmethod
     def from_core(cls, core: CMMCorePlus, extra: dict[str, Any]) -> Any:
         tags = extra
+        tags["Event"] = tags.pop(PymmcPlusConstants.MDA_EVENT.value, None)
         for dev, label, val in core.getSystemStateCache():
             tags[f"{dev}-{label}"] = val
 
