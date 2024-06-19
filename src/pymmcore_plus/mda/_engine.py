@@ -150,6 +150,9 @@ class MDAEngine(PMDAEngine):
             {PymmcPlusConstants.MDA_SEQUENCE.value: sequence}
         )
 
+    def get_summary_metadata(self, extra: dict | None = None) -> Any:
+        return self._get_summary_meta(self._mmc, extra or {})
+
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()
         fov_width = x_size * px_size
@@ -303,9 +306,6 @@ class MDAEngine(PMDAEngine):
                 event,
                 self.get_frame_metadata(event, cam_index=cam),
             )
-
-    def get_summary_metadata(self, extra: dict | None = None) -> Any:
-        return self._get_summary_meta(self._mmc, extra or {})
 
     def get_frame_metadata(
         self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0
