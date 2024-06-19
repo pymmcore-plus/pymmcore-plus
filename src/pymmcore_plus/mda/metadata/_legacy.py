@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from contextlib import suppress
 from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
@@ -23,7 +25,7 @@ class LegacySummaryMeta(MetadataProvider):
         return "1.0"
 
     @classmethod
-    def metadata_type(cls) -> Literal["summary", "frame"]:
+    def metadata_type(cls) -> Literal["summary"]:
         return "summary"
 
     @classmethod
@@ -47,3 +49,37 @@ class LegacySummaryMeta(MetadataProvider):
             "Core-Shutter": core.getShutterDevice(),
             "AffineTransform": "Undefined",
         }
+
+
+class LegacyFrameMeta(MetadataProvider):
+    @classmethod
+    def provider_key(cls) -> str:
+        return "legacy"
+
+    @classmethod
+    def provider_version(cls) -> str:
+        return "1.0"
+
+    @classmethod
+    def metadata_type(cls) -> Literal["frame"]:
+        return "frame"
+
+    @classmethod
+    def from_core(cls, core: CMMCorePlus, extra: dict[str, Any]) -> Any:
+        tags = extra
+        for dev, label, val in core.getSystemStateCache():
+            tags[f"{dev}-{label}"] = val
+
+        # these are added by AcqEngJ
+        # yyyy-MM-dd HH:mm:ss.mmmmmm  # NOTE AcqEngJ omits microseconds
+        tags["Time"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S.%f")
+        tags["PixelSizeUm"] = core.getPixelSizeUm(True)  # true == cached
+        with suppress(RuntimeError):
+            tags["XPositionUm"] = core.getXPosition()
+            tags["YPositionUm"] = core.getYPosition()
+        with suppress(RuntimeError):
+            tags["ZPositionUm"] = core.getZPosition()
+
+        # used by Runner
+        tags["PerfCounter"] = time.perf_counter()
+        return tags
