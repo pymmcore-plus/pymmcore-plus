@@ -406,8 +406,8 @@ def test_multicam(core: CMMCorePlus) -> None:
 
     mda = MDASequence(
         channels=["Cy5", "FITC"],
-        time_plan={"interval": 0, "loops": 2},
-        axis_order="tpcz",
+        time_plan={"interval": 0, "loops": 10},
+        axis_order="cptz",
         stage_positions=[(222, 1, 1), (111, 0, 0)],
     )
 

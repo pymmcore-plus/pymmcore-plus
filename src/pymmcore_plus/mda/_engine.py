@@ -39,6 +39,9 @@ class MDAEngine(PMDAEngine):
     This implements the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] protocol, and
     uses a [`CMMCorePlus`][pymmcore_plus.CMMCorePlus] instance to control the hardware.
 
+    It may be subclassed to provide custom behavior, or to override specific methods.
+    <https://pymmcore-plus.github.io/pymmcore-plus/guides/custom_engine/>
+
     Attributes
     ----------
     mmcore: CMMCorePlus
@@ -291,11 +294,19 @@ class MDAEngine(PMDAEngine):
         if (ch := event.channel) and (info := self._get_config_group_state(ch.group)):
             extra["config_state"] = {ch.group: info}
 
+        from rich import print
+
         if meta:
+            print(meta)
             # metadata will be available only when popping from the circular buffer.
             # there is no defined schema for what can be in here. it's up to the adapter
             # grep for `md.put("` in mmCoreAndDevices to see things that are likely
-            # to be in this metadata object. Common keys include:
+            # to be in this metadata object.
+            # See also: CircularBuffer::InsertMultiChannel in CircularBuffer.cpp
+            # which adds additional tags: Width, Height, BitDepth, TimeReceivedByCore
+            # PixelType {GRAY8, GRAY16, GRAY32, RGB32, RGB64, Unknown}
+
+            # Common keys include:
             # "Camera"
             # MM::g_Keyword_Elapsed_Time_ms
             # MM::g_Keyword_Metadata_ImageNumber
