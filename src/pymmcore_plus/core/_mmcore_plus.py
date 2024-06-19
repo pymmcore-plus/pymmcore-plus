@@ -2083,14 +2083,24 @@ class CMMCorePlus(pymmcore.CMMCore):
             and self.getDeviceType(device) is DeviceType.StateDevice
         ):
             properties = STATE_PROPS
+        try:
+            before = [self.getProperty(device, p) for p in properties]
+        except Exception as e:
+            logger.error(
+                "Error getting properties %s on %s: %s. Cannot ensure signal emission",
+                properties,
+                device,
+                e,
+            )
+            yield
+            return
 
-        # before = [self.getProperty(device, p) for p in properties]
         with _blockSignal(self.events, self.events.propertyChanged):
             yield
-        # after = [self.getProperty(device, p) for p in properties]
-        # if before != after:
-        #     for i, val in enumerate(after):
-        #         self.events.propertyChanged.emit(device, properties[i], val)
+        after = [self.getProperty(device, p) for p in properties]
+        if before != after:
+            for i, val in enumerate(after):
+                self.events.propertyChanged.emit(device, properties[i], val)
 
     @contextmanager
     def setContext(self, **kwargs: Any) -> Iterator[None]:
