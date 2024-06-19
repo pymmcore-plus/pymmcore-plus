@@ -19,11 +19,12 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
 from pymmcore_plus.core._sequencing import SequencedEvent
-from pymmcore_plus.mda.metadata._structs import FrameMetaV1, SummaryMetaV1
-from pymmcore_plus.mda.metadata.metadata import (
+from pymmcore_plus.mda.metadata import (
+    LegacySummaryMeta,
     ensure_valid_metadata_func,
     get_metadata_func,
 )
+from pymmcore_plus.mda.metadata._structs import FrameMetaV1
 
 from ._protocol import PMDAEngine
 
@@ -32,7 +33,7 @@ if TYPE_CHECKING:
 
     from pymmcore_plus.core import CMMCorePlus
     from pymmcore_plus.core._metadata import Metadata
-    from pymmcore_plus.mda.metadata.metadata import MetaDataGetter
+    from pymmcore_plus.mda.metadata import MetaDataGetter
 
     from ._protocol import PImagePayload
 
@@ -68,7 +69,7 @@ class MDAEngine(PMDAEngine):
         mmc: CMMCorePlus,
         *,
         use_hardware_sequencing: bool = False,
-        summary_metadata_format: str | MetaDataGetter = SummaryMetaV1.from_core,
+        summary_metadata_format: str | MetaDataGetter = LegacySummaryMeta.from_core,
         summary_metadata_version: str = "1.0",
         frame_metadata_format: str | MetaDataGetter = FrameMetaV1.from_core,
         frame_metadata_version: str = "1.0",
