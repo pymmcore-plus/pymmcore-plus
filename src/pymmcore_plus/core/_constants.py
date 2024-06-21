@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum, IntEnum
+from typing import Literal
 
 import pymmcore
 
@@ -170,8 +171,8 @@ class PropertyType(IntEnum):
     def to_json(self) -> str:
         return {0: "null", 1: "string", 2: "number", 3: "integer"}[self]
 
-    def __repr__(self) -> str:
-        return getattr(self.to_python(), "__name__", "None")
+    def __repr__(self) -> Literal["undefined", "float", "int", "str"]:
+        return getattr(self.to_python(), "__name__", "undefined")
 
 
 class ActionType(IntEnum):

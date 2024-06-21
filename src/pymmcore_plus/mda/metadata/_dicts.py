@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal, TypedDict
 
 import useq  # noqa: TCH002
 
+import pymmcore_plus
 from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
 
 from ._base import MetadataProvider
@@ -22,120 +23,97 @@ DeviceLabel: TypeAlias = str
 PropertyName: TypeAlias = str
 PresetName: TypeAlias = str
 
-KW_ONLY = {"kw_only": True}
-FROZEN = {"frozen": True}
-
 
 def _now_isoformat() -> str:
     return datetime.datetime.now().isoformat()
 
 
-# def _enc_hook(obj: Any) -> Any:
-#     """Custom encoder for msgspec."""
-#     pydantic = sys.modules.get("pydantic")
-#     if pydantic and isinstance(obj, pydantic.BaseModel):
-#         try:
-#             return obj.model_dump(mode="json")
-#         except AttributeError:
-#             return obj.dict()
-
-#     # Raise a NotImplementedError for other types
-#     raise NotImplementedError(f"Objects of type {type(obj)!r} are not supported")
-
-
-# def _dec_hook(type: type, obj: Any) -> Any:
-#     """Custom decoder for msgspec."""
-#     # `type` here is the value of the custom type annotation being decoded.
-#     if TYPE_CHECKING:
-#         import pydantic
-#     else:
-#         pydantic = sys.modules.get("pydantic")
-#     if pydantic and issubclass(type, pydantic.BaseModel):
-#         try:
-#             return type.model_validate(obj)
-#         except AttributeError:
-#             return type.parse_obj(obj)
-
-#     # Raise a NotImplementedError for other types
-#     raise NotImplementedError(f"Objects of type {type!r} are not supported")
-
-
-# def model_dump(obj) -> dict[str, Any]:
-#     """Convert the struct to a dictionary."""
-#     return msgspec.to_builtins(obj, enc_hook=_enc_hook)  # type: ignore
-
-# @classmethod
-# def model_validate(cls, obj: Any, *, strict: bool = True) -> Self:
-#     """Create a struct from a dictionary."""
-#     return msgspec.convert(obj, type=cls, strict=strict, dec_hook=_dec_hook)
-
-# def model_dump_json(self, *, indent: int | None = None) -> bytes:
-#     """Convert the struct to a JSON string."""
-#     data = msgspec.json.encode(self, enc_hook=_enc_hook)
-#     if indent is not None:
-#         return msgspec.json.format(data, indent=indent)
-#     return data
-
-# @classmethod
-# def model_validate_json(
-#     cls, json_data: bytes | str, *, strict: bool = True
-# ) -> Self:
-#     """Create struct from JSON bytes or string."""
-#     return msgspec.json.decode(
-#         json_data, type=cls, strict=strict, dec_hook=_dec_hook
-#     )
-
-# @classmethod
-# def model_json_schema(cls) -> dict[str, Any]:
-#     """Return the JSON schema for the struct."""
-#     return msgspec.json.schema(cls)
-
-
-class DeviceInfoDict(TypedDict):
+class _DeviceInfoDict(TypedDict):
     """Information about a specific device."""
 
-    type: str
     description: str
     library: str
     name: str
     label: str | None
+    parent_label: str | None
+    properties: dict[PropertyName, Any]
 
 
-def device_info(core: CMMCorePlus, *, label: str) -> DeviceInfoDict:
-    return {
+class StateDeviceInfoDict(_DeviceInfoDict):
+    type: Literal["StateDevice"]
+    labels: tuple[str, ...]
+
+
+class StageDeviceInfoDict(_DeviceInfoDict):
+    type: Literal["StageDevice"]
+    focus_direction: Literal["Unknown", "TowardSample", "AwayFromSample"]
+
+
+class HubDeviceInfoDict(_DeviceInfoDict):
+    type: Literal["HubDevice"]
+    child_names: tuple[str, ...] | None
+
+
+class GenericDeviceInfoDict(_DeviceInfoDict):
+    type: str
+
+
+DeviceInfoDict = (
+    GenericDeviceInfoDict
+    | StateDeviceInfoDict
+    | StageDeviceInfoDict
+    | HubDeviceInfoDict
+)
+
+
+def device_info(
+    core: CMMCorePlus, *, label: str, cached: bool = True
+) -> DeviceInfoDict:
+    info = {
         "type": core.getDeviceType(label).name,
         "description": core.getDeviceDescription(label),
         "library": core.getDeviceLibrary(label),
         "name": core.getDeviceName(label),
         "label": label,
+        "parent_label": core.getParentLabel(label) or None,
+        "properties": properties(core, device=label, cached=cached),
     }
+    with suppress(RuntimeError):
+        info["child_names"] = core.getInstalledDevices(label)  # type: ignore[assignment]
+    return info  # type: ignore[return-value]
 
 
 class SystemInfoDict(TypedDict):
     """General system information."""
 
+    pymmcore_version: str
+    pymmcore_plus_version: str
     api_version_info: str
     buffer_free_capacity: int
     buffer_total_capacity: int
     circular_buffer_memory_footprint: int
     device_adapter_search_paths: tuple[str, ...]
     primary_log_file: str
-    remaining_image_count: int
+    # remaining_image_count: int
     timeout_ms: int
     version_info: str
+    system_configuration: str | None
 
 
 def system_info(core: CMMCorePlus) -> SystemInfoDict:
     return {
+        "pymmcore_version": pymmcore_plus.__version__,
+        "pymmcore_plus_version": pymmcore_plus.__version__,
         "api_version_info": core.getAPIVersionInfo(),
         "buffer_free_capacity": core.getBufferFreeCapacity(),
         "buffer_total_capacity": core.getBufferTotalCapacity(),
         "circular_buffer_memory_footprint": core.getCircularBufferMemoryFootprint(),
         "device_adapter_search_paths": core.getDeviceAdapterSearchPaths(),
         "primary_log_file": core.getPrimaryLogFile(),
-        "remaining_image_count": core.getRemainingImageCount(),
+        # "remaining_image_count": core.getRemainingImageCount(),
         "timeout_ms": core.getTimeoutMs(),
         "version_info": core.getVersionInfo(),
+        "system_configuration": core.systemConfigurationFile(),
     }
 
 
@@ -191,7 +169,7 @@ class PositionInfoDict(TypedDict):
     focus: float | None
 
 
-def position_info(core: CMMCorePlus) -> PositionInfoDict:
+def position(core: CMMCorePlus) -> PositionInfoDict:
     x, y, focus = None, None, None
     with suppress(Exception):
         x = core.getXPosition()
@@ -204,16 +182,36 @@ def position_info(core: CMMCorePlus) -> PositionInfoDict:
 class SettingDict(TypedDict):
     """A single device property setting in a configuration group."""
 
-    device: str
-    property: str
-    value: Any
+    dev: str
+    prop: str
+    val: Any
 
 
 class ConfigGroupDict(TypedDict):
     """A group of device property settings."""
 
-    settings: tuple[SettingDict, ...]
-    name: str | None
+    settings: list[SettingDict]
+
+
+def config_group(
+    core: CMMCorePlus, *, group_name: str
+) -> dict[PresetName, ConfigGroupDict]:
+    return {
+        preset_name: {
+            "settings": [
+                SettingDict({"dev": dev, "prop": prop, "val": val})
+                for dev, prop, val in core.getConfigData(group_name, preset_name)
+            ]
+        }
+        for preset_name in core.getAvailableConfigs(group_name)
+    }
+
+
+def config_groups(core: CMMCorePlus) -> dict[str, dict[PresetName, ConfigGroupDict]]:
+    return {
+        group_name: config_group(core, group_name=group_name)
+        for group_name in core.getAvailableConfigGroups()
+    }
 
 
 class PixelSizeConfigDict(ConfigGroupDict):
@@ -225,21 +223,20 @@ class PixelSizeConfigDict(ConfigGroupDict):
 
 def pixel_size_config(core: CMMCorePlus, *, config_name: str) -> PixelSizeConfigDict:
     return {
-        "name": config_name,
-        "settings": tuple(
-            {"device": dev, "property": prop, "value": val}
-            for dev, prop, val in core.getPixelSizeConfigData(config_name)
-        ),
         "pixel_size_um": core.getPixelSizeUmByID(config_name),
         "pixel_size_affine": core.getPixelSizeAffineByID(config_name),  # type: ignore
+        "settings": [
+            {"dev": dev, "prop": prop, "val": val}
+            for dev, prop, val in core.getPixelSizeConfigData(config_name)
+        ],
     }
 
 
-class SummaryMetaDictV1Dict(TypedDict):
+class SummaryMetaDictV1Dict(TypedDict, total=False):
     devices: dict[DeviceLabel, DeviceInfoDict]
-    properties: dict[DeviceLabel, dict[PropertyName, Any]]
     system_info: SystemInfoDict
     image_info: ImageInfoDict
+    config_groups: dict[str, dict[PresetName, ConfigGroupDict]]
     pixel_size_configs: dict[PresetName, PixelSizeConfigDict]
     position: PositionInfoDict
     mda_sequence: useq.MDASequence | None
@@ -256,12 +253,12 @@ class SummaryMetaDictV1(MetadataProvider):
         cls, core: CMMCorePlus, extra: dict[str, Any]
     ) -> SummaryMetaDictV1Dict:
         return {
-            "devices": _devices_info(core),
-            "properties": _properties_state(core, cached=extra.get("cached", True)),
+            "devices": devices_info(core, cached=extra.get("cached", True)),
             "system_info": system_info(core),
             "image_info": image_info(core),
-            "position": position_info(core),
-            "pixel_size_configs": _pixel_size_configs(core),
+            "position": position(core),
+            "config_groups": config_groups(core),
+            "pixel_size_configs": pixel_size_configs(core),
             "mda_sequence": extra.get(PymmcPlusConstants.MDA_SEQUENCE.value),
             "format": "summary-struct-full",
             "date_time": _now_isoformat(),
@@ -281,30 +278,72 @@ class SummaryMetaDictV1(MetadataProvider):
         return "summary"
 
 
-def _devices_info(core: CMMCorePlus) -> dict[str, DeviceInfoDict]:
+def devices_info(core: CMMCorePlus, cached: bool = True) -> dict[str, DeviceInfoDict]:
     """Return a dictionary of device information for all loaded devices."""
-    return {lbl: device_info(core, label=lbl) for lbl in core.getLoadedDevices()}
+    return {
+        lbl: device_info(core, label=lbl, cached=cached)
+        for lbl in core.getLoadedDevices()
+    }
 
 
-def _properties_state(
-    core: CMMCorePlus, cached: bool = True, error_value: Any = None
-) -> dict[DeviceLabel, dict[PropertyName, Any]]:
+class PropertyInfoDict(TypedDict):
+    """Information about a device property."""
+
+    value: str | None
+    data_type: Literal["undefined", "float", "int", "str"]
+    allowed_values: tuple[str, ...] | None
+    limits: tuple[float, float] | None
+    is_read_only: bool
+
+    # is_pre_init: bool
+    # device_label: str
+    # name: str
+
+
+def property_info(
+    core: CMMCorePlus,
+    device: str,
+    prop: str,
+    *,
+    cached: bool = True,
+    error_value: Any = None,
+) -> PropertyInfoDict:
+    """Return a dictionary of device property information."""
+    if core.hasPropertyLimits(device, prop):
+        limits = (
+            core.getPropertyLowerLimit(device, prop),
+            core.getPropertyUpperLimit(device, prop),
+        )
+    else:
+        limits = None
+    try:
+        if cached:
+            value = core.getPropertyFromCache(device, prop)
+        else:
+            value = core.getProperty(device, prop)
+    except Exception:
+        value = error_value
+    return {
+        "value": value,
+        "data_type": core.getPropertyType(device, prop).__repr__(),
+        "allowed_values": core.getAllowedPropertyValues(device, prop),
+        "limits": limits,
+        "is_read_only": core.isPropertyReadOnly(device, prop),
+    }
+
+
+def properties(
+    core: CMMCorePlus, device: str, cached: bool = True, error_value: Any = None
+) -> dict[PropertyName, PropertyInfoDict]:
     """Return a dictionary of device properties values for all loaded devices."""
     # this actually appears to be faster than getSystemStateCache
-    getProp = core.getPropertyFromCache if cached else core.getProperty
-    device_state: dict = {}
-    for dev in core.getLoadedDevices():
-        dd = device_state.setdefault(dev, {})
-        for prop in core.getDevicePropertyNames(dev):
-            try:
-                val = getProp(dev, prop)
-            except Exception:
-                val = error_value
-            dd[prop] = val
-    return device_state
+    return {
+        prop: property_info(core, device, prop, cached=cached, error_value=error_value)
+        for prop in core.getDevicePropertyNames(device)
+    }
 
 
-def _pixel_size_configs(core: CMMCorePlus) -> dict[PresetName, PixelSizeConfigDict]:
+def pixel_size_configs(core: CMMCorePlus) -> dict[PresetName, PixelSizeConfigDict]:
     """Return a dictionary of pixel size configurations."""
     return {
         config_name: pixel_size_config(core, config_name=config_name)
@@ -339,7 +378,7 @@ class FrameMetaDictV1(MetadataProvider):
         return {
             "exposure_ms": core.getExposure(),
             "pixel_size_um": core.getPixelSizeUm(extra.get("cached", True)),
-            "position": position_info(core),
+            "position": position(core),
             "mda_event": mda_event,
             "runner_time": run_time,
             "camera_device": extra.get(Keyword.CoreCamera.value),
