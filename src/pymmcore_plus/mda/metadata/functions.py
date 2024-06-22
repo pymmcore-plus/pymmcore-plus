@@ -5,9 +5,11 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any
 
 import pymmcore_plus
-from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
+from pymmcore_plus.core._constants import PymmcPlusConstants
 
 if TYPE_CHECKING:
+    import useq
+
     from pymmcore_plus.core import CMMCorePlus
 
     from .schema import (
@@ -18,9 +20,69 @@ if TYPE_CHECKING:
         PixelSizeConfigPreset,
         Position,
         PropertyInfo,
+        PropertyValue,
         SummaryMetaV1,
         SystemInfo,
     )
+
+
+# -----------------------------------------------------------------
+# These are the two main functions that are called from the outside
+# -----------------------------------------------------------------
+
+
+def summary_metadata(
+    core: CMMCorePlus,
+    *,
+    mda_sequence: useq.MDASequence | None = None,
+    cached: bool = True,
+) -> SummaryMetaV1:
+    """Return a summary metadata for the current state of the system."""
+    summary: SummaryMetaV1 = {
+        "devices": devices_info(core, cached=cached),
+        "system_info": system_info(core),
+        "image_info": image_info(core),
+        "position": position(core),
+        "config_groups": config_groups(core),
+        "pixel_size_configs": pixel_size_configs(core),
+        "format": "summary-dict-full",
+        "date_time": _now_isoformat(),
+        "version": "1.0",
+    }
+    if mda_sequence:
+        summary["mda_sequence"] = mda_sequence
+    return summary
+
+
+def frame_metadata(
+    core: CMMCorePlus,
+    *,
+    mda_event: useq.MDAEvent | None = None,
+    camera_device: str | None = None,
+    property_values: tuple[PropertyValue, ...] = (),
+    cached: bool = True,
+) -> FrameMetaV1:
+    """Return metadata for the current frame."""
+    meta: FrameMetaV1 = {
+        "exposure_ms": core.getExposure(),
+        "pixel_size_um": core.getPixelSizeUm(cached),
+        "position": position(core),
+        "camera_device": camera_device,
+        "property_values": property_values,
+        "format": "frame-dict-minimal",
+        "version": "1.0",
+    }
+
+    if mda_event is not None:
+        meta["mda_event"] = mda_event
+        if run_time := mda_event.metadata.get(PymmcPlusConstants.RUNNER_TIME_SEC.value):
+            meta["runner_time"] = run_time
+    return meta
+
+
+# ----------------------------------------------
+# supporting functions
+# ----------------------------------------------
 
 
 def _now_isoformat() -> str:
@@ -139,24 +201,6 @@ def pixel_size_config(core: CMMCorePlus, *, config_name: str) -> PixelSizeConfig
     }
 
 
-def summary_metadata(core: CMMCorePlus, extra: dict[str, Any]) -> SummaryMetaV1:
-    """Return a summary metadata for the current state of the system."""
-    summary: SummaryMetaV1 = {
-        "devices": devices_info(core, cached=extra.get("cached", True)),
-        "system_info": system_info(core),
-        "image_info": image_info(core),
-        "position": position(core),
-        "config_groups": config_groups(core),
-        "pixel_size_configs": pixel_size_configs(core),
-        "format": "summary-dict-full",
-        "date_time": _now_isoformat(),
-        "version": "1.0",
-    }
-    if mda_sequence := extra.get(PymmcPlusConstants.MDA_SEQUENCE.value):
-        summary["mda_sequence"] = mda_sequence
-    return summary
-
-
 def devices_info(core: CMMCorePlus, cached: bool = True) -> tuple[DeviceInfo, ...]:
     """Return a dictionary of device information for all loaded devices."""
     return tuple(
@@ -217,22 +261,3 @@ def pixel_size_configs(core: CMMCorePlus) -> tuple[PixelSizeConfigPreset, ...]:
         pixel_size_config(core, config_name=config_name)
         for config_name in core.getAvailablePixelSizeConfigs()
     )
-
-
-def frame_metadata(core: CMMCorePlus, extra: dict[str, Any]) -> FrameMetaV1:
-    """Return metadata for the current frame."""
-    meta: FrameMetaV1 = {
-        "exposure_ms": core.getExposure(),
-        "pixel_size_um": core.getPixelSizeUm(extra.get("cached", True)),
-        "position": position(core),
-        "camera_device": extra.get(Keyword.CoreCamera.value),
-        "config_state": extra.get(PymmcPlusConstants.CONFIG_STATE.value),
-        "format": "frame-dict-minimal",
-        "version": "1.0",
-    }
-
-    if mda_event := extra.get(PymmcPlusConstants.MDA_EVENT.value):
-        meta["mda_event"] = mda_event
-        if run_time := mda_event.metadata.get(PymmcPlusConstants.RUNNER_TIME_SEC.value):
-            meta["runner_time"] = run_time
-    return meta

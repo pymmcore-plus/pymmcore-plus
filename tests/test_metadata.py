@@ -20,9 +20,9 @@ def test_create_schema() -> None:
 def test_from_core() -> None:
     core = CMMCorePlus()
     core.loadSystemConfiguration()
-    summary = summary_metadata(core, {})
+    summary = summary_metadata(core)
     assert isinstance(summary, dict)
-    frame = frame_metadata(core, {})
+    frame = frame_metadata(core)
     assert isinstance(frame, dict)
 
 
@@ -51,3 +51,4 @@ def test_metadata_during_mda(core: CMMCorePlus) -> None:
     assert isinstance(_event, useq.MDAEvent)
     assert isinstance(_meta, dict)
     assert _meta["format"] == "frame-dict-minimal"
+    assert any(pv["dev"] == "Excitation" for pv in _meta["property_values"])

@@ -17,10 +17,10 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
-from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
 from pymmcore_plus.core._sequencing import SequencedEvent
 from pymmcore_plus.mda.metadata import (
     FrameMetaV1,
+    PropertyValue,
     SummaryMetaV1,
     frame_metadata,
     summary_metadata,
@@ -111,12 +111,10 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = self._mmc.getAutoShutter()
-        return self.get_summary_metadata(
-            {PymmcPlusConstants.MDA_SEQUENCE.value: sequence}
-        )
+        return self.get_summary_metadata(mda_sequence=sequence)
 
-    def get_summary_metadata(self, extra: dict | None = None) -> SummaryMetaV1:
-        return summary_metadata(self._mmc, extra or {})
+    def get_summary_metadata(self, mda_sequence: MDASequence | None) -> SummaryMetaV1:
+        return summary_metadata(self._mmc, mda_sequence=mda_sequence)
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
         *_, x_size, y_size = self._mmc.getROI()
@@ -275,18 +273,23 @@ class MDAEngine(PMDAEngine):
     def get_frame_metadata(
         self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0
     ) -> FrameMetaV1:
-        extra = {} if meta is None else dict(meta)
-        extra[PymmcPlusConstants.MDA_EVENT.value] = event
-
-        if (ch := event.channel) and (info := self._get_config_group_state(ch.group)):
-            extra[PymmcPlusConstants.CONFIG_STATE.value] = {ch.group: info}
-        if (key := Keyword.CoreCamera.value) not in extra:
-            # note, when present in meta, this key is called "Camera".
+        if meta and "Camera" in meta:
+            # note, when present in circular buffer meta, this key is called "Camera".
             # It's NOT actually Keyword.CoreCamera (but it's the same value)
             # it is hardcoded in various places in mmCoreAndDevices, see:
             # see: https://github.com/micro-manager/mmCoreAndDevices/pull/468
-            extra[key] = self._mmc.getPhysicalCameraDevice(cam_index)
-        return frame_metadata(self._mmc, extra)
+            cam_device = meta["Camera"]
+        else:
+            cam_device = self._mmc.getPhysicalCameraDevice(cam_index)
+
+        prop_values = self._get_current_props(ch.group) if (ch := event.channel) else ()
+        return frame_metadata(
+            self._mmc,
+            mda_event=event,
+            camera_device=cam_device,
+            property_values=prop_values,
+            cached=True,
+        )
 
     def teardown_event(self, event: MDAEvent) -> None:
         """Teardown state of system (hardware, etc.) after `event`."""
@@ -519,6 +522,19 @@ class MDAEngine(PMDAEngine):
                 dev_dict = state.setdefault(dev, {})
                 dev_dict[prop] = self._mmc.getPropertyFromCache(dev, prop)
         return state
+
+    def _get_current_props(self, *groups: str) -> tuple[PropertyValue, ...]:
+        # if dev_props := self._config_device_props.get(ch.group):
+        return tuple(
+            {
+                "dev": dev,
+                "prop": prop,
+                "val": self._mmc.getPropertyFromCache(dev, prop),
+            }
+            for group in groups
+            if (dev_props := self._config_device_props.get(group))
+            for dev, prop in dev_props
+        )
 
 
 class ImagePayload(NamedTuple):

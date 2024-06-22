@@ -1,8 +1,6 @@
-from __future__ import annotations
+from typing import Any, List, Literal, Tuple, TypedDict
 
-from typing import Any, Literal, TypedDict
-
-import useq  # noqa: TCH002
+import useq
 from typing_extensions import NotRequired
 
 __all__ = [
@@ -15,7 +13,7 @@ __all__ = [
     "PixelSizeConfigPreset",
     "Position",
     "PropertyInfo",
-    "Setting",
+    "PropertyValue",
     "SystemInfo",
 ]
 
@@ -26,10 +24,10 @@ class PropertyInfo(TypedDict):
     name: str
     value: str | None
     data_type: Literal["undefined", "float", "int", "str"]
-    allowed_values: tuple[str, ...] | None
+    allowed_values: Tuple[str, ...] | None
     is_read_only: bool
     is_pre_init: bool
-    limits: NotRequired[tuple[float, float]]
+    limits: NotRequired[Tuple[float, float]]
     sequenceable: bool
     sequence_max_length: NotRequired[int]
     # device_label: str
@@ -43,15 +41,15 @@ class DeviceInfo(TypedDict):
     name: str
     type: str
     description: str
-    properties: tuple[PropertyInfo, ...]
+    properties: Tuple[PropertyInfo, ...]
     parent_label: str | None  # none on hub devices
 
     # state device only
-    labels: NotRequired[tuple[str, ...]]
+    labels: NotRequired[Tuple[str, ...]]
     # focus device only
     focus_direction: NotRequired[Literal["Unknown", "TowardSample", "AwayFromSample"]]
     # hub device only
-    child_names: NotRequired[tuple[str, ...]]
+    child_names: NotRequired[Tuple[str, ...]]
 
 
 class SystemInfo(TypedDict):
@@ -61,7 +59,7 @@ class SystemInfo(TypedDict):
     pymmcore_plus_version: str
     mmcore_version: str
     device_api_version: str
-    device_adapter_search_paths: tuple[str, ...]
+    device_adapter_search_paths: Tuple[str, ...]
     system_configuration: str | None
     primary_log_file: str
     circular_buffer_memory_footprint: int
@@ -84,11 +82,11 @@ class ImageInfo(TypedDict):
     magnification_factor: float
     number_of_camera_channels: int
     number_of_components: int
-    pixel_size_affine: tuple[float, float, float, float, float, float]
+    pixel_size_affine: Tuple[float, float, float, float, float, float]
     pixel_size_um: float
-    roi: list[int]
+    roi: List[int]
     camera_device: str
-    multi_roi: tuple[list[int], list[int], list[int], list[int]] | None
+    multi_roi: Tuple[List[int], List[int], List[int], List[int]] | None
 
 
 class Position(TypedDict):
@@ -99,7 +97,7 @@ class Position(TypedDict):
     focus: float | None
 
 
-class Setting(TypedDict):
+class PropertyValue(TypedDict):
     """A single device property setting in a configuration group."""
 
     dev: str
@@ -111,34 +109,34 @@ class ConfigPreset(TypedDict):
     """A group of device property settings."""
 
     name: str
-    settings: tuple[Setting, ...]
+    settings: Tuple[PropertyValue, ...]
 
 
 class PixelSizeConfigPreset(ConfigPreset):
     """A specialized group of device property settings for a pixel size preset."""
 
     pixel_size_um: float
-    pixel_size_affine: tuple[float, float, float, float, float, float]
+    pixel_size_affine: Tuple[float, float, float, float, float, float]
 
 
 class ConfigGroup(TypedDict):
     """A group of configuration presets."""
 
     name: str
-    presets: tuple[ConfigPreset, ...]
+    presets: Tuple[ConfigPreset, ...]
 
 
 class SummaryMetaV1(TypedDict, total=False):
     """Complete summary metadata for the system. Version 1.0."""
 
-    devices: tuple[DeviceInfo, ...]
+    devices: Tuple[DeviceInfo, ...]
     """A special list."""
     system_info: SystemInfo
     image_info: ImageInfo
-    config_groups: tuple[ConfigGroup, ...]
-    pixel_size_configs: tuple[PixelSizeConfigPreset, ...]
+    config_groups: Tuple[ConfigGroup, ...]
+    pixel_size_configs: Tuple[PixelSizeConfigPreset, ...]
     position: Position
-    mda_sequence: useq.MDASequence | None
+    mda_sequence: NotRequired[useq.MDASequence]
     date_time: str
     format: Literal["summary-dict-full"]
     version: Literal["1.0"]
@@ -153,6 +151,6 @@ class FrameMetaV1(TypedDict, total=False):
     camera_device: str | None
     mda_event: NotRequired[useq.MDAEvent]
     runner_time: NotRequired[float]
-    config_state: dict[str, dict[str, Any]] | None
+    property_values: Tuple[PropertyValue, ...]
     format: Literal["frame-dict-minimal"]
     version: Literal["1.0"]
