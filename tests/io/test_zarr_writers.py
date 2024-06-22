@@ -7,6 +7,7 @@ import numpy as np
 import pytest
 import useq
 from pymmcore_plus.mda.handlers import OMEZarrWriter, TensorStoreHandler
+from pymmcore_plus.mda.metadata import serialize
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -173,13 +174,33 @@ def test_tensorstore_writer(
     assert x.shape[-1] == 100
 
 
-def test_tensorstore_writer_spec_override(tmp_path: Path) -> None:
+def test_tensorstore_writer_spec_override(
+    tmp_path: Path,
+) -> None:
     writer = TensorStoreHandler(
         path=tmp_path / "test.zarr",
         spec={"context": {"cache_pool": {"total_bytes_limit": 10000000}}},
     )
 
     assert writer.get_spec()["context"]["cache_pool"]["total_bytes_limit"] == 10000000
+
+
+@pytest.mark.parametrize("dumps", ["msgspec", "std"])
+def test_tensorstore_writes_metadata(
+    tmp_path: Path,
+    core: CMMCorePlus,
+    dumps: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test that we can write metadata with or without msgspec."""
+    from pymmcore_plus.mda.handlers import _tensorstore_handler
+
+    dumper = getattr(serialize, f"{dumps}_json_dumps")
+    loader = getattr(serialize, f"{dumps}_json_loads")
+    monkeypatch.setattr(_tensorstore_handler, "json_dumps", dumper)
+    monkeypatch.setattr(_tensorstore_handler, "json_loads", loader)
+    writer = TensorStoreHandler(path=tmp_path / "test.zarr")
+    core.mda.run(SIMPLE_MDA, output=writer)
 
 
 def test_tensorstore_writer_indeterminate(tmp_path: Path, core: CMMCorePlus) -> None:

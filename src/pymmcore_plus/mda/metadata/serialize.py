@@ -3,7 +3,11 @@ from __future__ import annotations
 import json
 import sys
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Sequence
+from datetime import timedelta
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Any, Mapping, Sequence
+
+import numpy as np
 
 try:
     # use msgspec if available
@@ -23,8 +27,14 @@ def encode_hook(obj: Any, raises: bool = True) -> Any:
     if pydantic and isinstance(obj, pydantic.BaseModel):
         try:
             return obj.model_dump(mode="json", exclude_unset=True)
-        except AttributeError:
-            return obj.dict(exclude_unset=True)
+        except (AttributeError, TypeError):
+            return to_builtins(obj.dict(exclude_unset=True))
+    if isinstance(obj, MappingProxyType):
+        return dict(obj)
+    if isinstance(obj, np.number):
+        return obj.item()
+    if isinstance(obj, timedelta):
+        return obj.total_seconds()
     if raises:
         raise NotImplementedError(f"Cannot serialize object of type {type(obj)}")
     return obj
@@ -72,12 +82,14 @@ def msgspec_to_builtins(obj: Any) -> Any:
 
 def msgspec_to_schema(type: Any) -> Any:
     """Generate JSON schema for a given type."""
+    if msgspec is None:
+        raise ImportError("msgspec is required for this function")
     return msgspec.json.schema(type, schema_hook=schema_hook)
 
 
 def std_json_dumps(obj: Any, *, indent: int | None = None) -> bytes:
     """Serialize object to bytes."""
-    return json.dumps(std_to_builtins(obj), indent=indent).encode("utf-8")
+    return json.dumps(obj, default=std_to_builtins, indent=indent).encode("utf-8")
 
 
 def std_json_loads(s: bytes | str) -> Any:
@@ -87,7 +99,7 @@ def std_json_loads(s: bytes | str) -> Any:
 
 def std_to_builtins(obj: Any) -> Any:
     """Convert object to built-in types."""
-    if isinstance(obj, dict):
+    if isinstance(obj, Mapping):
         return {k: std_to_builtins(v) for k, v in obj.items()}
     if isinstance(obj, Sequence) and not isinstance(obj, str):
         return [std_to_builtins(v) for v in obj]

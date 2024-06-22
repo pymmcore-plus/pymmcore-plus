@@ -266,7 +266,6 @@ class _5DWriterBase(Generic[T]):
             raise IndexError(
                 f"Position index {p_index} out of range for {len(self.position_sizes)}"
             ) from e
-
         data = self.position_arrays[self.get_position_key(p_index)]
         full = slice(None, None)
         index = tuple(indexers.get(k, full) for k in sizes)
