@@ -144,7 +144,7 @@ jobs:
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v2
         with:
-          run: pytest --codspeed -v --color=yes
+          run: pytest -W ignore --codspeed -v --color=yes
 
   deploy:
     needs: test
