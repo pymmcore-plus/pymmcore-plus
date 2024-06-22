@@ -3,6 +3,13 @@ import sys
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, Sequence
 
+try:
+    # use msgspec if available
+    import msgspec
+except ImportError:
+    msgspec = None
+
+
 if TYPE_CHECKING:
     import pydantic  # noqa: F401
 
@@ -32,11 +39,15 @@ def decode_hook(type: type, obj: Any) -> Any:
     raise NotImplementedError(f"Cannot deserialize object of type {type}")
 
 
-try:
-    # use msgspec if available
-    import msgspec
-except ImportError:
-    msgspec = None
+def schema_hook(obj: type) -> dict[str, Any]:
+    """Hook to convert objects to schema."""
+    if not TYPE_CHECKING:
+        pydantic = sys.modules.get("pydantic")
+    if pydantic:
+        with suppress(TypeError):
+            if issubclass(obj, pydantic.BaseModel):
+                return obj.model_json_schema()
+    raise NotImplementedError(f"Cannot create schema for object of type {type(obj)}")
 
 
 def msgspec_json_dumps(obj: Any, *, indent: int | None = None) -> bytes:
@@ -55,6 +66,11 @@ def msgspec_json_loads(s: bytes | str) -> Any:
 def msgspec_to_builtins(obj: Any) -> Any:
     """Convert object to built-in types."""
     return msgspec.to_builtins(obj, enc_hook=encode_hook)
+
+
+def msgspec_to_schema(type: Any) -> Any:
+    """Generate JSON schema for a given type."""
+    return msgspec.json.schema(type, schema_hook=schema_hook)
 
 
 def std_json_dumps(obj: Any, *, indent: int | None = None) -> bytes:

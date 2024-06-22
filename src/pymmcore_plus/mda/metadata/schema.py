@@ -1,6 +1,7 @@
-from typing import Any, Literal, NotRequired, TypedDict
+from typing import Any, Literal, TypedDict
 
 import useq
+from typing_extensions import NotRequired
 
 __all__ = [
     "FrameMetaV1",
