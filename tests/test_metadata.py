@@ -39,6 +39,11 @@ def test_metadata_during_mda(
     core: CMMCorePlus, dumps: Callable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(serialize, "json_dumps", dumps)
+    loader = getattr(serialize, dumps.__name__.replace("_dumps", "_loads"))
+    to_builtins = getattr(
+        serialize, dumps.__name__.replace("_json_dumps", "_to_builtins")
+    )
+
     seq = useq.MDASequence(
         channels=["DAPI", "FITC"],
         time_plan=useq.TIntervalLoops(interval=0.01, loops=2),
@@ -57,13 +62,21 @@ def test_metadata_during_mda(
     assert isinstance(_meta, dict)
     assert _meta["format"] == "summary-dict-full"
     assert isinstance(_meta["mda_sequence"], useq.MDASequence)
-    assert isinstance(dumps(_meta), bytes)
+    dumped = dumps(_meta)
+    assert isinstance(to_builtins(_meta), dict)
+    assert isinstance(dumped, bytes)
+    loaded = loader(dumped)
+    assert isinstance(loaded, dict)
 
     frame_ready_mock.assert_called()
     _frame, _event, _meta = frame_ready_mock.call_args.args
     assert isinstance(_frame, np.ndarray)
     assert isinstance(_event, useq.MDAEvent)
     assert isinstance(_meta, dict)
-    assert isinstance(dumps(_meta), bytes)
     assert _meta["format"] == "frame-dict-minimal"
     assert any(pv["dev"] == "Excitation" for pv in _meta["property_values"])
+    dumped = dumps(_meta, indent=2)
+    assert isinstance(to_builtins(_meta), dict)
+    assert isinstance(dumped, bytes)
+    loaded = loader(dumped)
+    assert isinstance(loaded, dict)

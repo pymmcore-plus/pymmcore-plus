@@ -40,15 +40,15 @@ def encode_hook(obj: Any, raises: bool = True) -> Any:
     return obj
 
 
-def decode_hook(type: type, obj: Any) -> Any:
-    """Hook to decode objects that are not JSON deserializable."""
-    if not TYPE_CHECKING:
-        pydantic = sys.modules.get("pydantic")
-    if pydantic:
-        with suppress(TypeError):
-            if issubclass(type, pydantic.BaseModel):
-                return type.model_validate(obj)
-    raise NotImplementedError(f"Cannot deserialize object of type {type}")
+# def decode_hook(type: type, obj: Any) -> Any:
+#     """Hook to decode objects that are not JSON deserializable."""
+#     if not TYPE_CHECKING:
+#         pydantic = sys.modules.get("pydantic")
+#     if pydantic:
+#         with suppress(TypeError):
+#             if issubclass(type, pydantic.BaseModel):
+#                 return type.model_validate(obj)
+#     raise NotImplementedError(f"Cannot deserialize object of type {type}")
 
 
 def schema_hook(obj: type) -> dict[str, Any]:
@@ -72,7 +72,7 @@ def msgspec_json_dumps(obj: Any, *, indent: int | None = None) -> bytes:
 
 def msgspec_json_loads(s: bytes | str) -> Any:
     """Deserialize bytes to object."""
-    return msgspec.json.decode(s, dec_hook=decode_hook)
+    return msgspec.json.decode(s)
 
 
 def msgspec_to_builtins(obj: Any) -> Any:
@@ -82,7 +82,7 @@ def msgspec_to_builtins(obj: Any) -> Any:
 
 def msgspec_to_schema(type: Any) -> Any:
     """Generate JSON schema for a given type."""
-    if msgspec is None:
+    if msgspec is None:  # pragma: no cover
         raise ImportError("msgspec is required for this function")
     return msgspec.json.schema(type, schema_hook=schema_hook)
 
@@ -106,7 +106,7 @@ def std_to_builtins(obj: Any) -> Any:
     return encode_hook(obj, raises=False)
 
 
-if msgspec is None:
+if msgspec is None:  # pragma: no cover
     json_dumps = std_json_dumps
     json_loads = std_json_loads
     to_builtins = std_to_builtins
