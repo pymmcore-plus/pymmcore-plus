@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import atexit
-import json
 import os
 import shutil
 import tempfile
@@ -9,6 +8,8 @@ import warnings
 from itertools import product
 from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
+
+from pymmcore_plus.mda.metadata.serialize import json
 
 from ._util import position_sizes
 
@@ -287,14 +288,7 @@ class TensorStoreHandler:
         if not (store := self._store) or not store.kvstore:
             return  # pragma: no cover
 
-        data = []
-        for event, meta in self.frame_metadatas:
-            # FIXME: unnecessary ser/des
-            js = event.model_dump_json(exclude={"sequence"}, exclude_defaults=True)
-            meta["Event"] = json.loads(js)
-            data.append(meta)
-
-        metadata = {"frame_metadatas": data}
+        metadata = {"frame_metadatas": [m[1] for m in self.frame_metadatas]}
         if not self._nd_storage:
             metadata["frame_indices"] = [
                 (tuple(dict(k).items()), v)  # type: ignore
@@ -302,11 +296,11 @@ class TensorStoreHandler:
             ]
 
         if self.ts_driver.startswith("zarr"):
-            store.kvstore.write(".zattrs", json.dumps(metadata))
+            store.kvstore.write(".zattrs", json.dumps(metadata).decode("utf-8"))
         elif self.ts_driver == "n5":  # pragma: no cover
             attrs = json.loads(store.kvstore.read("attributes.json").result().value)
             attrs.update(metadata)
-            store.kvstore.write("attributes.json", json.dumps(attrs))
+            store.kvstore.write("attributes.json", json.dumps(attrs).decode("utf-8"))
 
     def _expand_store(self, store: ts.TensorStore) -> ts.Future[ts.TensorStore]:
         """Grow the store by `self._size_increment` frames.
