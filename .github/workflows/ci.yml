@@ -60,8 +60,9 @@ jobs:
         shell: bash
         run: |
           set -e
-          echo "CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')" >> $GITHUB_ENV
-  
+          CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
+          echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
+
       - name: Install  ${{ matrix.qt }}
         if: ${{ matrix.qt }}
         run: pip install ${{ matrix.qt }}
