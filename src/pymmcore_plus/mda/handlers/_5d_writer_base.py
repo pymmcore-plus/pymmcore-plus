@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from abc import abstractmethod
 from collections import defaultdict
 from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar
@@ -10,6 +9,8 @@ from ._util import position_sizes
 if TYPE_CHECKING:
     import numpy as np
     import useq
+
+    from pymmcore_plus.mda.metadata import FrameMetaV1, SummaryMetaV1
 
     class SupportsSetItem(Protocol):
         def __setitem__(self, key: tuple[int, ...], value: np.ndarray) -> None: ...
@@ -66,7 +67,7 @@ class _5DWriterBase(Generic[T]):
 
         # storage of individual frame metadata
         # maps position key to list of frame metadata
-        self.frame_metadatas: defaultdict[str, list[dict]] = defaultdict(list)
+        self.frame_metadatas: defaultdict[str, list[FrameMetaV1]] = defaultdict(list)
 
         # set during sequenceStarted and cleared during sequenceFinished
         self.current_sequence: useq.MDASequence | None = None
@@ -95,7 +96,7 @@ class _5DWriterBase(Generic[T]):
         """
         return self._position_sizes
 
-    def sequenceStarted(self, seq: useq.MDASequence) -> None:
+    def sequenceStarted(self, seq: useq.MDASequence, meta: SummaryMetaV1) -> None:
         """On sequence started, simply store the sequence."""
         self.frame_metadatas.clear()
         self.current_sequence = seq
@@ -115,7 +116,9 @@ class _5DWriterBase(Generic[T]):
         """
         return f"{POS_PREFIX}{position_index}"
 
-    def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
+    def frameReady(
+        self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
+    ) -> None:
         """Write frame to the zarr array for the appropriate position."""
         # get the position key to store the array in the group
         p_index = event.index.get("p", 0)
@@ -142,8 +145,8 @@ class _5DWriterBase(Generic[T]):
 
         index = tuple(event.index[k] for k in pos_sizes)
         t = event.index.get("t", 0)
-        if t >= len(self._timestamps) and "ElapsedTime-ms" in meta:
-            self._timestamps.append(meta["ElapsedTime-ms"])
+        if t >= len(self._timestamps) and "runner_time" in meta:
+            self._timestamps.append(meta["runner_time"])
         self.write_frame(ary, index, frame)
         self.store_frame_metadata(key, event, meta)
 
@@ -189,7 +192,9 @@ class _5DWriterBase(Generic[T]):
         # WRITE DATA TO DISK
         ary[index] = frame
 
-    def store_frame_metadata(self, key: str, event: useq.MDAEvent, meta: dict) -> None:
+    def store_frame_metadata(
+        self, key: str, event: useq.MDAEvent, meta: FrameMetaV1
+    ) -> None:
         """Called during each frameReady event to store metadata for the frame.
 
         Subclasses may override this method to customize how metadata is stored for each
@@ -208,11 +213,6 @@ class _5DWriterBase(Generic[T]):
         # needn't be re-implemented in subclasses
         # default implementation is to store the metadata in self._frame_metas
         # use finalize_metadata to write to disk at the end of the sequence.
-        if meta:
-            # fix serialization MDAEvent
-            # XXX: There is already an Event object in meta, this overwrites it.
-            event_json = event.json(exclude={"sequence"}, exclude_defaults=True)
-            meta["Event"] = json.loads(event_json)
         self.frame_metadatas[key].append(meta or {})
 
     def finalize_metadata(self) -> None:

@@ -209,12 +209,12 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
             return
 
         sizes = {**seq.sizes}
-        px = 1
+        px: float = 1.0
         if self.frame_metadatas:
             key, metas = next(iter(self.frame_metadatas.items()))
             if key in self.position_arrays:
                 shape = self.position_arrays[key].shape
-                px = metas[-1].get("PixelSizeUm", 1)
+                px = metas[-1].get("pixel_size_um", 1)
                 with suppress(IndexError):
                     sizes.update(y=shape[-2], x=shape[-1])
 
@@ -274,7 +274,9 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         self._group.attrs["multiscales"] = scales
         ary.attrs["_ARRAY_DIMENSIONS"] = dims
         if seq := self.current_sequence:
-            ary.attrs["useq_MDASequence"] = json.loads(seq.json(exclude_unset=True))
+            ary.attrs["useq_MDASequence"] = seq.model_dump(
+                exclude_unset=True, mode="python"
+            )
         return ary
 
     # # the superclass implementation is all we need

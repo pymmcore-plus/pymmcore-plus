@@ -18,6 +18,7 @@ from unittest.mock import MagicMock
 from useq import MDASequence
 
 from pymmcore_plus._logger import exceptions_logged, logger
+from pymmcore_plus.core._constants import PymmcPlusConstants as PPC
 
 from ._protocol import PMDAEngine
 from ._thread_relay import mda_listeners_connected
@@ -210,6 +211,10 @@ class MDARunner:
         if error is not None:
             raise error
 
+    def seconds_elapsed(self) -> float:
+        """Return the number of seconds since the start of the acquisition."""
+        return time.perf_counter() - self._t0
+
     def _outputs_connected(
         self, output: SingleOutput | Sequence[SingleOutput] | None
     ) -> ContextManager:
@@ -268,6 +273,7 @@ class MDARunner:
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
         event_iterator = getattr(engine, "event_iterator", iter)
         _events: Iterator[MDAEvent] = event_iterator(events)
+        self._reset_timer()
 
         for event in _events:
             # If cancelled break out of the loop
@@ -279,14 +285,12 @@ class MDARunner:
             engine.setup_event(event)
 
             try:
+                event.metadata[PPC.RUNNER_TIME_SEC.value] = self.seconds_elapsed()
                 output = engine.exec_event(event) or ()  # in case output is None
-
                 for payload in output:
                     img, event, meta = payload
-                    if "PerfCounter" in meta:
-                        meta["ElapsedTime-ms"] = (meta["PerfCounter"] - self._t0) * 1000
-                    meta["Event"] = event
                     with exceptions_logged():
+                        event.metadata.pop(PPC.RUNNER_TIME_SEC.value, None)
                         self._signals.frameReady.emit(img, event, meta)
             finally:
                 teardown_event(event)
@@ -307,18 +311,13 @@ class MDARunner:
         self._paused_time = 0.0
         self._sequence = sequence
 
-        meta = self._engine.setup_sequence(sequence)
+        meta = self._engine.setup_sequence(sequence) or {}
+        self._signals.sequenceStarted.emit(sequence, meta)
         logger.info("MDA Started: %s", sequence)
-
-        self._signals.sequenceStarted.emit(sequence, meta or {})
-        self._reset_timer()
         return self._engine
 
     def _reset_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
-
-    def _time_elapsed(self) -> float:
-        return time.perf_counter() - self._t0
 
     def _check_canceled(self) -> bool:
         """Return True if the cancel method has been called and emit relevant signals.
@@ -370,7 +369,7 @@ class MDARunner:
             go_at = event.min_start_time + self._paused_time
             # We need to enter a loop here checking paused and canceled.
             # otherwise you'll potentially wait a long time to cancel
-            remaining_wait_time = go_at - self._time_elapsed()
+            remaining_wait_time = go_at - self.seconds_elapsed()
             while remaining_wait_time > 0:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
                 while self._paused and not self._canceled:
@@ -381,7 +380,7 @@ class MDARunner:
                 if self._canceled:
                     break
                 time.sleep(min(remaining_wait_time, 0.5))
-                remaining_wait_time = go_at - self._time_elapsed()
+                remaining_wait_time = go_at - self.seconds_elapsed()
 
         # check canceled again in case it was canceled
         # during the waiting loop
@@ -403,12 +402,3 @@ class MDARunner:
 
         logger.info("MDA Finished: %s", sequence)
         self._signals.sequenceFinished.emit(sequence)
-
-
-def _assert_handler(handler: Any) -> None:
-    if (
-        not hasattr(handler, "start")
-        or not hasattr(handler, "finish")
-        or not hasattr(handler, "put")
-    ):
-        raise TypeError("Handler must have start, finish, and put methods.")
