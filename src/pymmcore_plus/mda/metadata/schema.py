@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 from typing import Any, Literal, TypedDict
 
-import useq
+import useq  # noqa: TCH002
 from typing_extensions import NotRequired
 
 __all__ = [
