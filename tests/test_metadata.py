@@ -29,9 +29,12 @@ def test_from_core() -> None:
     assert isinstance(frame, dict)
 
 
-@pytest.mark.parametrize(
-    "dumps", [serialize.msgspec_json_dumps, serialize.std_json_dumps]
-)
+DUMPS = [serialize.std_json_dumps]
+if serialize.msgspec is not None:  # type: ignore
+    DUMPS.append(serialize.msgspec_json_dumps)
+
+
+@pytest.mark.parametrize("dumps", DUMPS)
 def test_metadata_during_mda(
     core: CMMCorePlus, dumps: Callable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
