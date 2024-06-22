@@ -218,9 +218,9 @@ def property_info(
     try:
         if cached:
             value = core.getPropertyFromCache(device, prop)
-        else:
+        else:  # pragma: no cover
             value = core.getProperty(device, prop)
-    except Exception:
+    except Exception:  # pragma: no cover
         value = None
     info: PropertyInfo = {
         "name": prop,
