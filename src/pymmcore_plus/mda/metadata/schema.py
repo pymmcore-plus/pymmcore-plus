@@ -130,7 +130,6 @@ class SummaryMetaV1(TypedDict, total=False):
     """Complete summary metadata for the system. Version 1.0."""
 
     devices: Tuple[DeviceInfo, ...]
-    """A special list."""
     system_info: SystemInfo
     image_info: ImageInfo
     config_groups: Tuple[ConfigGroup, ...]
