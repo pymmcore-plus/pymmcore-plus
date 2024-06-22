@@ -1,4 +1,4 @@
-from typing import Any, List, Literal, Tuple, TypedDict
+from typing import Any, List, Literal, Optional, Tuple, TypedDict
 
 import useq
 from typing_extensions import NotRequired
@@ -22,9 +22,9 @@ class PropertyInfo(TypedDict):
     """Information about a single device property."""
 
     name: str
-    value: str | None
+    value: Optional[str]
     data_type: Literal["undefined", "float", "int", "str"]
-    allowed_values: Tuple[str, ...] | None
+    allowed_values: Optional[Tuple[str, ...]]
     is_read_only: bool
     is_pre_init: bool
     limits: NotRequired[Tuple[float, float]]
@@ -42,7 +42,7 @@ class DeviceInfo(TypedDict):
     type: str
     description: str
     properties: Tuple[PropertyInfo, ...]
-    parent_label: str | None  # none on hub devices
+    parent_label: Optional[str]  # None on hub devices
 
     # state device only
     labels: NotRequired[Tuple[str, ...]]
@@ -60,7 +60,7 @@ class SystemInfo(TypedDict):
     mmcore_version: str
     device_api_version: str
     device_adapter_search_paths: Tuple[str, ...]
-    system_configuration: str | None
+    system_configuration: Optional[str]
     primary_log_file: str
     circular_buffer_memory_footprint: int
     buffer_total_capacity: int
@@ -86,15 +86,15 @@ class ImageInfo(TypedDict):
     pixel_size_um: float
     roi: List[int]
     camera_device: str
-    multi_roi: Tuple[List[int], List[int], List[int], List[int]] | None
+    multi_roi: NotRequired[Tuple[List[int], List[int], List[int], List[int]]]
 
 
 class Position(TypedDict):
     """Represents a position in 3D space and focus."""
 
-    x: float | None
-    y: float | None
-    focus: float | None
+    x: Optional[float]
+    y: Optional[float]
+    focus: Optional[float]
 
 
 class PropertyValue(TypedDict):
@@ -148,7 +148,7 @@ class FrameMetaV1(TypedDict, total=False):
     exposure_ms: float
     pixel_size_um: float
     position: Position
-    camera_device: str | None
+    camera_device: Optional[str]
     mda_event: NotRequired[useq.MDAEvent]
     runner_time: NotRequired[float]
     property_values: Tuple[PropertyValue, ...]

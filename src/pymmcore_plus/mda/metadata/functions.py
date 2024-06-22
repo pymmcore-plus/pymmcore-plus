@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import datetime
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import pymmcore_plus
 from pymmcore_plus.core._constants import PymmcPlusConstants
@@ -129,11 +129,7 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
 
 def image_info(core: CMMCorePlus) -> ImageInfo:
     """Return information about the current image properties."""
-    try:
-        multi_roi = core.getMultiROI()
-    except RuntimeError:
-        multi_roi = None
-    return {
+    info: ImageInfo = {
         "bytes_per_pixel": core.getBytesPerPixel(),
         "current_pixel_size_config": core.getCurrentPixelSizeConfig(),
         "exposure": core.getExposure(),
@@ -148,8 +144,10 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
         "pixel_size_um": core.getPixelSizeUm(True),
         "roi": core.getROI(),
         "camera_device": core.getCameraDevice(),
-        "multi_roi": multi_roi,
     }
+    with suppress(RuntimeError):
+        info["multi_roi"] = core.getMultiROI()
+    return info
 
 
 def position(core: CMMCorePlus) -> Position:
@@ -157,6 +155,7 @@ def position(core: CMMCorePlus) -> Position:
     x, y, focus = None, None, None
     with suppress(Exception):
         x = core.getXPosition()
+    with suppress(Exception):
         y = core.getYPosition()
     with suppress(Exception):
         focus = core.getPosition()
@@ -214,7 +213,6 @@ def property_info(
     prop: str,
     *,
     cached: bool = True,
-    error_value: Any = None,
 ) -> PropertyInfo:
     """Return information on a specific device property."""
     try:
@@ -223,7 +221,7 @@ def property_info(
         else:
             value = core.getProperty(device, prop)
     except Exception:
-        value = error_value
+        value = None
     info: PropertyInfo = {
         "name": prop,
         "value": value,
@@ -245,12 +243,12 @@ def property_info(
 
 
 def properties(
-    core: CMMCorePlus, device: str, cached: bool = True, error_value: Any = None
+    core: CMMCorePlus, device: str, *, cached: bool = True
 ) -> tuple[PropertyInfo, ...]:
     """Return a dictionary of device properties values for all loaded devices."""
     # this actually appears to be faster than getSystemStateCache
     return tuple(
-        property_info(core, device, prop, cached=cached, error_value=error_value)
+        property_info(core, device, prop, cached=cached)
         for prop in core.getDevicePropertyNames(device)
     )
 
