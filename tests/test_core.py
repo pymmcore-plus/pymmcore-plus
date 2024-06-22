@@ -125,7 +125,7 @@ def test_new_position_methods(core: CMMCorePlus):
 
 
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
+def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
     """Test signal emission during MDA"""
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
@@ -154,13 +154,21 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot"):
         assert isinstance(_call.args[0], np.ndarray)
         assert _call.args[1] == event
 
-    summary = core.mda.engine.get_summary_metadata()
-    summary.pop("DateAndTime", "")
     ss_mock.assert_called_once()
     _seq, _meta = ss_mock.call_args[0]
     assert _seq == mda
-    _meta.pop("DateAndTime", "")
-    assert _meta == summary
+    assert set(_meta) == {
+        "mda_sequence",
+        "config_groups",
+        "format",
+        "pixel_size_configs",
+        "position",
+        "image_info",
+        "devices",
+        "version",
+        "system_info",
+        "date_time",
+    }
     sf_mock.assert_called_once_with(mda)
     xystage_mock.assert_called_with("XY", 1.0, 1.0)
     exp_mock.assert_called_with("Camera", 1.0)
