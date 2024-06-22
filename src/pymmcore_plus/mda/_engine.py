@@ -19,7 +19,12 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import Keyword, PymmcPlusConstants
 from pymmcore_plus.core._sequencing import SequencedEvent
-from pymmcore_plus.mda.metadata import frame_metadata, summary_metadata
+from pymmcore_plus.mda.metadata import (
+    FrameMetaV1,
+    SummaryMetaV1,
+    frame_metadata,
+    summary_metadata,
+)
 
 from ._protocol import PMDAEngine
 
@@ -110,7 +115,7 @@ class MDAEngine(PMDAEngine):
             {PymmcPlusConstants.MDA_SEQUENCE.value: sequence}
         )
 
-    def get_summary_metadata(self, extra: dict | None = None) -> Any:
+    def get_summary_metadata(self, extra: dict | None = None) -> SummaryMetaV1:
         return summary_metadata(self._mmc, extra or {})
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
@@ -264,12 +269,12 @@ class MDAEngine(PMDAEngine):
             yield ImagePayload(
                 self._mmc.getImage(cam),
                 event,
-                self.get_frame_metadata(event, cam_index=cam),
+                self.get_frame_metadata(event, cam_index=cam),  # type: ignore[arg-type]
             )
 
     def get_frame_metadata(
         self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0
-    ) -> Any:
+    ) -> FrameMetaV1:
         extra = {} if meta is None else dict(meta)
         extra[PymmcPlusConstants.MDA_EVENT.value] = event
 
@@ -438,9 +443,9 @@ class MDAEngine(PMDAEngine):
     def _next_img_payload(self, event: MDAEvent, channel: int = 0) -> PImagePayload:
         """Grab next image from the circular buffer and return it as an ImagePayload."""
         _slice = 0  # ?
-        img, meta = self._mmc.popNextImageAndMD(channel, _slice)
-        _meta = self.get_frame_metadata(event, meta)
-        return ImagePayload(img, event, _meta)
+        img, _meta = self._mmc.popNextImageAndMD(channel, _slice)
+        meta = self.get_frame_metadata(event, _meta)
+        return ImagePayload(img, event, meta)  # type: ignore[arg-type]
 
     # ===================== EXTRA =====================
 
