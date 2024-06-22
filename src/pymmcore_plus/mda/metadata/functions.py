@@ -148,7 +148,7 @@ def summary_metadata(core: CMMCorePlus, extra: dict[str, Any]) -> SummaryMetaV1:
         "position": position(core),
         "config_groups": config_groups(core),
         "pixel_size_configs": pixel_size_configs(core),
-        "format": "summary-struct-full",
+        "format": "summary-dict-full",
         "date_time": _now_isoformat(),
         "version": "1.0",
     }

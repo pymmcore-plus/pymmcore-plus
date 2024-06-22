@@ -138,7 +138,7 @@ class SummaryMetaV1(TypedDict, total=False):
     position: Position
     mda_sequence: useq.MDASequence | None
     date_time: str
-    format: Literal["summary-struct-full"]
+    format: Literal["summary-dict-full"]
     version: Literal["1.0"]
 
 
