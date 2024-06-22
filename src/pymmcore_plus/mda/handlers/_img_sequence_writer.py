@@ -11,7 +11,7 @@ from itertools import count
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Mapping, Sequence, cast
 
-from pymmcore_plus.mda.metadata.serialize import json
+from pymmcore_plus.mda.metadata.serialize import json_dumps
 
 from ._util import get_full_sequence_axes
 
@@ -183,7 +183,7 @@ class ImageSequenceWriter:
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         # write final frame metadata to disk
-        self._frame_meta_file.write_bytes(json.dumps(self._frame_metadata, indent=2))
+        self._frame_meta_file.write_bytes(json_dumps(self._frame_metadata, indent=2))
 
     def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
         """Write a frame to disk."""
@@ -206,7 +206,7 @@ class ImageSequenceWriter:
         # write metadata to disk every 10 frames
         if frame_idx % 10 == 0:
             self._frame_meta_file.write_bytes(
-                json.dumps(self._frame_metadata, indent=2)
+                json_dumps(self._frame_metadata, indent=2)
             )
 
     @staticmethod

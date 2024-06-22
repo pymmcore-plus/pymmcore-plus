@@ -9,7 +9,7 @@ from itertools import product
 from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
-from pymmcore_plus.mda.metadata.serialize import json
+from pymmcore_plus.mda.metadata.serialize import json_dumps, json_loads
 
 from ._util import position_sizes
 
@@ -296,11 +296,11 @@ class TensorStoreHandler:
             ]
 
         if self.ts_driver.startswith("zarr"):
-            store.kvstore.write(".zattrs", json.dumps(metadata).decode("utf-8"))
+            store.kvstore.write(".zattrs", json_dumps(metadata).decode("utf-8"))
         elif self.ts_driver == "n5":  # pragma: no cover
-            attrs = json.loads(store.kvstore.read("attributes.json").result().value)
+            attrs = json_loads(store.kvstore.read("attributes.json").result().value)
             attrs.update(metadata)
-            store.kvstore.write("attributes.json", json.dumps(attrs).decode("utf-8"))
+            store.kvstore.write("attributes.json", json_dumps(attrs).decode("utf-8"))
 
     def _expand_store(self, store: ts.TensorStore) -> ts.Future[ts.TensorStore]:
         """Grow the store by `self._size_increment` frames.

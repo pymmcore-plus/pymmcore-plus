@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
 import numpy as np
 
+from pymmcore_plus.mda.metadata.serialize import to_builtins
+
 from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
@@ -193,7 +195,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         while self.frame_metadatas:
             key, metas = self.frame_metadatas.popitem()
             if key in self.position_arrays:
-                self.position_arrays[key].attrs["frame_meta"] = metas
+                self.position_arrays[key].attrs["frame_meta"] = to_builtins(metas)
 
         if self._minify_metadata:
             self._minify_zattrs_metadata()
@@ -275,8 +277,9 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         ary.attrs["_ARRAY_DIMENSIONS"] = dims
         if seq := self.current_sequence:
             ary.attrs["useq_MDASequence"] = seq.model_dump(
-                exclude_unset=True, mode="python"
+                exclude_unset=True, mode="json"
             )
+
         return ary
 
     # # the superclass implementation is all we need

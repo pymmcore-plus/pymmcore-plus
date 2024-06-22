@@ -1,60 +1,86 @@
-from typing import TYPE_CHECKING, Any
+import json
+import sys
+from contextlib import suppress
+from typing import TYPE_CHECKING, Any, Sequence
 
 if TYPE_CHECKING:
+    import pydantic  # noqa: F401
 
-    class json:
-        """Namespace for JSON serialization."""
 
-        @staticmethod
-        def dumps(obj: Any, *, indent: int | None = None) -> bytes:
-            """Serialize object to bytes."""
+def encode_hook(obj: Any, raises: bool = True) -> Any:
+    """Hook to encode objects that are not JSON serializable."""
+    if not TYPE_CHECKING:
+        pydantic = sys.modules.get("pydantic")
+    if pydantic and isinstance(obj, pydantic.BaseModel):
+        try:
+            return obj.model_dump(mode="json", exclude_unset=True)
+        except AttributeError:
+            return obj.dict(exclude_unset=True)
+    if raises:
+        raise NotImplementedError(f"Cannot serialize object of type {type(obj)}")
+    return obj
 
-        @staticmethod
-        def loads(s: bytes | str) -> Any:
-            """Deserialize bytes to object."""
+
+def decode_hook(type: type, obj: Any) -> Any:
+    """Hook to decode objects that are not JSON deserializable."""
+    if not TYPE_CHECKING:
+        pydantic = sys.modules.get("pydantic")
+    if pydantic:
+        with suppress(TypeError):
+            if issubclass(type, pydantic.BaseModel):
+                return type.model_validate(obj)
+    raise NotImplementedError(f"Cannot deserialize object of type {type}")
 
 
 try:
+    # use msgspec if available
     import msgspec
-
-    def _enc_hook(obj: Any) -> Any:
-        if hasattr(obj, "model_dump"):
-            return obj.model_dump(mode="json")
-        raise NotImplementedError(f"Cannot serialize object of type {type(obj)}")
-
-    def _dec_hook(type: type, obj: Any) -> Any:
-        if hasattr(type, "model_validate"):
-            return type.model_validate(obj)
-        raise NotImplementedError(f"Cannot deserialize object of type {type}")
-
-    class json:  # type: ignore
-        """Namespace for JSON serialization."""
-
-        @staticmethod
-        def dumps(obj: Any, *, indent: int | None = None) -> bytes:
-            """Serialize object to bytes."""
-            encoded = msgspec.json.encode(obj, enc_hook=_enc_hook)
-            if indent is not None:
-                encoded = msgspec.json.format(encoded, indent=indent)
-            return encoded  # type: ignore [no-any-return]
-
-        @staticmethod
-        def loads(s: bytes | str) -> Any:
-            """Deserialize bytes to object."""
-            return msgspec.json.decode(s, dec_hook=_dec_hook)
-
 except ImportError:
-    import json as _json
+    msgspec = None
 
-    class json:  # type: ignore
-        """Namespace for JSON serialization."""
 
-        @staticmethod
-        def dumps(obj: Any, *, indent: int | None = None) -> bytes:
-            """Serialize object to bytes."""
-            return _json.dumps(obj, indent=indent).encode("utf-8")
+def msgspec_json_dumps(obj: Any, *, indent: int | None = None) -> bytes:
+    """Serialize object to bytes."""
+    encoded = msgspec.json.encode(obj, enc_hook=encode_hook)
+    if indent is not None:
+        encoded = msgspec.json.format(encoded, indent=indent)
+    return encoded  # type: ignore [no-any-return]
 
-        @staticmethod
-        def loads(s: bytes | str) -> Any:
-            """Deserialize bytes to object."""
-            return _json.loads(s)
+
+def msgspec_json_loads(s: bytes | str) -> Any:
+    """Deserialize bytes to object."""
+    return msgspec.json.decode(s, dec_hook=decode_hook)
+
+
+def msgspec_to_builtins(obj: Any) -> Any:
+    """Convert object to built-in types."""
+    return msgspec.to_builtins(obj, enc_hook=encode_hook)
+
+
+def std_json_dumps(obj: Any, *, indent: int | None = None) -> bytes:
+    """Serialize object to bytes."""
+    return json.dumps(std_to_builtins(obj), indent=indent).encode("utf-8")
+
+
+def std_json_loads(s: bytes | str) -> Any:
+    """Deserialize bytes to object."""
+    return json.loads(s)
+
+
+def std_to_builtins(obj: Any) -> Any:
+    """Convert object to built-in types."""
+    if isinstance(obj, dict):
+        return {k: std_to_builtins(v) for k, v in obj.items()}
+    if isinstance(obj, Sequence) and not isinstance(obj, str):
+        return [std_to_builtins(v) for v in obj]
+    return encode_hook(obj, raises=False)
+
+
+if msgspec is None:
+    json_dumps = std_json_dumps
+    json_loads = std_json_loads
+    to_builtins = std_to_builtins
+else:
+    json_dumps = msgspec_json_dumps
+    json_loads = msgspec_json_loads
+    to_builtins = msgspec_to_builtins

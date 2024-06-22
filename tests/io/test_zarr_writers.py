@@ -114,7 +114,7 @@ def test_ome_zarr_writer(
         assert expected_shapes[k] == actual_shape
 
         # check that the MDASequence was stored
-        stored_seq = useq.MDASequence.parse_obj(v.attrs["useq_MDASequence"])
+        stored_seq = useq.MDASequence.model_validate(v.attrs["useq_MDASequence"])
         assert stored_seq == mda
 
         if xr is not None:
