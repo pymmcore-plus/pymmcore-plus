@@ -195,6 +195,9 @@ def test_tensorstore_writes_metadata(
     """Test that we can write metadata with or without msgspec."""
     from pymmcore_plus.mda.handlers import _tensorstore_handler
 
+    if dumps == "msgspec":
+        pytest.importorskip("msgspec")
+
     dumper = getattr(serialize, f"{dumps}_json_dumps")
     loader = getattr(serialize, f"{dumps}_json_loads")
     monkeypatch.setattr(_tensorstore_handler, "json_dumps", dumper)

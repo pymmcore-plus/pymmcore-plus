@@ -20,6 +20,8 @@ if TYPE_CHECKING:
     import tensorstore as ts
     import useq
 
+    from pymmcore_plus.mda.metadata import FrameMetaV1, SummaryMetaV1
+
     TsDriver: TypeAlias = Literal["zarr", "zarr3", "n5", "neuroglancer_precomputed"]
     EventKey: TypeAlias = frozenset[tuple[str, int]]
 
@@ -108,7 +110,7 @@ class TensorStoreHandler:
 
         # storage of individual frame metadata
         # maps position key to list of frame metadata
-        self.frame_metadatas: list[tuple[useq.MDAEvent, dict]] = []
+        self.frame_metadatas: list[tuple[useq.MDAEvent, FrameMetaV1]] = []
 
         self._size_increment = 300
 
@@ -171,7 +173,7 @@ class TensorStoreHandler:
 
         return cls(path=path, **kwargs)
 
-    def sequenceStarted(self, seq: useq.MDASequence) -> None:
+    def sequenceStarted(self, seq: useq.MDASequence, meta: SummaryMetaV1) -> None:
         """On sequence started, simply store the sequence."""
         self._frame_index = 0
         self._store = None
@@ -193,7 +195,9 @@ class TensorStoreHandler:
         if self.frame_metadatas:
             self.finalize_metadata()
 
-    def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
+    def frameReady(
+        self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
+    ) -> None:
         """Write frame to the zarr array for the appropriate position."""
         if self._store is None:
             self._store = self.new_store(frame, event.sequence, meta).result()
@@ -231,7 +235,7 @@ class TensorStoreHandler:
         return self._store[ts_index].read().result().squeeze()  # type: ignore
 
     def new_store(
-        self, frame: np.ndarray, seq: useq.MDASequence | None, meta: dict
+        self, frame: np.ndarray, seq: useq.MDASequence | None, meta: FrameMetaV1
     ) -> ts.Future[ts.TensorStore]:
         shape, chunks, labels = self.get_shape_chunks_labels(frame.shape, seq)
         self._nd_storage = FRAME_DIM not in labels

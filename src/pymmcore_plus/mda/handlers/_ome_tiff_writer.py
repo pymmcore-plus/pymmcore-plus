@@ -41,7 +41,7 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ._5d_writer_base import _5DWriterBase
+from ._5d_writer_base import _NULL, _5DWriterBase
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -83,7 +83,9 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
 
         super().__init__()
 
-    def sequenceStarted(self, seq: useq.MDASequence, meta: SummaryMetaV1) -> None:
+    def sequenceStarted(
+        self, seq: useq.MDASequence, meta: SummaryMetaV1 | object = _NULL
+    ) -> None:
         super().sequenceStarted(seq, meta)
         # Non-OME (ImageJ) hyperstack axes MUST be in TZCYXS order
         # so we reorder the ordered position_sizes dicts.  This will ensure

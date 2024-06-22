@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import warnings
 from abc import abstractmethod
 from collections import defaultdict
 from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar
@@ -16,6 +17,7 @@ if TYPE_CHECKING:
         def __setitem__(self, key: tuple[int, ...], value: np.ndarray) -> None: ...
 
 
+_NULL = object()
 POS_PREFIX = "p"
 T = TypeVar("T", bound="SupportsSetItem")
 
@@ -96,8 +98,18 @@ class _5DWriterBase(Generic[T]):
         """
         return self._position_sizes
 
-    def sequenceStarted(self, seq: useq.MDASequence, meta: SummaryMetaV1) -> None:
+    def sequenceStarted(
+        self, seq: useq.MDASequence, meta: SummaryMetaV1 | object = _NULL
+    ) -> None:
         """On sequence started, simply store the sequence."""
+        if meta is _NULL:  # pragma: no cover
+            warnings.warn(
+                "calling `sequenceStarted` without metadata as the second argument is "
+                "deprecated and will raise an exception in the future. Please propagate"
+                " metadata from the event callback.",
+                UserWarning,
+                stacklevel=2,
+            )
         self.frame_metadatas.clear()
         self.current_sequence = seq
         if seq:
