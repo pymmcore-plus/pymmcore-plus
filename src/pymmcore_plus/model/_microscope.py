@@ -15,6 +15,7 @@ from ._pixel_size_config import PixelSizeGroup
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
+    from pymmcore_plus.mda.metadata.schema import SummaryMetaV1
 
     from ._core_link import ErrCallback
     from ._property import Property
@@ -153,6 +154,40 @@ class Microscope:
             dump(self, fh)
 
         self.mark_clean()
+
+    @classmethod
+    def from_metadata(cls, summary_meta: SummaryMetaV1) -> Microscope:
+        #         # XXX: Consider making a dedicated Core device
+        # # and disallowing the user from creating Device with type Core
+        # core_device: CoreDevice = field(default_factory=CoreDevice)
+        # devices: list[Device] = field(default_factory=list)
+        # config_groups: dict[str, ConfigGroup] = field(default_factory=dict)
+        # pixel_size_group: PixelSizeGroup = field(default_factory=PixelSizeGroup)
+        # config_file: str = ""
+
+        # initialized: bool = False
+        core_device = next(
+            (d for d in summary_meta["devices"] if d["name"] == Keyword.CoreDevice),
+            None,
+        )
+        if core_device is None:
+            raise ValueError("CoreDevice not found in metadata")
+        return cls(
+            core_device=CoreDevice.from_metadata(core_device),
+            devices=[
+                Device.from_metadata(d)
+                for d in summary_meta["devices"]
+                if d["name"] != Keyword.CoreDevice
+            ],
+            config_groups={
+                grp["name"]: ConfigGroup.from_metadata(grp)
+                for grp in summary_meta["config_groups"]
+            },
+            pixel_size_group=PixelSizeGroup.from_metadata(
+                summary_meta["pixel_size_configs"]
+            ),
+            config_file=summary_meta["system_info"].get("system_configuration") or "",
+        )
 
     # ------------- Core-interacting methods -------------
 
