@@ -5,7 +5,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING
 
 import pymmcore_plus
-from pymmcore_plus.core._constants import PymmcPlusConstants
+from pymmcore_plus.core._constants import DeviceType, PymmcPlusConstants
 
 if TYPE_CHECKING:
     import useq
@@ -91,11 +91,12 @@ def _now_isoformat() -> str:
 
 def device_info(core: CMMCorePlus, *, label: str, cached: bool = True) -> DeviceInfo:
     """Return information about a specific device label."""
+    devtype = core.getDeviceType(label)
     info: DeviceInfo = {
         "label": label,
         "library": core.getDeviceLibrary(label),
         "name": core.getDeviceName(label),
-        "type": core.getDeviceType(label).name,
+        "type": devtype.name,
         "description": core.getDeviceDescription(label),
         "parent_label": core.getParentLabel(label) or None,
         "properties": properties(core, device=label, cached=cached),
@@ -106,6 +107,16 @@ def device_info(core: CMMCorePlus, *, label: str, cached: bool = True) -> Device
         info["focus_direction"] = core.getFocusDirection(label).name  # type: ignore[typeddict-item]
     with suppress(RuntimeError):
         info["labels"] = core.getStateLabels(label)
+    if devtype == DeviceType.Stage:
+        with suppress(RuntimeError):
+            info["is_continuous_focus_drive"] = core.isContinuousFocusDrive(label)
+            info["is_stage_sequenceable"] = core.isStageSequenceable(label)
+            info["is_stage_linear_sequenceable"] = core.isStageLinearSequenceable(label)
+    elif devtype == DeviceType.XYStage:
+        with suppress(RuntimeError):
+            info["is_stage_sequenceable"] = core.isXYStageSequenceable(label)
+    with suppress(RuntimeError):
+        info["is_exposure_sequenceable"] = core.isExposureSequenceable(label)
     return info
 
 
@@ -123,6 +134,9 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
         "buffer_total_capacity": core.getBufferTotalCapacity(),
         "buffer_free_capacity": core.getBufferFreeCapacity(),
         "timeout_ms": core.getTimeoutMs(),
+        "continuous_focus_enabled": core.isContinuousFocusEnabled(),
+        "continuous_focus_locked": core.isContinuousFocusLocked(),
+        "auto_shutter": core.getAutoShutter(),
         # "remaining_image_count": core.getRemainingImageCount(),
     }
 

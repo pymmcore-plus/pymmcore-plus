@@ -50,6 +50,13 @@ class DeviceInfo(TypedDict):
     focus_direction: NotRequired[Literal["Unknown", "TowardSample", "AwayFromSample"]]
     # hub device only
     child_names: NotRequired[Tuple[str, ...]]
+    # stage or XYstage device only
+    is_stage_sequenceable: NotRequired[bool]
+    # stage device only
+    is_continuous_focus_drive: NotRequired[bool]
+    is_stage_linear_sequenceable: NotRequired[bool]
+    # camera device only
+    is_exposure_sequenceable: NotRequired[bool]
 
 
 class SystemInfo(TypedDict):
@@ -67,6 +74,9 @@ class SystemInfo(TypedDict):
     buffer_free_capacity: int
     timeout_ms: int
     # remaining_image_count: int
+    continuous_focus_enabled: bool
+    continuous_focus_locked: bool
+    auto_shutter: bool
 
 
 class ImageInfo(TypedDict):
@@ -139,6 +149,7 @@ class SummaryMetaV1(TypedDict, total=False):
     date_time: str
     format: Literal["summary-dict-full"]
     version: Literal["1.0"]
+    extra: NotRequired[dict[str, Any]]
 
 
 class FrameMetaV1(TypedDict, total=False):
@@ -151,5 +162,8 @@ class FrameMetaV1(TypedDict, total=False):
     mda_event: NotRequired[useq.MDAEvent]
     runner_time: NotRequired[float]
     property_values: Tuple[PropertyValue, ...]
+    is_sequence_running: NotRequired[bool]
+    remaining_image_count: NotRequired[int]
     format: Literal["frame-dict-minimal"]
     version: Literal["1.0"]
+    extra: NotRequired[dict[str, Any]]

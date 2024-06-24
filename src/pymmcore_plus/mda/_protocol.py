@@ -1,7 +1,14 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Mapping, Protocol, runtime_checkable
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Mapping,
+    MutableMapping,
+    Protocol,
+    runtime_checkable,
+)
 
 if TYPE_CHECKING:
     from typing import Iterable, Iterator
@@ -9,7 +16,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from useq import MDAEvent, MDASequence
 
-    PImagePayload = tuple[NDArray, MDAEvent, dict]
+    PImagePayload = tuple[NDArray, MDAEvent, MutableMapping[str, Any]]
 
 
 # NOTE: This whole thing could potentially go in useq-schema

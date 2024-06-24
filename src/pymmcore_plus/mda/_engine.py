@@ -32,7 +32,6 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
 
     from pymmcore_plus.core import CMMCorePlus
-    from pymmcore_plus.core._metadata import Metadata
 
     from ._protocol import PImagePayload
 
@@ -264,29 +263,21 @@ class MDAEngine(PMDAEngine):
             self._mmc.setShutterOpen(False)
 
         for cam in range(self._mmc.getNumberOfCameraChannels()):
-            yield ImagePayload(
-                self._mmc.getImage(cam),
-                event,
-                self.get_frame_metadata(event, cam_index=cam),  # type: ignore[arg-type]
-            )
+            camera_device = self._mmc.getPhysicalCameraDevice(cam)
+            meta = self.get_frame_metadata(event, camera_device=camera_device)
+            # Note, the third element is actually a MutableMapping, but mypy doesn't
+            # see TypedDict as a subclass of MutableMapping yet.
+            # https://github.com/python/mypy/issues/4976
+            yield ImagePayload(self._mmc.getImage(cam), event, meta)  # type: ignore[misc]
 
     def get_frame_metadata(
-        self, event: MDAEvent, meta: Metadata | None = None, cam_index: int = 0
+        self, event: MDAEvent, camera_device: str | None = None
     ) -> FrameMetaV1:
-        if meta and "Camera" in meta:
-            # note, when present in circular buffer meta, this key is called "Camera".
-            # It's NOT actually Keyword.CoreCamera (but it's the same value)
-            # it is hardcoded in various places in mmCoreAndDevices, see:
-            # see: https://github.com/micro-manager/mmCoreAndDevices/pull/468
-            cam_device = meta["Camera"]
-        else:
-            cam_device = self._mmc.getPhysicalCameraDevice(cam_index)
-
         prop_values = self._get_current_props(ch.group) if (ch := event.channel) else ()
         return frame_metadata(
             self._mmc,
             mda_event=event,
-            camera_device=cam_device,
+            camera_device=camera_device,
             property_values=prop_values,
             cached=True,
         )
@@ -421,8 +412,10 @@ class MDAEngine(PMDAEngine):
         iter_events = product(event.events, range(n_channels))
         # block until the sequence is done, popping images in the meantime
         while self._mmc.isSequenceRunning():
-            if self._mmc.getRemainingImageCount():
-                yield self._next_img_payload(*next(iter_events))
+            if remaining := self._mmc.getRemainingImageCount():
+                yield self._next_img_payload(
+                    *next(iter_events), running=True, remaining=remaining
+                )
                 count += 1
             else:
                 time.sleep(0.001)
@@ -430,8 +423,10 @@ class MDAEngine(PMDAEngine):
         if self._mmc.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
 
-        while self._mmc.getRemainingImageCount():
-            yield self._next_img_payload(*next(iter_events))
+        while remaining := self._mmc.getRemainingImageCount():
+            yield self._next_img_payload(
+                *next(iter_events), running=False, remaining=remaining
+            )
             count += 1
 
         expected_images = n_events * n_channels
@@ -443,12 +438,31 @@ class MDAEngine(PMDAEngine):
                 count,
             )
 
-    def _next_img_payload(self, event: MDAEvent, channel: int = 0) -> PImagePayload:
+    def _next_img_payload(
+        self,
+        event: MDAEvent,
+        channel: int = 0,
+        *,
+        running: bool = True,
+        remaining: int = 0,
+    ) -> PImagePayload:
         """Grab next image from the circular buffer and return it as an ImagePayload."""
         _slice = 0  # ?
-        img, _meta = self._mmc.popNextImageAndMD(channel, _slice)
-        meta = self.get_frame_metadata(event, _meta)
-        return ImagePayload(img, event, meta)  # type: ignore[arg-type]
+        img, mm_meta = self._mmc.popNextImageAndMD(channel, _slice)
+        try:
+            # note, when present in circular buffer meta, this key is called "Camera".
+            # It's NOT actually Keyword.CoreCamera (but it's the same value)
+            # it is hardcoded in various places in mmCoreAndDevices, see:
+            # see: https://github.com/micro-manager/mmCoreAndDevices/pull/468
+            camera_device = mm_meta.GetSingleTag("Camera").GetValue()
+        except Exception:
+            camera_device = self._mmc.getPhysicalCameraDevice(channel)
+
+        meta = self.get_frame_metadata(event, camera_device=camera_device)
+        meta["is_sequence_running"] = running
+        meta["remaining_image_count"] = remaining
+        # https://github.com/python/mypy/issues/4976
+        return ImagePayload(img, event, meta)  # type: ignore[return-value]
 
     # ===================== EXTRA =====================
 
@@ -508,7 +522,7 @@ class MDAEngine(PMDAEngine):
                     {(i[0], i[1]): None for i in self._mmc.getConfigData(grp, preset)}
                 )
 
-    def _get_config_group_state(self, group: str) -> dict[str, dict[str, str]]:
+    def _get_current_props(self, *groups: str) -> tuple[PropertyValue, ...]:
         """Faster version of core.getConfigGroupState(group).
 
         MMCore does some excess iteration that we want to avoid here. It calls
@@ -516,15 +530,6 @@ class MDAEngine(PMDAEngine):
         group, (not only the one being requested).  We go straight to cached data
         for the group we want.
         """
-        state: dict[str, dict[str, str]] = {}
-        if group in self._config_device_props:
-            for dev, prop in self._config_device_props[group]:
-                dev_dict = state.setdefault(dev, {})
-                dev_dict[prop] = self._mmc.getPropertyFromCache(dev, prop)
-        return state
-
-    def _get_current_props(self, *groups: str) -> tuple[PropertyValue, ...]:
-        # if dev_props := self._config_device_props.get(ch.group):
         return tuple(
             {
                 "dev": dev,
@@ -540,4 +545,4 @@ class MDAEngine(PMDAEngine):
 class ImagePayload(NamedTuple):
     image: NDArray
     event: MDAEvent
-    metadata: dict
+    metadata: FrameMetaV1 | SummaryMetaV1
