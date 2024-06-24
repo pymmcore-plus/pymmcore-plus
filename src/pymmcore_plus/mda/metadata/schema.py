@@ -1,4 +1,4 @@
-from typing import Any, List, Literal, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict
 
 import useq
 from typing_extensions import NotRequired
@@ -149,7 +149,7 @@ class SummaryMetaV1(TypedDict, total=False):
     date_time: str
     format: Literal["summary-dict-full"]
     version: Literal["1.0"]
-    extra: NotRequired[dict[str, Any]]
+    extra: NotRequired[Dict[str, Any]]
 
 
 class FrameMetaV1(TypedDict, total=False):
@@ -166,4 +166,4 @@ class FrameMetaV1(TypedDict, total=False):
     remaining_image_count: NotRequired[int]
     format: Literal["frame-dict-minimal"]
     version: Literal["1.0"]
-    extra: NotRequired[dict[str, Any]]
+    extra: NotRequired[Dict[str, Any]]
