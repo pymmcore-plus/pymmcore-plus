@@ -54,7 +54,7 @@ class DeviceInfo(TypedDict):
     is_stage_sequenceable: NotRequired[bool]
     # stage device only
     is_continuous_focus_drive: NotRequired[bool]
-    is_stage_linear_sequenceable: NotRequired[bool]
+    # is_stage_linear_sequenceable: NotRequired[bool]
     # camera device only
     is_exposure_sequenceable: NotRequired[bool]
 
@@ -67,11 +67,9 @@ class SystemInfo(TypedDict):
     mmcore_version: str
     device_api_version: str
     device_adapter_search_paths: Tuple[str, ...]
-    system_configuration: Optional[str]
+    system_configuration_file: Optional[str]
     primary_log_file: str
-    circular_buffer_memory_footprint: int
-    buffer_total_capacity: int
-    buffer_free_capacity: int
+    sequence_buffer_size_mb: int  # core returns this as MB
     timeout_ms: int
     # remaining_image_count: int
     continuous_focus_enabled: bool
@@ -82,16 +80,20 @@ class SystemInfo(TypedDict):
 class ImageInfo(TypedDict):
     """Information about the current image structure."""
 
+    label: str  # some concept of camera device, magnification
+
     bytes_per_pixel: int
     current_pixel_size_config: str
     exposure: float
-    image_bit_depth: int
-    image_buffer_size: int
-    image_height: int
-    image_width: int
+    # image_buffer_size: int
+    # image_height: int
+    # image_width: int
     magnification_factor: float
     number_of_camera_channels: int
-    number_of_components: int
+    number_of_components: int  # rgb or not
+    component_bit_depth: int
+    # some way to suggest the image format, like RGB, etc...
+
     pixel_size_affine: Tuple[float, float, float, float, float, float]
     pixel_size_um: float
     roi: List[int]
@@ -141,7 +143,7 @@ class SummaryMetaV1(TypedDict, total=False):
 
     devices: Tuple[DeviceInfo, ...]
     system_info: SystemInfo
-    image_info: ImageInfo
+    image_info: tuple[ImageInfo, ...]
     config_groups: Tuple[ConfigGroup, ...]
     pixel_size_configs: Tuple[PixelSizeConfigPreset, ...]
     position: Position
@@ -155,14 +157,16 @@ class SummaryMetaV1(TypedDict, total=False):
 class FrameMetaV1(TypedDict, total=False):
     """Metadata for a single frame. Version 1.0."""
 
-    exposure_ms: float
+    # image_info: ImageInfo
     pixel_size_um: float
-    position: Position
     camera_device: Optional[str]
+
+    exposure_ms: float
+    position: Position
     mda_event: NotRequired[useq.MDAEvent]
     runner_time: NotRequired[float]
     property_values: Tuple[PropertyValue, ...]
-    is_sequence_running: NotRequired[bool]
+    in_sequence_acquisition: NotRequired[bool]
     remaining_image_count: NotRequired[int]
     format: Literal["frame-dict-minimal"]
     version: Literal["1.0"]

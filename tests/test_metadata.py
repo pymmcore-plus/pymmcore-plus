@@ -80,3 +80,31 @@ def test_metadata_during_mda(
     assert isinstance(dumped, bytes)
     loaded = loader(dumped)
     assert isinstance(loaded, dict)
+
+
+def test_multicam(core: CMMCorePlus) -> None:
+    mc = "YoMulti"
+    core.loadDevice("Camer2", "DemoCamera", "DCam")
+    core.loadDevice(mc, "Utilities", "Multi Camera")
+    core.initializeDevice(mc)
+    core.initializeDevice("Camer2")
+    core.setProperty("Camer2", "BitDepth", "16")
+    core.setProperty(mc, "Physical Camera 1", "Camera")
+    core.setProperty(mc, "Physical Camera 2", "Camer2")
+    core.setCameraDevice(mc)
+    breakpoint()
+    mda = useq.MDASequence(
+        channels=["Cy5", "FITC"],
+        time_plan={"interval": 0, "loops": 3},
+        axis_order="tpcz",
+        stage_positions=[(222, 1, 1), (111, 0, 0)],
+    )
+
+    Mock()
+    Mock()
+    from rich import print
+
+    # core.mda.engine.use_hardware_sequencing = True
+    core.mda.events.sequenceStarted.connect(print)
+    core.mda.events.frameReady.connect(print)
+    core.mda.run(mda)

@@ -225,6 +225,7 @@ class MDAEngine(PMDAEngine):
 
         if event.channel is not None:
             try:
+                # possible speedup by setting manually.
                 self._mmc.setConfig(event.channel.group, event.channel.config)
             except Exception as e:
                 logger.warning("Failed to set channel. %s", e)

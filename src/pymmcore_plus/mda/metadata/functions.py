@@ -111,12 +111,14 @@ def device_info(core: CMMCorePlus, *, label: str, cached: bool = True) -> Device
         with suppress(RuntimeError):
             info["is_continuous_focus_drive"] = core.isContinuousFocusDrive(label)
             info["is_stage_sequenceable"] = core.isStageSequenceable(label)
-            info["is_stage_linear_sequenceable"] = core.isStageLinearSequenceable(label)
+            # info["is_stage_linear_sequenceable"]=core.isStageLinearSequenceable(label)
     elif devtype == DeviceType.XYStage:
         with suppress(RuntimeError):
             info["is_stage_sequenceable"] = core.isXYStageSequenceable(label)
     with suppress(RuntimeError):
         info["is_exposure_sequenceable"] = core.isExposureSequenceable(label)
+    with suppress(RuntimeError):
+        info["is_slm_sequenceable"] = core.getSLMSequenceMaxLength(label) > 0
     return info
 
 
@@ -128,11 +130,11 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
         "mmcore_version": core.getVersionInfo(),
         "device_api_version": core.getAPIVersionInfo(),
         "device_adapter_search_paths": core.getDeviceAdapterSearchPaths(),
-        "system_configuration": core.systemConfigurationFile(),
+        "system_configuration_file": core.systemConfigurationFile(),
         "primary_log_file": core.getPrimaryLogFile(),
-        "circular_buffer_memory_footprint": core.getCircularBufferMemoryFootprint(),
-        "buffer_total_capacity": core.getBufferTotalCapacity(),
-        "buffer_free_capacity": core.getBufferFreeCapacity(),
+        "sequence_buffer_size_mb": core.getCircularBufferMemoryFootprint(),
+        # "buffer_total_capacity": core.getBufferTotalCapacity(),
+        # "buffer_free_capacity": core.getBufferFreeCapacity(),
         "timeout_ms": core.getTimeoutMs(),
         "continuous_focus_enabled": core.isContinuousFocusEnabled(),
         "continuous_focus_locked": core.isContinuousFocusLocked(),
