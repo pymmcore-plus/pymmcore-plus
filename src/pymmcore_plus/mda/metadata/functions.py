@@ -133,7 +133,7 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
         # "image_width": core.getImageWidth(),
         "magnification_factor": core.getMagnificationFactor(),
         "number_of_camera_adapter_channels": core.getNumberOfCameraChannels(),
-        "number_of_components": core.getNumberOfComponents(),
+        "components_per_pixel": core.getNumberOfComponents(),
         "component_bit_depth": core.getImageBitDepth(),
         "pixel_size_um": core.getPixelSizeUm(True),
         "roi": core.getROI(),

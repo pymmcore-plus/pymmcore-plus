@@ -88,7 +88,7 @@ class ImageInfo(TypedDict):
     # this will be != 1 for things like multi-camera device,
     # or any "single" device adapter that manages multiple detectors, like PMTs, etc...
     number_of_camera_adapter_channels: NotRequired[int]
-    number_of_components: int  # rgb or not
+    components_per_pixel: int  # rgb or not
     component_bit_depth: int
     # some way to suggest the image format, like RGB, etc...
 
