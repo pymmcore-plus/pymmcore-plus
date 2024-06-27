@@ -146,7 +146,7 @@ class SummaryMetaV1(TypedDict, total=False):
     pixel_size_configs: Tuple[PixelSizeConfigPreset, ...]
     position: Position
     mda_sequence: NotRequired[useq.MDASequence]
-    datetime_utc: str
+    datetime: str
     format: Literal["summary-dict-full"]
     version: Literal["1.0"]
     extra: NotRequired[Dict[str, Any]]

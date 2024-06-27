@@ -28,6 +28,11 @@ if TYPE_CHECKING:
 # -----------------------------------------------------------------
 # These are the two main functions that are called from the outside
 # -----------------------------------------------------------------
+def _timestamp() -> str:
+    now = datetime.datetime.now(tz=datetime.UTC)
+    with suppress(Exception):
+        now = now.astimezone()
+    return now.isoformat()
 
 
 def summary_metadata(
@@ -46,7 +51,7 @@ def summary_metadata(
         "position": position(core),
         "config_groups": config_groups(core),
         "pixel_size_configs": pixel_size_configs(core),
-        "datetime_utc": datetime.datetime.now(tz=datetime.UTC).isoformat(),
+        "datetime": _timestamp(),
     }
     if mda_sequence:
         summary["mda_sequence"] = mda_sequence
