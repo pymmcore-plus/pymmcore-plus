@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import datetime
 from contextlib import suppress
-from typing import TYPE_CHECKING, Unpack
+from typing import TYPE_CHECKING
 
 import pymmcore_plus
-from pymmcore_plus.core._constants import DeviceType
+from pymmcore_plus.core._constants import DeviceType, PixelType
 
 if TYPE_CHECKING:
+    from typing import Unpack
+
     import useq
 
     from pymmcore_plus.core import CMMCorePlus
@@ -47,7 +49,7 @@ def summary_metadata(
         "version": "1.0",
         "devices": devices_info(core, cached=cached),
         "system_info": system_info(core),
-        # "image_info": image_info(core),
+        "image_infos": image_infos(core),
         "position": position(core),
         "config_groups": config_groups(core),
         "pixel_size_configs": pixel_size_configs(core),
@@ -129,28 +131,66 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
 
 def image_info(core: CMMCorePlus) -> ImageInfo:
     """Return information about the current image properties."""
+    w = core.getImageWidth()
+    h = core.getImageHeight()
+    n_comp = core.getNumberOfComponents()
+    plane_shape: tuple[int, int] | tuple[int, int, int] = (h, w)
+    if n_comp == 1:
+        plane_shape = (h, w)
+    elif n_comp == 4:
+        plane_shape = (h, w, 3)
+    else:
+        plane_shape = (h, w, n_comp)
+    bpp = core.getBytesPerPixel()
+    dtype = f"uint{(bpp // n_comp) * 8}"
+
     info: ImageInfo = {
-        "bytes_per_pixel": core.getBytesPerPixel(),
-        "current_pixel_size_config": core.getCurrentPixelSizeConfig(),
-        "exposure": core.getExposure(),
-        # "image_buffer_size": core.getImageBufferSize(),
-        "image_height": core.getImageHeight(),
-        "image_width": core.getImageWidth(),
-        "magnification_factor": core.getMagnificationFactor(),
-        "number_of_camera_adapter_channels": core.getNumberOfCameraChannels(),
-        "components_per_pixel": core.getNumberOfComponents(),
+        "camera_label": core.getCameraDevice(),
+        "plane_shape": plane_shape,
+        "dtype": dtype,
+        "image_height": h,
+        "image_width": w,
+        "bytes_per_pixel": bpp,
+        "components_per_pixel": n_comp,
         "component_bit_depth": core.getImageBitDepth(),
+        "pixel_format": PixelType.for_bytes(bpp, n_comp).value,
         "pixel_size_um": core.getPixelSizeUm(True),
-        "roi": core.getROI(),
-        "camera_device": core.getCameraDevice(),
+        "pixel_size_config_name": core.getCurrentPixelSizeConfig(),
     }
 
+    if (n_channels := core.getNumberOfCameraChannels()) > 1:
+        info["num_camera_adapter_channels"] = n_channels
+    if (mag_factor := core.getMagnificationFactor()) != 1.0:
+        info["magnification_factor"] = mag_factor
     if (affine := core.getPixelSizeAffine(True)) != (1.0, 0.0, 0.0, 0.0, 1.0, 0.0):
         info["pixel_size_affine"] = affine  # type: ignore [typeddict-item]
 
     with suppress(RuntimeError):
-        info["multi_roi"] = core.getMultiROI()
+        if (roi := core.getROI()) != [0, 0, info["image_width"], info["image_height"]]:
+            info["roi"] = tuple(roi)  # type: ignore [typeddict-item]
+    with suppress(RuntimeError):
+        if any(rois := core.getMultiROI()):
+            info["multi_roi"] = rois
     return info
+
+
+def image_infos(core: CMMCorePlus) -> tuple[ImageInfo, ...]:
+    """Return information about the current image properties for all cameras."""
+    if not (loaded := core.getCameraDevice()):
+        return ()
+    # currently loaded device is always first
+    infos: list[ImageInfo] = [image_info(core)]
+    try:
+        # load every other camera and get the image info
+        for cam in core.getLoadedDevicesOfType(DeviceType.Camera):
+            if cam != loaded:
+                with suppress(RuntimeError):
+                    core.setCameraDevice(cam)
+                    infos.append(image_info(core))
+    finally:
+        # set the camera back to the original loaded device
+        core.setCameraDevice(loaded)
+    return tuple(infos)
 
 
 def position(core: CMMCorePlus) -> Position:

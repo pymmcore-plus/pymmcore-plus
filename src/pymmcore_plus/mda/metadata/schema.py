@@ -78,24 +78,58 @@ class SystemInfo(TypedDict):
 class ImageInfo(TypedDict):
     """Information about the current image structure."""
 
-    bytes_per_pixel: int
-    current_pixel_size_config: str
-    exposure: float
-    # image_buffer_size: int
+    # Label of the loaded camera device
+    camera_label: str
+
+    # The shape of the numpy array that will be returned for each snap of the camera
+    plane_shape: Tuple[int, int] | Tuple[int, int, int]
+    # number of pixels in the image  (should we have both this and plane shape?)
     image_height: int
     image_width: int
-    magnification_factor: float
+
+    # The numpy dtype of the image array (uint8, uint16, etc...)
+    dtype: str
+
+    # bytes per pixel is the total number of bytes per pixel, in the image buffer.
+    # This including all components so RGB32 is 4 bytes per pixel
+    # and a 12-bit camera with a 16-bit buffer would be 2 bytes per pixel
+    bytes_per_pixel: int
+
+    # Number of components per pixel, RGBA is 4, GRAY is 1, etc...
+    # I think this will always be either 4 or 1
+    # note also that CMMCorePlus will fix BGRA to RGB, so the numpy array returned
+    # will have shape(..., 3) even though MMCore says components_per_pixel is 4
+    components_per_pixel: int  # rgb or not
+
+    # component_bit_depth is the "true" bit depth of the image, irrespective of the
+    # buffer size.  So a 12-bit gray camera will have 12 bits per component, and
+    # 1 components_per_pixel... even though the final numpy array will have
+    # dtype uint16 and bytes_per_pixel will be 2.
+    # An RGBA32 camera would have 8 bits per component and 4 components_per_pixel
+    component_bit_depth: int
+
+    # format of the pixel data, like "RGB32", "GRAY16", etc...
+    pixel_format: Literal["GRAY8", "GRAY16", "GRAY32", "RGB32", "RGB64", ""]
+
+    # name of the currently active pixel size configuration
+    pixel_size_config_name: str
+
+    # the product of magnification of all loaded devices of type MagnifierDevice
+    # If no devices are found, or all have magnification=1, this will not be present
+    magnification_factor: NotRequired[float]
+
     # this will be != 1 for things like multi-camera device,
     # or any "single" device adapter that manages multiple detectors, like PMTs, etc...
-    number_of_camera_adapter_channels: NotRequired[int]
-    components_per_pixel: int  # rgb or not
-    component_bit_depth: int
-    # some way to suggest the image format, like RGB, etc...
+    num_camera_adapter_channels: NotRequired[int]
 
-    pixel_size_affine: NotRequired[AffineTuple]
     pixel_size_um: float
-    roi: List[int]
-    camera_device: str
+    # will not be present if equal to the default of (1,0,0,0,1,0)
+    pixel_size_affine: NotRequired[AffineTuple]
+
+    # will not be present if the ROI is the full image
+    roi: NotRequired[Tuple[int, int, int, int]]
+    # will not be present if camera devices not support multiple ROIs, or if multiple
+    # ROIs are not currently being used
     multi_roi: NotRequired[Tuple[List[int], List[int], List[int], List[int]]]
 
 
@@ -141,7 +175,7 @@ class SummaryMetaV1(TypedDict, total=False):
 
     devices: Tuple[DeviceInfo, ...]
     system_info: SystemInfo
-    # image_info: ImageInfo
+    image_infos: Tuple[ImageInfo, ...]
     config_groups: Tuple[ConfigGroup, ...]
     pixel_size_configs: Tuple[PixelSizeConfigPreset, ...]
     position: Position
