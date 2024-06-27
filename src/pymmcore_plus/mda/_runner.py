@@ -285,14 +285,16 @@ class MDARunner:
 
             try:
                 elapsed_ms = self.seconds_elapsed() * 1000
-                # this is a bit of a hack to pass the time to the engine
+                # this is a bit of a hack to pass the time into the engine
+                # it is used for intra-event time calculations
                 # we pop it off after the event is executed.
                 event.metadata["runner_t0"] = self._t0
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in output:
                     img, event, meta = payload
                     event.metadata.pop("runner_t0", None)
-                    meta.setdefault("runner_time_ms", elapsed_ms)
+                    if "runner_time_ms" not in meta:
+                        meta["runner_time_ms"] = elapsed_ms
                     with exceptions_logged():
                         self._signals.frameReady.emit(img, event, meta)
             finally:

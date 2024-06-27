@@ -102,6 +102,7 @@ class _5DWriterBase(Generic[T]):
         self, seq: useq.MDASequence, meta: SummaryMetaV1 | object = _NULL
     ) -> None:
         """On sequence started, simply store the sequence."""
+        # this is here for backwards compatibility with experimental viewer widget.
         if meta is _NULL:  # pragma: no cover
             warnings.warn(
                 "calling `sequenceStarted` without metadata as the second argument is "

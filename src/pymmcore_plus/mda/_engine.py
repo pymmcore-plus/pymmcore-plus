@@ -5,7 +5,6 @@ from contextlib import suppress
 from itertools import product
 from typing import (
     TYPE_CHECKING,
-    Any,
     Iterable,
     Iterator,
     NamedTuple,
@@ -93,7 +92,7 @@ class MDAEngine(PMDAEngine):
 
     # ===================== Protocol Implementation =====================
 
-    def setup_sequence(self, sequence: MDASequence) -> Any:
+    def setup_sequence(self, sequence: MDASequence) -> SummaryMetaV1 | None:
         """Setup the hardware for the entire sequence."""
         # clear z_correction for new sequence
         self._z_correction.clear()
@@ -270,6 +269,8 @@ class MDAEngine(PMDAEngine):
         if not event.keep_shutter_open:
             self._mmc.setShutterOpen(False)
 
+        # most cameras will only have a single channel
+        # but Multi-camera may have multiple, and we need to retrieve a buffer for each
         for cam in range(self._mmc.getNumberOfCameraChannels()):
             meta = self.get_frame_metadata(event)
             meta["camera_device"] = self._mmc.getPhysicalCameraDevice(cam)
@@ -279,9 +280,13 @@ class MDAEngine(PMDAEngine):
             # https://github.com/python/mypy/issues/4976
             yield ImagePayload(self._mmc.getImage(cam), event, meta)  # type: ignore[misc]
 
-    def get_frame_metadata(self, event: MDAEvent) -> FrameMetaV1:
-        # TODO: don't collect this on every frame for sequenced events
-        prop_values = self._get_current_props(ch.group) if (ch := event.channel) else ()
+    def get_frame_metadata(
+        self, event: MDAEvent, prop_values: tuple[PropertyValue, ...] | None = None
+    ) -> FrameMetaV1:
+        if prop_values is None and (ch := event.channel):
+            prop_values = self._get_current_props(ch.group)
+        else:
+            prop_values = ()
         return frame_metadata(
             self._mmc, cached=True, property_values=prop_values, mda_event=event
         )
@@ -402,7 +407,7 @@ class MDAEngine(PMDAEngine):
 
         t0 = event.metadata.get("runner_t0") or time.perf_counter()
         event_t0_ms = (time.perf_counter() - t0) * 1000
-        print(">>>>>>>>>>>>>>>>>>>>EVENT T0", event_t0_ms)
+
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
         # label does NOT automatically initialize a circular buffer.  So if this call
@@ -467,10 +472,12 @@ class MDAEngine(PMDAEngine):
         except Exception:
             camera_device = self._mmc.getPhysicalCameraDevice(channel)
 
-        meta = self.get_frame_metadata(event)
+        # TODO: determine whether we want to try to populate changing property values
+        # during the course of a triggered sequence
+        meta = self.get_frame_metadata(event, prop_values=())
         meta["camera_device"] = camera_device
-        meta["in_sequence"] = True
-        meta["n_images_remaining_in_buffer"] = remaining
+        meta["hardware_triggered"] = True
+        meta["images_remaining_in_buffer"] = remaining
         meta["camera_metadata"] = dict(mm_meta)
         meta["runner_time_ms"] = event_t0 + seq_time
 

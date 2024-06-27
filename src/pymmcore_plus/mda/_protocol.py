@@ -1,11 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import (
-    TYPE_CHECKING,
-    Protocol,
-    runtime_checkable,
-)
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from typing import Iterable, Iterator
@@ -27,7 +23,7 @@ class PMDAEngine(Protocol):
     """Protocol that all MDA engines must implement."""
 
     @abstractmethod
-    def setup_sequence(self, sequence: MDASequence) -> None | SummaryMetaV1:
+    def setup_sequence(self, sequence: MDASequence) -> SummaryMetaV1 | None:
         """Setup state of system (hardware, etc.) before an MDA is run.
 
         This method is called once at the beginning of a sequence.
