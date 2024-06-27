@@ -82,8 +82,8 @@ class ImageInfo(TypedDict):
     current_pixel_size_config: str
     exposure: float
     # image_buffer_size: int
-    # image_height: int
-    # image_width: int
+    image_height: int
+    image_width: int
     magnification_factor: float
     # this will be != 1 for things like multi-camera device,
     # or any "single" device adapter that manages multiple detectors, like PMTs, etc...
@@ -141,7 +141,7 @@ class SummaryMetaV1(TypedDict, total=False):
 
     devices: Tuple[DeviceInfo, ...]
     system_info: SystemInfo
-    image_info: ImageInfo
+    # image_info: ImageInfo
     config_groups: Tuple[ConfigGroup, ...]
     pixel_size_configs: Tuple[PixelSizeConfigPreset, ...]
     position: Position

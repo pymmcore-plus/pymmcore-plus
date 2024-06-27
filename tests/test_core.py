@@ -163,7 +163,6 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
         "format",
         "pixel_size_configs",
         "position",
-        "image_info",
         "devices",
         "version",
         "system_info",
