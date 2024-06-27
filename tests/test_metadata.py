@@ -82,7 +82,8 @@ def test_metadata_during_mda(
     assert isinstance(loaded, dict)
 
 
-def test_multicam(core: CMMCorePlus) -> None:
+@pytest.mark.parametrize("sequenced", [True, False], ids=["sequenced", "not-sequenced"])
+def test_multicam(core: CMMCorePlus, sequenced: bool) -> None:
     mc = "YoMulti"
     core.loadDevice("Camer2", "DemoCamera", "DCam")
     core.loadDevice(mc, "Utilities", "Multi Camera")
@@ -92,19 +93,30 @@ def test_multicam(core: CMMCorePlus) -> None:
     core.setProperty(mc, "Physical Camera 1", "Camera")
     core.setProperty(mc, "Physical Camera 2", "Camer2")
     core.setCameraDevice(mc)
-    breakpoint()
+
     mda = useq.MDASequence(
         channels=["Cy5", "FITC"],
         time_plan={"interval": 0, "loops": 3},
-        axis_order="tpcz",
+        axis_order="pctz",
         stage_positions=[(222, 1, 1), (111, 0, 0)],
     )
 
-    Mock()
-    Mock()
-    from rich import print
+    summary_mock = Mock()
+    frame_mock = Mock()
 
-    # core.mda.engine.use_hardware_sequencing = True
-    core.mda.events.sequenceStarted.connect(print)
-    core.mda.events.frameReady.connect(print)
+    core.mda.engine.use_hardware_sequencing = sequenced
+    core.mda.events.sequenceStarted.connect(summary_mock)
+    core.mda.events.frameReady.connect(frame_mock)
     core.mda.run(mda)
+
+    assert summary_mock.call_count == 1
+    assert frame_mock.call_count == len(list(mda)) * core.getNumberOfCameraChannels()
+    for call in summary_mock.call_args_list:
+        meta = call.args[1]
+        assert meta["format"] == "summary-dict-full"
+    time_stamps = []
+    for call in frame_mock.call_args_list:
+        meta = call.args[2]
+        assert meta["format"] == "frame-dict-minimal"
+        assert ("camera_metadata" in meta) is sequenced
+        time_stamps.append(meta["runner_time_ms"])
