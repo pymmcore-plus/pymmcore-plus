@@ -165,6 +165,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
         "position",
         "devices",
         "version",
+        "image_infos",
         "system_info",
         "datetime",
     }
