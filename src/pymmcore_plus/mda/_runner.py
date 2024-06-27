@@ -18,7 +18,6 @@ from unittest.mock import MagicMock
 from useq import MDASequence
 
 from pymmcore_plus._logger import exceptions_logged, logger
-from pymmcore_plus.core._constants import PymmcPlusConstants as PPC
 
 from ._protocol import PMDAEngine
 from ._thread_relay import mda_listeners_connected
@@ -285,12 +284,12 @@ class MDARunner:
             engine.setup_event(event)
 
             try:
-                event.metadata[PPC.RUNNER_TIME_SEC.value] = self.seconds_elapsed()
+                elapsed = self.seconds_elapsed()
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in output:
                     img, event, meta = payload
+                    meta["runner_time"] = elapsed
                     with exceptions_logged():
-                        event.metadata.pop(PPC.RUNNER_TIME_SEC.value, None)
                         self._signals.frameReady.emit(img, event, meta)
             finally:
                 teardown_event(event)

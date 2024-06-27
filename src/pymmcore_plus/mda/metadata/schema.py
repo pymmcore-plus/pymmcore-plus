@@ -17,6 +17,8 @@ __all__ = [
     "SystemInfo",
 ]
 
+AffineTuple = Tuple[float, float, float, float, float, float]
+
 
 class PropertyInfo(TypedDict):
     """Information about a single device property."""
@@ -24,11 +26,11 @@ class PropertyInfo(TypedDict):
     name: str
     value: Optional[str]
     data_type: Literal["undefined", "float", "int", "str"]
-    allowed_values: Optional[Tuple[str, ...]]
     is_read_only: bool
-    is_pre_init: bool
+    allowed_values: NotRequired[Tuple[str, ...]]
+    is_pre_init: NotRequired[bool]
     limits: NotRequired[Tuple[float, float]]
-    sequenceable: bool
+    sequenceable: NotRequired[bool]
     sequence_max_length: NotRequired[int]
     # device_label: str
 
@@ -42,21 +44,18 @@ class DeviceInfo(TypedDict):
     type: str
     description: str
     properties: Tuple[PropertyInfo, ...]
-    parent_label: Optional[str]  # None on hub devices
+    # hub devices and non-peripheral devices will have no parent_label
+    parent_label: NotRequired[str]
 
     # state device only
     labels: NotRequired[Tuple[str, ...]]
-    # focus device only
-    focus_direction: NotRequired[Literal["Unknown", "TowardSample", "AwayFromSample"]]
     # hub device only
     child_names: NotRequired[Tuple[str, ...]]
-    # stage or XYstage device only
-    is_stage_sequenceable: NotRequired[bool]
-    # stage device only
+    # stage/focus device only
     is_continuous_focus_drive: NotRequired[bool]
-    # is_stage_linear_sequenceable: NotRequired[bool]
-    # camera device only
-    is_exposure_sequenceable: NotRequired[bool]
+    focus_direction: NotRequired[Literal["Unknown", "TowardSample", "AwayFromSample"]]
+    # camera, slm, stage/focus, or XYStage devices only
+    is_sequenceable: NotRequired[bool]
 
 
 class SystemInfo(TypedDict):
@@ -70,17 +69,15 @@ class SystemInfo(TypedDict):
     system_configuration_file: Optional[str]
     primary_log_file: str
     sequence_buffer_size_mb: int  # core returns this as MB
-    timeout_ms: int
     # remaining_image_count: int
     continuous_focus_enabled: bool
     continuous_focus_locked: bool
     auto_shutter: bool
+    timeout_ms: NotRequired[int]
 
 
 class ImageInfo(TypedDict):
     """Information about the current image structure."""
-
-    label: str  # some concept of camera device, magnification
 
     bytes_per_pixel: int
     current_pixel_size_config: str
@@ -89,12 +86,14 @@ class ImageInfo(TypedDict):
     # image_height: int
     # image_width: int
     magnification_factor: float
-    number_of_camera_channels: int
+    # this will be != 1 for things like multi-camera device,
+    # or any "single" device adapter that manages multiple detectors, like PMTs, etc...
+    number_of_camera_adapter_channels: NotRequired[int]
     number_of_components: int  # rgb or not
     component_bit_depth: int
     # some way to suggest the image format, like RGB, etc...
 
-    pixel_size_affine: Tuple[float, float, float, float, float, float]
+    pixel_size_affine: NotRequired[AffineTuple]
     pixel_size_um: float
     roi: List[int]
     camera_device: str
@@ -106,7 +105,7 @@ class Position(TypedDict):
 
     x: Optional[float]
     y: Optional[float]
-    focus: Optional[float]
+    z: Optional[float]
 
 
 class PropertyValue(TypedDict):
@@ -128,7 +127,7 @@ class PixelSizeConfigPreset(ConfigPreset):
     """A specialized group of device property settings for a pixel size preset."""
 
     pixel_size_um: float
-    pixel_size_affine: Tuple[float, float, float, float, float, float]
+    pixel_size_affine: NotRequired[AffineTuple]
 
 
 class ConfigGroup(TypedDict):
@@ -143,12 +142,12 @@ class SummaryMetaV1(TypedDict, total=False):
 
     devices: Tuple[DeviceInfo, ...]
     system_info: SystemInfo
-    image_info: tuple[ImageInfo, ...]
+    image_info: ImageInfo
     config_groups: Tuple[ConfigGroup, ...]
     pixel_size_configs: Tuple[PixelSizeConfigPreset, ...]
     position: Position
     mda_sequence: NotRequired[useq.MDASequence]
-    date_time: str
+    datetime_utc: str
     format: Literal["summary-dict-full"]
     version: Literal["1.0"]
     extra: NotRequired[Dict[str, Any]]
@@ -163,11 +162,12 @@ class FrameMetaV1(TypedDict, total=False):
 
     exposure_ms: float
     position: Position
+    property_values: Tuple[PropertyValue, ...]
     mda_event: NotRequired[useq.MDAEvent]
     runner_time: NotRequired[float]
-    property_values: Tuple[PropertyValue, ...]
-    in_sequence_acquisition: NotRequired[bool]
+    in_sequence: NotRequired[bool]
     remaining_image_count: NotRequired[int]
     format: Literal["frame-dict-minimal"]
     version: Literal["1.0"]
     extra: NotRequired[Dict[str, Any]]
+    camera_metadata: NotRequired[Dict[str, Any]]

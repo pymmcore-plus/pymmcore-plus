@@ -264,23 +264,17 @@ class MDAEngine(PMDAEngine):
             self._mmc.setShutterOpen(False)
 
         for cam in range(self._mmc.getNumberOfCameraChannels()):
-            camera_device = self._mmc.getPhysicalCameraDevice(cam)
-            meta = self.get_frame_metadata(event, camera_device=camera_device)
+            meta = self.get_frame_metadata(event)
+            meta["camera_device"] = self._mmc.getPhysicalCameraDevice(cam)
             # Note, the third element is actually a MutableMapping, but mypy doesn't
             # see TypedDict as a subclass of MutableMapping yet.
             # https://github.com/python/mypy/issues/4976
             yield ImagePayload(self._mmc.getImage(cam), event, meta)  # type: ignore[misc]
 
-    def get_frame_metadata(
-        self, event: MDAEvent, camera_device: str | None = None
-    ) -> FrameMetaV1:
+    def get_frame_metadata(self, event: MDAEvent) -> FrameMetaV1:
         prop_values = self._get_current_props(ch.group) if (ch := event.channel) else ()
         return frame_metadata(
-            self._mmc,
-            mda_event=event,
-            camera_device=camera_device,
-            property_values=prop_values,
-            cached=True,
+            self._mmc, cached=True, property_values=prop_values, mda_event=event
         )
 
     def teardown_event(self, event: MDAEvent) -> None:
@@ -414,9 +408,7 @@ class MDAEngine(PMDAEngine):
         # block until the sequence is done, popping images in the meantime
         while self._mmc.isSequenceRunning():
             if remaining := self._mmc.getRemainingImageCount():
-                yield self._next_img_payload(
-                    *next(iter_events), running=True, remaining=remaining
-                )
+                yield self._next_seqimg_payload(*next(iter_events), remaining=remaining)
                 count += 1
             else:
                 time.sleep(0.001)
@@ -425,11 +417,10 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while remaining := self._mmc.getRemainingImageCount():
-            yield self._next_img_payload(
-                *next(iter_events), running=False, remaining=remaining
-            )
+            yield self._next_seqimg_payload(*next(iter_events), remaining=remaining)
             count += 1
 
+        # necessary?
         expected_images = n_events * n_channels
         if count != expected_images:
             logger.warning(
@@ -439,12 +430,11 @@ class MDAEngine(PMDAEngine):
                 count,
             )
 
-    def _next_img_payload(
+    def _next_seqimg_payload(
         self,
         event: MDAEvent,
         channel: int = 0,
         *,
-        running: bool = True,
         remaining: int = 0,
     ) -> PImagePayload:
         """Grab next image from the circular buffer and return it as an ImagePayload."""
@@ -459,9 +449,12 @@ class MDAEngine(PMDAEngine):
         except Exception:
             camera_device = self._mmc.getPhysicalCameraDevice(channel)
 
-        meta = self.get_frame_metadata(event, camera_device=camera_device)
-        meta["is_sequence_running"] = running
+        meta = self.get_frame_metadata(event)
+        meta["camera_device"] = camera_device
+        meta["in_sequence"] = True
         meta["remaining_image_count"] = remaining
+        meta["camera_metadata"] = dict(mm_meta)
+
         # https://github.com/python/mypy/issues/4976
         return ImagePayload(img, event, meta)  # type: ignore[return-value]
 
