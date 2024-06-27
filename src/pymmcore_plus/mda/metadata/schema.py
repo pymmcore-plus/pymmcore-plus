@@ -69,7 +69,6 @@ class SystemInfo(TypedDict):
     system_configuration_file: Optional[str]
     primary_log_file: str
     sequence_buffer_size_mb: int  # core returns this as MB
-    # remaining_image_count: int
     continuous_focus_enabled: bool
     continuous_focus_locked: bool
     auto_shutter: bool
