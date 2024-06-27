@@ -81,8 +81,11 @@ class ImageInfo(TypedDict):
     # Label of the loaded camera device
     camera_label: str
 
-    # The shape of the numpy array that will be returned for each snap of the camera
-    plane_shape: Tuple[int, int] | Tuple[int, int, int]
+    # The shape (height, width[, num_components]) of the numpy array
+    # that will be returned for each snap of the camera
+    # this will be length 2 (if components_per_pixel is 1) or 3 otherwise
+    #
+    plane_shape: Tuple[int, ...]
     # number of pixels in the image  (should we have both this and plane shape?)
     image_height: int
     image_width: int
