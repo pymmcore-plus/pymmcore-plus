@@ -163,9 +163,9 @@ class FrameMetaV1(TypedDict, total=False):
     position: Position
     property_values: Tuple[PropertyValue, ...]
     mda_event: NotRequired[useq.MDAEvent]
-    runner_time: NotRequired[float]
+    runner_time_ms: NotRequired[float]
     in_sequence: NotRequired[bool]
-    remaining_image_count: NotRequired[int]
+    n_images_remaining_in_buffer: NotRequired[int]
     format: Literal["frame-dict-minimal"]
     version: Literal["1.0"]
     extra: NotRequired[Dict[str, Any]]

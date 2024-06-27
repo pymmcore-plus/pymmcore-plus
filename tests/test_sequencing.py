@@ -38,11 +38,17 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     events = list(engine.event_iterator(mda))
     assert len(events) == EXPECTED_SEQUENCES
 
+    engine.use_hardware_sequencing = True
+    from rich import print
+
     runner = MDARunner()
     runner.set_engine(engine)
 
-    runner.run(mda)
+    @runner.events.frameReady.connect
+    def frame_ready(f, e, m):
+        print(m)
 
+    runner.run(mda)
     assert core_mock.prepareSequenceAcquisition.call_count == EXPECTED_SEQUENCES
     assert core_mock.startSequenceAcquisition.call_count == EXPECTED_SEQUENCES
     core_mock.startSequenceAcquisition.assert_called_with(NLOOPS, 0, True)
@@ -161,7 +167,7 @@ def test_sequence_tester_decoding(sequence_tester: CMMCorePlus) -> None:
         assert bool(info.start_state) == (i != 0)
 
 
-def test_sequence_actions(core: CMMCorePlus):
+def test_sequence_actions(core: CMMCorePlus) -> None:
     mda = useq.MDASequence(
         axis_order="ptc",  # do complete t for each c at each p
         stage_positions=[(0, 0), (1, 1)],

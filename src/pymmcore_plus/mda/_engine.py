@@ -17,6 +17,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
+from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent
 from pymmcore_plus.mda.metadata import (
     FrameMetaV1,
@@ -257,6 +258,12 @@ class MDAEngine(PMDAEngine):
         """
         try:
             self._mmc.snapImage()
+            # taking event time after snapImage includes exposure time
+            # not sure that's what we want, but it's currently consistent with the
+            # timing of the sequenced event runner (where Elapsed_Time_ms is taken after
+            # the image is acquired, not before the exposure starts)
+            t0 = event.metadata.get("runner_t0") or time.perf_counter()
+            event_time_ms = (time.perf_counter() - t0) * 1000
         except Exception as e:
             logger.warning("Failed to snap image. %s", e)
             return
@@ -266,12 +273,14 @@ class MDAEngine(PMDAEngine):
         for cam in range(self._mmc.getNumberOfCameraChannels()):
             meta = self.get_frame_metadata(event)
             meta["camera_device"] = self._mmc.getPhysicalCameraDevice(cam)
+            meta["runner_time_ms"] = event_time_ms
             # Note, the third element is actually a MutableMapping, but mypy doesn't
             # see TypedDict as a subclass of MutableMapping yet.
             # https://github.com/python/mypy/issues/4976
             yield ImagePayload(self._mmc.getImage(cam), event, meta)  # type: ignore[misc]
 
     def get_frame_metadata(self, event: MDAEvent) -> FrameMetaV1:
+        # TODO: don't collect this on every frame for sequenced events
         prop_values = self._get_current_props(ch.group) if (ch := event.channel) else ()
         return frame_metadata(
             self._mmc, cached=True, property_values=prop_values, mda_event=event
@@ -391,6 +400,9 @@ class MDAEngine(PMDAEngine):
         """
         n_events = len(event.events)
 
+        t0 = event.metadata.get("runner_t0") or time.perf_counter()
+        event_t0_ms = (time.perf_counter() - t0) * 1000
+        print(">>>>>>>>>>>>>>>>>>>>EVENT T0", event_t0_ms)
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
         # label does NOT automatically initialize a circular buffer.  So if this call
@@ -408,7 +420,9 @@ class MDAEngine(PMDAEngine):
         # block until the sequence is done, popping images in the meantime
         while self._mmc.isSequenceRunning():
             if remaining := self._mmc.getRemainingImageCount():
-                yield self._next_seqimg_payload(*next(iter_events), remaining=remaining)
+                yield self._next_seqimg_payload(
+                    *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
+                )
                 count += 1
             else:
                 time.sleep(0.001)
@@ -417,7 +431,9 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while remaining := self._mmc.getRemainingImageCount():
-            yield self._next_seqimg_payload(*next(iter_events), remaining=remaining)
+            yield self._next_seqimg_payload(
+                *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
+            )
             count += 1
 
         # necessary?
@@ -435,11 +451,13 @@ class MDAEngine(PMDAEngine):
         event: MDAEvent,
         channel: int = 0,
         *,
+        event_t0: float = 0.0,
         remaining: int = 0,
     ) -> PImagePayload:
         """Grab next image from the circular buffer and return it as an ImagePayload."""
         _slice = 0  # ?
         img, mm_meta = self._mmc.popNextImageAndMD(channel, _slice)
+        seq_time = float(mm_meta.get(Keyword.Elapsed_Time_ms, 0.0))
         try:
             # note, when present in circular buffer meta, this key is called "Camera".
             # It's NOT actually Keyword.CoreCamera (but it's the same value)
@@ -452,8 +470,9 @@ class MDAEngine(PMDAEngine):
         meta = self.get_frame_metadata(event)
         meta["camera_device"] = camera_device
         meta["in_sequence"] = True
-        meta["remaining_image_count"] = remaining
+        meta["n_images_remaining_in_buffer"] = remaining
         meta["camera_metadata"] = dict(mm_meta)
+        meta["runner_time_ms"] = event_t0 + seq_time
 
         # https://github.com/python/mypy/issues/4976
         return ImagePayload(img, event, meta)  # type: ignore[return-value]

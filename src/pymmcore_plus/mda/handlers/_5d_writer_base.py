@@ -157,8 +157,8 @@ class _5DWriterBase(Generic[T]):
 
         index = tuple(event.index[k] for k in pos_sizes)
         t = event.index.get("t", 0)
-        if t >= len(self._timestamps) and "runner_time" in meta:
-            self._timestamps.append(meta["runner_time"])
+        if t >= len(self._timestamps) and "runner_time_ms" in meta:
+            self._timestamps.append(meta["runner_time_ms"])
         self.write_frame(ary, index, frame)
         self.store_frame_metadata(key, event, meta)
 
