@@ -30,11 +30,6 @@ if TYPE_CHECKING:
 # -----------------------------------------------------------------
 # These are the two main functions that are called from the outside
 # -----------------------------------------------------------------
-def _timestamp() -> str:
-    now = datetime.datetime.now(tz=datetime.UTC)
-    with suppress(Exception):
-        now = now.astimezone()
-    return now.isoformat()
 
 
 def summary_metadata(
@@ -77,6 +72,14 @@ def frame_metadata(
 # ----------------------------------------------
 # supporting functions
 # ----------------------------------------------
+
+
+def _timestamp() -> str:
+    """Return the current timestamp, try using local timezone, in ISO format."""
+    now = datetime.datetime.now(tz=datetime.UTC)
+    with suppress(Exception):
+        now = now.astimezone()
+    return now.isoformat()
 
 
 def device_info(core: CMMCorePlus, *, label: str, cached: bool = True) -> DeviceInfo:
