@@ -316,8 +316,8 @@ class MDARunner:
         self._paused_time = 0.0
         self._sequence = sequence
 
-        meta = self._engine.setup_sequence(sequence) or {}
-        self._signals.sequenceStarted.emit(sequence, meta)
+        meta = self._engine.setup_sequence(sequence)
+        self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
         return self._engine
 

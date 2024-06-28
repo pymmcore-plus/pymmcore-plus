@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import datetime
 from contextlib import suppress
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, TypedDict
 
 import pymmcore_plus
-from pymmcore_plus.core._constants import DeviceType, PixelType
+from pymmcore_plus.core._constants import DeviceType, PixelFormat
 
 if TYPE_CHECKING:
     from typing import Unpack
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
         PixelSizeConfigPreset,
         Position,
         PropertyInfo,
+        PropertyValue,
         SummaryMetaV1,
         SystemInfo,
     )
@@ -38,9 +39,13 @@ def summary_metadata(
     mda_sequence: useq.MDASequence | None = None,
     cached: bool = True,
 ) -> SummaryMetaV1:
-    """Return a summary metadata for the current state of the system."""
+    """Return a summary metadata for the current state of the system.
+
+    See [pymmcore_plus.mda.metadata.SummaryMetaV1][] for a description of the
+    dictionary format.
+    """
     summary: SummaryMetaV1 = {
-        "format": "summary-dict-full",
+        "format": "summary-dict",
         "version": "1.0",
         "devices": devices_info(core, cached=cached),
         "system_info": system_info(core),
@@ -55,13 +60,32 @@ def summary_metadata(
     return summary
 
 
+class _OptionalFrameMetaKwargs(TypedDict, total=False):
+    """Additional optional fields for frame metadata."""
+
+    mda_event: useq.MDAEvent
+    hardware_triggered: bool
+    images_remaining_in_buffer: int
+    camera_metadata: dict[str, Any]
+    extra: dict[str, Any]
+
+
 def frame_metadata(
-    core: CMMCorePlus, *, cached: bool = True, **kwargs: Unpack[FrameMetaV1]
+    core: CMMCorePlus,
+    *,
+    cached: bool = True,
+    runner_time_ms: float,
+    camera_device: str | None = None,
+    property_values: tuple[PropertyValue, ...] = (),
+    **kwargs: Unpack[_OptionalFrameMetaKwargs],
 ) -> FrameMetaV1:
     """Return metadata for the current frame."""
     return {
-        "format": "frame-dict-minimal",
+        "format": "frame-dict",
         "version": "1.0",
+        "runner_time_ms": runner_time_ms,
+        "camera_device": camera_device or core.getPhysicalCameraDevice(),
+        "property_values": property_values,
         "exposure_ms": core.getExposure(),
         "pixel_size_um": core.getPixelSizeUm(cached),
         "position": position(core),
@@ -151,25 +175,22 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
         "camera_label": core.getCameraDevice(),
         "plane_shape": plane_shape,
         "dtype": dtype,
-        "image_height": h,
-        "image_width": w,
-        "bytes_per_pixel": bpp,
-        "components_per_pixel": n_comp,
-        "component_bit_depth": core.getImageBitDepth(),
-        "pixel_format": PixelType.for_bytes(bpp, n_comp).value,
+        "height": h,
+        "width": w,
+        "pixel_format": PixelFormat.for_current_camera(core).value,
         "pixel_size_um": core.getPixelSizeUm(True),
         "pixel_size_config_name": core.getCurrentPixelSizeConfig(),
     }
 
-    if (n_channels := core.getNumberOfCameraChannels()) > 1:
-        info["num_camera_adapter_channels"] = n_channels
+    # if (n_channels := core.getNumberOfCameraChannels()) > 1:
+    #     info["num_camera_adapter_channels"] = n_channels
     if (mag_factor := core.getMagnificationFactor()) != 1.0:
         info["magnification_factor"] = mag_factor
     if (affine := core.getPixelSizeAffine(True)) != (1.0, 0.0, 0.0, 0.0, 1.0, 0.0):
         info["pixel_size_affine"] = affine  # type: ignore [typeddict-item]
 
     with suppress(RuntimeError):
-        if (roi := core.getROI()) != [0, 0, info["image_width"], info["image_height"]]:
+        if (roi := core.getROI()) != [0, 0, w, h]:
             info["roi"] = tuple(roi)  # type: ignore [typeddict-item]
     with suppress(RuntimeError):
         if any(rois := core.getMultiROI()):
@@ -179,20 +200,20 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
 
 def image_infos(core: CMMCorePlus) -> tuple[ImageInfo, ...]:
     """Return information about the current image properties for all cameras."""
-    if not (loaded := core.getCameraDevice()):
+    if not (selected := core.getCameraDevice()):
         return ()
-    # currently loaded device is always first
+    # currently selected device is always first
     infos: list[ImageInfo] = [image_info(core)]
     try:
-        # load every other camera and get the image info
+        # set every other camera and get the image info
         for cam in core.getLoadedDevicesOfType(DeviceType.Camera):
-            if cam != loaded:
+            if cam != selected:
                 with suppress(RuntimeError):
                     core.setCameraDevice(cam)
                     infos.append(image_info(core))
     finally:
-        # set the camera back to the original loaded device
-        core.setCameraDevice(loaded)
+        # set the camera back to the originally selected device
+        core.setCameraDevice(selected)
     return tuple(infos)
 
 

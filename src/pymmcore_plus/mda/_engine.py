@@ -272,23 +272,34 @@ class MDAEngine(PMDAEngine):
         # most cameras will only have a single channel
         # but Multi-camera may have multiple, and we need to retrieve a buffer for each
         for cam in range(self._mmc.getNumberOfCameraChannels()):
-            meta = self.get_frame_metadata(event)
-            meta["camera_device"] = self._mmc.getPhysicalCameraDevice(cam)
-            meta["runner_time_ms"] = event_time_ms
+            meta = self.get_frame_metadata(
+                event,
+                runner_time_ms=event_time_ms,
+                camera_device=self._mmc.getPhysicalCameraDevice(cam),
+            )
             # Note, the third element is actually a MutableMapping, but mypy doesn't
             # see TypedDict as a subclass of MutableMapping yet.
             # https://github.com/python/mypy/issues/4976
             yield ImagePayload(self._mmc.getImage(cam), event, meta)  # type: ignore[misc]
 
     def get_frame_metadata(
-        self, event: MDAEvent, prop_values: tuple[PropertyValue, ...] | None = None
+        self,
+        event: MDAEvent,
+        prop_values: tuple[PropertyValue, ...] | None = None,
+        runner_time_ms: float = 0.0,
+        camera_device: str | None = None,
     ) -> FrameMetaV1:
         if prop_values is None and (ch := event.channel):
             prop_values = self._get_current_props(ch.group)
         else:
             prop_values = ()
         return frame_metadata(
-            self._mmc, cached=True, property_values=prop_values, mda_event=event
+            self._mmc,
+            cached=True,
+            runner_time_ms=runner_time_ms,
+            camera_device=camera_device,
+            property_values=prop_values,
+            mda_event=event,
         )
 
     def teardown_event(self, event: MDAEvent) -> None:
@@ -474,12 +485,15 @@ class MDAEngine(PMDAEngine):
 
         # TODO: determine whether we want to try to populate changing property values
         # during the course of a triggered sequence
-        meta = self.get_frame_metadata(event, prop_values=())
-        meta["camera_device"] = camera_device
+        meta = self.get_frame_metadata(
+            event,
+            prop_values=(),
+            runner_time_ms=event_t0 + seq_time,
+            camera_device=camera_device,
+        )
         meta["hardware_triggered"] = True
         meta["images_remaining_in_buffer"] = remaining
         meta["camera_metadata"] = dict(mm_meta)
-        meta["runner_time_ms"] = event_t0 + seq_time
 
         # https://github.com/python/mypy/issues/4976
         return ImagePayload(img, event, meta)  # type: ignore[return-value]

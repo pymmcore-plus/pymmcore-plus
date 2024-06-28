@@ -60,7 +60,7 @@ def test_metadata_during_mda(
     _seq, _meta = seq_started_mock.call_args.args
     assert _seq == seq
     assert isinstance(_meta, dict)
-    assert _meta["format"] == "summary-dict-full"
+    assert _meta["format"] == "summary-dict"
     assert isinstance(_meta["mda_sequence"], useq.MDASequence)
     dumped = dumps(_meta)
     assert isinstance(to_builtins(_meta), dict)
@@ -73,7 +73,7 @@ def test_metadata_during_mda(
     assert isinstance(_frame, np.ndarray)
     assert isinstance(_event, useq.MDAEvent)
     assert isinstance(_meta, dict)
-    assert _meta["format"] == "frame-dict-minimal"
+    assert _meta["format"] == "frame-dict"
     assert any(pv["dev"] == "Excitation" for pv in _meta["property_values"])
     dumped = dumps(_meta, indent=2)
     assert isinstance(to_builtins(_meta), dict)
@@ -113,10 +113,10 @@ def test_multicam(core: CMMCorePlus, sequenced: bool) -> None:
     assert frame_mock.call_count == len(list(mda)) * core.getNumberOfCameraChannels()
     for call in summary_mock.call_args_list:
         meta = call.args[1]
-        assert meta["format"] == "summary-dict-full"
+        assert meta["format"] == "summary-dict"
     time_stamps = []
     for call in frame_mock.call_args_list:
         meta = call.args[2]
-        assert meta["format"] == "frame-dict-minimal"
+        assert meta["format"] == "frame-dict"
         assert ("camera_metadata" in meta) is sequenced
         time_stamps.append(meta["runner_time_ms"])
