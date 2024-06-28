@@ -80,6 +80,8 @@ class Keyword(str, Enum):
 
 
 class CFGCommand(str, Enum):
+    PyDevice = "PyDevice"
+
     Device = pymmcore.g_CFGCommand_Device
     Label = pymmcore.g_CFGCommand_Label
     Property = pymmcore.g_CFGCommand_Property
