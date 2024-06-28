@@ -75,6 +75,11 @@ of the metadata and for static type checking.
         heading_level: 3
         members: []
 
+:::pymmcore_plus.mda.metadata.StagePosition
+    options:
+        heading_level: 3
+        members: []
+
 ------------
 
 ## Functions

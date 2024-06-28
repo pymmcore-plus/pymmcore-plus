@@ -23,6 +23,7 @@ if TYPE_CHECKING:
         Position,
         PropertyInfo,
         PropertyValue,
+        StagePosition,
         SummaryMetaV1,
         SystemInfo,
     )
@@ -217,16 +218,35 @@ def image_infos(core: CMMCorePlus) -> tuple[ImageInfo, ...]:
     return tuple(infos)
 
 
-def position(core: CMMCorePlus) -> Position:
+def position(core: CMMCorePlus, all_stages: bool = True) -> Position:
     """Return current position."""
-    x, y, z = None, None, None
+    position: Position = {}
     with suppress(Exception):
-        x = core.getXPosition()
+        position["x"] = core.getXPosition()
     with suppress(Exception):
-        y = core.getYPosition()
+        position["y"] = core.getYPosition()
     with suppress(Exception):
-        z = core.getPosition()
-    return {"x": x, "y": y, "z": z}
+        position["z"] = core.getPosition()
+    if all_stages:
+        pos_list: list[StagePosition] = []
+        for stage in core.getLoadedDevicesOfType(DeviceType.Stage):
+            with suppress(Exception):
+                pos_list.append(
+                    {
+                        "device_label": stage,
+                        "position": core.getPosition(stage),
+                    }
+                )
+        for stage in core.getLoadedDevicesOfType(DeviceType.XYStage):
+            with suppress(Exception):
+                pos_list.append(
+                    {
+                        "device_label": stage,
+                        "position": tuple(core.getXYPosition(stage)),  # type: ignore
+                    }
+                )
+        position["all_stages"] = pos_list
+    return position
 
 
 def config_group(core: CMMCorePlus, *, group_name: str) -> ConfigGroup:

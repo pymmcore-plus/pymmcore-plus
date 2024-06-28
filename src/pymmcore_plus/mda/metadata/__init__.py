@@ -9,6 +9,7 @@ from .schema import (
     Position,
     PropertyInfo,
     PropertyValue,
+    StagePosition,
     SummaryMetaV1,
     SystemInfo,
 )
@@ -16,6 +17,7 @@ from .serialize import json_dumps, to_builtins
 
 __all__ = [
     "ConfigGroup",
+    "ConfigPreset",
     "ConfigPreset",
     "DeviceInfo",
     "frame_metadata",
@@ -25,8 +27,8 @@ __all__ = [
     "PixelSizeConfigPreset",
     "Position",
     "PropertyInfo",
-    "ConfigPreset",
     "PropertyValue",
+    "StagePosition",
     "summary_metadata",
     "SummaryMetaV1",
     "SystemInfo",

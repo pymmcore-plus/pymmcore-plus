@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict
+from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union
 
 import useq
 from typing_extensions import NotRequired
@@ -246,6 +246,13 @@ class ImageInfo(TypedDict):
     # num_camera_adapter_channels: NotRequired[int]
 
 
+class StagePosition(TypedDict):
+    """Represents the position of a single stage device."""
+
+    device_label: str
+    position: Union[float, Tuple[float, float]]
+
+
 class Position(TypedDict):
     """Represents a position in 3D space and focus.
 
@@ -259,9 +266,10 @@ class Position(TypedDict):
         The Z (focus axis) coordinate.
     """
 
-    x: Optional[float]
-    y: Optional[float]
-    z: Optional[float]
+    x: NotRequired[float]
+    y: NotRequired[float]
+    z: NotRequired[float]
+    all_stages: NotRequired[List[StagePosition]]
 
 
 class PropertyValue(TypedDict):
@@ -439,10 +447,8 @@ class FrameMetaV1(TypedDict):
 
     format: Literal["frame-dict"]
     version: Literal["1.0"]
-    # image_info: ImageInfo
     pixel_size_um: float
     camera_device: Optional[str]
-
     exposure_ms: float
     position: Position
     property_values: Tuple[PropertyValue, ...]
