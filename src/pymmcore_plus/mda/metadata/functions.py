@@ -74,7 +74,7 @@ def frame_metadata(
     core: CMMCorePlus,
     *,
     cached: bool = True,
-    runner_time_ms: float,
+    runner_time_ms: float = -1,
     camera_device: str | None = None,
     property_values: tuple[PropertyValue, ...] = (),
     **kwargs: Unpack[_OptionalFrameMetaKwargs],
