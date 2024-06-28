@@ -4,8 +4,14 @@ on:
     branches:
       - main
   pull_request:
+    types: [opened, synchronize, reopened, closed]
     branches:
       - main
+    paths:
+      - 'docs/**'
+      - 'mkdocs.yml'
+
+concurrency: preview-${{ github.ref }}
 
 jobs:
   build:
@@ -21,6 +27,11 @@ jobs:
           # bugfix until https://github.com/mkdocstrings/griffe/pull/115
           pip install git+https://github.com/tlambert03/griffe@recursion#egg=griffe -U
       - run: mkdocs build --strict
+      - name: Deploy preview
+        if: github.event_name == 'pull_request' && github.event.action != 'closed'
+        uses: rossjrw/pr-preview-action@v1
+        with:
+          source-dir: ./site/
 
   deploy:
     if: github.ref == 'refs/heads/main'
