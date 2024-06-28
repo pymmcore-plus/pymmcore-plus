@@ -98,6 +98,7 @@ def test_fully_sequenceable_core() -> None:
     core_mock.getPixelSizeUm.return_value = None
     core_mock.getNumberOfCameraChannels.return_value = 1
     core_mock.getImageBitDepth.return_value = 12
+    core_mock.getNumberOfComponents.return_value = 1
 
     engine = MDAEngine(mmc=core_mock, use_hardware_sequencing=True)
 
