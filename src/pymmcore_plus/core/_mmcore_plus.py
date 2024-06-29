@@ -1500,10 +1500,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         np.ndarray
             output image (possibly new shape and dtype)
         """
-        if self.getNumberOfCameraChannels() > 1:
-            # we might have multicam
-            ...
-
         if ncomponents is None:
             ncomponents = self.getNumberOfComponents()
         if ncomponents == 4:

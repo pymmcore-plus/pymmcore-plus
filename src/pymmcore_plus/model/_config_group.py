@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Container, MutableMapping, NamedTuple, Self
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
-    from typing import Final
+    from typing import Container, Final, MutableMapping, Self
 
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda.metadata.schema import ConfigGroup as ConfigGroupMeta

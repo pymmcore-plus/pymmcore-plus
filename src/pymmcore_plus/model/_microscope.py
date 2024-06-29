@@ -157,15 +157,13 @@ class Microscope:
 
     @classmethod
     def from_metadata(cls, summary_meta: SummaryMetaV1) -> Microscope:
-        #         # XXX: Consider making a dedicated Core device
-        # # and disallowing the user from creating Device with type Core
-        # core_device: CoreDevice = field(default_factory=CoreDevice)
-        # devices: list[Device] = field(default_factory=list)
-        # config_groups: dict[str, ConfigGroup] = field(default_factory=dict)
-        # pixel_size_group: PixelSizeGroup = field(default_factory=PixelSizeGroup)
-        # config_file: str = ""
+        """Create a Microscope model from summary metadata.
 
-        # initialized: bool = False
+        This may be used to load a model from summary metadata, such as as written
+        during the course of a Multi-Dimensional Acquisition.  This is useful for
+        restoring the state of a microscope from a specific experiment, or writing
+        out a cfg file that can be used to restore the state of the microscope.
+        """
         core_device = next(
             (d for d in summary_meta["devices"] if d["name"] == Keyword.CoreDevice),
             None,

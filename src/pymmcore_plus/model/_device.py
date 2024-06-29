@@ -3,7 +3,7 @@ from __future__ import annotations
 import dataclasses
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Self
+from typing import TYPE_CHECKING
 
 from pymmcore_plus import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus._util import no_stdout
@@ -12,7 +12,7 @@ from ._core_link import CoreObject
 from ._property import Property
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, Container, Iterable
+    from typing import Any, Callable, Container, Iterable, Self
 
     from typing_extensions import TypeAlias  # py310
 
