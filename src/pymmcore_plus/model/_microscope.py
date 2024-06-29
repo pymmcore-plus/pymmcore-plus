@@ -127,7 +127,7 @@ class Microscope:
     # ------------- Config-file methods -------------
 
     @classmethod
-    def create_from_config(cls, config_file: str) -> Microscope:
+    def create_from_config(cls, config_file: str | Path) -> Microscope:
         obj = cls()
         obj.load_config(config_file)
         obj.mark_clean()
