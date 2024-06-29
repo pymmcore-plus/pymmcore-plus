@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
 import numpy as np
 
-from pymmcore_plus.mda.metadata.serialize import to_builtins
+from pymmcore_plus.metadata.serialize import to_builtins
 
 from ._5d_writer_base import _5DWriterBase
 

@@ -47,10 +47,11 @@ def summary_metadata(
     *,
     mda_sequence: useq.MDASequence | None = None,
     cached: bool = True,
+    include_time: bool = True,
 ) -> SummaryMetaV1:
     """Return a summary metadata for the current state of the system.
 
-    See [pymmcore_plus.mda.metadata.SummaryMetaV1][] for a description of the
+    See [pymmcore_plus.metadata.SummaryMetaV1][] for a description of the
     dictionary format.
     """
     summary: SummaryMetaV1 = {
@@ -62,8 +63,9 @@ def summary_metadata(
         "position": position(core),
         "config_groups": config_groups(core),
         "pixel_size_configs": pixel_size_configs(core),
-        "datetime": timestamp(),
     }
+    if include_time:
+        summary["datetime"] = timestamp()
     if mda_sequence:
         summary["mda_sequence"] = mda_sequence
     return summary

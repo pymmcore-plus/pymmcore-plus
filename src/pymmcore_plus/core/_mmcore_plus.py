@@ -31,6 +31,7 @@ from psygnal import SignalInstance
 from pymmcore_plus._logger import current_logfile, logger
 from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
+from pymmcore_plus.metadata.functions import summary_metadata
 
 from ._adapter import DeviceAdapter
 from ._config import Configuration
@@ -47,7 +48,6 @@ from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from ._sequencing import can_sequence_events
-from ._state import core_state
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
@@ -57,8 +57,7 @@ if TYPE_CHECKING:
     from useq import MDAEvent
 
     from pymmcore_plus.mda._runner import SingleOutput
-
-    from ._state import StateDict
+    from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
@@ -2035,35 +2034,17 @@ class CMMCorePlus(pymmcore.CMMCore):
         print_tabular_data(data, sort=sort)
 
     def state(
-        self,
-        *,
-        devices: bool = True,
-        image: bool = True,
-        system_info: bool = False,
-        system_status: bool = False,
-        config_groups: bool | Sequence[str] = True,
-        position: bool = False,
-        autofocus: bool = False,
-        pixel_size_configs: bool = False,
-        device_types: bool = False,
-        cached: bool = True,
-        error_value: Any = None,
-    ) -> StateDict:
+        self, *, cached: bool = True, include_time: bool = False, **_kwargs: Any
+    ) -> SummaryMetaV1:
         """Return info on the current state of the core."""
-        return core_state(
-            self,
-            devices=devices,
-            image=image,
-            system_info=system_info,
-            system_status=system_status,
-            config_groups=config_groups,
-            position=position,
-            autofocus=autofocus,
-            pixel_size_configs=pixel_size_configs,
-            device_types=device_types,
-            cached=cached,
-            error_value=error_value,
-        )
+        if _kwargs:
+            keys = ", ".join(_kwargs.keys())
+            warnings.warn(
+                f"CMMCorePlus.state no longer takes arguments: {keys}. Ignoring."
+                "Please update your code as this may be an error in the future.",
+                stacklevel=2,
+            )
+        return summary_metadata(self, include_time=include_time, cached=cached)
 
     @contextmanager
     def _property_change_emission_ensured(

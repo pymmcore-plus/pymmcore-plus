@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from useq import MDAEvent, MDASequence
 
-    from pymmcore_plus.mda.metadata.schema import FrameMetaV1, SummaryMetaV1
+    from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
 
     PImagePayload = tuple[NDArray, MDAEvent, FrameMetaV1]
 

@@ -4,7 +4,7 @@ from pathlib import Path
 
 import pytest
 from pymmcore_plus import CMMCorePlus, DeviceType, find_micromanager
-from pymmcore_plus.mda.metadata import summary_metadata
+from pymmcore_plus.metadata import summary_metadata
 from pymmcore_plus.model import CoreDevice, Device, Microscope
 
 

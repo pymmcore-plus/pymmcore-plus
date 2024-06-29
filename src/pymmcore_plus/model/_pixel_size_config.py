@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     )
 
     from pymmcore_plus import CMMCorePlus
-    from pymmcore_plus.mda.metadata.schema import PixelSizeConfigPreset
+    from pymmcore_plus.metadata.schema import PixelSizeConfigPreset
 
     from ._core_link import ErrCallback
 
