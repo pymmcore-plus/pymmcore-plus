@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-import datetime
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, TypedDict
 
 import pymmcore_plus
+from pymmcore_plus._util import timestamp
 from pymmcore_plus.core._constants import DeviceType, PixelFormat
 
 if TYPE_CHECKING:
@@ -54,7 +54,7 @@ def summary_metadata(
         "position": position(core),
         "config_groups": config_groups(core),
         "pixel_size_configs": pixel_size_configs(core),
-        "datetime": _timestamp(),
+        "datetime": timestamp(),
     }
     if mda_sequence:
         summary["mda_sequence"] = mda_sequence
@@ -97,14 +97,6 @@ def frame_metadata(
 # ----------------------------------------------
 # supporting functions
 # ----------------------------------------------
-
-
-def _timestamp() -> str:
-    """Return the current timestamp, try using local timezone, in ISO format."""
-    now = datetime.datetime.now(tz=datetime.UTC)
-    with suppress(Exception):
-        now = now.astimezone()
-    return now.isoformat()
 
 
 def device_info(core: CMMCorePlus, *, label: str, cached: bool = True) -> DeviceInfo:
