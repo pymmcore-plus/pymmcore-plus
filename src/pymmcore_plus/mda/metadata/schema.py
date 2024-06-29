@@ -46,7 +46,7 @@ class PropertyInfo(TypedDict):
         `False`.
     sequence_max_length : int
         *Not Required*. The maximum length of a sequence for the property,
-        if applicable.
+        if applicable.  Will be missing if the property is not sequenceable.
     """
 
     name: str
@@ -258,12 +258,19 @@ class Position(TypedDict):
 
     Attributes
     ----------
-    x : float | None
-        The X coordinate.
-    y : float | None
-        The Y coordinate.
-    z : float | None
-        The Z (focus axis) coordinate.
+    x : float
+        *Not Required*. The X coordinate of the "active" XY stage device.
+        May be missing if there is no current XY stage device.
+    y : float
+        *Not Required*. The Y coordinate of the "active" XY stage device.
+        May be missing if there is no current XY stage device.
+    z : float
+        *Not Required*. The coordinate of the "active" focus device.
+        May be missing if there is no current focus stage device.
+    all_stages : tuple[StagePosition, ...]
+        *Not Required*. The positions of *all* stage devices (both inactive and active
+        devices that are represented by `x`, `y`, and `z`).  Inclusion of this field
+        is up to the implementer.
     """
 
     x: NotRequired[float]
@@ -273,7 +280,10 @@ class Position(TypedDict):
 
 
 class PropertyValue(TypedDict):
-    """A single device property setting in a configuration group.
+    """A single device property setting.
+
+    This represents a single device property setting, whether it be an "active" value,
+    or an intended value as a part of a configuration preset.
 
     Attributes
     ----------
@@ -362,7 +372,8 @@ class SummaryMetaV1(TypedDict):
         The version of this summary metadata object.
     datetime : str
         The date and time when the summary metadata was generated. This is an ISO 8601
-        formatted string.
+        formatted string, including date, time and offset from UTC:
+        `YYYY-MM-DD HH:MM:SS.mmmmmm+HH:MM`
     devices : tuple[DeviceInfo, ...]
         Information about all loaded devices.
     system_info : SystemInfo

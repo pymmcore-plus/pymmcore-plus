@@ -28,6 +28,14 @@ if TYPE_CHECKING:
         SystemInfo,
     )
 
+    class _OptionalFrameMetaKwargs(TypedDict, total=False):
+        """Additional optional fields for frame metadata."""
+
+        mda_event: useq.MDAEvent
+        hardware_triggered: bool
+        images_remaining_in_buffer: int
+        camera_metadata: dict[str, Any]
+        extra: dict[str, Any]
 
 # -----------------------------------------------------------------
 # These are the two main functions that are called from the outside
@@ -59,16 +67,6 @@ def summary_metadata(
     if mda_sequence:
         summary["mda_sequence"] = mda_sequence
     return summary
-
-
-class _OptionalFrameMetaKwargs(TypedDict, total=False):
-    """Additional optional fields for frame metadata."""
-
-    mda_event: useq.MDAEvent
-    hardware_triggered: bool
-    images_remaining_in_buffer: int
-    camera_metadata: dict[str, Any]
-    extra: dict[str, Any]
 
 
 def frame_metadata(
@@ -145,12 +143,12 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
         "continuous_focus_enabled": core.isContinuousFocusEnabled(),
         "continuous_focus_locked": core.isContinuousFocusLocked(),
         "auto_shutter": core.getAutoShutter(),
-        # "timeout_ms": core.getTimeoutMs(),
+        "timeout_ms": core.getTimeoutMs(),
     }
 
 
 def image_info(core: CMMCorePlus) -> ImageInfo:
-    """Return information about the current image properties."""
+    """Return information about the current camera image properties."""
     w = core.getImageWidth()
     h = core.getImageHeight()
     n_comp = core.getNumberOfComponents()
@@ -210,8 +208,8 @@ def image_infos(core: CMMCorePlus) -> tuple[ImageInfo, ...]:
     return tuple(infos)
 
 
-def position(core: CMMCorePlus, all_stages: bool = True) -> Position:
-    """Return current position."""
+def position(core: CMMCorePlus, all_stages: bool = False) -> Position:
+    """Return current position of active (and, optionally, all) stages."""
     position: Position = {}
     with suppress(Exception):
         position["x"] = core.getXPosition()
