@@ -473,7 +473,10 @@ class MDAEngine(PMDAEngine):
         """Grab next image from the circular buffer and return it as an ImagePayload."""
         _slice = 0  # ?
         img, mm_meta = self._mmc.popNextImageAndMD(channel, _slice)
-        seq_time = float(mm_meta.get(Keyword.Elapsed_Time_ms, 0.0))
+        try:
+            seq_time = float(mm_meta.get(Keyword.Elapsed_Time_ms))
+        except Exception:
+            seq_time = 0.0
         try:
             # note, when present in circular buffer meta, this key is called "Camera".
             # It's NOT actually Keyword.CoreCamera (but it's the same value)
