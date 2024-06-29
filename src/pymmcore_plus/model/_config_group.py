@@ -9,8 +9,8 @@ if TYPE_CHECKING:
     from typing_extensions import Self  # py311
 
     from pymmcore_plus import CMMCorePlus
-    from pymmcore_plus.mda.metadata.schema import ConfigGroup as ConfigGroupMeta
-    from pymmcore_plus.mda.metadata.schema import ConfigPreset as ConfigPresetMeta
+    from pymmcore_plus.metadata.schema import ConfigGroup as ConfigGroupMeta
+    from pymmcore_plus.metadata.schema import ConfigPreset as ConfigPresetMeta
 
     from ._core_link import ErrCallback
 

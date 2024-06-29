@@ -9,7 +9,7 @@ from itertools import product
 from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
-from pymmcore_plus.mda.metadata.serialize import json_dumps, json_loads
+from pymmcore_plus.metadata.serialize import json_dumps, json_loads
 
 from ._util import position_sizes
 
@@ -21,7 +21,7 @@ if TYPE_CHECKING:
     import useq
     from typing_extensions import Self  # py311
 
-    from pymmcore_plus.mda.metadata import FrameMetaV1, SummaryMetaV1
+    from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
     TsDriver: TypeAlias = Literal["zarr", "zarr3", "n5", "neuroglancer_precomputed"]
     EventKey: TypeAlias = frozenset[tuple[str, int]]

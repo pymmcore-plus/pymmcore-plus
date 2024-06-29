@@ -19,7 +19,7 @@ if TYPE_CHECKING:
         TypeAlias,  # py310
     )
 
-    from pymmcore_plus.mda.metadata.schema import DeviceInfo
+    from pymmcore_plus.metadata.schema import DeviceInfo
 
     from ._core_link import ErrCallback
     from ._microscope import Microscope

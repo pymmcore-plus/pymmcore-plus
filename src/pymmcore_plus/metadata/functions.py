@@ -50,7 +50,7 @@ def summary_metadata(
 ) -> SummaryMetaV1:
     """Return a summary metadata for the current state of the system.
 
-    See [pymmcore_plus.mda.metadata.SummaryMetaV1][] for a description of the
+    See [pymmcore_plus.metadata.SummaryMetaV1][] for a description of the
     dictionary format.
     """
     summary: SummaryMetaV1 = {

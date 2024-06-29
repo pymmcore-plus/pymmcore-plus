@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     import numpy as np
     import useq
 
-    from pymmcore_plus.mda.metadata import FrameMetaV1, SummaryMetaV1
+    from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
     class SupportsSetItem(Protocol):
         def __setitem__(self, key: tuple[int, ...], value: np.ndarray) -> None: ...

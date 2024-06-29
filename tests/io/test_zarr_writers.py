@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 import useq
 from pymmcore_plus.mda.handlers import OMEZarrWriter, TensorStoreHandler
-from pymmcore_plus.mda.metadata import serialize
+from pymmcore_plus.metadata import serialize
 
 if TYPE_CHECKING:
     from pathlib import Path

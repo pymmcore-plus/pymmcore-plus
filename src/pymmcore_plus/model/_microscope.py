@@ -15,7 +15,7 @@ from ._pixel_size_config import PixelSizeGroup
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
-    from pymmcore_plus.mda.metadata.schema import SummaryMetaV1
+    from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     from ._core_link import ErrCallback
     from ._property import Property

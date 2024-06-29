@@ -96,7 +96,7 @@ class DeviceInfo(TypedDict):
         *Not Required*. Whether the device is sequenceable. If missing, assume `False`.
         This may be present for Cameras, SLMs, Stages, and XYStages.  See also the
         `is_sequenceable` property of each
-        [`PropertyInfo`][pymmcore_plus.mda.metadata.schema.PropertyInfo] object.
+        [`PropertyInfo`][pymmcore_plus.metadata.schema.PropertyInfo] object.
     """
 
     label: str
@@ -362,7 +362,7 @@ class SummaryMetaV1(TypedDict):
     devices.
 
     It may be generated outside of a running mda sequence as well using
-    [`pymmcore_plus.mda.metadata.summary_metadata`][]
+    [`pymmcore_plus.metadata.summary_metadata`][]
 
     Attributes
     ----------
@@ -416,7 +416,7 @@ class FrameMetaV1(TypedDict):
     in the summary metadata.
 
     It may be generated outside of a running mda sequence as well using
-    [`pymmcore_plus.mda.metadata.frame_metadata`][]
+    [`pymmcore_plus.metadata.frame_metadata`][]
 
     Attributes
     ----------

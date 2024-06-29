@@ -5,7 +5,7 @@ import numpy as np
 import pytest
 import useq
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.mda.metadata import (
+from pymmcore_plus.metadata import (
     FrameMetaV1,
     SummaryMetaV1,
     frame_metadata,

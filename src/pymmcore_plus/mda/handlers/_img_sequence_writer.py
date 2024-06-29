@@ -11,7 +11,7 @@ from itertools import count
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Mapping, Sequence, cast
 
-from pymmcore_plus.mda.metadata.serialize import json_dumps
+from pymmcore_plus.metadata.serialize import json_dumps
 
 from ._util import get_full_sequence_axes
 

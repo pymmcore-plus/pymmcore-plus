@@ -40,8 +40,6 @@ method is implemented in `CMMCorePlus` or not).
 
 ### TypedDicts
 
-::: pymmcore_plus.core._mmcore_plus.StateDict
-
 ::: pymmcore_plus.core._mmcore_plus.DeviceSchema
 
 ::: pymmcore_plus.core._mmcore_plus.PropertySchema

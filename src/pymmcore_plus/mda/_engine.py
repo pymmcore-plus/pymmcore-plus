@@ -18,7 +18,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent
-from pymmcore_plus.mda.metadata import (
+from pymmcore_plus.metadata import (
     FrameMetaV1,
     PropertyValue,
     SummaryMetaV1,
