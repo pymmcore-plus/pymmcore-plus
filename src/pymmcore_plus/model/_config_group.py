@@ -4,7 +4,9 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
-    from typing import Container, Final, MutableMapping, Self
+    from typing import Container, Final, MutableMapping
+
+    from typing_extensions import Self  # py311
 
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda.metadata.schema import ConfigGroup as ConfigGroupMeta

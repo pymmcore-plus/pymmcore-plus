@@ -1,14 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, Any, Container, Iterable, MutableMapping, Self
+from typing import TYPE_CHECKING
 
 from ._config_group import ConfigGroup, ConfigPreset, Setting
 
 if TYPE_CHECKING:
-    from typing import Final
+    from typing import Any, Container, Final, Iterable, MutableMapping
 
-    from typing_extensions import TypeAlias  # py310
+    from typing_extensions import (
+        Self,  # py311
+        TypeAlias,  # py310
+    )
 
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda.metadata.schema import PixelSizeConfigPreset

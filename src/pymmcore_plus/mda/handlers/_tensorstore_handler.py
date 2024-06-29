@@ -14,11 +14,12 @@ from pymmcore_plus.mda.metadata.serialize import json_dumps, json_loads
 from ._util import position_sizes
 
 if TYPE_CHECKING:
-    from typing import Literal, Mapping, Self, Sequence, TypeAlias
+    from typing import Literal, Mapping, Sequence, TypeAlias
 
     import numpy as np
     import tensorstore as ts
     import useq
+    from typing_extensions import Self  # py311
 
     from pymmcore_plus.mda.metadata import FrameMetaV1, SummaryMetaV1
 

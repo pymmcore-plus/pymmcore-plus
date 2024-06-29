@@ -12,9 +12,12 @@ from ._core_link import CoreObject
 from ._property import Property
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, Container, Iterable, Self
+    from typing import Any, Callable, Container, Iterable
 
-    from typing_extensions import TypeAlias  # py310
+    from typing_extensions import (
+        Self,  # py311
+        TypeAlias,  # py310
+    )
 
     from pymmcore_plus.mda.metadata.schema import DeviceInfo
 
