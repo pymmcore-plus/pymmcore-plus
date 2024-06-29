@@ -7,10 +7,11 @@ provided.
 
 from __future__ import annotations
 
-import json
 from itertools import count
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Mapping, Sequence, cast
+
+from pymmcore_plus.mda.metadata.serialize import json_dumps
 
 from ._util import get_full_sequence_axes
 
@@ -176,11 +177,13 @@ class ImageSequenceWriter:
                 include_frame_count=self._include_frame_count,
             )
             # make directory and write metadata
-            self._seq_meta_file.write_text(seq.json(exclude_unset=True, indent=4))
+            self._seq_meta_file.write_text(
+                seq.model_dump_json(exclude_unset=True, indent=2)
+            )
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         # write final frame metadata to disk
-        self._frame_meta_file.write_text(json.dumps(self._frame_metadata, indent=2))
+        self._frame_meta_file.write_bytes(json_dumps(self._frame_metadata, indent=2))
 
     def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
         """Write a frame to disk."""
@@ -199,11 +202,12 @@ class ImageSequenceWriter:
         self._imwrite(str(self._directory / filename), frame, **self._imwrite_kwargs)
 
         # store metadata
-        meta["Event"] = json.loads(event.json(exclude={"sequence"}, exclude_unset=True))
         self._frame_metadata[filename] = meta
         # write metadata to disk every 10 frames
         if frame_idx % 10 == 0:
-            self._frame_meta_file.write_text(json.dumps(self._frame_metadata, indent=2))
+            self._frame_meta_file.write_bytes(
+                json_dumps(self._frame_metadata, indent=2)
+            )
 
     @staticmethod
     def fname_template(

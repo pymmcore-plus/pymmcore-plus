@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, Mapping, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
     from typing import Iterable, Iterator
@@ -9,7 +9,9 @@ if TYPE_CHECKING:
     from numpy.typing import NDArray
     from useq import MDAEvent, MDASequence
 
-    PImagePayload = tuple[NDArray, MDAEvent, dict]
+    from pymmcore_plus.mda.metadata.schema import FrameMetaV1, SummaryMetaV1
+
+    PImagePayload = tuple[NDArray, MDAEvent, FrameMetaV1]
 
 
 # NOTE: This whole thing could potentially go in useq-schema
@@ -21,7 +23,7 @@ class PMDAEngine(Protocol):
     """Protocol that all MDA engines must implement."""
 
     @abstractmethod
-    def setup_sequence(self, sequence: MDASequence) -> None | Mapping[str, Any]:
+    def setup_sequence(self, sequence: MDASequence) -> SummaryMetaV1 | None:
         """Setup state of system (hardware, etc.) before an MDA is run.
 
         This method is called once at the beginning of a sequence.

@@ -210,6 +210,10 @@ class MDARunner:
         if error is not None:
             raise error
 
+    def seconds_elapsed(self) -> float:
+        """Return the number of seconds since the start of the acquisition."""
+        return time.perf_counter() - self._t0
+
     def _outputs_connected(
         self, output: SingleOutput | Sequence[SingleOutput] | None
     ) -> ContextManager:
@@ -268,6 +272,7 @@ class MDARunner:
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
         event_iterator = getattr(engine, "event_iterator", iter)
         _events: Iterator[MDAEvent] = event_iterator(events)
+        self._reset_timer()
 
         for event in _events:
             # If cancelled break out of the loop
@@ -278,17 +283,22 @@ class MDARunner:
             logger.info("%s", event)
             engine.setup_event(event)
 
-            output = engine.exec_event(event) or ()  # in case output is None
-
-            for payload in output:
-                img, event, meta = payload
-                if "PerfCounter" in meta:
-                    meta["ElapsedTime-ms"] = (meta["PerfCounter"] - self._t0) * 1000
-                meta["Event"] = event
-                with exceptions_logged():
-                    self._signals.frameReady.emit(img, event, meta)
-
-            teardown_event(event)
+            try:
+                elapsed_ms = self.seconds_elapsed() * 1000
+                # this is a bit of a hack to pass the time into the engine
+                # it is used for intra-event time calculations
+                # we pop it off after the event is executed.
+                event.metadata["runner_t0"] = self._t0
+                output = engine.exec_event(event) or ()  # in case output is None
+                for payload in output:
+                    img, event, meta = payload
+                    event.metadata.pop("runner_t0", None)
+                    if "runner_time_ms" not in meta:
+                        meta["runner_time_ms"] = elapsed_ms
+                    with exceptions_logged():
+                        self._signals.frameReady.emit(img, event, meta)
+            finally:
+                teardown_event(event)
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
@@ -307,17 +317,12 @@ class MDARunner:
         self._sequence = sequence
 
         meta = self._engine.setup_sequence(sequence)
-        logger.info("MDA Started: %s", sequence)
-
         self._signals.sequenceStarted.emit(sequence, meta or {})
-        self._reset_timer()
+        logger.info("MDA Started: %s", sequence)
         return self._engine
 
     def _reset_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
-
-    def _time_elapsed(self) -> float:
-        return time.perf_counter() - self._t0
 
     def _check_canceled(self) -> bool:
         """Return True if the cancel method has been called and emit relevant signals.
@@ -369,7 +374,7 @@ class MDARunner:
             go_at = event.min_start_time + self._paused_time
             # We need to enter a loop here checking paused and canceled.
             # otherwise you'll potentially wait a long time to cancel
-            remaining_wait_time = go_at - self._time_elapsed()
+            remaining_wait_time = go_at - self.seconds_elapsed()
             while remaining_wait_time > 0:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
                 while self._paused and not self._canceled:
@@ -380,7 +385,7 @@ class MDARunner:
                 if self._canceled:
                     break
                 time.sleep(min(remaining_wait_time, 0.5))
-                remaining_wait_time = go_at - self._time_elapsed()
+                remaining_wait_time = go_at - self.seconds_elapsed()
 
         # check canceled again in case it was canceled
         # during the waiting loop
@@ -402,12 +407,3 @@ class MDARunner:
 
         logger.info("MDA Finished: %s", sequence)
         self._signals.sequenceFinished.emit(sequence)
-
-
-def _assert_handler(handler: Any) -> None:
-    if (
-        not hasattr(handler, "start")
-        or not hasattr(handler, "finish")
-        or not hasattr(handler, "put")
-    ):
-        raise TypeError("Handler must have start, finish, and put methods.")

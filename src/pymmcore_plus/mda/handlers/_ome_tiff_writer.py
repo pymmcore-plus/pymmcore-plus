@@ -42,10 +42,12 @@ from typing import TYPE_CHECKING, Any
 
 import numpy as np
 
-from ._5d_writer_base import _5DWriterBase
+from ._5d_writer_base import _NULL, _5DWriterBase
 
 if TYPE_CHECKING:
     import useq
+
+    from pymmcore_plus.mda.metadata import SummaryMetaV1
 
 IMAGEJ_AXIS_ORDER = "tzcyxs"
 
@@ -80,8 +82,10 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
 
         super().__init__()
 
-    def sequenceStarted(self, seq: useq.MDASequence) -> None:
-        super().sequenceStarted(seq)
+    def sequenceStarted(
+        self, seq: useq.MDASequence, meta: SummaryMetaV1 | object = _NULL
+    ) -> None:
+        super().sequenceStarted(seq, meta)
         # Non-OME (ImageJ) hyperstack axes MUST be in TZCYXS order
         # so we reorder the ordered position_sizes dicts.  This will ensure
         # that the array indices created from event.index are in the correct order.

@@ -23,12 +23,12 @@ jobs:
         platform: [windows-latest, macos-13]
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
         pydantic: [""]
-        qt: ["'PySide6!=6.7.1'"]
+        qt: ["PySide6"]
         include:
           - platform: windows-latest
             python-version: "3.8"
             pydantic: "'pydantic<2'"
-            qt: "'PySide6!=6.7.1'"
+            qt: "PySide6"
           - platform: windows-latest
             python-version: "3.9"
             pydantic: "'pydantic<2'"
@@ -39,7 +39,7 @@ jobs:
           - platform: windows-latest
             python-version: "3.11"
             pydantic: "'pydantic<2'"
-            qt: "'PySide6!=6.7.1'"
+            qt: "PySide6"
           - platform: ubuntu-latest
             python-version: "3.11"
 
@@ -56,6 +56,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[test]
 
+      - name: Set cache path
+        shell: bash
+        run: |
+          set -e
+          CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
+          echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
+
       - name: Install  ${{ matrix.qt }}
         if: ${{ matrix.qt }}
         run: pip install ${{ matrix.qt }}
@@ -63,11 +70,6 @@ jobs:
       - name: Downgrade pydantic
         if: ${{ matrix.pydantic }}
         run: pip install ${{ matrix.pydantic }}
-
-      - name: Set cache path
-        shell: bash
-        run: |
-          echo "CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')" >> $GITHUB_ENV
 
       - name: Cache Drivers
         id: cache-mm-build
@@ -142,7 +144,7 @@ jobs:
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v2
         with:
-          run: pytest --codspeed -v --color=yes
+          run: pytest -W ignore --codspeed -v --color=yes
 
   deploy:
     needs: test

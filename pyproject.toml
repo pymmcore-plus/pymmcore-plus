@@ -54,6 +54,7 @@ dependencies = [
 cli = ["typer >=0.4.2", "rich >=10.2.0"]
 io = ["tifffile >=2021.6.14", "zarr >=2.2"]
 test = [
+    "msgspec",
     "msgpack",
     "pytest-cov >=4",
     "pytest-qt >=4",
@@ -139,7 +140,7 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 minversion = "6.0"
 testpaths = ["tests"]
-filterwarnings = ["error"]
+filterwarnings = ["error", "ignore:Failed to disconnect::pytestqt"]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]

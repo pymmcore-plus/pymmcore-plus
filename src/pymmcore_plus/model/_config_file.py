@@ -2,11 +2,11 @@
 
 from __future__ import annotations
 
-import datetime
 import warnings
 from typing import TYPE_CHECKING, Any, Callable, Iterable, Sequence
 
 from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword
+from pymmcore_plus._util import timestamp
 
 from ._config_group import ConfigGroup, ConfigPreset, Setting
 from ._device import Device
@@ -57,9 +57,7 @@ INIT = _serialize(CFGCommand.Property, Keyword.CoreDevice, Keyword.CoreInitializ
 
 
 def yield_date(scope: Microscope) -> Iterable[str]:
-    now = datetime.datetime.now(datetime.timezone.utc)
-    date = now.astimezone().strftime("%a %b %d %H:%M:%S %Z %Y")
-    yield f"# Date: {date}\n"
+    yield f"# Date: {timestamp()}\n"
 
 
 def iter_devices(scope: Microscope) -> Iterable[str]:

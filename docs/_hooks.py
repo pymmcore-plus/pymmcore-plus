@@ -10,6 +10,7 @@ CMMCorePlus API page.
 """
 
 import logging
+import re
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -40,6 +41,8 @@ def on_page_content(html: str, page: "Page", config: "MkDocsConfig", files) -> s
     of the page."""
     # add a plus icons everywhere the bolded text "Override" appears
     # doing this here keeps the source-code docs more readable
+    if page.title == "Metadata Schema":
+        html = re.sub("<strong>Attributes:</strong>", "<strong>Keys:</strong>", html)
     override = "<strong>Why Override?</strong>"
     return html.replace(override, PLUS_SVG + override + "<br/>")
 
