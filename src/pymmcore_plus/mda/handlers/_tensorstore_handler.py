@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import atexit
-import json
 import os
 import shutil
 import tempfile
@@ -9,6 +8,8 @@ import warnings
 from itertools import product
 from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
+
+from pymmcore_plus.mda.metadata.serialize import json_dumps, json_loads
 
 from ._util import position_sizes
 
@@ -18,6 +19,8 @@ if TYPE_CHECKING:
     import numpy as np
     import tensorstore as ts
     import useq
+
+    from pymmcore_plus.mda.metadata import FrameMetaV1, SummaryMetaV1
 
     TsDriver: TypeAlias = Literal["zarr", "zarr3", "n5", "neuroglancer_precomputed"]
     EventKey: TypeAlias = frozenset[tuple[str, int]]
@@ -107,12 +110,12 @@ class TensorStoreHandler:
 
         # storage of individual frame metadata
         # maps position key to list of frame metadata
-        self.frame_metadatas: list[tuple[useq.MDAEvent, dict]] = []
+        self.frame_metadatas: list[tuple[useq.MDAEvent, FrameMetaV1]] = []
 
         self._size_increment = 300
 
         self._store: ts.TensorStore | None = None
-        self._futures: list[ts.Future] = []
+        self._futures: list[ts.Future | ts.WriteFutures] = []
         self._frame_indices: dict[EventKey, int | ts.DimExpression] = {}
 
         # "_nd_storage" means we're greedily attempting to store the data in a
@@ -170,7 +173,7 @@ class TensorStoreHandler:
 
         return cls(path=path, **kwargs)
 
-    def sequenceStarted(self, seq: useq.MDASequence) -> None:
+    def sequenceStarted(self, seq: useq.MDASequence, meta: SummaryMetaV1) -> None:
         """On sequence started, simply store the sequence."""
         self._frame_index = 0
         self._store = None
@@ -192,7 +195,9 @@ class TensorStoreHandler:
         if self.frame_metadatas:
             self.finalize_metadata()
 
-    def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
+    def frameReady(
+        self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
+    ) -> None:
         """Write frame to the zarr array for the appropriate position."""
         if self._store is None:
             self._store = self.new_store(frame, event.sequence, meta).result()
@@ -230,7 +235,7 @@ class TensorStoreHandler:
         return self._store[ts_index].read().result().squeeze()  # type: ignore
 
     def new_store(
-        self, frame: np.ndarray, seq: useq.MDASequence | None, meta: dict
+        self, frame: np.ndarray, seq: useq.MDASequence | None, meta: FrameMetaV1
     ) -> ts.Future[ts.TensorStore]:
         shape, chunks, labels = self.get_shape_chunks_labels(frame.shape, seq)
         self._nd_storage = FRAME_DIM not in labels
@@ -287,14 +292,7 @@ class TensorStoreHandler:
         if not (store := self._store) or not store.kvstore:
             return  # pragma: no cover
 
-        data = []
-        for event, meta in self.frame_metadatas:
-            # FIXME: unnecessary ser/des
-            js = event.model_dump_json(exclude={"sequence"}, exclude_defaults=True)
-            meta["Event"] = json.loads(js)
-            data.append(meta)
-
-        metadata = {"frame_metadatas": data}
+        metadata = {"frame_metadatas": [m[1] for m in self.frame_metadatas]}
         if not self._nd_storage:
             metadata["frame_indices"] = [
                 (tuple(dict(k).items()), v)  # type: ignore
@@ -302,11 +300,11 @@ class TensorStoreHandler:
             ]
 
         if self.ts_driver.startswith("zarr"):
-            store.kvstore.write(".zattrs", json.dumps(metadata))
+            store.kvstore.write(".zattrs", json_dumps(metadata).decode("utf-8"))
         elif self.ts_driver == "n5":  # pragma: no cover
-            attrs = json.loads(store.kvstore.read("attributes.json").result().value)
+            attrs = json_loads(store.kvstore.read("attributes.json").result().value)
             attrs.update(metadata)
-            store.kvstore.write("attributes.json", json.dumps(attrs))
+            store.kvstore.write("attributes.json", json_dumps(attrs).decode("utf-8"))
 
     def _expand_store(self, store: ts.TensorStore) -> ts.Future[ts.TensorStore]:
         """Grow the store by `self._size_increment` frames.
@@ -324,7 +322,8 @@ class TensorStoreHandler:
         The return value is safe to use as an index to self._store[...]
         """
         if self._nd_storage:
-            return self._ts.d[index][tuple(index.values())]
+            keys, values = zip(*index.items())
+            return self._ts.d[keys][values]
 
         if any(isinstance(v, slice) for v in index.values()):
             idx: list | int | ts.DimExpression = self._get_frame_indices(index)

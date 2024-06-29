@@ -54,6 +54,7 @@ dependencies = [
 cli = ["typer >=0.4.2", "rich >=10.2.0"]
 io = ["tifffile >=2021.6.14", "zarr >=2.2"]
 test = [
+    "msgspec",
     "msgpack",
     "pytest-cov >=4",
     "pytest-qt >=4",

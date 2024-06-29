@@ -76,7 +76,7 @@ methods here.
 
     ```python
     class MyEngine:
-        def setup_sequence(self, sequence: MDASequence) -> None:
+        def setup_sequence(self, sequence: MDASequence) -> SummaryMetaV1 | None:
             """Setup state of system (hardware, etc.) before an MDA is run.
 
             This method is called once at the beginning of a sequence.
@@ -92,7 +92,7 @@ methods here.
             without any additional preparation.
             """
 
-        def exec_event(self, event: MDAEvent) -> object:
+        def exec_event(self, event: MDAEvent) -> Iterable[tuple[NDArray, MDAEvent, FrameMetaV1]]:
             """Execute `event`.
 
             This method is called after `setup_event` and is responsible for

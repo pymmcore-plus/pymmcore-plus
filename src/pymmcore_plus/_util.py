@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import importlib
 import os
 import platform
@@ -521,3 +522,24 @@ def system_info() -> dict[str, str]:
                     info["qt"] = f"{API_NAME} {QT_VERSION}"
 
     return info
+
+
+if sys.version_info < (3, 11):
+
+    def _utcnow() -> datetime.datetime:
+        return datetime.datetime.utcnow()
+else:
+
+    def _utcnow() -> datetime.datetime:
+        return datetime.datetime.now(datetime.UTC)
+
+
+def timestamp() -> str:
+    """Return the current timestamp, try using local timezone, in ISO format.
+
+    YYYY-MM-DD HH:MM:SS.mmmmmm+HH:MM
+    """
+    now = _utcnow()
+    with suppress(Exception):
+        now = now.astimezone()
+    return now.isoformat()
