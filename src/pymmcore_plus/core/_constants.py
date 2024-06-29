@@ -230,6 +230,12 @@ class DeviceInitializationState(IntEnum):
 
 
 class PixelType(str, Enum):
+    """These are pixel types, as used in MMStudio and MMCoreJ wrapper.
+
+    They are only here for supporting the legacy (and probably to-be-deprecated)
+    taggedImages.
+    """
+
     UNKNOWN = ""
     GRAY8 = "GRAY8"
     GRAY16 = "GRAY16"
@@ -247,3 +253,97 @@ class PixelType(str, Enum):
                 depth, cls.UNKNOWN
             )
         return cls.GRAY32 if n_comp == 1 else cls.RGB32
+
+    def to_pixel_format(self) -> PixelFormat:
+        return {
+            self.GRAY8: PixelFormat.MONO8,
+            self.GRAY16: PixelFormat.MONO16,
+            self.GRAY32: PixelFormat.MONO32,
+            self.RGB32: PixelFormat.RGB8,
+            self.RGB64: PixelFormat.RGB16,
+        }[self]
+
+
+class PixelFormat(str, Enum):
+    """Subset of GeniCam Pixel Format names used by pymmcore-plus.
+
+    (This is similar to PixelType, but follows GeniCam standards.)
+
+    See <https://docs.baslerweb.com/pixel-format#unpacked-and-packed-pixel-formats>
+    for helpful clarifications.  Note that **unpacked** pixel formats (like
+    Mono8, Mono12, Mono16) are always 8-bit aligned. Meaning Mono12 is actually
+    a 16-bit buffer.
+
+    Attributes
+    ----------
+    MONO8 : str
+        8-bit (unpacked) monochrome pixel format.
+    MONO10 : str
+        10-bit (unpacked) monochrome pixel format. (16-bit buffer)
+    MONO12 : str
+        12-bit (unpacked) monochrome pixel format. (16-bit buffer)
+    MONO14 : str
+        14-bit (unpacked) monochrome pixel format. (16-bit buffer)
+    MONO16 : str
+        16-bit (unpacked) monochrome pixel format
+    MONO32 : str
+        32-bit (unpacked) monochrome pixel format
+    RGB8 : str
+        8-bit RGB pixel format. (24-bit buffer)
+    RGB10 : str
+        10-bit RGB pixel format. (48-bit buffer)
+    RGB12 : str
+        12-bit RGB pixel format. (48-bit buffer)
+    RGB14 : str
+        14-bit RGB pixel format. (48-bit buffer)
+    RGB16 : str
+        16-bit RGB pixel format. (48-bit buffer)
+    """
+
+    MONO8 = "Mono8"
+    MONO10 = "Mono10"
+    MONO12 = "Mono12"
+    MONO14 = "Mono14"
+    MONO16 = "Mono16"
+    MONO32 = "Mono32"
+    RGB8 = "RGB8"
+    RGB10 = "RGB10"
+    RGB12 = "RGB12"
+    RGB14 = "RGB14"
+    RGB16 = "RGB16"
+
+    @classmethod
+    def pick(cls, bit_depth: int, n_comp: int = 1) -> PixelFormat:
+        try:
+            return PIXEL_FORMATS[n_comp][bit_depth]
+        except KeyError as e:
+            raise NotImplementedError(
+                f"Unsupported Pixel Format {bit_depth=} {n_comp=}"
+            ) from e
+
+    @classmethod
+    def for_current_camera(cls, core: pymmcore.CMMCore) -> PixelFormat:
+        n_comp = core.getNumberOfComponents()
+        if n_comp == 4:
+            n_comp = 3
+        return cls.pick(core.getImageBitDepth(), n_comp)
+
+
+# map of {number of components: {bit depth: PixelFormat}}
+PIXEL_FORMATS: dict[int, dict[int, PixelFormat]] = {
+    1: {
+        8: PixelFormat.MONO8,
+        10: PixelFormat.MONO10,
+        12: PixelFormat.MONO12,
+        14: PixelFormat.MONO14,
+        16: PixelFormat.MONO16,
+        32: PixelFormat.MONO32,
+    },
+    3: {
+        8: PixelFormat.RGB8,
+        10: PixelFormat.RGB10,
+        12: PixelFormat.RGB12,
+        14: PixelFormat.RGB14,
+        16: PixelFormat.RGB16,
+    },
+}

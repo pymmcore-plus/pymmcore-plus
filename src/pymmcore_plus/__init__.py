@@ -26,6 +26,7 @@ from .core import (
     FocusDirection,
     Keyword,
     Metadata,
+    PixelFormat,
     PortType,
     PropertyType,
 )
@@ -55,6 +56,7 @@ __all__ = [
     "Keyword",
     "Metadata",
     "PCoreSignaler",
+    "PixelFormat",
     "PortType",
     "PropertyType",
 ]

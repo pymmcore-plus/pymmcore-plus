@@ -285,10 +285,17 @@ class MDARunner:
             engine.setup_event(event)
 
             try:
-                event.metadata[PPC.RUNNER_TIME_SEC.value] = self.seconds_elapsed()
+                elapsed_ms = self.seconds_elapsed() * 1000
+                # this is a bit of a hack to pass the time into the engine
+                # it is used for intra-event time calculations
+                # we pop it off after the event is executed.
+                event.metadata["runner_t0"] = self._t0
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in output:
                     img, event, meta = payload
+                    event.metadata.pop("runner_t0", None)
+                    if "runner_time_ms" not in meta:
+                        meta["runner_time_ms"] = elapsed_ms
                     with exceptions_logged():
                         event.metadata.pop(PPC.RUNNER_TIME_SEC.value, None)
                         self._signals.frameReady.emit(img, event, meta)
@@ -311,8 +318,8 @@ class MDARunner:
         self._paused_time = 0.0
         self._sequence = sequence
 
-        meta = self._engine.setup_sequence(sequence) or {}
-        self._signals.sequenceStarted.emit(sequence, meta)
+        meta = self._engine.setup_sequence(sequence)
+        self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
         return self._engine
 

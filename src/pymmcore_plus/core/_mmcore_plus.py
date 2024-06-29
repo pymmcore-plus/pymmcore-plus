@@ -1480,7 +1480,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         self,
         img: np.ndarray,
         ncomponents: int | None = None,
-        numChannel: int | None = None,
     ) -> np.ndarray:
         """Fix img shape/dtype based on `self.getNumberOfComponents()`.
 
@@ -1674,7 +1673,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if numChannel is not None
             else super().getImage()
         )
-        return self.fixImage(img, numChannel=numChannel) if fix else img
+        return self.fixImage(img) if fix else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition.

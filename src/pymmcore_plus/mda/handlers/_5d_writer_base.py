@@ -102,6 +102,7 @@ class _5DWriterBase(Generic[T]):
         self, seq: useq.MDASequence, meta: SummaryMetaV1 | object = _NULL
     ) -> None:
         """On sequence started, simply store the sequence."""
+        # this is here for backwards compatibility with experimental viewer widget.
         if meta is _NULL:  # pragma: no cover
             warnings.warn(
                 "calling `sequenceStarted` without metadata as the second argument is "
@@ -157,8 +158,8 @@ class _5DWriterBase(Generic[T]):
 
         index = tuple(event.index[k] for k in pos_sizes)
         t = event.index.get("t", 0)
-        if t >= len(self._timestamps) and "runner_time" in meta:
-            self._timestamps.append(meta["runner_time"])
+        if t >= len(self._timestamps) and "runner_time_ms" in meta:
+            self._timestamps.append(meta["runner_time_ms"])
         self.write_frame(ary, index, frame)
         self.store_frame_metadata(key, event, meta)
 

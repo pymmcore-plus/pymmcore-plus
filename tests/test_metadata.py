@@ -60,7 +60,7 @@ def test_metadata_during_mda(
     _seq, _meta = seq_started_mock.call_args.args
     assert _seq == seq
     assert isinstance(_meta, dict)
-    assert _meta["format"] == "summary-dict-full"
+    assert _meta["format"] == "summary-dict"
     assert isinstance(_meta["mda_sequence"], useq.MDASequence)
     dumped = dumps(_meta)
     assert isinstance(to_builtins(_meta), dict)
@@ -73,10 +73,50 @@ def test_metadata_during_mda(
     assert isinstance(_frame, np.ndarray)
     assert isinstance(_event, useq.MDAEvent)
     assert isinstance(_meta, dict)
-    assert _meta["format"] == "frame-dict-minimal"
+    assert _meta["format"] == "frame-dict"
     assert any(pv["dev"] == "Excitation" for pv in _meta["property_values"])
     dumped = dumps(_meta, indent=2)
     assert isinstance(to_builtins(_meta), dict)
     assert isinstance(dumped, bytes)
     loaded = loader(dumped)
     assert isinstance(loaded, dict)
+
+
+@pytest.mark.parametrize("sequenced", [True, False], ids=["sequenced", "not-sequenced"])
+def test_multicam(core: CMMCorePlus, sequenced: bool) -> None:
+    mc = "YoMulti"
+    core.loadDevice("Camer2", "DemoCamera", "DCam")
+    core.loadDevice(mc, "Utilities", "Multi Camera")
+    core.initializeDevice(mc)
+    core.initializeDevice("Camer2")
+    core.setProperty("Camer2", "BitDepth", "16")
+    core.setProperty(mc, "Physical Camera 1", "Camera")
+    core.setProperty(mc, "Physical Camera 2", "Camer2")
+    core.setCameraDevice(mc)
+
+    mda = useq.MDASequence(
+        channels=["Cy5", "FITC"],
+        time_plan={"interval": 0, "loops": 3},
+        axis_order="pctz",
+        stage_positions=[(222, 1, 1), (111, 0, 0)],
+    )
+
+    summary_mock = Mock()
+    frame_mock = Mock()
+
+    core.mda.engine.use_hardware_sequencing = sequenced
+    core.mda.events.sequenceStarted.connect(summary_mock)
+    core.mda.events.frameReady.connect(frame_mock)
+    core.mda.run(mda)
+
+    assert summary_mock.call_count == 1
+    assert frame_mock.call_count == len(list(mda)) * core.getNumberOfCameraChannels()
+    for call in summary_mock.call_args_list:
+        meta = call.args[1]
+        assert meta["format"] == "summary-dict"
+    time_stamps = []
+    for call in frame_mock.call_args_list:
+        meta = call.args[2]
+        assert meta["format"] == "frame-dict"
+        assert ("camera_metadata" in meta) is sequenced
+        time_stamps.append(meta["runner_time_ms"])

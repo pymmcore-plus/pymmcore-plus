@@ -15,6 +15,7 @@ __all__ = [
     "FocusDirection",
     "Keyword",
     "Metadata",
+    "PixelFormat",
     "PortType",
     "PropertyType",
 ]
@@ -32,6 +33,7 @@ from ._constants import (
     DeviceType,
     FocusDirection,
     Keyword,
+    PixelFormat,
     PortType,
     PropertyType,
 )

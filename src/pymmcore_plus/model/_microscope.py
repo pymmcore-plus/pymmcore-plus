@@ -186,7 +186,8 @@ class Microscope:
             pixel_size_group=PixelSizeGroup.from_metadata(
                 summary_meta["pixel_size_configs"]
             ),
-            config_file=summary_meta["system_info"].get("system_configuration") or "",
+            config_file=summary_meta["system_info"].get("system_configuration_file")
+            or "",
         )
 
     # ------------- Core-interacting methods -------------

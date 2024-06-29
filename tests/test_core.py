@@ -148,7 +148,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
     core.events.exposureChanged.connect(exp_mock)
 
     with qtbot.waitSignal(core.mda._signals.sequenceFinished):
-        core.run_mda(mda)
+        core.mda.run(mda)
     assert fr_mock.call_count == len(list(mda))
     for event, _call in zip(mda, fr_mock.call_args_list):
         assert isinstance(_call.args[0], np.ndarray)
@@ -163,11 +163,11 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
         "format",
         "pixel_size_configs",
         "position",
-        "image_info",
         "devices",
         "version",
+        "image_infos",
         "system_info",
-        "date_time",
+        "datetime",
     }
     sf_mock.assert_called_once_with(mda)
     xystage_mock.assert_called_with("XY", 1.0, 1.0)
