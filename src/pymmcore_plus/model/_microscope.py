@@ -156,7 +156,7 @@ class Microscope:
         self.mark_clean()
 
     @classmethod
-    def from_metadata(cls, summary_meta: SummaryMetaV1) -> Microscope:
+    def from_summary_metadata(cls, summary_meta: SummaryMetaV1) -> Microscope:
         """Create a Microscope model from summary metadata.
 
         This may be used to load a model from summary metadata, such as as written

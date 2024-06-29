@@ -47,7 +47,7 @@ def test_model_from_summary_metadata(tmp_path: Path) -> None:
     core = CMMCorePlus()
     core.loadSystemConfiguration()
     summary = summary_metadata(core)
-    model = Microscope.from_metadata(summary)
+    model = Microscope.from_summary_metadata(summary)
     dest = tmp_path / "model.cfg"
     model.save(dest)
     core.loadSystemConfiguration(dest)
