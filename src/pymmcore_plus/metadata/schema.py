@@ -394,7 +394,7 @@ class SummaryMetaV1(TypedDict):
 
     format: Literal["summary-dict"]
     version: Literal["1.0"]
-    datetime: str
+    datetime: NotRequired[str]
     devices: Tuple[DeviceInfo, ...]
     system_info: SystemInfo
     image_infos: Tuple[ImageInfo, ...]

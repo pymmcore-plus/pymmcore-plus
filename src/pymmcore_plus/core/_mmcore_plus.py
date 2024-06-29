@@ -2033,7 +2033,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         print("Adapter path:", ",".join(self.getDeviceAdapterSearchPaths()))
         print_tabular_data(data, sort=sort)
 
-    def state(self, *, cached: bool = True, **_kwargs: Any) -> SummaryMetaV1:
+    def state(
+        self, *, cached: bool = True, include_time: bool = False, **_kwargs: Any
+    ) -> SummaryMetaV1:
         """Return info on the current state of the core."""
         if _kwargs:
             keys = ", ".join(_kwargs.keys())
@@ -2042,7 +2044,7 @@ class CMMCorePlus(pymmcore.CMMCore):
                 "Please update your code as this may be an error in the future.",
                 stacklevel=2,
             )
-        return summary_metadata(self, cached=cached)
+        return summary_metadata(self, include_time=include_time, cached=cached)
 
     @contextmanager
     def _property_change_emission_ensured(
