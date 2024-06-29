@@ -14,7 +14,12 @@ from ._property import Property
 if TYPE_CHECKING:
     from typing import Any, Callable, Container, Iterable
 
-    from typing_extensions import TypeAlias  # py310
+    from typing_extensions import (
+        Self,  # py311
+        TypeAlias,  # py310
+    )
+
+    from pymmcore_plus.mda.metadata.schema import DeviceInfo
 
     from ._core_link import ErrCallback
     from ._microscope import Microscope
@@ -83,6 +88,20 @@ class Device(CoreObject):
     # These are adapter_name (NOT loaded device labels) of child devices
     # from the same library that can be loaded into this hub.
     children: tuple[str, ...] = field(default_factory=tuple)
+
+    @classmethod
+    def from_metadata(cls, metadata: DeviceInfo) -> Self:
+        return cls(
+            name=metadata["label"],
+            library=metadata["library"],
+            adapter_name=metadata["name"],
+            description=metadata["description"],
+            device_type=DeviceType[metadata["type"]],
+            parent_label=metadata.get("parent_label") or "",
+            labels=tuple(metadata.get("labels", [])),
+            focus_direction=FocusDirection[metadata.get("focus_direction", "Unknown")],
+            children=tuple(metadata.get("child_names", [])),
+        )
 
     def __post_init__(self) -> None:
         if self.name == Keyword.CoreDevice or self.device_type == DeviceType.Core:

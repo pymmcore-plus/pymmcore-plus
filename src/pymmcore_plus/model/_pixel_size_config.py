@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field, fields
-from typing import TYPE_CHECKING, Any, Container, Iterable, MutableMapping
+from typing import TYPE_CHECKING
 
 from ._config_group import ConfigGroup, ConfigPreset, Setting
 
 if TYPE_CHECKING:
-    from typing import Final
+    from typing import Any, Container, Final, Iterable, MutableMapping
 
-    from typing_extensions import TypeAlias  # py310
+    from typing_extensions import (
+        Self,  # py311
+        TypeAlias,  # py310
+    )
 
     from pymmcore_plus import CMMCorePlus
+    from pymmcore_plus.mda.metadata.schema import PixelSizeConfigPreset
 
     from ._core_link import ErrCallback
 
@@ -26,6 +30,14 @@ class PixelSizePreset(ConfigPreset):
 
     pixel_size_um: float = 0.0
     affine: AffineTuple = DEFAULT_AFFINE
+
+    @classmethod
+    def from_metadata(cls, meta: PixelSizeConfigPreset) -> Self:  # type: ignore [override]
+        obj = super().from_metadata(meta)
+        obj.pixel_size_um = meta["pixel_size_um"]
+        if "pixel_size_affine" in meta:
+            obj.affine = meta["pixel_size_affine"]
+        return obj
 
     def __rich_repr__(self, *, defaults: bool = False) -> Iterable[tuple[str, Any]]:
         """Make AvailableDevices look a little less verbose."""
@@ -44,6 +56,16 @@ class PixelSizeGroup(ConfigGroup):
 
     name: str = PIXEL_SIZE_GROUP
     presets: MutableMapping[str, PixelSizePreset] = field(default_factory=dict)  # type: ignore
+
+    @classmethod
+    def from_metadata(cls, meta: tuple[PixelSizeConfigPreset, ...]) -> Self:  # type: ignore [override]
+        """Create a PixelSizeGroup from metadata."""
+        return cls(
+            presets={
+                preset_info["name"]: PixelSizePreset.from_metadata(preset_info)
+                for preset_info in meta
+            }
+        )
 
     @classmethod
     def create_from_core(
