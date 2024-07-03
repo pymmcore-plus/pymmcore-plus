@@ -408,6 +408,35 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return FocusDirection(super().getFocusDirection(stageLabel))
 
+    def getInstalledDevices(
+        self, hubLabel: str, force: bool = False
+    ) -> tuple[str, ...]:
+        """Performs auto-detection of child devices that are attached to a Hub device.
+
+        !!! important
+
+            This method may only be called once, and it is generally best to call it
+            only after the device has been initialized, otherwise it may *permanently*
+            return an empty tuple. pymmcore-plus prevents you from calling this before
+            initialization. Use `force=True` to override this safeguard.
+
+        **Why Override?** To prevent calling this method before initialization, which
+        can lead to unexpected behavior.
+        """
+        if (
+            self.getDeviceInitializationState(hubLabel)
+            is DeviceInitializationState.Uninitialized
+            and not force
+        ):
+            warnings.warn(
+                "Not calling getInstalledDevices before initializing the hub device. "
+                "Use force=True to override this safeguard.",
+                stacklevel=2,
+            )
+            return ()
+
+        return super().getInstalledDevices(hubLabel)
+
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         """Return the intrinsic property type for a given device and property.
 

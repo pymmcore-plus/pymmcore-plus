@@ -641,3 +641,13 @@ def test_snap_rgb(core: CMMCorePlus) -> None:
         dtype="uint8",
     )
     assert np.array_equal(img[::64, -1], expect)
+
+
+def test_guard_get_devices():
+    core = CMMCorePlus()
+    core.loadDevice("Hub", "DemoCamera", "DHub")
+    with pytest.warns(match="Not calling getInstalledDevices"):
+        assert core.getInstalledDevices("Hub") == ()
+
+    core.initializeDevice("Hub")
+    assert "DCam" in core.getInstalledDevices("Hub")
