@@ -193,6 +193,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         if _instance is None:
             _instance = self
 
+        if hasattr("self", "enableFeature"):
+            self.enableFeature("StrictInitializationChecks", True)
+
         # TODO: test this on windows ... writing to the same file may be an issue there
         if logfile := current_logfile(logger):
             self.setPrimaryLogFile(str(logfile))
