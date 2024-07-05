@@ -195,7 +195,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         try:
             self.enableFeature("StrictInitializationChecks", True)
-        except Exception as e:
+        except Exception as e:  # pragma: no cover
             logger.warn(
                 "Failed to enable StrictInitializationChecks: %s", e, exc_info=True
             )
