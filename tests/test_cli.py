@@ -164,7 +164,7 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
             metadata={"test": "test"},
         )
         useq_file = tmp_path / "test.json"
-        useq_file.write_text(seq.json())
+        useq_file.write_text(seq.model_dump_json())
         cmd.append(str(useq_file))
 
         for field_name, val in args.items():
