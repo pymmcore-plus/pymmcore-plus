@@ -188,7 +188,7 @@ def use_micromanager(
         `find_micromanager`. If no match is found, a `FileNotFoundError` will be raised.
     """
     if path is None:
-        if pattern is None:
+        if pattern is None:  # pragma: no cover
             raise ValueError("One of 'path' or 'pattern' must be provided")
         if (path := _match_mm_pattern(pattern)) is None:
             options = "\n".join(find_micromanager(return_first=False))
@@ -196,13 +196,13 @@ def use_micromanager(
                 f"No micromanager path found matching: {pattern!r}. Options:\n{options}"
             )
 
-    if not isinstance(path, Path):
+    if not isinstance(path, Path):  # pragma: no cover
         path = Path(path)
 
     path = path.expanduser().resolve()
-    if not path.exists():
-        raise FileNotFoundError(f"Path not found: {path!r}")
-    if not path.is_dir():
+    if not path.is_dir():  # pragma: no cover
+        if not path.exists():
+            raise FileNotFoundError(f"Path not found: {path!r}")
         raise NotADirectoryError(f"Not a directory: {path!r}")
 
     USER_DATA_MM_PATH.mkdir(parents=True, exist_ok=True)
