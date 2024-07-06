@@ -95,7 +95,8 @@ def _list() -> None:
             print(f":file_folder:[bold green] {parent}")
             for item in items:
                 bullet = "   [bold yellow]*" if first else "   •"
-                print(f"{bullet} [cyan]{item}")
+                using = " [bold blue](active)" if first else ""
+                print(f"{bullet} [cyan]{item}{using}")
                 first = False
     else:
         print(":x: [bold red]There are no pymmcore-plus Micro-Manager files.")
@@ -381,6 +382,31 @@ def info() -> None:
     length = max(len(k) for k in info) + 1
     for key, value in info.items():
         typer.secho(f"{key:{length}}: {value}")
+
+
+@app.command()
+def use(
+    pattern: str = typer.Argument(
+        ...,
+        help="Path to an existing directory, or pattern to match against installations "
+        "found by `mmcore list`",
+    ),
+) -> None:
+    """Change the currently used Micro-manager version/path."""
+    from pymmcore_plus._util import use_micromanager
+
+    _pth = Path(pattern)
+    if _pth.exists():
+        if not _pth.is_dir():
+            raise typer.BadParameter("must be a directory")
+        result = use_micromanager(path=_pth)
+    else:
+        try:
+            result = use_micromanager(pattern=pattern)
+        except FileNotFoundError as e:
+            raise typer.BadParameter(str(e)) from None
+
+    typer.secho(f"using {result}", fg=typer.colors.BRIGHT_GREEN)
 
 
 def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
