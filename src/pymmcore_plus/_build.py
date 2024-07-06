@@ -1,5 +1,7 @@
 """Clone the micro-manager source code from GitHub and build dev devices."""
 
+from __future__ import annotations
+
 import json
 import os
 import platform
