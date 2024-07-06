@@ -72,6 +72,7 @@ docs = [
     "mkdocs-material",
     "mkdocstrings ==0.22.0",
     "mkdocstrings-python ==1.1.2",
+    "mkdocs-typer ==0.0.3"
     # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
 
