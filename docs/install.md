@@ -81,26 +81,52 @@ They can be installed in two ways:
     the corresponding date, roughly
     [here](https://github.com/micro-manager/mmCoreAndDevices/blob/main/MMDevice/MMDevice.h#L30)
 
-!!! tip
+## Show the currently used Micro-Manager installation
 
-    By default, `pymmcore-plus` will look for a `Micro-Manager` folder in the
-    default install location. On Windows this is `C:\Program Files\`, on macOS it is
-    `/Applications/` and on Linux it is `/usr/local/lib/`. To override these default
-    device adapter search path, set the `MICROMANAGER_PATH` environment variable
-    (e.g. `export MICROMANAGER_PATH=/path/to/installation`).
+To see which micro-manager installation `pymmcore-plus` is using, you
+can run:
 
-    To see which micro-manager installation `pymmcore-plus` is using, you
-    can run:
+```shell
+mmcore list
+```
 
-    ```shell
-    mmcore list
-    ```
+or, if you didn't install with the `cli` extra, you can use
+[`find_micromanager`][pymmcore_plus.find_micromanager]:
 
-    or, if you didn't install with the `cli` extra:
+```shell
+python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
+```
 
-    ```shell
-    python -c "from pymmcore_plus import find_micromanager; print(find_micromanager())"
-    ```
+## Set the active Micro-Manager installation
+
+By default, `pymmcore-plus` will look for a `Micro-Manager` folder in the
+default install location. On Windows this is `C:\Program Files\`, on macOS it is
+`/Applications/` and on Linux it is `/usr/local/lib/`. To override these default
+device adapter search path, set the `MICROMANAGER_PATH` environment variable
+
+```shell
+export MICROMANAGER_PATH=/path/to/installation
+```
+
+If you want to permanently set the Micro-Manager installation path that
+`pymmcore-plus` uses, you can use the `mmcore use` command:
+
+```shell
+mmcore use <some path or pattern>
+```
+
+... where `<some path or pattern>` is either a path to an existing directory
+(containing micro-manager device adapters) or a pattern to match against
+directories returned by [`find_micromanager`][pymmcore_plus.find_micromanager].
+
+Alternatively, you can use the
+[`use_micromanager`][pymmcore_plus.use_micromanager] function, passing *either*
+a path to an existing directory, or a pattern to match against directories
+returned by [`find_micromanager`][pymmcore_plus.find_micromanager]:
+
+```shell
+python -c "from pymmcore_plus import use_micromanager; use_micromanager(path=..., pattern=...)"
+```
 
 ### On Linux
 
