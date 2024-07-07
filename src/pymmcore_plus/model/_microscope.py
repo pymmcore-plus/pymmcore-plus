@@ -15,6 +15,7 @@ from ._pixel_size_config import PixelSizeGroup
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
+    from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     from ._core_link import ErrCallback
     from ._property import Property
@@ -126,7 +127,7 @@ class Microscope:
     # ------------- Config-file methods -------------
 
     @classmethod
-    def create_from_config(cls, config_file: str) -> Microscope:
+    def create_from_config(cls, config_file: str | Path) -> Microscope:
         obj = cls()
         obj.load_config(config_file)
         obj.mark_clean()
@@ -153,6 +154,39 @@ class Microscope:
             dump(self, fh)
 
         self.mark_clean()
+
+    @classmethod
+    def from_summary_metadata(cls, summary_meta: SummaryMetaV1) -> Microscope:
+        """Create a Microscope model from summary metadata.
+
+        This may be used to load a model from summary metadata, such as as written
+        during the course of a Multi-Dimensional Acquisition.  This is useful for
+        restoring the state of a microscope from a specific experiment, or writing
+        out a cfg file that can be used to restore the state of the microscope.
+        """
+        core_device = next(
+            (d for d in summary_meta["devices"] if d["name"] == Keyword.CoreDevice),
+            None,
+        )
+        if core_device is None:
+            raise ValueError("CoreDevice not found in metadata")
+        return cls(
+            core_device=CoreDevice.from_metadata(core_device),
+            devices=[
+                Device.from_metadata(d)
+                for d in summary_meta["devices"]
+                if d["name"] != Keyword.CoreDevice
+            ],
+            config_groups={
+                grp["name"]: ConfigGroup.from_metadata(grp)
+                for grp in summary_meta["config_groups"]
+            },
+            pixel_size_group=PixelSizeGroup.from_metadata(
+                summary_meta["pixel_size_configs"]
+            ),
+            config_file=summary_meta["system_info"].get("system_configuration_file")
+            or "",
+        )
 
     # ------------- Core-interacting methods -------------
 

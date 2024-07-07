@@ -18,11 +18,12 @@ except ImportError:  # pragma: no cover
     ) from None
 
 import pymmcore_plus
+from pymmcore_plus._build import DEFAULT_PACKAGES, build
 from pymmcore_plus._logger import configure_logging
 from pymmcore_plus._util import USER_DATA_MM_PATH
 from pymmcore_plus.install import PLATFORM
 
-app = typer.Typer(no_args_is_help=True)
+app = typer.Typer(name="mmcore", no_args_is_help=True)
 
 
 def _show_version_and_exit(value: bool) -> None:
@@ -47,7 +48,7 @@ def _main(
 ) -> None:
     """mmcore: pymmcore-plus command line (v{version}).
 
-    For additional help on a specific command: type 'mmcore [command] --help'
+    For additional help on a specific command: type `mmcore [command] --help`
     """
     # fix for windows CI encoding and emoji printing
     if getattr(sys.stdout, "encoding", None) != "utf-8":
@@ -55,10 +56,13 @@ def _main(
             sys.stdout.reconfigure(encoding="utf-8")  # type: ignore [attr-defined]
 
 
-_main.__doc__ = typer.style(
-    (_main.__doc__ or "").format(version=pymmcore_plus.__version__),
-    fg=typer.colors.BRIGHT_YELLOW,
-)
+if "mkdocs" in sys.argv[0]:  # pragma: no cover
+    _main.__doc__ = (_main.__doc__ or "").replace(" (v{version})", "")
+else:
+    _main.__doc__ = typer.style(
+        (_main.__doc__ or "").format(version=pymmcore_plus.__version__),
+        fg=typer.colors.BRIGHT_YELLOW,
+    )
 
 
 @app.command()
@@ -91,7 +95,8 @@ def _list() -> None:
             print(f":file_folder:[bold green] {parent}")
             for item in items:
                 bullet = "   [bold yellow]*" if first else "   •"
-                print(f"{bullet} [cyan]{item}")
+                using = " [bold blue](active)" if first else ""
+                print(f"{bullet} [cyan]{item}{using}")
                 first = False
     else:
         print(":x: [bold red]There are no pymmcore-plus Micro-Manager files.")
@@ -100,7 +105,11 @@ def _list() -> None:
 
 @app.command()
 def mmstudio() -> None:  # pragma: no cover
-    """Run the Java Micro-Manager GUI."""
+    """Run the Java Micro-Manager GUI.
+
+    This command will attempt to locate an execute an ImageJ application found in
+    the active Micro-Manager directory.
+    """
     mm = pymmcore_plus.find_micromanager()
     app = (
         next((x for x in Path(mm).glob("ImageJ*") if not str(x).endswith("cfg")), None)
@@ -137,7 +146,7 @@ def install(
         show_default=False,
     ),
 ) -> None:
-    """Install Micro-Manager Device adapters."""
+    """Install Micro-Manager Device adapters from <https://download.micro-manager.org>."""
     import pymmcore_plus.install
 
     if plain_output:
@@ -286,7 +295,7 @@ def run(
 @app.command()
 def build_dev(
     devices: Optional[List[str]] = typer.Argument(
-        None, help="Device adapters to build. Defaults to DemoCamera and Utilities."
+        None, help=f"Device adapters to build. Defaults to {DEFAULT_PACKAGES}"
     ),
     dest: Path = typer.Option(
         USER_DATA_MM_PATH,
@@ -305,9 +314,10 @@ def build_dev(
         "If not specified, will prompt.",
     ),
 ) -> None:  # pragma: no cover
-    """Build DemoCamera and Utility adapters from source for apple silicon."""
-    from pymmcore_plus._build import DEFAULT_PACKAGES, build
+    """Build Micro-Manager device adapters from the git repo.
 
+    Currently only supports macos and linux.
+    """
     devices = DEFAULT_PACKAGES if not devices else devices
     try:
         build(dest, overwrite=overwrite, devices=devices)
@@ -372,6 +382,31 @@ def info() -> None:
     length = max(len(k) for k in info) + 1
     for key, value in info.items():
         typer.secho(f"{key:{length}}: {value}")
+
+
+@app.command()
+def use(
+    pattern: str = typer.Argument(
+        ...,
+        help="Path to an existing directory, or pattern to match against installations "
+        "found by `mmcore list`",
+    ),
+) -> None:
+    """Change the currently used Micro-manager version/path."""
+    from pymmcore_plus._util import use_micromanager
+
+    _pth = Path(pattern)
+    if _pth.exists():
+        if not _pth.is_dir():
+            raise typer.BadParameter("must be a directory")
+        result = use_micromanager(path=_pth)
+    else:
+        try:
+            result = use_micromanager(pattern=pattern)
+        except FileNotFoundError as e:
+            raise typer.BadParameter(str(e)) from None
+
+    typer.secho(f"using {result}", fg=typer.colors.BRIGHT_GREEN)
 
 
 def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:

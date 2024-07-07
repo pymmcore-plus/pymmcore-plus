@@ -6,6 +6,11 @@ on:
   pull_request:
     branches:
       - main
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
+
+concurrency: preview-${{ github.ref }}
 
 jobs:
   build:

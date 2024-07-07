@@ -54,6 +54,7 @@ dependencies = [
 cli = ["typer >=0.4.2", "rich >=10.2.0"]
 io = ["tifffile >=2021.6.14", "zarr >=2.2"]
 test = [
+    "msgspec",
     "msgpack",
     "pytest-cov >=4",
     "pytest-qt >=4",
@@ -71,6 +72,7 @@ docs = [
     "mkdocs-material",
     "mkdocstrings ==0.22.0",
     "mkdocstrings-python ==1.1.2",
+    "mkdocs-typer ==0.0.3"
     # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
 

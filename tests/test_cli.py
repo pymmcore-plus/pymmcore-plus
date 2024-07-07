@@ -19,7 +19,7 @@ try:
 except ImportError:
     pytest.skip("cli extras not available", allow_module_level=True)
 
-from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, install
+from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, _util, install
 from useq import MDASequence
 
 if TYPE_CHECKING:
@@ -91,7 +91,7 @@ def test_basic_install(tmp_path: Path) -> None:
 
 
 @pytest.mark.skipif(platform.system() == "Linux", reason="Not supported on Linux")
-def test_available_versions(tmp_path: Path) -> None:
+def test_available_versions() -> None:
     """installing with an erroneous version should fail and show available versions."""
     result = runner.invoke(app, ["install", "-r", "xxxx"])
     assert result.exit_code > 0
@@ -123,13 +123,41 @@ def test_clean(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
-def test_list(tmp_path: Path) -> None:
+def test_list() -> None:
     """Just shows what's in the user data folder."""
     result = runner.invoke(app, ["list"])
     if result.exit_code != 0:
         raise AssertionError(
             "mmcore list failed... is Micro-Manager installed?  (run mmcore install)"
         )
+
+
+def test_cli_use(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    mm = tmp_path / "mm"
+    current = mm / ".current"
+    monkeypatch.setattr(_util, "USER_DATA_MM_PATH", mm)
+    monkeypatch.setattr(_util, "CURRENT_MM_PATH", current)
+
+    # provide existing path
+    fake = tmp_path / "fake-123456"
+    fake.mkdir()
+    runner.invoke(app, ["use", str(fake)])
+    assert current.read_text() == str(fake)
+    assert _util.find_micromanager() == str(fake)
+
+    # match based on pattern
+    runner.invoke(app, ["use", "1234"])
+    assert current.read_text() == str(fake)
+
+    # error if no match
+    result = runner.invoke(app, ["use", "xyz"])
+    assert result.exit_code > 0
+
+    # error if not directory
+    file = tmp_path / "file.txt"
+    file.touch()
+    result = runner.invoke(app, ["use", str(file)])
+    assert result.exit_code > 0
 
 
 ARGS: list[dict[str, dict | str]] = [
@@ -164,7 +192,7 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
             metadata={"test": "test"},
         )
         useq_file = tmp_path / "test.json"
-        useq_file.write_text(seq.json())
+        useq_file.write_text(seq.model_dump_json())
         cmd.append(str(useq_file))
 
         for field_name, val in args.items():

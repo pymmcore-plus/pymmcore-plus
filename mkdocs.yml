@@ -38,6 +38,8 @@ nav:
           - api/constants.md
           - Metadata: api/metadata.md
           - Utilities: api/utils.md
+      - metadata.md
+      - cli.md
       - troubleshooting.md
       - contributing.md
   - useq-schema: /useq-schema/
@@ -90,6 +92,7 @@ markdown_extensions:
       emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - pymdownx.tabbed:
       alternate_style: true
+  - mkdocs-typer
 
 hooks:
   - docs/_hooks.py

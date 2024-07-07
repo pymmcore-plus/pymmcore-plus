@@ -9,7 +9,7 @@ except PackageNotFoundError:  # pragma: no cover
 
 
 from ._logger import configure_logging
-from ._util import find_micromanager
+from ._util import find_micromanager, use_micromanager
 from .core import (
     CFGCommand,
     CFGGroup,
@@ -26,6 +26,7 @@ from .core import (
     FocusDirection,
     Keyword,
     Metadata,
+    PixelFormat,
     PortType,
     PropertyType,
 )
@@ -55,6 +56,8 @@ __all__ = [
     "Keyword",
     "Metadata",
     "PCoreSignaler",
+    "PixelFormat",
     "PortType",
     "PropertyType",
+    "use_micromanager",
 ]

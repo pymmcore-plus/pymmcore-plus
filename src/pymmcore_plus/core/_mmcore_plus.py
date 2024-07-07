@@ -31,6 +31,7 @@ from psygnal import SignalInstance
 from pymmcore_plus._logger import current_logfile, logger
 from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
+from pymmcore_plus.metadata.functions import summary_metadata
 
 from ._adapter import DeviceAdapter
 from ._config import Configuration
@@ -39,6 +40,7 @@ from ._constants import (
     DeviceDetectionStatus,
     DeviceInitializationState,
     DeviceType,
+    FocusDirection,
     PixelType,
     PropertyType,
 )
@@ -46,7 +48,6 @@ from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from ._sequencing import can_sequence_events
-from ._state import core_state
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
@@ -56,8 +57,7 @@ if TYPE_CHECKING:
     from useq import MDAEvent
 
     from pymmcore_plus.mda._runner import SingleOutput
-
-    from ._state import StateDict
+    from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
@@ -192,6 +192,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         global _instance
         if _instance is None:
             _instance = self
+
+        if hasattr("self", "enableFeature"):
+            self.enableFeature("StrictInitializationChecks", True)
 
         # TODO: test this on windows ... writing to the same file may be an issue there
         if logfile := current_logfile(logger):
@@ -399,6 +402,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         interpretable than the raw `int` returned by `pymmcore`
         """
         return DeviceType(super().getDeviceType(label))
+
+    def getFocusDirection(self, stageLabel: str) -> FocusDirection:
+        """Return device type for a given device.
+
+        **Why Override?** The returned [`pymmcore_plus.FocusDirection`][] enum is more
+        interpretable than the raw `int` returned by `pymmcore`
+        """
+        return FocusDirection(super().getFocusDirection(stageLabel))
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         """Return the intrinsic property type for a given device and property.
@@ -621,7 +632,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     @synchronized(_lock)
     def popNextImageAndMD(
-        self, channel: int | None = None, slice: int | None = None, *, fix: bool = True
+        self, channel: int = 0, slice: int = 0, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
         """Gets and removes the next image (and metadata) from the circular buffer.
 
@@ -651,10 +662,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             Image and metadata
         """
         md = Metadata()
-        if channel is not None and slice is not None:
-            img = super().popNextImageMD(channel, slice, md)
-        else:
-            img = super().popNextImageMD(md)
+        img = super().popNextImageMD(channel, slice, md)
         return (self.fixImage(img) if fix else img, md)
 
     @synchronized(_lock)
@@ -1470,7 +1478,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         old_engine = self.mda.set_engine(engine)
         self.events.mdaEngineRegistered.emit(engine, old_engine)
 
-    def fixImage(self, img: np.ndarray, ncomponents: int | None = None) -> np.ndarray:
+    def fixImage(
+        self,
+        img: np.ndarray,
+        ncomponents: int | None = None,
+    ) -> np.ndarray:
         """Fix img shape/dtype based on `self.getNumberOfComponents()`.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -1497,6 +1509,28 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
             img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
         return img
+
+    def getPhysicalCameraDevice(self, channel_index: int = 0) -> str:
+        """Return the name of the actual camera device for a given channel index.
+
+        :sparkles: *This method is new in `CMMCorePlus`.* It provides a convenience
+        for accessing the name of the actual camera device when using the multi-camera
+        utility.
+        """
+        cam_dev = self.getCameraDevice()
+        # best as I can tell, this is a hard-coded string in Utilities/MultiCamera.cpp
+        # (it also appears in ArduinoCounter.cpp).  This appears to be "the way"
+        # to get at the original camera when using the multi-camera utility.
+        prop_name = f"Physical Camera {channel_index+1}"
+        if self.hasProperty(cam_dev, prop_name):
+            return self.getProperty(cam_dev, prop_name)
+        if channel_index > 0:
+            warnings.warn(
+                f"Camera {cam_dev} does not have a property {prop_name}. "
+                f"Cannot get channel_index={channel_index}",
+                stacklevel=2,
+            )
+        return cam_dev
 
     def getTaggedImage(self, channel_index: int = 0) -> TaggedImage:
         """Return getImage as named tuple with metadata.
@@ -1570,15 +1604,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             tags["Binning"] = self.getProperty(self.getCameraDevice(), "Binning")
 
         if channel_index is not None:
-            if "CameraChannelIndex" not in tags:
-                tags["CameraChannelIndex"] = channel_index
-                tags["ChannelIndex"] = channel_index
-            if "Camera" not in tags:
-                core_cam = tags.get("Core-Camera")
-                phys_cam_key = f"{core_cam}-Physical Camera {channel_index+1}"
-                if phys_cam_key in tags:
-                    tags["Camera"] = tags[phys_cam_key]
-                    # tags["Channel"] = tags[phys_cam_key] # ?? why did MMCoreJ do this?
+            tags["CameraChannelIndex"] = channel_index
+            tags["ChannelIndex"] = channel_index
+            tags["Camera"] = self.getPhysicalCameraDevice(channel_index)
 
         # these are added by AcqEngJ
         # yyyy-MM-dd HH:mm:ss.mmmmmm  # NOTE AcqEngJ omits microseconds
@@ -2009,35 +2037,17 @@ class CMMCorePlus(pymmcore.CMMCore):
         print_tabular_data(data, sort=sort)
 
     def state(
-        self,
-        *,
-        devices: bool = True,
-        image: bool = True,
-        system_info: bool = False,
-        system_status: bool = False,
-        config_groups: bool | Sequence[str] = True,
-        position: bool = False,
-        autofocus: bool = False,
-        pixel_size_configs: bool = False,
-        device_types: bool = False,
-        cached: bool = True,
-        error_value: Any = None,
-    ) -> StateDict:
+        self, *, cached: bool = True, include_time: bool = False, **_kwargs: Any
+    ) -> SummaryMetaV1:
         """Return info on the current state of the core."""
-        return core_state(
-            self,
-            devices=devices,
-            image=image,
-            system_info=system_info,
-            system_status=system_status,
-            config_groups=config_groups,
-            position=position,
-            autofocus=autofocus,
-            pixel_size_configs=pixel_size_configs,
-            device_types=device_types,
-            cached=cached,
-            error_value=error_value,
-        )
+        if _kwargs:
+            keys = ", ".join(_kwargs.keys())
+            warnings.warn(
+                f"CMMCorePlus.state no longer takes arguments: {keys}. Ignoring."
+                "Please update your code as this may be an error in the future.",
+                stacklevel=2,
+            )
+        return summary_metadata(self, include_time=include_time, cached=cached)
 
     @contextmanager
     def _property_change_emission_ensured(
@@ -2061,8 +2071,18 @@ class CMMCorePlus(pymmcore.CMMCore):
             and self.getDeviceType(device) is DeviceType.StateDevice
         ):
             properties = STATE_PROPS
+        try:
+            before = [self.getProperty(device, p) for p in properties]
+        except Exception as e:
+            logger.error(
+                "Error getting properties %s on %s: %s. Cannot ensure signal emission",
+                properties,
+                device,
+                e,
+            )
+            yield
+            return
 
-        before = [self.getProperty(device, p) for p in properties]
         with _blockSignal(self.events, self.events.propertyChanged):
             yield
         after = [self.getProperty(device, p) for p in properties]

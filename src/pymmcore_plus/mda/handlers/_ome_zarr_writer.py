@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
 
 import numpy as np
 
+from pymmcore_plus.metadata.serialize import to_builtins
+
 from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
@@ -193,7 +195,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         while self.frame_metadatas:
             key, metas = self.frame_metadatas.popitem()
             if key in self.position_arrays:
-                self.position_arrays[key].attrs["frame_meta"] = metas
+                self.position_arrays[key].attrs["frame_meta"] = to_builtins(metas)
 
         if self._minify_metadata:
             self._minify_zattrs_metadata()
@@ -209,12 +211,12 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
             return
 
         sizes = {**seq.sizes}
-        px = 1
+        px: float = 1.0
         if self.frame_metadatas:
             key, metas = next(iter(self.frame_metadatas.items()))
             if key in self.position_arrays:
                 shape = self.position_arrays[key].shape
-                px = metas[-1].get("PixelSizeUm", 1)
+                px = metas[-1].get("pixel_size_um", 1)
                 with suppress(IndexError):
                     sizes.update(y=shape[-2], x=shape[-1])
 
@@ -274,7 +276,10 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         self._group.attrs["multiscales"] = scales
         ary.attrs["_ARRAY_DIMENSIONS"] = dims
         if seq := self.current_sequence:
-            ary.attrs["useq_MDASequence"] = json.loads(seq.json(exclude_unset=True))
+            ary.attrs["useq_MDASequence"] = to_builtins(
+                seq.model_dump(exclude_unset=True)
+            )
+
         return ary
 
     # # the superclass implementation is all we need

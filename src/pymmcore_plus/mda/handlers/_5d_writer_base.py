@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import json
+import warnings
 from abc import abstractmethod
 from collections import defaultdict
 from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar
@@ -11,10 +11,13 @@ if TYPE_CHECKING:
     import numpy as np
     import useq
 
+    from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
+
     class SupportsSetItem(Protocol):
         def __setitem__(self, key: tuple[int, ...], value: np.ndarray) -> None: ...
 
 
+_NULL = object()
 POS_PREFIX = "p"
 T = TypeVar("T", bound="SupportsSetItem")
 
@@ -66,7 +69,7 @@ class _5DWriterBase(Generic[T]):
 
         # storage of individual frame metadata
         # maps position key to list of frame metadata
-        self.frame_metadatas: defaultdict[str, list[dict]] = defaultdict(list)
+        self.frame_metadatas: defaultdict[str, list[FrameMetaV1]] = defaultdict(list)
 
         # set during sequenceStarted and cleared during sequenceFinished
         self.current_sequence: useq.MDASequence | None = None
@@ -95,8 +98,19 @@ class _5DWriterBase(Generic[T]):
         """
         return self._position_sizes
 
-    def sequenceStarted(self, seq: useq.MDASequence) -> None:
+    def sequenceStarted(
+        self, seq: useq.MDASequence, meta: SummaryMetaV1 | object = _NULL
+    ) -> None:
         """On sequence started, simply store the sequence."""
+        # this is here for backwards compatibility with experimental viewer widget.
+        if meta is _NULL:  # pragma: no cover
+            warnings.warn(
+                "calling `sequenceStarted` without metadata as the second argument is "
+                "deprecated and will raise an exception in the future. Please propagate"
+                " metadata from the event callback.",
+                UserWarning,
+                stacklevel=2,
+            )
         self.frame_metadatas.clear()
         self.current_sequence = seq
         if seq:
@@ -115,7 +129,9 @@ class _5DWriterBase(Generic[T]):
         """
         return f"{POS_PREFIX}{position_index}"
 
-    def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
+    def frameReady(
+        self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
+    ) -> None:
         """Write frame to the zarr array for the appropriate position."""
         # get the position key to store the array in the group
         p_index = event.index.get("p", 0)
@@ -142,8 +158,8 @@ class _5DWriterBase(Generic[T]):
 
         index = tuple(event.index[k] for k in pos_sizes)
         t = event.index.get("t", 0)
-        if t >= len(self._timestamps) and "ElapsedTime-ms" in meta:
-            self._timestamps.append(meta["ElapsedTime-ms"])
+        if t >= len(self._timestamps) and "runner_time_ms" in meta:
+            self._timestamps.append(meta["runner_time_ms"])
         self.write_frame(ary, index, frame)
         self.store_frame_metadata(key, event, meta)
 
@@ -189,7 +205,9 @@ class _5DWriterBase(Generic[T]):
         # WRITE DATA TO DISK
         ary[index] = frame
 
-    def store_frame_metadata(self, key: str, event: useq.MDAEvent, meta: dict) -> None:
+    def store_frame_metadata(
+        self, key: str, event: useq.MDAEvent, meta: FrameMetaV1
+    ) -> None:
         """Called during each frameReady event to store metadata for the frame.
 
         Subclasses may override this method to customize how metadata is stored for each
@@ -208,11 +226,6 @@ class _5DWriterBase(Generic[T]):
         # needn't be re-implemented in subclasses
         # default implementation is to store the metadata in self._frame_metas
         # use finalize_metadata to write to disk at the end of the sequence.
-        if meta:
-            # fix serialization MDAEvent
-            # XXX: There is already an Event object in meta, this overwrites it.
-            event_json = event.json(exclude={"sequence"}, exclude_defaults=True)
-            meta["Event"] = json.loads(event_json)
         self.frame_metadatas[key].append(meta or {})
 
     def finalize_metadata(self) -> None:
@@ -266,7 +279,6 @@ class _5DWriterBase(Generic[T]):
             raise IndexError(
                 f"Position index {p_index} out of range for {len(self.position_sizes)}"
             ) from e
-
         data = self.position_arrays[self.get_position_key(p_index)]
         full = slice(None, None)
         index = tuple(indexers.get(k, full) for k in sizes)
