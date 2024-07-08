@@ -584,6 +584,10 @@ mmc.mda.engine.use_hardware_sequencing = True
     - [`pymmcore.CMMCore.isXYStageSequenceable`][]
     - [`pymmcore.CMMCore.isExposureSequenceable`][]
 
+    Hint: Many devices that support sequencing have a property (often named
+    `Sequence` or similar) that can be used to toggle their responses to the
+    above queries, thereby enabling or disabling sequencing.
+
     If two `MDAEvents` in a sequence have different exposure, stage, or other
     device property values, then `pymmcore-plus` uses these methods to determine whether the
     events can be sequenced (see [`pymmcore_plus.CMMCorePlus.canSequenceEvents`][]).
