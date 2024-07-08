@@ -477,8 +477,8 @@ mmc.run_mda(mda_sequence)
 1. The `frameReady` signal accepts a callback with up to two arguments:
    the image data as a numpy array, and the `MDAEvent` that triggered the callback
 
-See also [additional events you may also wish to connect
-to](http://127.0.0.1:8000/pymmcore-plus/api/events/#pymmcore_plus.mda.events.PMDASignaler)
+See also [additional events you may wish to connect
+to][pymmcore_plus.mda.events.PMDASignaler].
 
 ## Cancelling or Pausing
 
