@@ -35,7 +35,7 @@ Let's start by taking a quick look at how the acquisition logic in
 pymmcore-plus is structured. There are two key classes involved:
 
 1. An [**`MDARunner`**][pymmcore_plus.mda.MDARunner] instance is
-   is responsible for receiving a sequence of `useq.MDAEvent` objects and
+   responsible for receiving a sequence of `useq.MDAEvent` objects and
    driving an `MDAEngine` to execute them. The `MDARunner` is the object that
    has the actual [`run()`][pymmcore_plus.mda.MDARunner.run] method. It also
    emits all the events, such as
@@ -60,7 +60,7 @@ core.mda.engine   # <- The MDAEngine instance
 
 ## The `MDAEngine` Protocol
 
-`pymmcore-plus` defines a protocol (a.k.a "interface" in the Java world) that
+`pymmcore-plus` defines a protocol (a.k.a. "interface" in the Java world) that
 all acquisition engines must implement. Formal API docs for the protocol can be
 found [here][pymmcore_plus.mda.PMDAEngine], but let's discuss the three key
 methods here.
