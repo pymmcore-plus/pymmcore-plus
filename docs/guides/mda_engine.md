@@ -150,7 +150,7 @@ mmc.run_mda(mda_sequence)
 
     See [logging](logging.md) for more details on how to configure and review logs.
 
-At this point, you might thinking that constructing a sequence by hand is a
+At this point, you might be thinking that constructing a sequence by hand is a
 little tedious. And you'd be right! That's why we have the
 `MDASequence` class.
 
@@ -550,7 +550,7 @@ $ mmcore run mda_sequence.yaml
 
 ## Hardware-triggered sequences
 
-Having the computer "in-the-loop" for every event in an MDA sequence, can add
+Having the computer "in-the-loop" for every event in an MDA sequence can add
 unwanted overhead that limits performance in rapid acquisition sequences.
 Because of this, some devices support _hardware triggering_. This means that the
 computer can tell the device to queue up and start a sequence of events, and the
