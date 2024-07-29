@@ -142,7 +142,7 @@ jobs:
         run: mmcore build-dev
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v2
+        uses: CodSpeedHQ/action@v3
         with:
           run: pytest -W ignore --codspeed -v --color=yes
 
