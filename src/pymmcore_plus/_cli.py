@@ -31,7 +31,7 @@ def _show_version_and_exit(value: bool) -> None:
         import pymmcore
 
         typer.echo(f"pymmcore-plus v{pymmcore_plus.__version__}")
-        typer.echo(f"pymmcore v{pymmcore.__version__}")  # type: ignore [attr-defined]
+        typer.echo(f"pymmcore v{pymmcore.__version__}")
         typer.echo(f"MMCore v{pymmcore.CMMCore().getAPIVersionInfo()}")
         raise typer.Exit()
 
@@ -53,7 +53,7 @@ def _main(
     # fix for windows CI encoding and emoji printing
     if getattr(sys.stdout, "encoding", None) != "utf-8":
         with suppress(AttributeError):
-            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore [attr-defined]
+            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore [union-attr]
 
 
 if "mkdocs" in sys.argv[0]:  # pragma: no cover
