@@ -1594,7 +1594,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         try:
             channel_group = self.getPropertyFromCache("Core", "ChannelGroup")
-            channel = self.getCurrentConfigFromCache(channel_group)
+            channel: str = self.getCurrentConfigFromCache(channel_group)
         except Exception:
             channel = "Default"
         tags["Channel"] = channel
@@ -2010,7 +2010,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`.*
         """
-        _current = {
+        _current: dict[str, str] = {
             self.getCameraDevice(): "Camera",
             self.getXYStageDevice(): "XYStage",
             self.getFocusDevice(): "Focus",
