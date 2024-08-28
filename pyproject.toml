@@ -52,7 +52,7 @@ dependencies = [
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
 cli = ["typer >=0.4.2", "rich >=10.2.0"]
-io = ["tifffile >=2021.6.14", "zarr >=2.2"]
+io = ["tifffile >=2021.6.14", "zarr >=2.2,<3"]
 test = [
     "msgspec",
     "msgpack",
@@ -63,7 +63,7 @@ test = [
     "rich",
     "typer >=0.4.2",
     "tifffile >=2021.6.14",
-    "zarr >=2.2",
+    "zarr >=2.2,<3",
     "xarray",
 ]
 dev = ["ipython", "mypy", "pdbpp", "pre-commit", "ruff", "tensorstore-stubs"]
