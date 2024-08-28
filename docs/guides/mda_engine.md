@@ -274,7 +274,7 @@ mda_sequence = MDASequence(
 )
 ```
 
-1.  The "fastest" axes come last. By putting `z` after `g` in the `axis_order`,
+1. The "fastest" axes come last. By putting `z` after `g` in the `axis_order`,
     we're saying "at each `g`, do a full `z` iteration".
 
 ??? example "output of `list(mda_sequence)`"
@@ -560,9 +560,9 @@ computer.
 Just like [micro-manager's acquisition
 engine](https://micro-manager.org/Hardware-based_Synchronization_in_Micro-Manager),
 the default acquisition engine in `pymmcore-plus` can opportunistically use
-hardware triggering whenever possible. For now, this behavior is off by default
-(in order to avoid unexpected behavior), but you can enable it by setting
-`CMMCorePlus.mda.engine.use_hardware_sequencing = True`:
+hardware triggering whenever possible. This behavior is on by default, but you can
+disable it by setting `CMMCorePlus.mda.engine.use_hardware_sequencing = False`,
+which may be useful for various debugging or testing purposes:
 
 ```python
 from pymmcore_plus import CMMCorePlus
@@ -571,6 +571,7 @@ mmc = CMMCorePlus.instance()
 mmc.loadSystemConfiguration()
 
 # enable hardware triggering
+# this is True by default, this is just an example for how to set it
 mmc.mda.engine.use_hardware_sequencing = True
 ```
 
