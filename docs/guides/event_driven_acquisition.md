@@ -69,7 +69,7 @@ can be used to implement event-driven acquisition in pymmcore-plus.
 
 ### Generators
 
-[Generator functions](https://docs.python.org/3/glossary.html#index-19) are
+[Generators](https://docs.python.org/3/glossary.html#term-generator) are
 functions that contain `yield` statements. When called, they return a [generator
 iterator](https://docs.python.org/3/glossary.html#term-generator-iterator) that
 can be used to iterate over the values yielded by the generator function. 

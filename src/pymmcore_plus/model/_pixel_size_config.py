@@ -77,7 +77,7 @@ class PixelSizeGroup(ConfigGroup):
                 preset: PixelSizePreset(
                     name=preset,
                     pixel_size_um=core.getPixelSizeUmByID(preset),
-                    affine=core.getPixelSizeAffineByID(preset),  # type: ignore
+                    affine=core.getPixelSizeAffineByID(preset),
                     settings=[Setting(*d) for d in core.getPixelSizeConfigData(preset)],
                 )
                 for preset in core.getAvailablePixelSizeConfigs()

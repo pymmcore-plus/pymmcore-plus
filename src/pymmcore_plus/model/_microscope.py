@@ -212,7 +212,7 @@ class Microscope:
             self.devices = [
                 Device.create_from_core(core, name=name)
                 for name in core.getLoadedDevices()
-                if name != Keyword.CoreDevice
+                if name != Keyword.CoreDevice  # type: ignore [comparison-overlap]
             ]
         if "core_device" not in exclude:
             self.core_device.update_from_core(core)

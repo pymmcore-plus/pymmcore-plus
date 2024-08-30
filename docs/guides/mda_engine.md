@@ -150,7 +150,7 @@ mmc.run_mda(mda_sequence)
 
     See [logging](logging.md) for more details on how to configure and review logs.
 
-At this point, you might thinking that constructing a sequence by hand is a
+At this point, you might be thinking that constructing a sequence by hand is a
 little tedious. And you'd be right! That's why we have the
 `MDASequence` class.
 
@@ -274,7 +274,7 @@ mda_sequence = MDASequence(
 )
 ```
 
-1.  The "fastest" axes come last. By putting `z` after `g` in the `axis_order`,
+1. The "fastest" axes come last. By putting `z` after `g` in the `axis_order`,
     we're saying "at each `g`, do a full `z` iteration".
 
 ??? example "output of `list(mda_sequence)`"
@@ -477,8 +477,8 @@ mmc.run_mda(mda_sequence)
 1. The `frameReady` signal accepts a callback with up to two arguments:
    the image data as a numpy array, and the `MDAEvent` that triggered the callback
 
-See also [additional events you may also wish to connect
-to](http://127.0.0.1:8000/pymmcore-plus/api/events/#pymmcore_plus.mda.events.PMDASignaler)
+See also [additional events you may wish to connect
+to][pymmcore_plus.mda.events.PMDASignaler].
 
 ## Cancelling or Pausing
 
@@ -550,7 +550,7 @@ $ mmcore run mda_sequence.yaml
 
 ## Hardware-triggered sequences
 
-Having the computer "in-the-loop" for every event in an MDA sequence, can add
+Having the computer "in-the-loop" for every event in an MDA sequence can add
 unwanted overhead that limits performance in rapid acquisition sequences.
 Because of this, some devices support _hardware triggering_. This means that the
 computer can tell the device to queue up and start a sequence of events, and the
@@ -560,9 +560,9 @@ computer.
 Just like [micro-manager's acquisition
 engine](https://micro-manager.org/Hardware-based_Synchronization_in_Micro-Manager),
 the default acquisition engine in `pymmcore-plus` can opportunistically use
-hardware triggering whenever possible. For now, this behavior is off by default
-(in order to avoid unexpected behavior), but you can enable it by setting
-`CMMCorePlus.mda.engine.use_hardware_sequencing = True`:
+hardware triggering whenever possible. This behavior is on by default, but you can
+disable it by setting `CMMCorePlus.mda.engine.use_hardware_sequencing = False`,
+which may be useful for various debugging or testing purposes:
 
 ```python
 from pymmcore_plus import CMMCorePlus
@@ -571,6 +571,7 @@ mmc = CMMCorePlus.instance()
 mmc.loadSystemConfiguration()
 
 # enable hardware triggering
+# this is True by default, this is just an example for how to set it
 mmc.mda.engine.use_hardware_sequencing = True
 ```
 
@@ -583,6 +584,10 @@ mmc.mda.engine.use_hardware_sequencing = True
     - [`pymmcore.CMMCore.isPropertySequenceable`][]
     - [`pymmcore.CMMCore.isXYStageSequenceable`][]
     - [`pymmcore.CMMCore.isExposureSequenceable`][]
+
+    Hint: Many devices that support sequencing have a property (often named
+    `Sequence` or similar) that can be used to toggle their responses to the
+    above queries, thereby enabling or disabling sequencing.
 
     If two `MDAEvents` in a sequence have different exposure, stage, or other
     device property values, then `pymmcore-plus` uses these methods to determine whether the

@@ -23,6 +23,7 @@ except ImportError:
 @pytest.fixture(params=PARAMS, scope="function")
 def core(request):
     core = pymmcore_plus.CMMCorePlus()
+    core.mda.engine.use_hardware_sequencing = False
     if request.param == "psygnal":
         core._events = CMMCoreSignaler()
         core.mda._signals = MDASignaler()
