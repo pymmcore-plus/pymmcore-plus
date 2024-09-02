@@ -73,6 +73,7 @@ def on_page_markdown(md: str, page: "Page", config: "MkDocsConfig", files) -> st
 def _get_core_and_plus_members() -> tuple[set, set]:
     """Return member names found only in CMMCore and those in CMMCorePlus."""
     from pymmcore import CMMCore
+
     from pymmcore_plus import CMMCorePlus
 
     base_names = {x for x in CMMCore.__dict__ if not x.startswith("_")}
@@ -88,6 +89,7 @@ def _build_table() -> str:
     """This function builds the markdown table for the CMMCorePlus API page."""
     import griffe
     import pymmcore
+
     import pymmcore_plus
 
     core = griffe.load("pymmcore.CMMCore")

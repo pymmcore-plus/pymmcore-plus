@@ -5,8 +5,9 @@ from unittest.mock import patch
 
 os.environ["PYTEST_RUNNING"] = "1"
 
-import pymmcore_plus
 import pytest
+
+import pymmcore_plus
 from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler

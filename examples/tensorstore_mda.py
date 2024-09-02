@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+from useq import MDASequence
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.handlers import TensorStoreHandler
-from useq import MDASequence
 
 core = CMMCorePlus.instance()
 core.loadSystemConfiguration()

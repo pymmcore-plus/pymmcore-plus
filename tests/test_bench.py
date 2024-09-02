@@ -6,6 +6,7 @@ from typing import Callable
 
 import pytest
 import useq
+
 from pymmcore_plus import CMMCorePlus
 
 if all(x not in {"--codspeed", "tests/test_bench.py"} for x in sys.argv):

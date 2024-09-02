@@ -3,6 +3,7 @@ from unittest.mock import Mock, call
 
 import numpy as np
 import useq
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
 
