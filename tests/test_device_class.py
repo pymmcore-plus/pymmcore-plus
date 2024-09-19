@@ -1,6 +1,7 @@
 from unittest.mock import Mock
 
 import pytest
+
 from pymmcore_plus import CMMCorePlus, Device, DeviceDetectionStatus, DeviceType
 
 

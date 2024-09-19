@@ -6,14 +6,16 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import useq
-from pymmcore_plus.mda.events import MDASignaler
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
+from pymmcore_plus.mda.events import MDASignaler
+
 if TYPE_CHECKING:
-    from pymmcore_plus import CMMCorePlus
-    from pymmcore_plus.mda import MDAEngine
     from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
+
+    from pymmcore_plus import CMMCorePlus
+    from pymmcore_plus.mda import MDAEngine
 
 try:
     import pytestqt

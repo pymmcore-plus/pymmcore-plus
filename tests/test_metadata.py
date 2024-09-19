@@ -4,6 +4,7 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 import useq
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.metadata import (
     FrameMetaV1,
