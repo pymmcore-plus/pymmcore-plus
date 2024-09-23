@@ -5,10 +5,7 @@ from contextlib import suppress
 from itertools import product
 from typing import (
     TYPE_CHECKING,
-    Iterable,
-    Iterator,
     NamedTuple,
-    Sequence,
     cast,
 )
 
@@ -29,6 +26,8 @@ from pymmcore_plus.metadata import (
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Sequence
+
     from numpy.typing import NDArray
 
     from pymmcore_plus.core import CMMCorePlus

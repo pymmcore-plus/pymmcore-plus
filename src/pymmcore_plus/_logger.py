@@ -6,7 +6,10 @@ import sys
 from contextlib import contextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import ClassVar, Iterator
+from typing import TYPE_CHECKING, ClassVar
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 __all__ = ["logger"]
 

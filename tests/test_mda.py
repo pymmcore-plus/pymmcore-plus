@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -11,6 +11,8 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
+
     from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
 
