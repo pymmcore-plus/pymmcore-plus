@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, List, Type
+from typing import TYPE_CHECKING, Any
 
 from pymmcore_plus._util import signals_backend
 
@@ -18,7 +18,7 @@ __all__ = [
 ]
 
 
-def _get_auto_core_callback_class() -> Type[PCoreSignaler]:
+def _get_auto_core_callback_class() -> type[PCoreSignaler]:
     if signals_backend() == "qt":
         from ._qsignals import QCoreSignaler
 
@@ -26,7 +26,7 @@ def _get_auto_core_callback_class() -> Type[PCoreSignaler]:
     return CMMCoreSignaler
 
 
-def __dir__() -> List[str]:  # pragma: no cover
+def __dir__() -> list[str]:  # pragma: no cover
     return [*list(globals()), "QCoreSignaler"]
 
 

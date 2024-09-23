@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Container
+from typing import TYPE_CHECKING
 
 from pymmcore_plus import CMMCorePlus, DeviceType, Keyword
 
@@ -9,6 +9,8 @@ from ._device import Device
 from ._property import Property
 
 if TYPE_CHECKING:
+    from collections.abc import Container
+
     from pymmcore_plus.model._core_link import ErrCallback
 
 CORE = Keyword.CoreDevice.value

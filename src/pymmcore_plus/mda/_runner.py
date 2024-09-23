@@ -2,17 +2,10 @@ from __future__ import annotations
 
 import time
 import warnings
-from contextlib import nullcontext
+from collections.abc import Iterable, Iterator, Sequence
+from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    ContextManager,
-    Iterable,
-    Iterator,
-    Sequence,
-    Tuple,
-)
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 
 from useq import MDASequence
@@ -39,7 +32,7 @@ MSG = (
 
 
 class GeneratorMDASequence(MDASequence):
-    axis_order: Tuple[str, ...] = ()  # noqa: UP006
+    axis_order: tuple[str, ...] = ()
 
     @property
     def sizes(self) -> dict[str, int]:  # pragma: no cover
@@ -216,7 +209,7 @@ class MDARunner:
 
     def _outputs_connected(
         self, output: SingleOutput | Sequence[SingleOutput] | None
-    ) -> ContextManager:
+    ) -> AbstractContextManager:
         """Context in which output handlers are connected to the frameReady signal."""
         if output is None:
             return nullcontext()

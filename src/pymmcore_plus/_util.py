@@ -18,8 +18,9 @@ from typing import TYPE_CHECKING, cast, overload
 from platformdirs import user_data_dir
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from re import Pattern
-    from typing import Any, Callable, Iterator, Literal, TypeVar
+    from typing import Any, Callable, Literal, TypeVar
 
     QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
 

@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 from collections import defaultdict
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, Tuple, overload
+from typing import TYPE_CHECKING, Any, overload
 
 import pymmcore
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
+
     from typing_extensions import TypeAlias  # py310
 
-DevPropValueTuple: TypeAlias = Tuple[str, str, str]
-DevPropTuple: TypeAlias = Tuple[str, str]
+DevPropValueTuple: TypeAlias = tuple[str, str, str]
+DevPropTuple: TypeAlias = tuple[str, str]
 
 
 class Configuration(pymmcore.Configuration):

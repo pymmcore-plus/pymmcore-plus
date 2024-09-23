@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, TypeVar
 
 from ._norm_slot import denormalize_slot, normalize_slot
 from ._protocol import PCoreSignaler
@@ -8,8 +8,8 @@ from ._protocol import PCoreSignaler
 if TYPE_CHECKING:
     from ._norm_slot import NormedCallback
 
-    PropKey = Tuple[str, str | None, NormedCallback]
-    PropKeyDict = Dict[PropKey, Callable]
+    PropKey = tuple[str, str | None, NormedCallback]
+    PropKeyDict = dict[PropKey, Callable]
 
 
 _C = TypeVar("_C", bound=Callable[..., Any])
