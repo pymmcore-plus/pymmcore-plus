@@ -276,9 +276,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         self._group.attrs["multiscales"] = scales
         ary.attrs["_ARRAY_DIMENSIONS"] = dims
         if seq := self.current_sequence:
-            ary.attrs["useq_MDASequence"] = to_builtins(
-                seq.model_dump(exclude_unset=True)
-            )
+            ary.attrs["useq_MDASequence"] = to_builtins(seq)
 
         return ary
 

@@ -4,6 +4,7 @@ import json
 import sys
 from contextlib import suppress
 from datetime import timedelta
+from enum import Enum
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Any, Mapping, Sequence
 
@@ -35,6 +36,8 @@ def encode_hook(obj: Any, raises: bool = True) -> Any:
         return obj.item()
     if isinstance(obj, timedelta):
         return obj.total_seconds()
+    if isinstance(obj, Enum):
+        return obj.value
     if raises:
         raise NotImplementedError(f"Cannot serialize object of type {type(obj)}")
     return obj
