@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from useq import MDASequence
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import OMETiffWriter
-from useq import MDASequence
 
 core = CMMCorePlus.instance()
 core.loadSystemConfiguration("tests/local_config.cfg")

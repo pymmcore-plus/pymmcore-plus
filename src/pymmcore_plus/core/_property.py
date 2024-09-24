@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from functools import cached_property
-from typing import TYPE_CHECKING, Any, Sequence, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict
 
 from pymmcore import g_Keyword_Label, g_Keyword_State
 
@@ -9,6 +9,8 @@ from ._constants import DeviceType, PropertyType
 from .events._device_signal_view import _DevicePropValueSignal
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from ._mmcore_plus import CMMCorePlus
 
 

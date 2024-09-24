@@ -10,6 +10,8 @@ import psygnal
 import pymmcore
 import pytest
 from pymmcore import CMMCore, PropertySetting
+from useq import MDASequence
+
 from pymmcore_plus import (
     CMMCorePlus,
     Configuration,
@@ -20,7 +22,6 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
-from useq import MDASequence
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -455,7 +456,7 @@ def test_lock_and_callbacks(core: CMMCorePlus, qtbot: "QtBot") -> None:
 
     # do some threading silliness here so we don't accidentally hang our
     # test if things go wrong have to use *got_lock* to check because we
-    # can't assert in the function as theads don't throw their exceptions
+    # can't assert in the function as threads don't throw their exceptions
     # back into the calling thread.
     got_lock = False
 

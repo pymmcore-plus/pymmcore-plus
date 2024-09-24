@@ -180,7 +180,7 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
     if (mag_factor := core.getMagnificationFactor()) != 1.0:
         info["magnification_factor"] = mag_factor
     if (affine := core.getPixelSizeAffine(True)) != (1.0, 0.0, 0.0, 0.0, 1.0, 0.0):
-        info["pixel_size_affine"] = affine  # type: ignore [typeddict-item]
+        info["pixel_size_affine"] = affine
 
     with suppress(RuntimeError):
         if (roi := core.getROI()) != [0, 0, w, h]:
@@ -278,7 +278,7 @@ def pixel_size_config(core: CMMCorePlus, *, config_name: str) -> PixelSizeConfig
     }
     affine = core.getPixelSizeAffineByID(config_name)
     if affine != (1.0, 0.0, 0.0, 0.0, 1.0, 0.0):
-        info["pixel_size_affine"] = affine  # type: ignore [typeddict-item]
+        info["pixel_size_affine"] = affine
     return info
 
 

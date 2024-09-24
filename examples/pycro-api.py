@@ -2,18 +2,21 @@ from __future__ import annotations
 
 import inspect
 from queue import Queue
-from typing import TYPE_CHECKING, Any, Callable, Iterable, Iterator, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, cast
+
+from useq import MDAEvent
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import MDAEngine
-from useq import MDAEvent
 
 # These types represent what the pycro-manager API expects.
 if TYPE_CHECKING:
     from collections import deque
+    from collections.abc import Iterable, Iterator, Sequence
     from typing import TypeAlias
 
     from numpy.typing import NDArray
+
     from pymmcore_plus.mda._engine import EventPayload
 
     Meta: TypeAlias = dict[str, Any]

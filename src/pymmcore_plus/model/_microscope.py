@@ -4,7 +4,7 @@ import os
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, Container, Iterable
+from typing import TYPE_CHECKING, Any, Callable
 
 from pymmcore_plus import DeviceType, Keyword
 
@@ -14,6 +14,8 @@ from ._device import AvailableDevice, Device, get_available_devices
 from ._pixel_size_config import PixelSizeGroup
 
 if TYPE_CHECKING:
+    from collections.abc import Container, Iterable
+
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
@@ -212,7 +214,7 @@ class Microscope:
             self.devices = [
                 Device.create_from_core(core, name=name)
                 for name in core.getLoadedDevices()
-                if name != Keyword.CoreDevice
+                if name != Keyword.CoreDevice  # type: ignore [comparison-overlap]
             ]
         if "core_device" not in exclude:
             self.core_device.update_from_core(core)

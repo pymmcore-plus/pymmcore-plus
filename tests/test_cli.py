@@ -14,13 +14,15 @@ from unittest.mock import Mock, patch
 import pytest
 
 try:
-    from pymmcore_plus._cli import app
     from typer.testing import CliRunner
+
+    from pymmcore_plus._cli import app
 except ImportError:
     pytest.skip("cli extras not available", allow_module_level=True)
 
-from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, _util, install
 from useq import MDASequence
+
+from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, _util, install
 
 if TYPE_CHECKING:
     from pathlib import Path

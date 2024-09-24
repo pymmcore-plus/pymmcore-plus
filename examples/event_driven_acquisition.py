@@ -5,8 +5,9 @@ import time
 from queue import Queue
 
 import numpy as np
-from pymmcore_plus import CMMCorePlus
 from useq import MDAEvent
+
+from pymmcore_plus import CMMCorePlus
 
 
 class Analyzer:

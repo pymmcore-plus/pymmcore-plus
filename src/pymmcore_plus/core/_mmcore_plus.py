@@ -10,17 +10,14 @@ from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
+from re import Pattern
 from textwrap import dedent
 from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Iterable,
-    Iterator,
     NamedTuple,
-    Pattern,
-    Sequence,
     TypeVar,
     overload,
 )
@@ -51,6 +48,7 @@ from ._sequencing import can_sequence_events
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Sequence
     from typing import Literal, TypedDict
 
     import numpy as np
@@ -1594,7 +1592,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         try:
             channel_group = self.getPropertyFromCache("Core", "ChannelGroup")
-            channel = self.getCurrentConfigFromCache(channel_group)
+            channel: str = self.getCurrentConfigFromCache(channel_group)
         except Exception:
             channel = "Default"
         tags["Channel"] = channel
@@ -2010,7 +2008,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`.*
         """
-        _current = {
+        _current: dict[str, str] = {
             self.getCameraDevice(): "Camera",
             self.getXYStageDevice(): "XYStage",
             self.getFocusDevice(): "Focus",

@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import useq
+
 from pymmcore_plus.mda.handlers import OMEZarrWriter, TensorStoreHandler
 from pymmcore_plus.metadata import serialize
 
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import zarr
+
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")

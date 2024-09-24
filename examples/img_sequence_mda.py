@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from useq import MDASequence, Position
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import mda_listeners_connected
 from pymmcore_plus.mda.handlers import ImageSequenceWriter
-from useq import MDASequence, Position
 
 core = CMMCorePlus.instance()
 core.loadSystemConfiguration()

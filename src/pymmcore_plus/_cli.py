@@ -6,7 +6,7 @@ import sys
 import time
 from contextlib import suppress
 from pathlib import Path
-from typing import List, Optional, Union, cast
+from typing import Optional, Union, cast
 
 try:
     import typer
@@ -31,7 +31,7 @@ def _show_version_and_exit(value: bool) -> None:
         import pymmcore
 
         typer.echo(f"pymmcore-plus v{pymmcore_plus.__version__}")
-        typer.echo(f"pymmcore v{pymmcore.__version__}")  # type: ignore [attr-defined]
+        typer.echo(f"pymmcore v{pymmcore.__version__}")
         typer.echo(f"MMCore v{pymmcore.CMMCore().getAPIVersionInfo()}")
         raise typer.Exit()
 
@@ -53,7 +53,7 @@ def _main(
     # fix for windows CI encoding and emoji printing
     if getattr(sys.stdout, "encoding", None) != "utf-8":
         with suppress(AttributeError):
-            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore [attr-defined]
+            sys.stdout.reconfigure(encoding="utf-8")  # type: ignore [union-attr]
 
 
 if "mkdocs" in sys.argv[0]:  # pragma: no cover
@@ -190,10 +190,10 @@ def run(
         None, help="Asymmetric range of z-stack below position."
     ),
     z_step: Optional[float] = typer.Option(None, help="Step size of z-stack."),
-    z_relative: Optional[List[float]] = typer.Option(
+    z_relative: Optional[list[float]] = typer.Option(
         None, "-zr", help="Relative z-positions to acquire (may use multiple times)."
     ),
-    z_absolute: Optional[List[float]] = typer.Option(
+    z_absolute: Optional[list[float]] = typer.Option(
         None, "-za", help="Absolute z-positions to acquire (may use multiple times)."
     ),
     t_interval: Optional[float] = typer.Option(
@@ -207,7 +207,7 @@ def run(
     axis_order: Optional[str] = typer.Option(
         None, help="Order of axes to acquire (e.g. 'TPCZ')."
     ),
-    channel: Optional[List[str]] = typer.Option(
+    channel: Optional[list[str]] = typer.Option(
         None,
         help="\bChannel to acquire. Argument is a string of the following form:\n"
         '\b - name: "DAPI"\n'
@@ -294,7 +294,7 @@ def run(
 
 @app.command()
 def build_dev(
-    devices: Optional[List[str]] = typer.Argument(
+    devices: Optional[list[str]] = typer.Argument(
         None, help=f"Device adapters to build. Defaults to {DEFAULT_PACKAGES}"
     ),
     dest: Path = typer.Option(
