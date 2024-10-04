@@ -18,9 +18,9 @@ class _DevicePropValueSignal:
         sig = self._mmc.events.devicePropertyChanged(self._dev, self._prop)
         return sig.connect(callback)  # type: ignore
 
-    def disconnect(self, callback: _C) -> None:
+    def disconnect(self, callback: _C | None = None) -> None:
         sig = self._mmc.events.devicePropertyChanged(self._dev, self._prop)
-        return sig.disconnect(callback)  # type: ignore
+        sig.disconnect(callback)
 
     def emit(self, *args: Any) -> Any:
         """Emits the signal with the given arguments."""
