@@ -259,7 +259,7 @@ class TensorStoreHandler:
             # expand the sizes to include the largest size we encounter for each axis
             # in the case of positions with subsequences, we'll still end up with a
             # jagged array, but it won't take extra space, and we won't get index errors
-            max_sizes = seq.sizes.copy()
+            max_sizes = dict(seq.sizes)
             for psize in position_sizes(seq):
                 for k, v in psize.items():
                     max_sizes[k] = max(max_sizes.get(k, 0), v)

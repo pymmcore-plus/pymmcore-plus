@@ -39,7 +39,7 @@ dependencies = [
     "psygnal >=0.7",
     "pymmcore >=10.7.0.71.0",
     "typing-extensions",      # not actually required at runtime
-    "useq-schema >=0.4.7",
+    "useq-schema >=0.5.0",
     "wrapt >=1.14",
     "tensorstore",
     # cli requirements included by default for now
