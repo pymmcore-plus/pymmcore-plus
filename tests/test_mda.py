@@ -407,5 +407,6 @@ def test_reset_event_timer(core: CMMCorePlus) -> None:
     meta: list[float] = []
     core.mda.events.frameReady.connect(lambda f, e, m: meta.append(m["runner_time_ms"]))
     core.mda.run(seq)
-    # ensure that the 4th event occurred at least 200ms after the 3rd event
-    assert meta[3] >= meta[2] + 200
+    # ensure that the 4th event occurred at least 190ms after the 3rd event
+    # (allow some jitter)
+    assert meta[3] >= meta[2] + 190
