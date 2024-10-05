@@ -1,6 +1,4 @@
-from __future__ import annotations
-
-from typing import Any, Callable, Protocol, Union, runtime_checkable
+from typing import Any, Callable, Optional, Protocol, Union, runtime_checkable
 
 
 @runtime_checkable
@@ -14,7 +12,7 @@ class PSignalInstance(Protocol):
     def connect(self, slot: Callable) -> Any:
         """Connect slot to this signal."""
 
-    def disconnect(self, slot: Callable | None = None) -> Any:
+    def disconnect(self, slot: Optional[Callable] = None) -> Any:
         """Disconnect slot from this signal.
 
         If `None`, all slots should be disconnected.
@@ -28,7 +26,7 @@ class PSignalInstance(Protocol):
 class PSignalDescriptor(Protocol):
     """Descriptor that returns a signal instance."""
 
-    def __get__(self, instance: Any | None, owner: Any) -> PSignalInstance:
+    def __get__(self, instance: Optional[Any], owner: Any) -> PSignalInstance:
         """Returns the signal instance for this descriptor."""
 
 
