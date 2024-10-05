@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.12.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.12.0) (2024-10-05)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.11.1...v0.12.0)
+
+**Implemented enhancements:**
+
+- feat: add support for MDAEvent.reset\_event\_timer [\#383](https://github.com/pymmcore-plus/pymmcore-plus/pull/383) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix: serialization of GridPlan in ome-zarr writer when msgspec is not installed [\#378](https://github.com/pymmcore-plus/pymmcore-plus/pull/378) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- chore: fix typing on Signal.disconnect protocol [\#381](https://github.com/pymmcore-plus/pymmcore-plus/pull/381) ([tlambert03](https://github.com/tlambert03))
+- build: drop python 3.8 [\#377](https://github.com/pymmcore-plus/pymmcore-plus/pull/377) ([tlambert03](https://github.com/tlambert03))
+- ci\(pre-commit.ci\): autoupdate [\#374](https://github.com/pymmcore-plus/pymmcore-plus/pull/374) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+
 ## [v0.11.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.11.1) (2024-08-28)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.11.0...v0.11.1)
