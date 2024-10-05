@@ -174,7 +174,7 @@ class PCoreSignaler(Protocol):
     """
 
     def devicePropertyChanged(
-        self, device: str, property: str | None = None
+        self, device: str, property: Optional[str] = None
     ) -> PSignalInstance:
         """Return object to connect/disconnect to device/property-specific changes.
 
