@@ -64,8 +64,11 @@ class _PropertySignal:
         self._events.propertyChanged.connect(_wrapper)
         return callback
 
-    def disconnect(self, callback: Callable) -> None:
+    def disconnect(self, callback: Callable | None = None) -> None:
         """Disconnect `callback` from this device and/or property."""
+        if callback is None:
+            self._events.propertyChanged.disconnect()
+            return
         key = (self._device, self._property, normalize_slot(callback))
         cb = self._events.property_callbacks.pop(key, None)
         if cb is None:
