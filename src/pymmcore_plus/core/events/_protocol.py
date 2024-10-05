@@ -1,4 +1,6 @@
-from typing import Any, Callable, Optional, Protocol, Union, runtime_checkable
+from __future__ import annotations
+
+from typing import Any, Callable, Protocol, Union, runtime_checkable
 
 
 @runtime_checkable
@@ -26,7 +28,7 @@ class PSignalInstance(Protocol):
 class PSignalDescriptor(Protocol):
     """Descriptor that returns a signal instance."""
 
-    def __get__(self, instance: Optional[Any], owner: Any) -> PSignalInstance:
+    def __get__(self, instance: Any | None, owner: Any) -> PSignalInstance:
         """Returns the signal instance for this descriptor."""
 
 
@@ -174,7 +176,7 @@ class PCoreSignaler(Protocol):
     """
 
     def devicePropertyChanged(
-        self, device: str, property: Optional[str] = None
+        self, device: str, property: str | None = None
     ) -> PSignalInstance:
         """Return object to connect/disconnect to device/property-specific changes.
 
