@@ -1,19 +1,23 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Any, Iterable, Iterator, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import useq
-from pymmcore_plus.mda.events import MDASignaler
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
+from pymmcore_plus.mda.events import MDASignaler
+
 if TYPE_CHECKING:
-    from pymmcore_plus import CMMCorePlus
-    from pymmcore_plus.mda import MDAEngine
+    from collections.abc import Iterable, Iterator
+
     from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
+
+    from pymmcore_plus import CMMCorePlus
+    from pymmcore_plus.mda import MDAEngine
 
 try:
     import pytestqt
@@ -391,3 +395,18 @@ def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
         thread.join()
     assert engine.setup_event.call_count == 2
     engine.teardown_sequence.assert_called_once()
+
+
+def test_reset_event_timer(core: CMMCorePlus) -> None:
+    seq = [
+        MDAEvent(min_start_time=0),
+        MDAEvent(min_start_time=0.2),
+        MDAEvent(min_start_time=0, reset_event_timer=True),
+        MDAEvent(min_start_time=0.2),
+    ]
+    meta: list[float] = []
+    core.mda.events.frameReady.connect(lambda f, e, m: meta.append(m["runner_time_ms"]))
+    core.mda.run(seq)
+    # ensure that the 4th event occurred at least 190ms after the 3rd event
+    # (allow some jitter)
+    assert meta[3] >= meta[2] + 190

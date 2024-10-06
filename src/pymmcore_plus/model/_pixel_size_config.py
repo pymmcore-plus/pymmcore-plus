@@ -6,7 +6,8 @@ from typing import TYPE_CHECKING
 from ._config_group import ConfigGroup, ConfigPreset, Setting
 
 if TYPE_CHECKING:
-    from typing import Any, Container, Final, Iterable, MutableMapping
+    from collections.abc import Container, Iterable, MutableMapping
+    from typing import Any, Final
 
     from typing_extensions import (
         Self,  # py311

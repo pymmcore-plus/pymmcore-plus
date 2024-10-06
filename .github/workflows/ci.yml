@@ -15,33 +15,23 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.platform }} py${{ matrix.python-version }} ${{ matrix.pydantic }}
+    name: ${{ matrix.platform }} py${{ matrix.python-version }}
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
         platform: [windows-latest, macos-13]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
-        pydantic: [""]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         qt: ["PySide6"]
         include:
           - platform: windows-latest
-            python-version: "3.8"
-            pydantic: "'pydantic<2'"
-            qt: "PySide6"
-          - platform: windows-latest
             python-version: "3.9"
-            pydantic: "'pydantic<2'"
             qt: "PySide2"
           - platform: macos-13
             python-version: "3.11"
             qt: "PyQt6"
-          - platform: windows-latest
-            python-version: "3.11"
-            pydantic: "'pydantic<2'"
-            qt: "PySide6"
           - platform: ubuntu-latest
-            python-version: "3.11"
+            python-version: "3.12"
 
     steps:
       - uses: actions/checkout@v4
@@ -114,7 +104,7 @@ jobs:
           - repo: pymmcore-plus/pymmcore-widgets
             qt: "pyqt6"
           - repo: pymmcore-plus/napari-micromanager
-            qt: "pyside2"
+            qt: "pyqt6"
 
   benchmarks:
     runs-on: ubuntu-latest

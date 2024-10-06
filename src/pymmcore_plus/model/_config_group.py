@@ -4,7 +4,8 @@ from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
-    from typing import Container, Final, MutableMapping
+    from collections.abc import Container, MutableMapping
+    from typing import Final
 
     from typing_extensions import Self  # py311
 

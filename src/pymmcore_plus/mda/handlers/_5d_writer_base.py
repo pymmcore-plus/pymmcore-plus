@@ -3,11 +3,13 @@ from __future__ import annotations
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar
+from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
 
 from ._util import position_sizes
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     import numpy as np
     import useq
 

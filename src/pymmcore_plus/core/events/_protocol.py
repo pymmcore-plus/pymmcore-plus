@@ -12,8 +12,11 @@ class PSignalInstance(Protocol):
     def connect(self, slot: Callable) -> Any:
         """Connect slot to this signal."""
 
-    def disconnect(self, slot: Callable) -> Any:
-        """Disconnect slot from this signal."""
+    def disconnect(self, slot: Optional[Callable] = None) -> Any:
+        """Disconnect slot from this signal.
+
+        If `None`, all slots should be disconnected.
+        """
 
     def emit(self, *args: Any) -> Any:
         """Emits the signal with the given arguments."""

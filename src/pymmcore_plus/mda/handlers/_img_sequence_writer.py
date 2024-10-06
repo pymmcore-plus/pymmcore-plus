@@ -7,9 +7,10 @@ provided.
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from itertools import count
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Mapping, Sequence, cast
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, cast
 
 from pymmcore_plus.metadata.serialize import json_dumps
 

@@ -10,17 +10,14 @@ from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
+from re import Pattern
 from textwrap import dedent
 from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Iterable,
-    Iterator,
     NamedTuple,
-    Pattern,
-    Sequence,
     TypeVar,
     overload,
 )
@@ -51,6 +48,7 @@ from ._sequencing import can_sequence_events
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Sequence
     from typing import Literal, TypedDict
 
     import numpy as np

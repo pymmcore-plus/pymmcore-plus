@@ -12,7 +12,8 @@ from ._core_link import CoreObject
 from ._property import Property
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, Container, Iterable
+    from collections.abc import Container, Iterable
+    from typing import Any, Callable
 
     from typing_extensions import (
         Self,  # py311

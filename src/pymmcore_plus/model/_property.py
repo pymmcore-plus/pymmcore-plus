@@ -8,7 +8,8 @@ from pymmcore_plus import CMMCorePlus, PropertyType
 from ._core_link import CoreObject
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, Container
+    from collections.abc import Container
+    from typing import Any, Callable
 
     from typing_extensions import TypeAlias  # py310
 

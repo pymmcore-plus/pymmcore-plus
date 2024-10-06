@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import useq
+
 from pymmcore_plus.mda.handlers import OMEZarrWriter, TensorStoreHandler
 from pymmcore_plus.metadata import serialize
 
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import zarr
+
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")
@@ -38,6 +40,12 @@ MULTIPOINT_MDA = SIMPLE_MDA.replace(
 MULTIPOINT_EXPECTATION = {
     "p0": {"t": 2, "c": 2, "y": 512, "x": 512},
     "p1": {"t": 2, "c": 2, "y": 512, "x": 512},
+}
+GRID_MDA = SIMPLE_MDA.replace(
+    grid_plan={"rows": 2, "columns": 2, "mode": "row_wise_snake"},
+)
+GRID_EXPECTATION = {
+    "p0": {"t": 2, "c": 2, "y": 512, "x": 512},
 }
 
 FULL_MDA = MULTIPOINT_MDA.replace(z_plan={"range": 0.3, "step": 0.1})
@@ -70,6 +78,7 @@ COMPLEX_EXPECTATION = {
 CASES: list[str | None, useq.MDASequence, dict[str, dict]] = [
     (None, SIMPLE_MDA, SIMPLE_EXPECTATION),
     (None, MULTIPOINT_MDA, MULTIPOINT_EXPECTATION),
+    (None, GRID_MDA, GRID_EXPECTATION),
     (None, FULL_MDA, FULL_EXPECTATION),
     ("out.zarr", FULL_MDA, FULL_EXPECTATION),
     (None, FULL_MDA, FULL_EXPECTATION),

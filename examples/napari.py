@@ -1,4 +1,5 @@
 import napari
+
 from pymmcore_plus import CMMCorePlus
 
 v = napari.Viewer()
