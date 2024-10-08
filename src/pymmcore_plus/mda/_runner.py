@@ -70,7 +70,10 @@ class MDARunner:
 
         self._canceled = False
         self._sequence: MDASequence | None = None
-        self._reset_timer()
+        # timer for the full sequence, reset only once at the beginning of the sequence
+        self._sequence_t0: float = 0.0
+        # event clock, reset whenever `event.reset_event_timer` is True
+        self._t0: float = 0.0
 
     def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
         """Set the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] to use for the MDA run."""  # noqa: E501
@@ -205,6 +208,14 @@ class MDARunner:
 
     def seconds_elapsed(self) -> float:
         """Return the number of seconds since the start of the acquisition."""
+        return time.perf_counter() - self._sequence_t0
+
+    def event_seconds_elapsed(self) -> float:
+        """Return the number of seconds on the "event clock".
+
+        This is the time since either the start of the acquisition or the last
+        event with `reset_event_timer` set to `True`.
+        """
         return time.perf_counter() - self._t0
 
     def _outputs_connected(
@@ -265,9 +276,12 @@ class MDARunner:
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
         event_iterator = getattr(engine, "event_iterator", iter)
         _events: Iterator[MDAEvent] = event_iterator(events)
-        self._reset_timer()
+        self._reset_event_timer()
+        self._sequence_t0 = self._t0
 
         for event in _events:
+            if event.reset_event_timer:
+                self._reset_event_timer()
             # If cancelled break out of the loop
             if self._wait_until_event(event) or not self._running:
                 break
@@ -277,17 +291,18 @@ class MDARunner:
             engine.setup_event(event)
 
             try:
-                elapsed_ms = self.seconds_elapsed() * 1000
+                runner_time_ms = self.seconds_elapsed() * 1000
                 # this is a bit of a hack to pass the time into the engine
-                # it is used for intra-event time calculations
+                # it is used for intra-event time calculations inside the engine.
                 # we pop it off after the event is executed.
-                event.metadata["runner_t0"] = self._t0
+                event.metadata["runner_t0"] = self._sequence_t0
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in output:
                     img, event, meta = payload
                     event.metadata.pop("runner_t0", None)
+                    # if the engine calculated its own time, don't overwrite it
                     if "runner_time_ms" not in meta:
-                        meta["runner_time_ms"] = elapsed_ms
+                        meta["runner_time_ms"] = runner_time_ms
                     with exceptions_logged():
                         self._signals.frameReady.emit(img, event, meta)
             finally:
@@ -314,7 +329,7 @@ class MDARunner:
         logger.info("MDA Started: %s", sequence)
         return self._engine
 
-    def _reset_timer(self) -> None:
+    def _reset_event_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
 
     def _check_canceled(self) -> bool:
@@ -367,7 +382,7 @@ class MDARunner:
             go_at = event.min_start_time + self._paused_time
             # We need to enter a loop here checking paused and canceled.
             # otherwise you'll potentially wait a long time to cancel
-            remaining_wait_time = go_at - self.seconds_elapsed()
+            remaining_wait_time = go_at - self.event_seconds_elapsed()
             while remaining_wait_time > 0:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
                 while self._paused and not self._canceled:
@@ -378,7 +393,7 @@ class MDARunner:
                 if self._canceled:
                     break
                 time.sleep(min(remaining_wait_time, 0.5))
-                remaining_wait_time = go_at - self.seconds_elapsed()
+                remaining_wait_time = go_at - self.event_seconds_elapsed()
 
         # check canceled again in case it was canceled
         # during the waiting loop

@@ -395,3 +395,18 @@ def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
         thread.join()
     assert engine.setup_event.call_count == 2
     engine.teardown_sequence.assert_called_once()
+
+
+def test_reset_event_timer(core: CMMCorePlus) -> None:
+    seq = [
+        MDAEvent(min_start_time=0),
+        MDAEvent(min_start_time=0.2),
+        MDAEvent(min_start_time=0, reset_event_timer=True),
+        MDAEvent(min_start_time=0.2),
+    ]
+    meta: list[float] = []
+    core.mda.events.frameReady.connect(lambda f, e, m: meta.append(m["runner_time_ms"]))
+    core.mda.run(seq)
+    # ensure that the 4th event occurred at least 190ms after the 3rd event
+    # (allow some jitter)
+    assert meta[3] >= meta[2] + 190

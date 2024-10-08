@@ -107,7 +107,7 @@ jobs:
           - repo: pymmcore-plus/pymmcore-widgets
             qt: "pyqt6"
           - repo: pymmcore-plus/napari-micromanager
-            qt: "pyside2"
+            qt: "pyqt6"
 
   benchmarks:
     runs-on: ubuntu-latest
