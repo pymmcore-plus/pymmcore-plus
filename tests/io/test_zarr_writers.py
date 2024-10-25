@@ -24,6 +24,12 @@ try:
 except ImportError:
     xr = None
 
+try:
+    import tensorstore as ts
+except ImportError:
+    ts = None
+
+requires_tensorstore = pytest.mark.skipif(not ts, reason="requires tensorstore")
 
 SIMPLE_MDA = useq.MDASequence(
     channels=["Cy5", "FITC"],
@@ -141,6 +147,7 @@ def test_ome_zarr_writer(
     assert isinstance(writer.isel(p=0, t=0, x=slice(0, 100)), np.ndarray)
 
 
+@requires_tensorstore
 @pytest.mark.parametrize("store, mda, expected_shapes", CASES)
 def test_tensorstore_writer(
     store: str | None,
@@ -183,6 +190,7 @@ def test_tensorstore_writer(
     assert x.shape[-1] == 100
 
 
+@requires_tensorstore
 def test_tensorstore_writer_spec_override(
     tmp_path: Path,
 ) -> None:
@@ -194,6 +202,7 @@ def test_tensorstore_writer_spec_override(
     assert writer.get_spec()["context"]["cache_pool"]["total_bytes_limit"] == 10000000
 
 
+@requires_tensorstore
 @pytest.mark.parametrize("dumps", ["msgspec", "std"])
 def test_tensorstore_writes_metadata(
     tmp_path: Path,
@@ -215,6 +224,7 @@ def test_tensorstore_writes_metadata(
     core.mda.run(SIMPLE_MDA, output=writer)
 
 
+@requires_tensorstore
 def test_tensorstore_writer_indeterminate(tmp_path: Path, core: CMMCorePlus) -> None:
     # FIXME: this test is actually throwing difficult-to-debug exceptions
     # when driver=='zarr'.  It happens when awaiting the result of self._store.resize()

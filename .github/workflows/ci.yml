@@ -32,6 +32,9 @@ jobs:
             qt: "PyQt6"
           - platform: ubuntu-latest
             python-version: "3.12"
+          - platform: windows-latest
+            python-version: "3.13"
+            qt: "PyQt6"
 
     steps:
       - uses: actions/checkout@v4
