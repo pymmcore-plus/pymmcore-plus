@@ -209,7 +209,11 @@ def install(
     """
     if PLATFORM not in ("Darwin", "Windows"):  # pragma: no cover
         log_msg(f"Unsupported platform: {PLATFORM!r}", "bold red", ":x:")
-        log_msg(f"Consider building from source (mmcore build-dev).", "bold yellow", ":light_bulb:")
+        log_msg(
+            "Consider building from source (mmcore build-dev).",
+            "bold yellow",
+            ":light_bulb:",
+        )
         raise sys.exit(1)
 
     if release == "latest":
