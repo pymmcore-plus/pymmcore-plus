@@ -118,9 +118,17 @@ def configure_logging(
 
     # automatically log to stderr
     if log_to_stderr and sys.stderr:
-        stderr_handler = logging.StreamHandler(sys.stderr)
+        # try to use rich for stderr logging
+        # fallback to plain text if rich is not installed
+        try:
+            from rich.logging import RichHandler
+
+            stderr_handler: logging.Handler = RichHandler()
+        except ImportError:
+            stderr_handler = logging.StreamHandler(sys.stderr)
+            stderr_handler.setFormatter(CustomFormatter())
+
         stderr_handler.setLevel(stderr_level)
-        stderr_handler.setFormatter(CustomFormatter())
         logger.addHandler(stderr_handler)
 
     # automatically log to file
