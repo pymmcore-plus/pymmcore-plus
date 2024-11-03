@@ -235,7 +235,7 @@ class TensorStoreHandler:
         # FIXME: will fail on slices
         indexers = {**(indexers or {}), **indexers_kwargs}
         ts_index = self._event_index_to_store_index(indexers)
-        if self._store is None:
+        if self._store is None:  # pragma: no cover
             warnings.warn("No data written.", stacklevel=2)
             return np.empty([])
         return self._store[ts_index].read().result().squeeze()  # type: ignore [no-any-return]
