@@ -30,6 +30,9 @@ jobs:
           - platform: macos-13
             python-version: "3.11"
             qt: "PyQt6"
+          - platform: windows-latest
+            python-version: "3.12"
+            qt: "PyQt6"
           - platform: ubuntu-latest
             python-version: "3.12"
 
