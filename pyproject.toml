@@ -52,6 +52,10 @@ dependencies = [
 [project.optional-dependencies]
 cli = ["typer >=0.4.2", "rich >=10.2.0"]
 io = ["tifffile >=2021.6.14", "zarr >=2.2,<3"]
+PySide2 = ["PySide2 >=5.15.4"]
+PySide6 = ["PySide6 >=6.4.0,<6.8"]
+PyQt5 = ["PyQt5 >=5.15.4"]
+PyQt6 = ["PyQt6 >=6.4.2,<6.8"]
 test = [
     "msgspec",
     "msgpack",

@@ -9,6 +9,8 @@ from itertools import product
 from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
+import numpy as np
+
 from pymmcore_plus.metadata.serialize import json_dumps, json_loads
 
 from ._util import position_sizes
@@ -17,7 +19,6 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from typing import Literal, TypeAlias
 
-    import numpy as np
     import tensorstore as ts
     import useq
     from typing_extensions import Self  # py311
@@ -234,7 +235,10 @@ class TensorStoreHandler:
         # FIXME: will fail on slices
         indexers = {**(indexers or {}), **indexers_kwargs}
         ts_index = self._event_index_to_store_index(indexers)
-        return self._store[ts_index].read().result().squeeze()  # type: ignore
+        if self._store is None:
+            warnings.warn("No data written.", stacklevel=2)
+            return np.empty([])
+        return self._store[ts_index].read().result().squeeze()  # type: ignore [no-any-return]
 
     def new_store(
         self, frame: np.ndarray, seq: useq.MDASequence | None, meta: FrameMetaV1
