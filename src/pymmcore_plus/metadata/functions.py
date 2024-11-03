@@ -8,9 +8,8 @@ from pymmcore_plus._util import timestamp
 from pymmcore_plus.core._constants import DeviceType, PixelFormat
 
 if TYPE_CHECKING:
-    from typing import Unpack
-
     import useq
+    from typing_extensions import Unpack
 
     from pymmcore_plus.core import CMMCorePlus
 
