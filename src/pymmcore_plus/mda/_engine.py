@@ -3,11 +3,7 @@ from __future__ import annotations
 import time
 from contextlib import suppress
 from itertools import product
-from typing import (
-    TYPE_CHECKING,
-    NamedTuple,
-    cast,
-)
+from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
@@ -27,12 +23,15 @@ from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
+    from typing import TypeAlias
 
     from numpy.typing import NDArray
 
     from pymmcore_plus.core import CMMCorePlus
 
     from ._protocol import PImagePayload
+
+    IncludePositionArg: TypeAlias = Literal[True, False, "unsequenced-only"]
 
 
 class MDAEngine(PMDAEngine):
@@ -59,7 +58,11 @@ class MDAEngine(PMDAEngine):
 
     def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = True) -> None:
         self._mmc = mmc
-        self.use_hardware_sequencing = use_hardware_sequencing
+        self.use_hardware_sequencing: bool = use_hardware_sequencing
+
+        # whether to include position metadata when fetching on-frame metadata
+        # omitted by default when performing triggered acquisition because it's slow.
+        self._include_frame_position_metadata: IncludePositionArg = "unsequenced-only"
 
         # used to check if the hardware autofocus is engaged when the sequence begins.
         # if it is, we will re-engage it after the autofocus action (if successful).
@@ -82,6 +85,19 @@ class MDAEngine(PMDAEngine):
         # sequence of (device, property) of all properties used in any of the presets
         # in the channel group.
         self._config_device_props: dict[str, Sequence[tuple[str, str]]] = {}
+
+    @property
+    def include_frame_position_metadata(self) -> IncludePositionArg:
+        return self._include_frame_position_metadata
+
+    @include_frame_position_metadata.setter
+    def include_frame_position_metadata(self, value: IncludePositionArg) -> None:
+        if value not in (True, False, "unsequenced-only"):
+            raise ValueError(
+                "include_frame_position_metadata must be True, False, or "
+                "'unsequenced-only'"
+            )
+        self._include_frame_position_metadata = value
 
     @property
     def mmcore(self) -> CMMCorePlus:
@@ -274,6 +290,7 @@ class MDAEngine(PMDAEngine):
                 event,
                 runner_time_ms=event_time_ms,
                 camera_device=self._mmc.getPhysicalCameraDevice(cam),
+                include_position=self._include_frame_position_metadata is not False,
             )
             # Note, the third element is actually a MutableMapping, but mypy doesn't
             # see TypedDict as a subclass of MutableMapping yet.
@@ -285,6 +302,7 @@ class MDAEngine(PMDAEngine):
         event: MDAEvent,
         prop_values: tuple[PropertyValue, ...] | None = None,
         runner_time_ms: float = 0.0,
+        include_position: bool = True,
         camera_device: str | None = None,
     ) -> FrameMetaV1:
         if prop_values is None and (ch := event.channel):
@@ -298,6 +316,7 @@ class MDAEngine(PMDAEngine):
             camera_device=camera_device,
             property_values=prop_values,
             mda_event=event,
+            include_position=include_position,
         )
 
     def teardown_event(self, event: MDAEvent) -> None:
@@ -491,6 +510,7 @@ class MDAEngine(PMDAEngine):
             prop_values=(),
             runner_time_ms=event_t0 + seq_time,
             camera_device=camera_device,
+            include_position=self._include_frame_position_metadata is True,
         )
         meta["hardware_triggered"] = True
         meta["images_remaining_in_buffer"] = remaining
