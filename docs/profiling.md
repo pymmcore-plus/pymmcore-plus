@@ -69,6 +69,15 @@ sudo py-spy record -o profile.json -f speedscope -r 1000 -- mmcore run mda_seq.j
 - the `mmcore run` command runs the acquisition specified in the json file
 - the `--config` flag specifies the path to the MMCore configuration file defining your microscope.
 
+### Example attaching to a running process
+
+If you have a running Python process that you want to profile, you can attach
+`py-spy` to it using the `-p` flag:
+
+```sh
+sudo py-spy record -o profile.json -f speedscope -r 1000 -p <pid>
+```
+
 ## Analyzing the profile
 
 Once you have a profile, you can view it in the Speedscope web viewer.
