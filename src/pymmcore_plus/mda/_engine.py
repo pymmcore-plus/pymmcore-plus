@@ -92,7 +92,7 @@ class MDAEngine(PMDAEngine):
 
     @include_frame_position_metadata.setter
     def include_frame_position_metadata(self, value: IncludePositionArg) -> None:
-        if value not in (True, False, "unsequenced-only"):
+        if value not in (True, False, "unsequenced-only"):  # pragma: no cover
             raise ValueError(
                 "include_frame_position_metadata must be True, False, or "
                 "'unsequenced-only'"
