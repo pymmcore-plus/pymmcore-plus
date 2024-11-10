@@ -192,6 +192,9 @@ class TensorStoreHandler:
         #     if x["type"] == "CameraDevice" and x["name"] != "Multi Camera"
         # ]
         self.cameras = meta["active_cameras"]
+        self.frame_sizes = tuple((x["width"], x["height"]) for x in meta["image_infos"] if (x["camera_label"] in self.cameras))
+        if not all(size == self.frame_sizes[0] for size in self.frame_sizes):
+            raise NotImplementedError("Multiple camera frame sizes are not supported.")
         if len(self.cameras) > 1:
             channels = []
             for channel in seq.channels:
