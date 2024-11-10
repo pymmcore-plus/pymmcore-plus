@@ -184,15 +184,23 @@ class TensorStoreHandler:
         self._store = None
         self._futures.clear()
         self.frame_metadatas.clear()
-        self.cameras = [x['label'] for x in meta['devices'] if x['type'] == 'CameraDevice' and x['name'] != 'Multi Camera']
+        self.cameras = [
+            x["label"]
+            for x in meta["devices"]
+            if x["type"] == "CameraDevice" and x["name"] != "Multi Camera"
+        ]
         if len(self.cameras) > 1:
-            # Not sure how to check for same frame size. is in the device meta, but none for DemoCam for example
+            # Not sure how to check for same frame size. is in the device meta,
+            # but none for DemoCam for example
             # and not sure how ROI would affect it
-            # We can't just replace the sizes, because they are recalculated and we don't want to access _sizes
+            # We can't just replace the sizes, because they are recalculated
+            # and we don't want to access _sizes
             channels = []
             for channel in seq.channels:
                 for camera in self.cameras:
-                    channels.append(channel.replace(config=channel.config + f"_{camera}"))
+                    channels.append(
+                        channel.replace(config=channel.config + f"_{camera}")
+                    )
             seq = seq.replace(channels=channels)
         self.current_sequence = seq
 
@@ -215,8 +223,13 @@ class TensorStoreHandler:
     ) -> None:
         """Write frame to the zarr array for the appropriate position."""
         if len(self.cameras) > 1:
-            new_index = {**event.index, 'c': (len(self.cameras) * event.index.get('c', 0)
-                                              + self.cameras.index(meta['camera_device']))}
+            new_index = {
+                **event.index,
+                "c": (
+                    len(self.cameras) * event.index.get("c", 0)
+                    + self.cameras.index(meta.get("camera_device") or "0")
+                ),
+            }
             event = event.replace(sequence=self.current_sequence, index=new_index)
             print(event)
 
