@@ -62,6 +62,7 @@ def summary_metadata(
         "position": position(core),
         "config_groups": config_groups(core),
         "pixel_size_configs": pixel_size_configs(core),
+        "active_cameras": active_cameras(core)
     }
     if include_time:
         summary["datetime"] = timestamp()
@@ -147,6 +148,13 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
         "timeout_ms": core.getTimeoutMs(),
     }
 
+
+def active_cameras(core: CMMCorePlus) -> list[str]:
+    """Return the list of active cameras."""
+    cams = []
+    for cam in range(core.getNumberOfCameraChannels()):
+        cams.append(core.getPhysicalCameraDevice(cam))
+    return tuple(cams)
 
 def image_info(core: CMMCorePlus) -> ImageInfo:
     """Return information about the current camera image properties."""

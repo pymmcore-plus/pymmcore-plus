@@ -244,15 +244,19 @@ def test_tensorstore_writer_indeterminate(tmp_path: Path, core: CMMCorePlus) -> 
     with pytest.raises(KeyError):
         writer.isel(t=2, z=2, c=0)
 
+
 @requires_tensorstore
 def test_tensorstore_writer_multicam(tmp_path: Path, core: CMMCorePlus) -> None:
     writer = TensorStoreHandler()
 
     mc = "YoMulti"
     core.loadDevice("Camera2", "DemoCamera", "DCam")
+    core.loadDevice("Camera3", "DemoCamera", "DCam")
     core.loadDevice(mc, "Utilities", "Multi Camera")
     core.initializeDevice(mc)
     core.initializeDevice("Camera2")
+    # Additional camera we don't activate to check if it's ignored
+    core.initializeDevice("Camera3")
     core.setProperty("Camera2", "BitDepth", "16")
     core.setProperty(mc, "Physical Camera 1", "Camera")
     core.setProperty(mc, "Physical Camera 2", "Camera2")

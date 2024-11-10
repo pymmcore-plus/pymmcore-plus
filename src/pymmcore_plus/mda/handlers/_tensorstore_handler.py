@@ -184,17 +184,15 @@ class TensorStoreHandler:
         self._store = None
         self._futures.clear()
         self.frame_metadatas.clear()
-        self.cameras = [
-            x["label"]
-            for x in meta["devices"]
-            if x["type"] == "CameraDevice" and x["name"] != "Multi Camera"
-        ]
+        # The problem with this is that we check for registered cameras, without knowing if MultiCam
+        #  is activated
+        # self.cameras = [
+        #     x["label"]
+        #     for x in meta["devices"]
+        #     if x["type"] == "CameraDevice" and x["name"] != "Multi Camera"
+        # ]
+        self.cameras = meta['active_cameras']
         if len(self.cameras) > 1:
-            # Not sure how to check for same frame size. is in the device meta,
-            # but none for DemoCam for example
-            # and not sure how ROI would affect it
-            # We can't just replace the sizes, because they are recalculated
-            # and we don't want to access _sizes
             channels = []
             for channel in seq.channels:
                 for camera in self.cameras:
@@ -230,8 +228,8 @@ class TensorStoreHandler:
                     + self.cameras.index(meta.get("camera_device") or "0")
                 ),
             }
-            event = event.replace(sequence=self.current_sequence, index=new_index)
-            print(event)
+            event = event.replace(sequence=self.current_sequence, index=new_index, channel=event.channel.replace(config=event.channel.config + f"_{meta.get('camera_device') or '0'}"))
+        
 
         if self._store is None:
             self._store = self.new_store(frame, event.sequence, meta).result()
@@ -248,7 +246,6 @@ class TensorStoreHandler:
 
         # write the new frame asynchronously
         self._futures.append(self._store[ts_index].write(frame))
-        print(self._futures)
 
         # store, but do not process yet, the frame metadata
         self.frame_metadatas.append((event, meta))

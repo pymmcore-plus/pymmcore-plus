@@ -398,6 +398,7 @@ class SummaryMetaV1(TypedDict):
     devices: tuple[DeviceInfo, ...]
     system_info: SystemInfo
     image_infos: tuple[ImageInfo, ...]
+    active_cameras: tuple[str, ...]
     config_groups: tuple[ConfigGroup, ...]
     pixel_size_configs: tuple[PixelSizeConfigPreset, ...]
     position: Position
