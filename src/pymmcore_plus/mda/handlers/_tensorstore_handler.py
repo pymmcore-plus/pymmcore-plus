@@ -10,6 +10,7 @@ from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
+import useq
 
 from pymmcore_plus.metadata.serialize import json_dumps, json_loads
 
@@ -20,7 +21,6 @@ if TYPE_CHECKING:
     from typing import Literal, TypeAlias
 
     import tensorstore as ts
-    import useq
     from typing_extensions import Self  # py311
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
@@ -111,7 +111,7 @@ class TensorStoreHandler:
         self.delete_existing = delete_existing
         self.spec = spec
 
-        self.cameras: list[str] = []
+        self.cameras: tuple[str, ...] = ("none",)
 
         # storage of individual frame metadata
         # maps position key to list of frame metadata
@@ -184,14 +184,14 @@ class TensorStoreHandler:
         self._store = None
         self._futures.clear()
         self.frame_metadatas.clear()
-        # The problem with this is that we check for registered cameras, without knowing if MultiCam
-        #  is activated
+        # The problem with this is that we check for registered cameras, without knowing
+        #  if MultiCam is activated
         # self.cameras = [
         #     x["label"]
         #     for x in meta["devices"]
         #     if x["type"] == "CameraDevice" and x["name"] != "Multi Camera"
         # ]
-        self.cameras = meta['active_cameras']
+        self.cameras = meta["active_cameras"]
         if len(self.cameras) > 1:
             channels = []
             for channel in seq.channels:
@@ -228,8 +228,14 @@ class TensorStoreHandler:
                     + self.cameras.index(meta.get("camera_device") or "0")
                 ),
             }
-            event = event.replace(sequence=self.current_sequence, index=new_index, channel=event.channel.replace(config=event.channel.config + f"_{meta.get('camera_device') or '0'}"))
-        
+            new_channel = event.channel or useq.Channel(config="default")
+            new_channel = new_channel.replace(
+                config=(event.channel or useq.Channel(config="default")).config
+                + f"_{meta.get('camera_device') or '0'}"
+            )
+            event = event.replace(
+                sequence=self.current_sequence, index=new_index, channel=new_channel
+            )
 
         if self._store is None:
             self._store = self.new_store(frame, event.sequence, meta).result()
