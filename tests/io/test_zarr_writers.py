@@ -243,3 +243,31 @@ def test_tensorstore_writer_indeterminate(tmp_path: Path, core: CMMCorePlus) -> 
     assert writer.isel(t=1, z=slice(None), c=0).shape == (2, 512, 512)
     with pytest.raises(KeyError):
         writer.isel(t=2, z=2, c=0)
+
+@requires_tensorstore
+def test_tensorstore_writer_multicam(tmp_path: Path, core: CMMCorePlus) -> None:
+    writer = TensorStoreHandler()
+
+    mc = "YoMulti"
+    core.loadDevice("Camera2", "DemoCamera", "DCam")
+    core.loadDevice(mc, "Utilities", "Multi Camera")
+    core.initializeDevice(mc)
+    core.initializeDevice("Camera2")
+    core.setProperty("Camera2", "BitDepth", "16")
+    core.setProperty(mc, "Physical Camera 1", "Camera")
+    core.setProperty(mc, "Physical Camera 2", "Camera2")
+    core.setCameraDevice(mc)
+
+    core.mda.run(SIMPLE_MDA, output=writer)
+
+    assert writer.isel(t=0, c=0).shape == (512, 512)
+    assert writer.isel(t=0, c=1).shape == (512, 512)
+    assert writer.isel(t=0, c=2).shape == (512, 512)
+    assert writer.isel(t=0, c=3).shape == (512, 512)
+    assert writer.isel(t=1, c=0).shape == (512, 512)
+    assert writer.isel(t=1, c=1).shape == (512, 512)
+    assert writer.isel(t=1, c=2).shape == (512, 512)
+    assert writer.isel(t=1, c=3).shape == (512, 512)
+    assert writer.isel(t=0, c=slice(None)).shape == (4, 512, 512)
+    assert writer.isel(t=slice(None), c=0).shape == (2, 512, 512)
+    assert writer.isel(t=slice(None), c=slice(None)).shape == (2, 4, 512, 512)
