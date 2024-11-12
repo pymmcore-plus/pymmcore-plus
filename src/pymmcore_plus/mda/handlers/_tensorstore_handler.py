@@ -20,6 +20,7 @@ if TYPE_CHECKING:
     from typing import Literal, TypeAlias
 
     import tensorstore as ts
+    import useq
     from typing_extensions import Self  # py311
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
@@ -127,12 +128,12 @@ class TensorStoreHandler:
         # for non-deterministic experiments, this often won't work...
         # _nd_storage False means we simply store data as a 3D array of shape
         # (nframes, y, x).  `_nd_storage` is set when a new_store is created.
-        self._nd_storage: bool = False 
+        self._nd_storage: bool = False
         self._frame_index: int = 0
 
         # the highest index seen for each axis
         self._axis_max: dict[str, int] = {}
-        self._index_jump_map : dict[int, int] = {}
+        self._index_jump_map: dict[int, int] = {}
 
     @property
     def store(self) -> ts.TensorStore | None:
@@ -204,7 +205,6 @@ class TensorStoreHandler:
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
     ) -> None:
         """Write frame to the zarr array for the appropriate position."""
-        # print("frameReady", event)
         if self._store is None:
             self._store = self.new_store(frame, event.sequence, meta).result()
 
@@ -218,9 +218,8 @@ class TensorStoreHandler:
             # store reverse lookup of event.index -> frame_index
             index = dict(event.index)
             while frozenset(index.items()) in self._frame_indices.keys():
-                index['camera'] = index.get('camera', 0) + 1
+                index["camera"] = index.get("camera", 0) + 1
             self._frame_indices[frozenset(index.items())] = ts_index
-        print("registering frame", index)
         # write the new frame asynchronously
         self._futures.append(self._store[ts_index].write(frame))
 
@@ -229,7 +228,7 @@ class TensorStoreHandler:
         # update the frame counter
         self._frame_index += 1
         # remember the highest index seen for each axis
-        for k, v in index.items(): 
+        for k, v in index.items():
             self._axis_max[k] = max(self._axis_max.get(k, 0), v)
 
     def isel(
@@ -241,7 +240,6 @@ class TensorStoreHandler:
         # FIXME: will fail on slices
         indexers = {**(indexers or {}), **indexers_kwargs}
         ts_index = self._event_index_to_store_index(indexers)
-        print('ts_index', ts_index)
         if self._store is None:  # pragma: no cover
             warnings.warn("No data written.", stacklevel=2)
             return np.empty([])
@@ -267,7 +265,11 @@ class TensorStoreHandler:
     ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[str, ...]]:
         labels: tuple[str, ...]
         if not self._nd_storage:
-            return (self._size_increment, *frame_shape), (1, *frame_shape), (FRAME_DIM, "y", "x")
+            return (
+                (self._size_increment, *frame_shape),
+                (1, *frame_shape),
+                (FRAME_DIM, "y", "x"),
+            )
         if seq is not None and seq.sizes:
             # expand the sizes to include the largest size we encounter for each axis
             # in the case of positions with subsequences, we'll still end up with a
@@ -316,7 +318,6 @@ class TensorStoreHandler:
 
         if self.ts_driver.startswith("zarr"):
             store.kvstore.write(".zattrs", json_dumps(metadata).decode("utf-8"))
-            print("writing meta")
         elif self.ts_driver == "n5":  # pragma: no cover
             attrs = json_loads(store.kvstore.read("attributes.json").result().value)
             attrs.update(metadata)
@@ -346,14 +347,12 @@ class TensorStoreHandler:
         else:
             try:
                 idx = [self._frame_indices[frozenset(index.items())]]  # type: ignore
-                for i in range(self._axis_max.get('camera', 0)):
-                    index['camera'] = i + 1
-                    print('adding camera', index)
+                for i in range(self._axis_max.get("camera", 0)):
+                    index["camera"] = i + 1  # type: ignore
                     if frozenset(index.items()) in self._frame_indices:
-                        idx.append(self._frame_indices[frozenset(index.items())]) 
+                        idx.append(self._frame_indices[frozenset(index.items())])  # type: ignore
             except KeyError as e:
                 raise KeyError(f"Index {index} not found in frame_indices.") from e
-        print('idx', idx)        
         return self._ts.d[FRAME_DIM][idx]
 
     def _get_frame_indices(self, indexers: Mapping[str, int | slice]) -> list[int]:
@@ -367,16 +366,13 @@ class TensorStoreHandler:
                 axis_indices[k] = (v,)
 
         indices: list[int] = []
-        print('axis_indices', axis_indices)
         for p in product(*axis_indices.values()):
-            key = frozenset(dict(zip(axis_indices.keys(), p)).items())
+            key = dict(zip(axis_indices.keys(), p)).items()
             try:
-                indices.append(self._frame_indices[key])
+                indices.append(self._frame_indices[frozenset(key)])
                 # add all cameras for this index
-                print('adding cameras', self._axis_max.get('camera', 'attention'))
-                for i in range(self._axis_max.get('camera', 0)):
-                    key['camera'] = i
-                    indices.append(self._frame_indices[key])
+                for _i in range(self._axis_max.get("camera", 0)):
+                    indices.append(self._frame_indices[frozenset(key)])
             except KeyError:  # pragma: no cover
                 warnings.warn(
                     f"Index {dict(key)} not found in frame_indices.", stacklevel=2
