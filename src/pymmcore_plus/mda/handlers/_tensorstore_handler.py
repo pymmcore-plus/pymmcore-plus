@@ -372,7 +372,7 @@ class TensorStoreHandler:
                 indices.append(self._frame_indices[frozenset(key.items())])
                 # add all cameras for this index
                 for i in range(self._axis_max.get("camera", 0)):
-                    key['camera'] = i + 1
+                    key["camera"] = i + 1
                     indices.append(self._frame_indices[frozenset(key.items())])
             except KeyError:  # pragma: no cover
                 warnings.warn(
