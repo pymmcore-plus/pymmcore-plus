@@ -128,11 +128,12 @@ class TensorStoreHandler:
         # for non-deterministic experiments, this often won't work...
         # _nd_storage False means we simply store data as a 3D array of shape
         # (nframes, y, x).  `_nd_storage` is set when a new_store is created.
-        self._nd_storage: bool = True
+        self._nd_storage: bool = False 
         self._frame_index: int = 0
 
         # the highest index seen for each axis
         self._axis_max: dict[str, int] = {}
+        self._index_jump_map : dict[int, int] = {}
 
     @property
     def store(self) -> ts.TensorStore | None:
@@ -184,29 +185,6 @@ class TensorStoreHandler:
         self._store = None
         self._futures.clear()
         self.frame_metadatas.clear()
-        # The problem with this is that we check for registered cameras, without knowing
-        #  if MultiCam is activated
-        # self.cameras = [
-        #     x["label"]
-        #     for x in meta["devices"]
-        #     if x["type"] == "CameraDevice" and x["name"] != "Multi Camera"
-        # ]
-        self.cameras = meta["active_cameras"]
-        self.frame_sizes = tuple(
-            (x["width"], x["height"])
-            for x in meta["image_infos"]
-            if (x["camera_label"] in self.cameras)
-        )
-        if not all(size == self.frame_sizes[0] for size in self.frame_sizes):
-            raise NotImplementedError("Multiple camera frame sizes are not supported.")
-        if len(self.cameras) > 1:
-            channels = []
-            for channel in seq.channels:
-                for camera in self.cameras:
-                    channels.append(
-                        channel.replace(config=channel.config + f"_{camera}")
-                    )
-            seq = seq.replace(channels=channels)
         self.current_sequence = seq
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
@@ -227,23 +205,7 @@ class TensorStoreHandler:
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
     ) -> None:
         """Write frame to the zarr array for the appropriate position."""
-        if len(self.cameras) > 1:
-            new_index = {
-                **event.index,
-                "c": (
-                    len(self.cameras) * event.index.get("c", 0)
-                    + self.cameras.index(meta.get("camera_device") or "0")
-                ),
-            }
-            new_channel = event.channel or useq.Channel(config="default")
-            new_channel = new_channel.replace(
-                config=(event.channel or useq.Channel(config="default")).config
-                + f"_{meta.get('camera_device') or '0'}"
-            )
-            event = event.replace(
-                sequence=self.current_sequence, index=new_index, channel=new_channel
-            )
-
+        # print("frameReady", event)
         if self._store is None:
             self._store = self.new_store(frame, event.sequence, meta).result()
 
@@ -255,8 +217,11 @@ class TensorStoreHandler:
                 self._store = self._expand_store(self._store).result()
             ts_index = self._frame_index
             # store reverse lookup of event.index -> frame_index
-            self._frame_indices[frozenset(event.index.items())] = ts_index
-
+            index = dict(event.index)
+            while frozenset(index.items()) in self._frame_indices.keys():
+                index['camera'] = index.get('camera', 0) + 1
+            self._frame_indices[frozenset(index.items())] = ts_index
+        print("registering frame", index)
         # write the new frame asynchronously
         self._futures.append(self._store[ts_index].write(frame))
 
@@ -265,7 +230,7 @@ class TensorStoreHandler:
         # update the frame counter
         self._frame_index += 1
         # remember the highest index seen for each axis
-        for k, v in event.index.items():
+        for k, v in index.items(): 
             self._axis_max[k] = max(self._axis_max.get(k, 0), v)
 
     def isel(
@@ -286,7 +251,7 @@ class TensorStoreHandler:
         self, frame: np.ndarray, seq: useq.MDASequence | None, meta: FrameMetaV1
     ) -> ts.Future[ts.TensorStore]:
         shape, chunks, labels = self.get_shape_chunks_labels(frame.shape, seq)
-        self._nd_storage = FRAME_DIM not in labels
+        # self._nd_storage = FRAME_DIM not in labels
         return self._ts.open(
             self.get_spec(),
             create=True,
@@ -301,6 +266,8 @@ class TensorStoreHandler:
         self, frame_shape: tuple[int, ...], seq: useq.MDASequence | None
     ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[str, ...]]:
         labels: tuple[str, ...]
+        if not self._nd_storage:
+            return (self._size_increment, *frame_shape), (1, *frame_shape), (FRAME_DIM, "y", "x")
         if seq is not None and seq.sizes:
             # expand the sizes to include the largest size we encounter for each axis
             # in the case of positions with subsequences, we'll still end up with a
@@ -349,6 +316,7 @@ class TensorStoreHandler:
 
         if self.ts_driver.startswith("zarr"):
             store.kvstore.write(".zattrs", json_dumps(metadata).decode("utf-8"))
+            print("writing meta")
         elif self.ts_driver == "n5":  # pragma: no cover
             attrs = json_loads(store.kvstore.read("attributes.json").result().value)
             attrs.update(metadata)
