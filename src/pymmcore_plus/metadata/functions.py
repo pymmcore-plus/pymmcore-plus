@@ -149,14 +149,6 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
     }
 
 
-def active_cameras(core: CMMCorePlus) -> tuple[str, ...]:
-    """Return the list of active cameras."""
-    cams = []
-    for cam in range(core.getNumberOfCameraChannels()):
-        cams.append(core.getPhysicalCameraDevice(cam))
-    return tuple(cams)
-
-
 def image_info(core: CMMCorePlus) -> ImageInfo:
     """Return information about the current camera image properties."""
     w = core.getImageWidth()
