@@ -10,7 +10,6 @@ from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-import useq
 
 from pymmcore_plus.metadata.serialize import json_dumps, json_loads
 
@@ -242,6 +241,7 @@ class TensorStoreHandler:
         # FIXME: will fail on slices
         indexers = {**(indexers or {}), **indexers_kwargs}
         ts_index = self._event_index_to_store_index(indexers)
+        print('ts_index', ts_index)
         if self._store is None:  # pragma: no cover
             warnings.warn("No data written.", stacklevel=2)
             return np.empty([])
@@ -345,9 +345,15 @@ class TensorStoreHandler:
             idx: list | int | ts.DimExpression = self._get_frame_indices(index)
         else:
             try:
-                idx = self._frame_indices[frozenset(index.items())]  # type: ignore
+                idx = [self._frame_indices[frozenset(index.items())]]  # type: ignore
+                for i in range(self._axis_max.get('camera', 0)):
+                    index['camera'] = i + 1
+                    print('adding camera', index)
+                    if frozenset(index.items()) in self._frame_indices:
+                        idx.append(self._frame_indices[frozenset(index.items())]) 
             except KeyError as e:
                 raise KeyError(f"Index {index} not found in frame_indices.") from e
+        print('idx', idx)        
         return self._ts.d[FRAME_DIM][idx]
 
     def _get_frame_indices(self, indexers: Mapping[str, int | slice]) -> list[int]:
@@ -361,10 +367,16 @@ class TensorStoreHandler:
                 axis_indices[k] = (v,)
 
         indices: list[int] = []
+        print('axis_indices', axis_indices)
         for p in product(*axis_indices.values()):
             key = frozenset(dict(zip(axis_indices.keys(), p)).items())
             try:
                 indices.append(self._frame_indices[key])
+                # add all cameras for this index
+                print('adding cameras', self._axis_max.get('camera', 'attention'))
+                for i in range(self._axis_max.get('camera', 0)):
+                    key['camera'] = i
+                    indices.append(self._frame_indices[key])
             except KeyError:  # pragma: no cover
                 warnings.warn(
                     f"Index {dict(key)} not found in frame_indices.", stacklevel=2
