@@ -111,8 +111,6 @@ class TensorStoreHandler:
         self.delete_existing = delete_existing
         self.spec = spec
 
-        self.cameras: tuple[str, ...] = ("none",)
-
         # storage of individual frame metadata
         # maps position key to list of frame metadata
         self.frame_metadatas: list[tuple[useq.MDAEvent, FrameMetaV1]] = []
@@ -133,7 +131,6 @@ class TensorStoreHandler:
 
         # the highest index seen for each axis
         self._axis_max: dict[str, int] = {}
-        self._index_jump_map: dict[int, int] = {}
 
     @property
     def store(self) -> ts.TensorStore | None:
