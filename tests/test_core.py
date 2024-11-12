@@ -159,7 +159,6 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
     _seq, _meta = ss_mock.call_args[0]
     assert _seq == mda
     assert set(_meta) == {
-        "active_cameras",
         "mda_sequence",
         "config_groups",
         "format",
