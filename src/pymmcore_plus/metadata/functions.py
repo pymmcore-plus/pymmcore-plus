@@ -62,7 +62,6 @@ def summary_metadata(
         "position": position(core),
         "config_groups": config_groups(core),
         "pixel_size_configs": pixel_size_configs(core),
-        "active_cameras": active_cameras(core),
     }
     if include_time:
         summary["datetime"] = timestamp()
