@@ -367,12 +367,13 @@ class TensorStoreHandler:
 
         indices: list[int] = []
         for p in product(*axis_indices.values()):
-            key = dict(zip(axis_indices.keys(), p)).items()
+            key = dict(zip(axis_indices.keys(), p))
             try:
-                indices.append(self._frame_indices[frozenset(key)])
+                indices.append(self._frame_indices[frozenset(key.items())])
                 # add all cameras for this index
-                for _i in range(self._axis_max.get("camera", 0)):
-                    indices.append(self._frame_indices[frozenset(key)])
+                for i in range(self._axis_max.get("camera", 0)):
+                    key['camera'] = i + 1
+                    indices.append(self._frame_indices[frozenset(key.items())])
             except KeyError:  # pragma: no cover
                 warnings.warn(
                     f"Index {dict(key)} not found in frame_indices.", stacklevel=2
