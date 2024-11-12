@@ -47,7 +47,7 @@ from ._5d_writer_base import _NULL, _5DWriterBase
 if TYPE_CHECKING:
     import useq
 
-    from pymmcore_plus.mda.metadata import SummaryMetaV1
+    from pymmcore_plus.metadata import SummaryMetaV1
 
 IMAGEJ_AXIS_ORDER = "tzcyxs"
 

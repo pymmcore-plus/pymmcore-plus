@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 from itertools import product
-from typing import TYPE_CHECKING, Literal, Sequence, Tuple, overload
+from typing import TYPE_CHECKING, Literal, overload
 
 from useq import AcquireImage, MDAEvent
 
 from pymmcore_plus.core._constants import DeviceType
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from pymmcore_plus import CMMCorePlus
 
 
@@ -18,12 +20,12 @@ class SequencedEvent(MDAEvent):
     calculate sequences for x, y, z, and exposure based on an a sequence of events.
     """
 
-    events: Tuple[MDAEvent, ...]  # noqa: UP006
+    events: tuple[MDAEvent, ...]
 
-    exposure_sequence: Tuple[float, ...]  # noqa: UP006
-    x_sequence: Tuple[float, ...]  # noqa: UP006
-    y_sequence: Tuple[float, ...]  # noqa: UP006
-    z_sequence: Tuple[float, ...]  # noqa: UP006
+    exposure_sequence: tuple[float, ...]
+    x_sequence: tuple[float, ...]
+    y_sequence: tuple[float, ...]
+    z_sequence: tuple[float, ...]
 
     # technically this is more like a field, but it requires a core instance
     # to getConfigData for channels, so we leave it as a method.

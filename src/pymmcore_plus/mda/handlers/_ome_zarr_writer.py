@@ -6,17 +6,19 @@ import os.path
 import shutil
 import tempfile
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Literal, MutableMapping, Protocol
+from typing import TYPE_CHECKING, Any, Literal, Protocol
 
 import numpy as np
 
-from pymmcore_plus.mda.metadata.serialize import to_builtins
+from pymmcore_plus.metadata.serialize import to_builtins
 
 from ._5d_writer_base import _5DWriterBase
 
 if TYPE_CHECKING:
+    from collections.abc import MutableMapping, Sequence
+    from contextlib import AbstractAsyncContextManager
     from os import PathLike
-    from typing import ContextManager, Sequence, TypedDict
+    from typing import TypedDict
 
     import xarray as xr
     import zarr
@@ -24,7 +26,7 @@ if TYPE_CHECKING:
     from numcodecs.abc import Codec
 
     class ZarrSynchronizer(Protocol):
-        def __getitem__(self, key: str) -> ContextManager: ...
+        def __getitem__(self, key: str) -> AbstractAsyncContextManager: ...
 
     class ArrayCreationKwargs(TypedDict, total=False):
         compressor: str | Codec
@@ -276,9 +278,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
         self._group.attrs["multiscales"] = scales
         ary.attrs["_ARRAY_DIMENSIONS"] = dims
         if seq := self.current_sequence:
-            ary.attrs["useq_MDASequence"] = to_builtins(
-                seq.model_dump(exclude_unset=True)
-            )
+            ary.attrs["useq_MDASequence"] = to_builtins(seq)
 
         return ary
 

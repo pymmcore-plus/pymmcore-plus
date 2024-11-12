@@ -4,12 +4,12 @@ from abc import abstractmethod
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
 if TYPE_CHECKING:
-    from typing import Iterable, Iterator
+    from collections.abc import Iterable, Iterator
 
     from numpy.typing import NDArray
     from useq import MDAEvent, MDASequence
 
-    from pymmcore_plus.mda.metadata.schema import FrameMetaV1, SummaryMetaV1
+    from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
 
     PImagePayload = tuple[NDArray, MDAEvent, FrameMetaV1]
 

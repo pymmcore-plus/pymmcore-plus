@@ -10,17 +10,14 @@ from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
+from re import Pattern
 from textwrap import dedent
 from threading import RLock, Thread
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
-    Iterable,
-    Iterator,
     NamedTuple,
-    Pattern,
-    Sequence,
     TypeVar,
     overload,
 )
@@ -31,6 +28,7 @@ from psygnal import SignalInstance
 from pymmcore_plus._logger import current_logfile, logger
 from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
+from pymmcore_plus.metadata.functions import summary_metadata
 
 from ._adapter import DeviceAdapter
 from ._config import Configuration
@@ -47,18 +45,17 @@ from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from ._sequencing import can_sequence_events
-from ._state import core_state
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Sequence
     from typing import Literal, TypedDict
 
     import numpy as np
     from useq import MDAEvent
 
     from pymmcore_plus.mda._runner import SingleOutput
-
-    from ._state import StateDict
+    from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
@@ -193,6 +190,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         global _instance
         if _instance is None:
             _instance = self
+
+        if hasattr("self", "enableFeature"):
+            self.enableFeature("StrictInitializationChecks", True)
 
         # TODO: test this on windows ... writing to the same file may be an issue there
         if logfile := current_logfile(logger):
@@ -1592,7 +1592,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         try:
             channel_group = self.getPropertyFromCache("Core", "ChannelGroup")
-            channel = self.getCurrentConfigFromCache(channel_group)
+            channel: str = self.getCurrentConfigFromCache(channel_group)
         except Exception:
             channel = "Default"
         tags["Channel"] = channel
@@ -2008,7 +2008,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         :sparkles: *This method is new in `CMMCorePlus`.*
         """
-        _current = {
+        _current: dict[str, str] = {
             self.getCameraDevice(): "Camera",
             self.getXYStageDevice(): "XYStage",
             self.getFocusDevice(): "Focus",
@@ -2035,35 +2035,17 @@ class CMMCorePlus(pymmcore.CMMCore):
         print_tabular_data(data, sort=sort)
 
     def state(
-        self,
-        *,
-        devices: bool = True,
-        image: bool = True,
-        system_info: bool = False,
-        system_status: bool = False,
-        config_groups: bool | Sequence[str] = True,
-        position: bool = False,
-        autofocus: bool = False,
-        pixel_size_configs: bool = False,
-        device_types: bool = False,
-        cached: bool = True,
-        error_value: Any = None,
-    ) -> StateDict:
+        self, *, cached: bool = True, include_time: bool = False, **_kwargs: Any
+    ) -> SummaryMetaV1:
         """Return info on the current state of the core."""
-        return core_state(
-            self,
-            devices=devices,
-            image=image,
-            system_info=system_info,
-            system_status=system_status,
-            config_groups=config_groups,
-            position=position,
-            autofocus=autofocus,
-            pixel_size_configs=pixel_size_configs,
-            device_types=device_types,
-            cached=cached,
-            error_value=error_value,
-        )
+        if _kwargs:
+            keys = ", ".join(_kwargs.keys())
+            warnings.warn(
+                f"CMMCorePlus.state no longer takes arguments: {keys}. Ignoring."
+                "Please update your code as this may be an error in the future.",
+                stacklevel=2,
+            )
+        return summary_metadata(self, include_time=include_time, cached=cached)
 
     @contextmanager
     def _property_change_emission_ensured(

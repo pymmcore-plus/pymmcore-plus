@@ -75,8 +75,7 @@ provides a python API to control the C++ core directly, without the need for
 Java in the loop.  Each has its own advantages and disadvantages!  With
 pycro-manager you immediately get the entire existing micro-manager ecosystem
 and GUI application. With pymmcore-plus you don't need to install Java, and you
-have direct access to the memory buffers used by the C++ core, but the GUI
-side of things is far less mature.
+have direct access to the memory buffers used by the C++ core.
 
 ## Quickstart
 

@@ -3,15 +3,17 @@ from __future__ import annotations
 import warnings
 from abc import abstractmethod
 from collections import defaultdict
-from typing import TYPE_CHECKING, Generic, Mapping, Protocol, TypeVar
+from typing import TYPE_CHECKING, Generic, Protocol, TypeVar
 
 from ._util import position_sizes
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     import numpy as np
     import useq
 
-    from pymmcore_plus.mda.metadata import FrameMetaV1, SummaryMetaV1
+    from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
     class SupportsSetItem(Protocol):
         def __setitem__(self, key: tuple[int, ...], value: np.ndarray) -> None: ...

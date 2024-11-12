@@ -6,6 +6,7 @@ from typing import Callable
 
 import pytest
 import useq
+
 from pymmcore_plus import CMMCorePlus
 
 if all(x not in {"--codspeed", "tests/test_bench.py"} for x in sys.argv):
@@ -72,3 +73,17 @@ def test_run_mda(mda_key: str, core: CMMCorePlus, benchmark: Callable) -> None:
     """Benchmark running MDA sequences."""
     seq = list(MDAS[mda_key])  # expand iterator prior to benchmarking
     benchmark(core.mda.run, seq)
+
+
+def test_mda_summary_metadata(benchmark: Callable) -> None:
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    seq = useq.MDASequence()
+    benchmark(core.mda.engine.setup_sequence, seq)  # type: ignore
+
+
+def test_mda_frame_metadata(benchmark: Callable) -> None:
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    event = useq.MDAEvent()
+    benchmark(core.mda.engine.exec_event, event)  # type: ignore

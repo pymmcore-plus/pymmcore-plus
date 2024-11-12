@@ -1,6 +1,7 @@
 import numpy as np
-from pymmcore_plus import CMMCorePlus
 from useq import MDAEvent, MDASequence
+
+from pymmcore_plus import CMMCorePlus
 
 # see https://pymmcore-plus.github.io/useq-schema/api/ (1)
 sequence = MDASequence(

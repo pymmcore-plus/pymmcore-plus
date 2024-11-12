@@ -5,8 +5,9 @@ from dataclasses import fields
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
+    from collections.abc import Container, Iterable
     from dataclasses import Field
-    from typing import Any, Callable, ClassVar, Container, Iterable, TypeVar
+    from typing import Any, Callable, ClassVar, TypeVar
 
     from typing_extensions import TypeAlias  # py310
 

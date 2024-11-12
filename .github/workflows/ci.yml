@@ -15,33 +15,29 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.platform }} py${{ matrix.python-version }} ${{ matrix.pydantic }}
+    name: ${{ matrix.platform }} py${{ matrix.python-version }} ${{ matrix.qt }}
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
         platform: [windows-latest, macos-13]
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
-        pydantic: [""]
+        python-version: ["3.9", "3.10", "3.11", "3.12"]
         qt: ["PySide6"]
         include:
           - platform: windows-latest
-            python-version: "3.8"
-            pydantic: "'pydantic<2'"
-            qt: "PySide6"
-          - platform: windows-latest
             python-version: "3.9"
-            pydantic: "'pydantic<2'"
             qt: "PySide2"
           - platform: macos-13
             python-version: "3.11"
             qt: "PyQt6"
           - platform: windows-latest
-            python-version: "3.11"
-            pydantic: "'pydantic<2'"
-            qt: "PySide6"
+            python-version: "3.12"
+            qt: "PyQt6"
           - platform: ubuntu-latest
-            python-version: "3.11"
+            python-version: "3.12"
+          - platform: windows-latest
+            python-version: "3.13"
+            qt: "PyQt6"
 
     steps:
       - uses: actions/checkout@v4
@@ -54,7 +50,11 @@ jobs:
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install -e .[test]
+          python -m pip install -e .[test]
+
+      - name: Install Qt
+        if: matrix.qt
+        run: pip install -e .[${{ matrix.qt }}]
 
       - name: Set cache path
         shell: bash
@@ -62,14 +62,6 @@ jobs:
           set -e
           CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
           echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
-
-      - name: Install  ${{ matrix.qt }}
-        if: ${{ matrix.qt }}
-        run: pip install ${{ matrix.qt }}
-
-      - name: Downgrade pydantic
-        if: ${{ matrix.pydantic }}
-        run: pip install ${{ matrix.pydantic }}
 
       - name: Cache Drivers
         id: cache-mm-build
@@ -114,7 +106,7 @@ jobs:
           - repo: pymmcore-plus/pymmcore-widgets
             qt: "pyqt6"
           - repo: pymmcore-plus/napari-micromanager
-            qt: "pyside2"
+            qt: "pyqt6"
 
   benchmarks:
     runs-on: ubuntu-latest
@@ -142,7 +134,7 @@ jobs:
         run: mmcore build-dev
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v2
+        uses: CodSpeedHQ/action@v3
         with:
           run: pytest -W ignore --codspeed -v --color=yes
 

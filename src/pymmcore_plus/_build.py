@@ -1,5 +1,7 @@
 """Clone the micro-manager source code from GitHub and build dev devices."""
 
+from __future__ import annotations
+
 import json
 import os
 import platform
@@ -9,11 +11,14 @@ import subprocess
 import tempfile
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Iterator, Sequence
+from typing import TYPE_CHECKING
 from urllib.request import Request, urlopen
 
 from rich import print
 from rich.prompt import Prompt
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Sequence
 
 MM_REPO = "micro-manager/micro-manager"
 MMCORE_AND_DEV = "micro-manager/mmCoreAndDevices"

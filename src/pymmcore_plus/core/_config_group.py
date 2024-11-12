@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Iterator, Literal, MutableMapping, overload
+from collections.abc import Iterator, MutableMapping
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import pymmcore
 

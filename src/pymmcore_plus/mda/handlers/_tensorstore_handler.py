@@ -9,18 +9,21 @@ from itertools import product
 from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
-from pymmcore_plus.mda.metadata.serialize import json_dumps, json_loads
+import numpy as np
+
+from pymmcore_plus.metadata.serialize import json_dumps, json_loads
 
 from ._util import position_sizes
 
 if TYPE_CHECKING:
-    from typing import Literal, Mapping, Self, Sequence, TypeAlias
+    from collections.abc import Mapping, Sequence
+    from typing import Literal, TypeAlias
 
-    import numpy as np
     import tensorstore as ts
     import useq
+    from typing_extensions import Self  # py311
 
-    from pymmcore_plus.mda.metadata import FrameMetaV1, SummaryMetaV1
+    from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
     TsDriver: TypeAlias = Literal["zarr", "zarr3", "n5", "neuroglancer_precomputed"]
     EventKey: TypeAlias = frozenset[tuple[str, int]]
@@ -232,7 +235,10 @@ class TensorStoreHandler:
         # FIXME: will fail on slices
         indexers = {**(indexers or {}), **indexers_kwargs}
         ts_index = self._event_index_to_store_index(indexers)
-        return self._store[ts_index].read().result().squeeze()  # type: ignore
+        if self._store is None:  # pragma: no cover
+            warnings.warn("No data written.", stacklevel=2)
+            return np.empty([])
+        return self._store[ts_index].read().result().squeeze()  # type: ignore [no-any-return]
 
     def new_store(
         self, frame: np.ndarray, seq: useq.MDASequence | None, meta: FrameMetaV1
@@ -257,7 +263,7 @@ class TensorStoreHandler:
             # expand the sizes to include the largest size we encounter for each axis
             # in the case of positions with subsequences, we'll still end up with a
             # jagged array, but it won't take extra space, and we won't get index errors
-            max_sizes = seq.sizes.copy()
+            max_sizes = dict(seq.sizes)
             for psize in position_sizes(seq):
                 for k, v in psize.items():
                     max_sizes[k] = max(max_sizes.get(k, 0), v)

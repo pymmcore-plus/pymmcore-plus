@@ -4,8 +4,9 @@ from unittest.mock import Mock
 import numpy as np
 import pytest
 import useq
+
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.mda.metadata import (
+from pymmcore_plus.metadata import (
     FrameMetaV1,
     SummaryMetaV1,
     frame_metadata,
@@ -85,13 +86,13 @@ def test_metadata_during_mda(
 @pytest.mark.parametrize("sequenced", [True, False], ids=["sequenced", "not-sequenced"])
 def test_multicam(core: CMMCorePlus, sequenced: bool) -> None:
     mc = "YoMulti"
-    core.loadDevice("Camer2", "DemoCamera", "DCam")
+    core.loadDevice("Camera2", "DemoCamera", "DCam")
     core.loadDevice(mc, "Utilities", "Multi Camera")
     core.initializeDevice(mc)
-    core.initializeDevice("Camer2")
-    core.setProperty("Camer2", "BitDepth", "16")
+    core.initializeDevice("Camera2")
+    core.setProperty("Camera2", "BitDepth", "16")
     core.setProperty(mc, "Physical Camera 1", "Camera")
-    core.setProperty(mc, "Physical Camera 2", "Camer2")
+    core.setProperty(mc, "Physical Camera 2", "Camera2")
     core.setCameraDevice(mc)
 
     mda = useq.MDASequence(

@@ -10,7 +10,7 @@ import tempfile
 from contextlib import contextmanager, nullcontext
 from pathlib import Path
 from platform import system
-from typing import TYPE_CHECKING, Callable, ContextManager, Iterator, Protocol
+from typing import TYPE_CHECKING, Callable, Protocol
 from urllib.request import urlopen, urlretrieve
 
 import typer
@@ -18,6 +18,8 @@ import typer
 from pymmcore_plus._util import USER_DATA_MM_PATH
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+    from contextlib import AbstractContextManager
 
     class _MsgLogger(Protocol):
         def __call__(self, text: str, color: str = "", emoji: str = "") -> None: ...
@@ -70,7 +72,7 @@ def _get_download_name(url: str) -> str:
     return ""
 
 
-def _get_spinner(log_msg: _MsgLogger) -> Callable[[str], ContextManager]:
+def _get_spinner(log_msg: _MsgLogger) -> Callable[[str], AbstractContextManager]:
     if log_msg is _pretty_print:
         spinner = _spinner
     else:
@@ -207,6 +209,11 @@ def install(
     """
     if PLATFORM not in ("Darwin", "Windows"):  # pragma: no cover
         log_msg(f"Unsupported platform: {PLATFORM!r}", "bold red", ":x:")
+        log_msg(
+            "Consider building from source (mmcore build-dev).",
+            "bold yellow",
+            ":light_bulb:",
+        )
         raise sys.exit(1)
 
     if release == "latest":

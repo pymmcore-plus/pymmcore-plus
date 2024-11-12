@@ -6,13 +6,15 @@ from typing import TYPE_CHECKING
 import numpy as np
 import pytest
 import useq
+
 from pymmcore_plus.mda.handlers import OMEZarrWriter, TensorStoreHandler
-from pymmcore_plus.mda.metadata import serialize
+from pymmcore_plus.metadata import serialize
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import zarr
+
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")
@@ -22,6 +24,12 @@ try:
 except ImportError:
     xr = None
 
+try:
+    import tensorstore as ts
+except ImportError:
+    ts = None
+
+requires_tensorstore = pytest.mark.skipif(not ts, reason="requires tensorstore")
 
 SIMPLE_MDA = useq.MDASequence(
     channels=["Cy5", "FITC"],
@@ -38,6 +46,12 @@ MULTIPOINT_MDA = SIMPLE_MDA.replace(
 MULTIPOINT_EXPECTATION = {
     "p0": {"t": 2, "c": 2, "y": 512, "x": 512},
     "p1": {"t": 2, "c": 2, "y": 512, "x": 512},
+}
+GRID_MDA = SIMPLE_MDA.replace(
+    grid_plan={"rows": 2, "columns": 2, "mode": "row_wise_snake"},
+)
+GRID_EXPECTATION = {
+    "p0": {"t": 2, "c": 2, "y": 512, "x": 512},
 }
 
 FULL_MDA = MULTIPOINT_MDA.replace(z_plan={"range": 0.3, "step": 0.1})
@@ -70,6 +84,7 @@ COMPLEX_EXPECTATION = {
 CASES: list[str | None, useq.MDASequence, dict[str, dict]] = [
     (None, SIMPLE_MDA, SIMPLE_EXPECTATION),
     (None, MULTIPOINT_MDA, MULTIPOINT_EXPECTATION),
+    (None, GRID_MDA, GRID_EXPECTATION),
     (None, FULL_MDA, FULL_EXPECTATION),
     ("out.zarr", FULL_MDA, FULL_EXPECTATION),
     (None, FULL_MDA, FULL_EXPECTATION),
@@ -132,6 +147,7 @@ def test_ome_zarr_writer(
     assert isinstance(writer.isel(p=0, t=0, x=slice(0, 100)), np.ndarray)
 
 
+@requires_tensorstore
 @pytest.mark.parametrize("store, mda, expected_shapes", CASES)
 def test_tensorstore_writer(
     store: str | None,
@@ -174,6 +190,7 @@ def test_tensorstore_writer(
     assert x.shape[-1] == 100
 
 
+@requires_tensorstore
 def test_tensorstore_writer_spec_override(
     tmp_path: Path,
 ) -> None:
@@ -185,6 +202,7 @@ def test_tensorstore_writer_spec_override(
     assert writer.get_spec()["context"]["cache_pool"]["total_bytes_limit"] == 10000000
 
 
+@requires_tensorstore
 @pytest.mark.parametrize("dumps", ["msgspec", "std"])
 def test_tensorstore_writes_metadata(
     tmp_path: Path,
@@ -206,6 +224,7 @@ def test_tensorstore_writes_metadata(
     core.mda.run(SIMPLE_MDA, output=writer)
 
 
+@requires_tensorstore
 def test_tensorstore_writer_indeterminate(tmp_path: Path, core: CMMCorePlus) -> None:
     # FIXME: this test is actually throwing difficult-to-debug exceptions
     # when driver=='zarr'.  It happens when awaiting the result of self._store.resize()

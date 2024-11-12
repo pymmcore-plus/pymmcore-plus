@@ -4,6 +4,7 @@ import datetime
 import importlib
 import os
 import platform
+import re
 import sys
 import warnings
 from collections import defaultdict
@@ -17,7 +18,9 @@ from typing import TYPE_CHECKING, cast, overload
 from platformdirs import user_data_dir
 
 if TYPE_CHECKING:
-    from typing import Any, Callable, Iterator, Literal, TypeVar
+    from collections.abc import Iterator
+    from re import Pattern
+    from typing import Any, Callable, Literal, TypeVar
 
     QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
 
@@ -41,6 +44,7 @@ __all__ = ["find_micromanager", "retry", "no_stdout", "signals_backend"]
 APP_NAME = "pymmcore-plus"
 USER_DATA_DIR = Path(user_data_dir(appname=APP_NAME))
 USER_DATA_MM_PATH = USER_DATA_DIR / "mm"
+CURRENT_MM_PATH = USER_DATA_MM_PATH / ".current_mm"
 PYMMCORE_PLUS_PATH = Path(__file__).parent.parent
 
 
@@ -58,16 +62,17 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     In order, this will look for:
 
     1. An environment variable named `MICROMANAGER_PATH`
-    2. A `Micro-Manager*` folder in the `pymmcore-plus` user data directory
+    2. A path stored in the `CURRENT_MM_PATH` file (set by `use_micromanager`).
+    3. A `Micro-Manager*` folder in the `pymmcore-plus` user data directory
        (this is the default install location when running `mmcore install`)
 
         - **Windows**: C:\Users\\[user]\AppData\Local\pymmcore-plus\pymmcore-plus
         - **macOS**: ~/Library/Application Support/pymmcore-plus
         - **Linux**: ~/.local/share/pymmcore-plus
 
-    3. A `Micro-Manager*` folder in the `pymmcore_plus` package directory (this is the
+    4. A `Micro-Manager*` folder in the `pymmcore_plus` package directory (this is the
        default install location when running `python -m pymmcore_plus.install`)
-    4. The default micro-manager install location:
+    5. The default micro-manager install location:
 
         - **Windows**: `C:/Program Files/`
         - **macOS**: `/Applications`
@@ -89,14 +94,25 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     """
     from ._logger import logger
 
+    # we use a dict here to avoid duplicates
+    full_list: dict[str, None] = {}
+
     # environment variable takes precedence
-    full_list: list[str] = []
     env_path = os.getenv("MICROMANAGER_PATH")
     if env_path and os.path.isdir(env_path):
         if return_first:
             logger.debug("using MM path from env var: %s", env_path)
             return env_path
-        full_list.append(env_path)
+        full_list[env_path] = None
+
+    # then check for a path in CURRENT_MM_PATH
+    if CURRENT_MM_PATH.exists():
+        path = CURRENT_MM_PATH.read_text().strip()
+        if os.path.isdir(path):
+            if return_first:
+                logger.debug("using MM path from current_mm: %s", path)
+                return path
+            full_list[path] = None
 
     # then look in user_data_dir
     _folders = (p for p in USER_DATA_MM_PATH.glob("Micro-Manager*") if p.is_dir())
@@ -105,7 +121,8 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         if return_first:
             logger.debug("using MM path from user install: %s", user_install[0])
             return str(user_install[0])
-        full_list.extend([str(x) for x in user_install])
+        for x in user_install:
+            full_list[str(x)] = None
 
     # then look for an installation in this folder (from `pymmcore_plus.install`)
     sfx = "_win" if os.name == "nt" else "_mac"
@@ -116,7 +133,8 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         if return_first:
             logger.debug("using MM path from local install: %s", local_install[0])
             return str(local_install[0])
-        full_list.extend([str(x) for x in local_install])
+        for x in local_install:
+            full_list[str(x)] = None
 
     applications = {
         "darwin": Path("/Applications/"),
@@ -138,8 +156,59 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         logger.debug("using MM path found in applications: %s", pth)
         return str(pth)
     if pth is not None:
-        full_list.append(str(pth))
-    return full_list
+        full_list[str(pth)] = None
+    return list(full_list)
+
+
+def _match_mm_pattern(pattern: str | Pattern[str]) -> Path | None:
+    """Locate an existing Micro-Manager folder using a regex pattern."""
+    for _path in find_micromanager(return_first=False):
+        if not isinstance(pattern, re.Pattern):
+            pattern = str(pattern)
+        if re.search(pattern, _path) is not None:
+            return Path(_path)
+    return None
+
+
+def use_micromanager(
+    path: str | Path | None = None, pattern: str | Pattern[str] | None = None
+) -> Path | None:
+    """Set the preferred Micro-Manager path.
+
+    This sets the preferred micromanager path, and persists across sessions.
+    This path takes precedence over everything *except* the `MICROMANAGER_PATH`
+    environment variable.
+
+    Parameters
+    ----------
+    path : str | Path | None
+        Path to an existing directory. This directory should contain micro-manager
+        device adapters. If `None`, the path will be determined using `pattern`.
+    pattern : str Pattern | | None
+        A regex pattern to match against the micromanager paths found by
+        `find_micromanager`. If no match is found, a `FileNotFoundError` will be raised.
+    """
+    if path is None:
+        if pattern is None:  # pragma: no cover
+            raise ValueError("One of 'path' or 'pattern' must be provided")
+        if (path := _match_mm_pattern(pattern)) is None:
+            options = "\n".join(find_micromanager(return_first=False))
+            raise FileNotFoundError(
+                f"No micromanager path found matching: {pattern!r}. Options:\n{options}"
+            )
+
+    if not isinstance(path, Path):  # pragma: no cover
+        path = Path(path)
+
+    path = path.expanduser().resolve()
+    if not path.is_dir():  # pragma: no cover
+        if not path.exists():
+            raise FileNotFoundError(f"Path not found: {path!r}")
+        raise NotADirectoryError(f"Not a directory: {path!r}")
+
+    USER_DATA_MM_PATH.mkdir(parents=True, exist_ok=True)
+    CURRENT_MM_PATH.write_text(str(path))
+    return path
 
 
 def _imported_qt_modules() -> Iterator[str]:

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Dict, Tuple, TypeVar
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, TypeVar
 
 from ._norm_slot import denormalize_slot, normalize_slot
 from ._protocol import PCoreSignaler
@@ -8,8 +8,8 @@ from ._protocol import PCoreSignaler
 if TYPE_CHECKING:
     from ._norm_slot import NormedCallback
 
-    PropKey = Tuple[str, str | None, NormedCallback]
-    PropKeyDict = Dict[PropKey, Callable]
+    PropKey = tuple[str, str | None, NormedCallback]
+    PropKeyDict = dict[PropKey, Callable]
 
 
 _C = TypeVar("_C", bound=Callable[..., Any])
@@ -64,8 +64,11 @@ class _PropertySignal:
         self._events.propertyChanged.connect(_wrapper)
         return callback
 
-    def disconnect(self, callback: Callable) -> None:
+    def disconnect(self, callback: Callable | None = None) -> None:
         """Disconnect `callback` from this device and/or property."""
+        if callback is None:
+            self._events.propertyChanged.disconnect()
+            return
         key = (self._device, self._property, normalize_slot(callback))
         cb = self._events.property_callbacks.pop(key, None)
         if cb is None:

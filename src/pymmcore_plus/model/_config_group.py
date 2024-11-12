@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Container, MutableMapping, NamedTuple
+from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
+    from collections.abc import Container, MutableMapping
     from typing import Final
 
+    from typing_extensions import Self  # py311
+
     from pymmcore_plus import CMMCorePlus
+    from pymmcore_plus.metadata.schema import ConfigGroup as ConfigGroupMeta
+    from pymmcore_plus.metadata.schema import ConfigPreset as ConfigPresetMeta
 
     from ._core_link import ErrCallback
 
@@ -37,6 +42,20 @@ class ConfigPreset:
     name: str
     settings: list[Setting] = field(default_factory=list)
 
+    @classmethod
+    def from_metadata(cls, meta: ConfigPresetMeta) -> Self:
+        return cls(
+            name=meta["name"],
+            settings=[
+                Setting(
+                    device_name=d["dev"],
+                    property_name=d["prop"],
+                    property_value=d["val"],
+                )
+                for d in meta["settings"]
+            ],
+        )
+
 
 @dataclass
 class ConfigGroup:
@@ -46,7 +65,15 @@ class ConfigGroup:
     presets: MutableMapping[str, ConfigPreset] = field(default_factory=dict)
 
     @classmethod
-    def create_from_core(cls, core: CMMCorePlus, name: str) -> ConfigGroup:
+    def from_metadata(cls, meta: ConfigGroupMeta) -> Self:
+        presets = {
+            preset["name"]: ConfigPreset.from_metadata(preset)
+            for preset in meta["presets"]
+        }
+        return cls(name=meta["name"], presets=presets)
+
+    @classmethod
+    def create_from_core(cls, core: CMMCorePlus, name: str) -> Self:
         obj = cls(name=name)
         obj.update_from_core(core)
         return obj

@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Literal, Optional, Tuple, TypedDict, Union
+from typing import Any, Literal, Optional, TypedDict, Union
 
 import useq
 from typing_extensions import NotRequired
@@ -17,7 +17,7 @@ __all__ = [
     "SystemInfo",
 ]
 
-AffineTuple = Tuple[float, float, float, float, float, float]
+AffineTuple = tuple[float, float, float, float, float, float]
 
 
 class PropertyInfo(TypedDict):
@@ -53,9 +53,9 @@ class PropertyInfo(TypedDict):
     value: Optional[str]
     data_type: Literal["undefined", "float", "int", "str"]
     is_read_only: bool
-    allowed_values: NotRequired[Tuple[str, ...]]
+    allowed_values: NotRequired[tuple[str, ...]]
     is_pre_init: NotRequired[bool]
-    limits: NotRequired[Tuple[float, float]]
+    limits: NotRequired[tuple[float, float]]
     sequenceable: NotRequired[bool]
     sequence_max_length: NotRequired[int]
     # device_label: str
@@ -96,7 +96,7 @@ class DeviceInfo(TypedDict):
         *Not Required*. Whether the device is sequenceable. If missing, assume `False`.
         This may be present for Cameras, SLMs, Stages, and XYStages.  See also the
         `is_sequenceable` property of each
-        [`PropertyInfo`][pymmcore_plus.mda.metadata.schema.PropertyInfo] object.
+        [`PropertyInfo`][pymmcore_plus.metadata.schema.PropertyInfo] object.
     """
 
     label: str
@@ -104,14 +104,14 @@ class DeviceInfo(TypedDict):
     name: str
     type: str
     description: str
-    properties: Tuple[PropertyInfo, ...]
+    properties: tuple[PropertyInfo, ...]
 
     # hub devices and non-peripheral devices will have no parent_label
     parent_label: NotRequired[str]
     # state device only
-    labels: NotRequired[Tuple[str, ...]]
+    labels: NotRequired[tuple[str, ...]]
     # hub device only
-    child_names: NotRequired[Tuple[str, ...]]
+    child_names: NotRequired[tuple[str, ...]]
     # stage/focus device only
     is_continuous_focus_drive: NotRequired[bool]
     focus_direction: NotRequired[Literal["Unknown", "TowardSample", "AwayFromSample"]]
@@ -159,7 +159,7 @@ class SystemInfo(TypedDict):
     pymmcore_plus_version: str
     mmcore_version: str
     device_api_version: str
-    device_adapter_search_paths: Tuple[str, ...]
+    device_adapter_search_paths: tuple[str, ...]
     system_configuration_file: Optional[str]
     primary_log_file: str
     sequence_buffer_size_mb: int
@@ -215,7 +215,7 @@ class ImageInfo(TypedDict):
     """  # noqa: E501
 
     camera_label: str
-    plane_shape: Tuple[int, ...]
+    plane_shape: tuple[int, ...]
     dtype: str
 
     height: int
@@ -238,8 +238,8 @@ class ImageInfo(TypedDict):
     pixel_size_um: float
     magnification_factor: NotRequired[float]
     pixel_size_affine: NotRequired[AffineTuple]
-    roi: NotRequired[Tuple[int, int, int, int]]
-    multi_roi: NotRequired[Tuple[List[int], List[int], List[int], List[int]]]
+    roi: NotRequired[tuple[int, int, int, int]]
+    multi_roi: NotRequired[tuple[list[int], list[int], list[int], list[int]]]
 
     # # this will be != 1 for things like multi-camera device,
     # # or any "single" device adapter that manages multiple detectors, like PMTs, etc..
@@ -250,7 +250,7 @@ class StagePosition(TypedDict):
     """Represents the position of a single stage device."""
 
     device_label: str
-    position: Union[float, Tuple[float, float]]
+    position: Union[float, tuple[float, float]]
 
 
 class Position(TypedDict):
@@ -276,7 +276,7 @@ class Position(TypedDict):
     x: NotRequired[float]
     y: NotRequired[float]
     z: NotRequired[float]
-    all_stages: NotRequired[List[StagePosition]]
+    all_stages: NotRequired[list[StagePosition]]
 
 
 class PropertyValue(TypedDict):
@@ -312,7 +312,7 @@ class ConfigPreset(TypedDict):
     """
 
     name: str
-    settings: Tuple[PropertyValue, ...]
+    settings: tuple[PropertyValue, ...]
 
 
 class PixelSizeConfigPreset(ConfigPreset):
@@ -350,7 +350,7 @@ class ConfigGroup(TypedDict):
     """
 
     name: str
-    presets: Tuple[ConfigPreset, ...]
+    presets: tuple[ConfigPreset, ...]
 
 
 class SummaryMetaV1(TypedDict):
@@ -362,7 +362,7 @@ class SummaryMetaV1(TypedDict):
     devices.
 
     It may be generated outside of a running mda sequence as well using
-    [`pymmcore_plus.mda.metadata.summary_metadata`][]
+    [`pymmcore_plus.metadata.summary_metadata`][]
 
     Attributes
     ----------
@@ -394,15 +394,15 @@ class SummaryMetaV1(TypedDict):
 
     format: Literal["summary-dict"]
     version: Literal["1.0"]
-    datetime: str
-    devices: Tuple[DeviceInfo, ...]
+    datetime: NotRequired[str]
+    devices: tuple[DeviceInfo, ...]
     system_info: SystemInfo
-    image_infos: Tuple[ImageInfo, ...]
-    config_groups: Tuple[ConfigGroup, ...]
-    pixel_size_configs: Tuple[PixelSizeConfigPreset, ...]
+    image_infos: tuple[ImageInfo, ...]
+    config_groups: tuple[ConfigGroup, ...]
+    pixel_size_configs: tuple[PixelSizeConfigPreset, ...]
     position: Position
     mda_sequence: NotRequired[useq.MDASequence]
-    extra: NotRequired[Dict[str, Any]]
+    extra: NotRequired[dict[str, Any]]
 
 
 class FrameMetaV1(TypedDict):
@@ -416,7 +416,7 @@ class FrameMetaV1(TypedDict):
     in the summary metadata.
 
     It may be generated outside of a running mda sequence as well using
-    [`pymmcore_plus.mda.metadata.frame_metadata`][]
+    [`pymmcore_plus.metadata.frame_metadata`][]
 
     Attributes
     ----------
@@ -462,10 +462,10 @@ class FrameMetaV1(TypedDict):
     camera_device: Optional[str]
     exposure_ms: float
     position: Position
-    property_values: Tuple[PropertyValue, ...]
+    property_values: tuple[PropertyValue, ...]
     runner_time_ms: float
     mda_event: NotRequired[useq.MDAEvent]
     hardware_triggered: NotRequired[bool]
     images_remaining_in_buffer: NotRequired[int]
-    camera_metadata: NotRequired[Dict[str, Any]]
-    extra: NotRequired[Dict[str, Any]]
+    camera_metadata: NotRequired[dict[str, Any]]
+    extra: NotRequired[dict[str, Any]]

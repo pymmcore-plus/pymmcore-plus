@@ -5,10 +5,7 @@ from contextlib import suppress
 from itertools import product
 from typing import (
     TYPE_CHECKING,
-    Iterable,
-    Iterator,
     NamedTuple,
-    Sequence,
     cast,
 )
 
@@ -18,7 +15,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent
-from pymmcore_plus.mda.metadata import (
+from pymmcore_plus.metadata import (
     FrameMetaV1,
     PropertyValue,
     SummaryMetaV1,
@@ -29,6 +26,8 @@ from pymmcore_plus.mda.metadata import (
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Sequence
+
     from numpy.typing import NDArray
 
     from pymmcore_plus.core import CMMCorePlus
@@ -54,12 +53,11 @@ class MDAEngine(PMDAEngine):
         attempt to combine MDAEvents into a single `SequencedEvent` if
         [`core.canSequenceEvents()`][pymmcore_plus.CMMCorePlus.canSequenceEvents]
         reports that the events can be sequenced. This can be set after instantiation.
-        By default, this is `False`, in order to avoid unexpected behavior, particularly
-        in testing and demo scenarios.  But in many "real world" scenarios, this can be
-        set to `True` to improve performance.
+        By default, this is `True`, however in various testing and demo scenarios, you
+        may wish to set it to `False` in order to avoid unexpected behavior.
     """
 
-    def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = False) -> None:
+    def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = True) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing = use_hardware_sequencing
 

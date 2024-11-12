@@ -11,7 +11,7 @@ class PMDASignaler(Protocol):
     """Emits `(sequence: MDASequence, metadata: dict)` when an acquisition sequence is started.
 
     For the default [`MDAEngine`][pymmcore_plus.mda.MDAEngine], the metadata `dict` will
-    be of type [`SummaryMetaV1`][pymmcore_plus.mda.metadata.schema.SummaryMetaV1].
+    be of type [`SummaryMetaV1`][pymmcore_plus.metadata.schema.SummaryMetaV1].
     """  # noqa: E501
     sequencePauseToggled: PSignal
     """Emits `(paused: bool)` when an acquisition sequence is paused or unpaused."""
@@ -23,7 +23,7 @@ class PMDASignaler(Protocol):
     """Emits `(img: np.ndarray, event: MDAEvent, metadata: dict)` after an image is acquired during an acquisition sequence.
 
     For the default [`MDAEngine`][pymmcore_plus.mda.MDAEngine], the metadata `dict` will
-    be of type [`FrameMetaV1`][pymmcore_plus.mda.metadata.schema.FrameMetaV1].
+    be of type [`FrameMetaV1`][pymmcore_plus.metadata.schema.FrameMetaV1].
     """  # noqa: E501
     awaitingEvent: PSignal
     """Emits `(event: MDAEvent, remaining_sec: float)` when the runner is waiting to start an event.

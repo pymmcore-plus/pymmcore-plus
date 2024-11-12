@@ -11,7 +11,9 @@ from pymmcore_plus._util import listeners_connected
 from .events import _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
-    from typing import Any, ContextManager, Iterator
+    from collections.abc import Iterator
+    from contextlib import AbstractContextManager
+    from typing import Any
 
     from pymmcore_plus.core.events._protocol import PSignalInstance
     from pymmcore_plus.mda import PMDASignaler
@@ -24,7 +26,7 @@ def mda_listeners_connected(
     name_map: dict[str, str] | None = ...,
     asynchronous: Literal[False],
     wait_on_exit: bool = ...,
-) -> ContextManager[None]: ...
+) -> AbstractContextManager[None]: ...
 
 
 @overload
@@ -34,7 +36,7 @@ def mda_listeners_connected(
     name_map: dict[str, str] | None = ...,
     asynchronous: Literal[True] = ...,
     wait_on_exit: bool = ...,
-) -> ContextManager[MDARelayThread]: ...
+) -> AbstractContextManager[MDARelayThread]: ...
 
 
 @contextmanager

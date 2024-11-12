@@ -3,7 +3,9 @@ from __future__ import annotations
 from pathlib import Path
 
 import pytest
+
 from pymmcore_plus import CMMCorePlus, DeviceType, find_micromanager
+from pymmcore_plus.metadata import summary_metadata
 from pymmcore_plus.model import CoreDevice, Device, Microscope
 
 
@@ -40,6 +42,16 @@ def test_model_from_config() -> None:
     core.loadSystemConfiguration()
     config = Path(__file__).parent / "local_config.cfg"
     assert Microscope.create_from_config(config).devices
+
+
+def test_model_from_summary_metadata(tmp_path: Path) -> None:
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    summary = summary_metadata(core)
+    model = Microscope.from_summary_metadata(summary)
+    dest = tmp_path / "model.cfg"
+    model.save(dest)
+    core.loadSystemConfiguration(dest)
 
 
 def non_empty_lines(path: Path) -> list[str]:

@@ -8,13 +8,11 @@ from types import MethodType
 from typing import TYPE_CHECKING, Any, Callable, Union
 
 if TYPE_CHECKING:
-    from typing import Tuple
-
     from typing_extensions import TypeGuard  # py310
 
-    MethodRef = Tuple[weakref.ReferenceType[object], str, Callable | None]
+    MethodRef = tuple[weakref.ReferenceType[object], str, Callable | None]
     NormedCallback = Union[MethodRef, Callable]
-    StoredSlot = Tuple[NormedCallback, int | None]
+    StoredSlot = tuple[NormedCallback, int | None]
     ReducerFunc = Callable[[tuple, tuple], tuple]
 
 
