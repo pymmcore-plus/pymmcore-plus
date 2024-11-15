@@ -144,7 +144,7 @@ class MDAEngine(PMDAEngine):
                 p.sequence.grid_plan.fov_height = fov_height
                 p.sequence.grid_plan.fov_width = fov_width
 
-    def setup_event(self, event: MDAEvent) -> None:
+    def setup_event(self, event: MDAEvent, cached_event: MDAEvent or None = None) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
         Parameters
@@ -153,7 +153,7 @@ class MDAEngine(PMDAEngine):
             The event to use for the Hardware config
         """
         if isinstance(event, SequencedEvent):
-            self.setup_sequenced_event(event)
+            self.setup_sequenced_event(event, cached_event)
         else:
             self.setup_single_event(event)
         self._mmc.waitForSystem()
@@ -344,7 +344,7 @@ class MDAEngine(PMDAEngine):
 
     # ===================== Sequenced Events =====================
 
-    def setup_sequenced_event(self, event: SequencedEvent) -> None:
+    def setup_sequenced_event(self, event: SequencedEvent, cached_event: SequencedEvent or None = None) -> None:
         """Setup hardware for a sequenced (triggered) event.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -354,22 +354,49 @@ class MDAEngine(PMDAEngine):
         core = self._mmc
         cam_device = self._mmc.getCameraDevice()
 
-        if event.exposure_sequence:
+        if cached_event is None:
+            # If there is no cached event, we need to load all sequences.
+            load_exposure_sequence = True
+            load_xy_sequence = True
+            load_z_sequence = True
+            load_prop_sequences = True
+        else:
+            # If there is a cached event, we only need to load sequences that are different
+            # from the cached event.
+            try:
+                load_exposure_sequence = event.exposure_sequence != cached_event.exposure_sequence
+            except AttributeError:
+                load_exposure_sequence = True
+            try:
+                load_xy_sequence = event.x_sequence != cached_event.x_sequence
+            except AttributeError:
+                load_xy_sequence = True
+            try:
+                load_z_sequence = event.z_sequence != cached_event.z_sequence
+            except AttributeError:
+                load_z_sequence = True
+            try:
+                load_prop_sequences = event.property_sequences(core) != cached_event.property_sequences(core)
+            except AttributeError:
+                load_prop_sequences = True
+
+        if event.exposure_sequence and load_exposure_sequence:
             with suppress(RuntimeError):
                 core.stopExposureSequence(cam_device)
             core.loadExposureSequence(cam_device, event.exposure_sequence)
-        if event.x_sequence:  # y_sequence is implied and will be the same length
+        if event.x_sequence and load_xy_sequence:  # y_sequence is implied and will be the same length
             stage = core.getXYStageDevice()
             with suppress(RuntimeError):
                 core.stopXYStageSequence(stage)
             core.loadXYStageSequence(stage, event.x_sequence, event.y_sequence)
-        if event.z_sequence:
+        if event.z_sequence and load_z_sequence:
             zstage = core.getFocusDevice()
             with suppress(RuntimeError):
                 core.stopStageSequence(zstage)
             core.loadStageSequence(zstage, event.z_sequence)
-        if prop_seqs := event.property_sequences(core):
+        if (prop_seqs := event.property_sequences(core)) and load_prop_sequences:
             for (dev, prop), value_sequence in prop_seqs.items():
+                print(value_sequence)
                 with suppress(RuntimeError):
                     core.stopPropertySequence(dev, prop)
                 core.loadPropertySequence(dev, prop, value_sequence)
