@@ -144,7 +144,9 @@ class MDAEngine(PMDAEngine):
                 p.sequence.grid_plan.fov_height = fov_height
                 p.sequence.grid_plan.fov_width = fov_width
 
-    def setup_event(self, event: MDAEvent, cached_event: MDAEvent or None = None) -> None:
+    def setup_event(
+        self, event: MDAEvent, cached_event: MDAEvent or None = None
+    ) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
 
         Parameters
@@ -344,7 +346,9 @@ class MDAEngine(PMDAEngine):
 
     # ===================== Sequenced Events =====================
 
-    def setup_sequenced_event(self, event: SequencedEvent, cached_event: SequencedEvent or None = None) -> None:
+    def setup_sequenced_event(
+        self, event: SequencedEvent, cached_event: SequencedEvent or None = None
+    ) -> None:
         """Setup hardware for a sequenced (triggered) event.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -364,7 +368,9 @@ class MDAEngine(PMDAEngine):
             # If there is a cached event, we only need to load sequences that are different
             # from the cached event.
             try:
-                load_exposure_sequence = event.exposure_sequence != cached_event.exposure_sequence
+                load_exposure_sequence = (
+                    event.exposure_sequence != cached_event.exposure_sequence
+                )
             except AttributeError:
                 load_exposure_sequence = True
             try:
@@ -376,7 +382,9 @@ class MDAEngine(PMDAEngine):
             except AttributeError:
                 load_z_sequence = True
             try:
-                load_prop_sequences = event.property_sequences(core) != cached_event.property_sequences(core)
+                load_prop_sequences = event.property_sequences(
+                    core
+                ) != cached_event.property_sequences(core)
             except AttributeError:
                 load_prop_sequences = True
 
@@ -384,7 +392,9 @@ class MDAEngine(PMDAEngine):
             with suppress(RuntimeError):
                 core.stopExposureSequence(cam_device)
             core.loadExposureSequence(cam_device, event.exposure_sequence)
-        if event.x_sequence and load_xy_sequence:  # y_sequence is implied and will be the same length
+        if (
+            event.x_sequence and load_xy_sequence
+        ):  # y_sequence is implied and will be the same length
             stage = core.getXYStageDevice()
             with suppress(RuntimeError):
                 core.stopXYStageSequence(stage)
