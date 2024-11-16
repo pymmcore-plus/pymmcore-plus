@@ -123,6 +123,7 @@ def test_fully_sequenceable_core() -> None:
     core_mock.loadXYStageSequence.assert_called_once_with(
         XYSTAGE, seq_event.x_sequence, seq_event.y_sequence
     )
+    breakpoint()
 
 
 def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:
