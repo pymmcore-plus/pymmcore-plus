@@ -13,11 +13,13 @@ __all__ = [
     "DeviceProperty",
     "DeviceType",
     "FocusDirection",
+    "iter_sequenced_events",
     "Keyword",
     "Metadata",
     "PixelFormat",
     "PortType",
     "PropertyType",
+    "SequencedEvent",
 ]
 
 from ._adapter import DeviceAdapter
@@ -41,3 +43,4 @@ from ._device import Device
 from ._metadata import Metadata
 from ._mmcore_plus import CMMCorePlus
 from ._property import DeviceProperty
+from ._sequencing import SequencedEvent, iter_sequenced_events

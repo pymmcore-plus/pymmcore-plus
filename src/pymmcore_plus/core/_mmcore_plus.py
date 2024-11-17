@@ -44,7 +44,6 @@ from ._constants import (
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
-from ._sequencing import can_sequence_events
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
@@ -56,6 +55,8 @@ if TYPE_CHECKING:
 
     from pymmcore_plus.mda._runner import SingleOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
+
+    from ._sequencing import SequencedEvent
 
     _T = TypeVar("_T")
     _F = TypeVar("_F", bound=Callable[..., Any])
@@ -2186,7 +2187,53 @@ class CMMCorePlus(pymmcore.CMMCore):
         False
         ```
         """
-        return can_sequence_events(self, e1, e2, cur_length)
+        warnings.warn(
+            "canSequenceEvents is deprecated.\nPlease use "
+            "`list(pymmcore_plus.core.iter_sequenced_events(core, [e1, e2]))` "
+            "to see how this core will combine MDAEvents into SequencedEvents.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from ._sequencing import _can_sequence_events
+
+        return _can_sequence_events(self, e1, e2)
+
+    def loadSequencedEvent(self, event: SequencedEvent) -> None:
+        """Load a `SequencedEvent` into the core.
+
+        `SequencedEvent` is a special pymmcore-plus specific subclass of
+        `useq.MDAEvent`.
+        """
+        if event.exposure_sequence:
+            cam_device = self.getCameraDevice()
+            with suppress(RuntimeError):
+                self.stopExposureSequence(cam_device)
+            self.loadExposureSequence(cam_device, event.exposure_sequence)
+        if event.x_sequence:  # y_sequence is implied and will be the same length
+            stage = self.getXYStageDevice()
+            with suppress(RuntimeError):
+                self.stopXYStageSequence(stage)
+            self.loadXYStageSequence(stage, event.x_sequence, event.y_sequence)
+        if event.z_sequence:
+            zstage = self.getFocusDevice()
+            with suppress(RuntimeError):
+                self.stopStageSequence(zstage)
+            self.loadStageSequence(zstage, event.z_sequence)
+        if event.slm_sequence:
+            slm = self.getSLMDevice()
+            with suppress(RuntimeError):
+                self.stopSLMSequence(slm)
+            self.loadSLMSequence(slm, event.slm_sequence)  # type: ignore[arg-type]
+        if event.property_sequences:
+            for (dev, prop), value_sequence in event.property_sequences.items():
+                with suppress(RuntimeError):
+                    self.stopPropertySequence(dev, prop)
+                self.loadPropertySequence(dev, prop, value_sequence)
+
+        # set all static properties, these won't change over the course of the sequence.
+        if event.properties:
+            for dev, prop, value in event.properties:
+                self.setProperty(dev, prop, value)
 
 
 for name in (
