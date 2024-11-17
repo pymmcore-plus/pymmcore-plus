@@ -139,6 +139,7 @@ cython_debug/
 
 Micro-Manager-*
 .vscode
+.idea/
 
 docs/_includes/_cmmcore_members.md
 docs/_includes/_cmmcore_table.md
