@@ -3,7 +3,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 from contextlib import suppress
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 from pydantic import Field, model_validator
 from useq import AcquireImage, MDAEvent
@@ -12,6 +12,7 @@ from pymmcore_plus.core._constants import DeviceType, Keyword
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
+    from typing import Self
 
     from pymmcore_plus import CMMCorePlus
 
