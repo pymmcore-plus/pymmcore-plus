@@ -240,6 +240,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
         self.unloadAllDevices()
+        # clean up logging
+        self.setPrimaryLogFile("")
 
     # Re-implemented methods from the CMMCore API
 
