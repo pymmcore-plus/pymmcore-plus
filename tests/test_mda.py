@@ -29,7 +29,7 @@ SKIP_NO_PYTESTQT = pytest.mark.skipif(
 )
 
 
-def test_mda_waiting(core: CMMCorePlus):
+def test_mda_waiting(core: CMMCorePlus) -> None:
     seq = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -46,7 +46,7 @@ def test_mda_waiting(core: CMMCorePlus):
     assert t1 - t0 >= 1.5
 
 
-def test_setting_position(core: CMMCorePlus):
+def test_setting_position(core: CMMCorePlus) -> None:
     core.mda._running = True
     event1 = MDAEvent(exposure=123, x_pos=123, y_pos=456, z_pos=1)
     core.mda.engine.setup_event(event1)
@@ -73,7 +73,7 @@ class BrokenEngine:
 
 
 @SKIP_NO_PYTESTQT
-def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
+def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
     mda = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -251,22 +251,28 @@ DEVICE_ERRORS: dict[str, list[str]] = {
 def test_mda_no_device(
     device: str, core: CMMCorePlus, caplog: LogCaptureFixture
 ) -> None:
-    core.unloadDevice(device)
+    from pymmcore_plus._logger import logger
 
-    if device == "Autofocus":
-        event = MDAEvent(
-            action=HardwareAutofocus(
-                autofocus_device_name="Z", autofocus_motor_offset=10
+    logger.setLevel("DEBUG")
+    try:
+        core.unloadDevice(device)
+
+        if device == "Autofocus":
+            event = MDAEvent(
+                action=HardwareAutofocus(
+                    autofocus_device_name="Z", autofocus_motor_offset=10
+                )
             )
-        )
-    else:
-        event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
-    engine = cast("MDAEngine", core.mda.engine)
-    engine.setup_event(event)
-    list(engine.exec_event(event))
+        else:
+            event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
+        engine = cast("MDAEngine", core.mda.engine)
+        engine.setup_event(event)
+        list(engine.exec_event(event))
 
-    for e in DEVICE_ERRORS[device]:
-        assert e in caplog.text
+        for e in DEVICE_ERRORS[device]:
+            assert e in caplog.text
+    finally:
+        logger.setLevel("CRITICAL")
 
 
 def test_keep_shutter_open(core: CMMCorePlus) -> None:

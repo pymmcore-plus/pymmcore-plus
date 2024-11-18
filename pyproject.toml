@@ -146,6 +146,7 @@ docstring-code-format = true
 minversion = "6.0"
 testpaths = ["tests"]
 filterwarnings = ["error", "ignore:Failed to disconnect::pytestqt"]
+markers = ["run_last: mark a test to run last"]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html
 [tool.mypy]
