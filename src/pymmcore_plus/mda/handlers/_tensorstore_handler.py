@@ -10,8 +10,8 @@ from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
-from PIL import Image, ImageDraw, ImageFont
 
+# from PIL import Image, ImageDraw, ImageFont
 from pymmcore_plus.metadata.serialize import json_dumps, json_loads
 
 from ._util import position_sizes
@@ -251,7 +251,7 @@ class TensorStoreHandler:
             while frozenset(index.items()) in self._frame_indices.keys():
                 index["camera"] = index.get("camera", 0) + 1
             self._frame_indices[frozenset(index.items())] = ts_index
-        frame = _write_index_to_image(index, frame)
+        # frame = _write_index_to_image(index, frame)
         # write the new frame asynchronously
         self._futures.append(self._store[ts_index].write(frame))
 
@@ -432,12 +432,12 @@ def _merge_nested_dicts(dict1: dict, dict2: Mapping) -> None:
             dict1[key] = value
 
 
-def _write_index_to_image(index: dict, image: np.ndarray) -> np.ndarray:
-    text = str([f"{key}: {value}" for key, value in index.items()])
-    canvas = np.zeros_like(image)
-    pil_image = Image.fromarray(canvas)
-    draw = ImageDraw.Draw(pil_image)
-    # Fallback if font is not found
-    font = ImageFont.truetype("arial.ttf", 32)
-    draw.text((0, 0), text, fill="white", font=font)
-    return np.array(pil_image)
+# def _write_index_to_image(index: dict, image: np.ndarray) -> np.ndarray:
+#     text = str([f"{key}: {value}" for key, value in index.items()])
+#     canvas = np.zeros_like(image)
+#     pil_image = Image.fromarray(canvas)
+#     draw = ImageDraw.Draw(pil_image)
+#     # Fallback if font is not found
+#     font = ImageFont.truetype("arial.ttf", 32)
+#     draw.text((0, 0), text, fill="white", font=font)
+#     return np.array(pil_image)
