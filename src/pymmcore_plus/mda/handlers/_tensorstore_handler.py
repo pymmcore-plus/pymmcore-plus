@@ -1,5 +1,4 @@
 from __future__ import annotations
-from PIL import Image, ImageDraw, ImageFont
 
 import atexit
 import os
@@ -11,6 +10,7 @@ from os import PathLike
 from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
+from PIL import Image, ImageDraw, ImageFont
 
 from pymmcore_plus.metadata.serialize import json_dumps, json_loads
 
@@ -26,8 +26,7 @@ if TYPE_CHECKING:
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
-    TsDriver: TypeAlias = Literal["zarr",
-                                  "zarr3", "n5", "neuroglancer_precomputed"]
+    TsDriver: TypeAlias = Literal["zarr", "zarr3", "n5", "neuroglancer_precomputed"]
     EventKey: TypeAlias = frozenset[tuple[str, int]]
 
 # special dimension label used when _nd_storage is False
@@ -46,6 +45,7 @@ class TensorStoreHandler:
     is stored in a separate chunk. To customize shape or chunking, override the
     `get_full_shape`, `get_chunk_layout`, and `get_index_domain` methods (these
     may change in the future as we learn to use tensorstore better).u
+
     Parameters
     ----------
     driver : TsDriver, optional
@@ -79,8 +79,7 @@ class TensorStoreHandler:
 
     sequence = MDASequence(
         channels=["DAPI", {"config": "FITC", "exposure": 1}],
-        stage_positions=[
-            {"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
+        stage_positions=[{"x": 1, "y": 1, "name": "some position"}, {"x": 0, "y": 0}],
         time_plan={"interval": 2, "loops": 3},
         z_plan={"range": 4, "step": 0.5},
         axis_order="tpcz",
@@ -104,8 +103,7 @@ class TensorStoreHandler:
         try:
             import tensorstore
         except ImportError as e:
-            raise ImportError(
-                "Tensorstore is required to use this handler.") from e
+            raise ImportError("Tensorstore is required to use this handler.") from e
 
         self._ts = tensorstore
 
@@ -198,8 +196,7 @@ class TensorStoreHandler:
         if not self._nd_storage:
             if self.reshape_on_finished:
                 self._reshape_store()
-                shutil.rmtree(self._store.spec().kvstore.path,
-                              ignore_errors=True)
+                shutil.rmtree(self._store.spec().kvstore.path, ignore_errors=True)
             else:
                 self._store = self._store.resize(
                     exclusive_max=(self._frame_index, *self._store.shape[-2:])
@@ -208,13 +205,16 @@ class TensorStoreHandler:
         if self.frame_metadatas:
             self.finalize_metadata()
 
-    def _reshape_store(self):
-        labels = [x for x in self._axis_max.keys()] + ['y', 'x']
-        chunks = [1]*(len(labels) - 2) + list(self._store.shape[-2:])
-        shape = [x+1 for x in self._axis_max.values()] + \
-            list(self._store.shape[-2:])
+    def _reshape_store(self) -> None:
+        if self._store is None:
+            return
+        labels = [*list(self._axis_max.keys()), "y", "x"]
+        chunks = [1] * (len(labels) - 2) + list(self._store.shape[-2:])
+        shape = [x + 1 for x in self._axis_max.values()] + list(self._store.shape[-2:])
         self._res_store = self._ts.open(
-            self._get_reshape_spec(), create=True, delete_existing=True,
+            self._get_reshape_spec(),
+            create=True,
+            delete_existing=True,
             dtype=self._ts.dtype(self._store.dtype),
             shape=shape,
             chunk_layout=self._ts.ChunkLayout(chunk_shape=chunks),
@@ -223,14 +223,13 @@ class TensorStoreHandler:
         for index, pos in self._frame_indices.items():
             keys, values = zip(*dict(index).items())
             put_index = self._ts.d[keys][values]
-            self._futures.append(
-                self._res_store[put_index].write(self._store[pos]))
+            self._futures.append(self._res_store[put_index].write(self._store[pos]))
         while self._futures:
             self._futures.pop().result()
 
-    def _get_reshape_spec(self):
+    def _get_reshape_spec(self) -> dict:
         spec = self.get_spec()
-        spec['kvstore'] = spec['kvstore'].replace('_tmp', '')
+        spec["kvstore"] = spec["kvstore"].replace("_tmp", "")
         return spec
 
     def frameReady(
@@ -276,8 +275,7 @@ class TensorStoreHandler:
         if self._store is None:  # pragma: no cover
             warnings.warn("No data written.", stacklevel=2)
             return np.empty([])
-        # type: ignore [no-any-return]
-        return self._store[ts_index].read().result().squeeze()
+        return self._store[ts_index].read().result().squeeze()  # type: ignore [no-any-return]
 
     def new_store(
         self, frame: np.ndarray, seq: useq.MDASequence | None, meta: FrameMetaV1
@@ -321,18 +319,20 @@ class TensorStoreHandler:
             full_shape = (self._size_increment, *frame_shape)
 
         chunks = [1] * len(full_shape)
-        chunks[-len(frame_shape):] = frame_shape
+        chunks[-len(frame_shape) :] = frame_shape
         labels = (*labels, "y", "x")
         return full_shape, tuple(chunks), labels
 
     def get_spec(self) -> dict:
         """Construct the tensorstore spec."""
-        if self.reshape_on_finished:
+        if self.reshape_on_finished and isinstance(self.kvstore, str):
             directory, filename = os.path.split(self.kvstore)
-            base, *ext = filename.split('.')
+            base, *ext = filename.split(".")
             self.kvstore = os.path.join(
-                directory, ''.join([f"{base}_tmp"] + [f".{e}" for e in ext]))
-            print(self.kvstore)
+                directory, "".join([f"{base}_tmp"] + [f".{e}" for e in ext])
+            )
+        elif self.reshape_on_finished and not isinstance(self.kvstore, str):
+            raise NotImplementedError("kvstore needs to be str for reshape to work")
         spec = {"driver": self.ts_driver, "kvstore": self.kvstore}
         if self.spec:
             _merge_nested_dicts(spec, self.spec)
@@ -356,22 +356,18 @@ class TensorStoreHandler:
             ]
 
         if self.ts_driver.startswith("zarr"):
-            store.kvstore.write(
-                ".zattrs", json_dumps(metadata).decode("utf-8"))
+            store.kvstore.write(".zattrs", json_dumps(metadata).decode("utf-8"))
         elif self.ts_driver == "n5":  # pragma: no cover
-            attrs = json_loads(store.kvstore.read(
-                "attributes.json").result().value)
+            attrs = json_loads(store.kvstore.read("attributes.json").result().value)
             attrs.update(metadata)
-            store.kvstore.write("attributes.json",
-                                json_dumps(attrs).decode("utf-8"))
+            store.kvstore.write("attributes.json", json_dumps(attrs).decode("utf-8"))
 
     def _expand_store(self, store: ts.TensorStore) -> ts.Future[ts.TensorStore]:
         """Grow the store by `self._size_increment` frames.
 
         This is used when _nd_storage mode is False and we've run out of space.
         """
-        new_shape = [self._frame_index +
-                     self._size_increment, *store.shape[-2:]]
+        new_shape = [self._frame_index + self._size_increment, *store.shape[-2:]]
         return store.resize(exclusive_max=new_shape, expand_only=True)
 
     def _event_index_to_store_index(
@@ -389,17 +385,13 @@ class TensorStoreHandler:
             idx: list | int | ts.DimExpression = self._get_frame_indices(index)
         else:
             try:
-                # type: ignore
-                idx = [self._frame_indices[frozenset(index.items())]]
+                idx = [self._frame_indices[frozenset(index.items())]]  # type: ignore
                 for i in range(self._axis_max.get("camera", 0)):
                     index["camera"] = i + 1  # type: ignore
                     if frozenset(index.items()) in self._frame_indices:
-                        # type: ignore
-                        idx.append(
-                            self._frame_indices[frozenset(index.items())])
+                        idx.append(self._frame_indices[frozenset(index.items())])  # type: ignore
             except KeyError as e:
-                raise KeyError(
-                    f"Index {index} not found in frame_indices.") from e
+                raise KeyError(f"Index {index} not found in frame_indices.") from e
         return self._ts.d[FRAME_DIM][idx]
 
     def _get_frame_indices(self, indexers: Mapping[str, int | slice]) -> list[int]:
@@ -408,8 +400,7 @@ class TensorStoreHandler:
         axis_indices: dict[str, Sequence[int]] = {}
         for k, v in indexers.items():
             if isinstance(v, slice):
-                axis_indices[k] = tuple(
-                    range(*v.indices(self._axis_max.get(k, 0) + 1)))
+                axis_indices[k] = tuple(range(*v.indices(self._axis_max.get(k, 0) + 1)))
             else:
                 axis_indices[k] = (v,)
 
@@ -441,12 +432,12 @@ def _merge_nested_dicts(dict1: dict, dict2: Mapping) -> None:
             dict1[key] = value
 
 
-def _write_index_to_image(index, image):
+def _write_index_to_image(index: dict, image: np.ndarray) -> np.ndarray:
     text = str([f"{key}: {value}" for key, value in index.items()])
     canvas = np.zeros_like(image)
     pil_image = Image.fromarray(canvas)
     draw = ImageDraw.Draw(pil_image)
     # Fallback if font is not found
-    font = ImageFont.truetype('arial.ttf', 32)
-    draw.text((0, 0), text, fill='white', font=font)
+    font = ImageFont.truetype("arial.ttf", 32)
+    draw.text((0, 0), text, fill="white", font=font)
     return np.array(pil_image)
