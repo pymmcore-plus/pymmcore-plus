@@ -29,8 +29,7 @@ try:
 except ImportError:
     ts = None
 
-requires_tensorstore = pytest.mark.skipif(
-    not ts, reason="requires tensorstore")
+requires_tensorstore = pytest.mark.skipif(not ts, reason="requires tensorstore")
 
 SIMPLE_MDA = useq.MDASequence(
     channels=["Cy5", "FITC"],
@@ -131,8 +130,7 @@ def test_ome_zarr_writer(
         assert expected_shapes[k] == actual_shape
 
         # check that the MDASequence was stored
-        stored_seq = useq.MDASequence.model_validate(
-            v.attrs["useq_MDASequence"])
+        stored_seq = useq.MDASequence.model_validate(v.attrs["useq_MDASequence"])
         assert stored_seq == mda
 
         if xr is not None:
@@ -201,8 +199,7 @@ def test_tensorstore_writer_spec_override(
         spec={"context": {"cache_pool": {"total_bytes_limit": 10000000}}},
     )
 
-    assert writer.get_spec()[
-        "context"]["cache_pool"]["total_bytes_limit"] == 10000000
+    assert writer.get_spec()["context"]["cache_pool"]["total_bytes_limit"] == 10000000
 
 
 @requires_tensorstore
@@ -251,7 +248,8 @@ def test_tensorstore_writer_indeterminate(tmp_path: Path, core: CMMCorePlus) -> 
 @requires_tensorstore
 def test_tensorstore_writer_multicam(tmp_path: Path, core: CMMCorePlus) -> None:
     writer = TensorStoreHandler(
-        path='/home/stepp/Desktop/test_tensor.ome.zarr', delete_existing=True)
+        path="/home/stepp/Desktop/test_tensor.ome.zarr", delete_existing=True
+    )
 
     mc = "YoMulti"
     core.loadDevice("Camera2", "DemoCamera", "DCam")
