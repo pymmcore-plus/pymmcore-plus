@@ -5,6 +5,7 @@ from contextlib import suppress
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
+import useq
 from pydantic import Field, model_validator
 from useq import AcquireImage, MDAEvent
 
@@ -13,6 +14,8 @@ from pymmcore_plus.core._constants import DeviceType, Keyword
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
     from typing import Self
+
+    import useq._mda_event
 
     from pymmcore_plus import CMMCorePlus
 
@@ -113,6 +116,9 @@ class SequenceData:
 
     def __post_init__(self) -> None:
         # initialize items dict with max sequenceable length of all core devices
+        self._cfg_cache: dict[
+            useq._mda_event.Channel, list[tuple[tuple[str, str], Any]]
+        ] = {}
         for keyword, get_device, is_sequenceable, get_max_length in (
             (
                 Keyword.CoreCamera,
@@ -147,6 +153,7 @@ class SequenceData:
                         max_length = get_max_length(device)
                 self.items[keyword] = SequenceItem(max_length)
 
+    # @profile
     def try_add_event(self, event: MDAEvent) -> bool:
         """Return True if the event was successfully added to the sequence."""
         # TODO: consider returning a string instead of False to indicate why the event
@@ -184,6 +191,7 @@ class SequenceData:
 
         return True
 
+    # @profile
     def _get_event_values(
         self, event: MDAEvent
     ) -> Sequence[tuple[str | tuple[str, str], Any]]:
@@ -193,9 +201,24 @@ class SequenceData:
             (Keyword.CoreFocus, event.z_pos),
             (Keyword.CoreXYStage, (event.x_pos, event.y_pos)),
         ]
-        if ch := event.channel:
-            for dev, prop, val in self.core.getConfigData(ch.group, ch.config):
-                vals.append(((dev, prop), val))
+        if (ch := event.channel) is not None:
+            # we've never seen this channel before; get the values from the core
+            # and cache them for future use
+            if not (data := self._cfg_cache.get(ch)):
+                # native slightly faster, though uglier
+                cfg = self.core.getConfigData(ch.group, ch.config, native=True)
+                self._cfg_cache[ch] = data = [
+                    (
+                        (
+                            (s := cfg.getSetting(n)).getDeviceLabel(),
+                            s.getPropertyName(),
+                        ),
+                        s.getPropertyValue(),
+                    )
+                    for n in range(cfg.size())
+                ]
+
+            vals.extend(data)
         if event.properties:
             for dev, prop, val in event.properties:
                 vals.append(((dev, prop), val))
