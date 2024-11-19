@@ -1384,7 +1384,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             for i in range(self.getNumberOfCameraChannels())
         )
 
-    @synchronized(_lock)
+    # @synchronized(_lock)
     def snapImage(self) -> None:
         """Acquires a single image with current settings.
 
