@@ -245,7 +245,7 @@ class MDAEngine(PMDAEngine):
                     self._mmc.displaySLMImage(slm_dev)
                 except Exception as e:
                     logger.warning("Failed to set SLM image. %s", e)
-                    
+
         if event.channel is not None:
             try:
                 # possible speedup by setting manually.
@@ -342,7 +342,7 @@ class MDAEngine(PMDAEngine):
                 core.stopExposureSequence(self._mmc.getCameraDevice())
             if event.x_sequence:
                 core.stopXYStageSequence(core.getXYStageDevice())
-            if event.z_sequence
+            if event.z_sequence:
                 core.stopStageSequence(core.getFocusDevice())
             for dev, prop in event.property_sequences(core):
                 core.stopPropertySequence(dev, prop)
