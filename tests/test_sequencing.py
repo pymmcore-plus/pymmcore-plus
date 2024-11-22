@@ -17,7 +17,7 @@ from pymmcore_plus.mocks import MockSequenceableCore
 from pymmcore_plus.seq_tester import decode_image
 
 with suppress(ImportError):
-    from rich import print
+    pass
 
 
 def test_get_all_sequencable(core: CMMCorePlus) -> None:
