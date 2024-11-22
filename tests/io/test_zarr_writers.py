@@ -14,10 +14,12 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import zarr
+    import zarr.storage
 
     from pymmcore_plus import CMMCorePlus
 else:
     zarr = pytest.importorskip("zarr")
+    import zarr.storage  # noqa: F811
 
 try:
     import xarray as xr
@@ -177,9 +179,9 @@ def test_tensorstore_writer(
     sizes = dict(zip(writer.store.domain.labels, writer.store.shape))
     assert sizes == expected_sizes
 
-    if store:
+    if store_path := getattr(writer.store.kvstore, "path", None):
         # ensure that non-memory stores were written to disk
-        ary = zarr.open(writer.store.kvstore.path)
+        ary = zarr.open(store_path)
         # ensure real data was written
         assert ary.nchunks_initialized > 0
         assert ary[0, 0].mean() > (ary.fill_value or 0)

@@ -53,11 +53,8 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     runner = MDARunner()
     runner.set_engine(engine)
 
-    @runner.events.frameReady.connect
-    def frame_ready(f, e, m):
-        print(m)
-
     core_mock.startSequenceAcquisition.assert_not_called()
+
     runner.run(mda)
     assert core_mock.prepareSequenceAcquisition.call_count == EXPECTED_SEQUENCES
     assert core_mock.startSequenceAcquisition.call_count == EXPECTED_SEQUENCES
