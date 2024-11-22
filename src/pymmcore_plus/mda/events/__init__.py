@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from pymmcore_plus._util import signals_backend
+from useq.experimental.protocols import PMDASignaler
+from useq.experimental.pysgnals import MDASignaler
 
-from ._protocol import PMDASignaler
-from ._psygnal import MDASignaler
+from pymmcore_plus import _util
 
 if TYPE_CHECKING:
     from ._qsignals import QMDASignaler  # noqa: TCH004
@@ -20,7 +20,7 @@ __all__ = [
 
 
 def _get_auto_MDA_callback_class() -> type[PMDASignaler]:
-    if signals_backend() == "qt":
+    if _util.signals_backend() == "qt":
         from ._qsignals import QMDASignaler
 
         return QMDASignaler
