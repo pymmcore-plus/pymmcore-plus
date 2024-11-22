@@ -113,6 +113,16 @@ _OFFSET_DEVICES: dict[tuple[str, str], str] = {
     # ("FocalPoint", "FocalPoint"): "",
 }
 
+# these are SLM devices that have a known pixel_on_value.
+# there is currently no way to extract this information from the core,
+# so it is hard-coded here.
+# maps device_name -> pixel_on_value
+_SLM_DEVICES_PIXEL_ON_VALUES: dict[str, int] = {
+    "Polygon1000": 127,
+    "Mosaic3": 1,
+    "genericSLMDevice": 255,
+}
+
 STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)

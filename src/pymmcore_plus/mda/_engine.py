@@ -19,6 +19,8 @@ from pymmcore_plus.metadata import (
     summary_metadata,
 )
 
+from pymmcore_plus.core._mmcore_plus import _SLM_DEVICES
+
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
@@ -237,14 +239,55 @@ class MDAEngine(PMDAEngine):
         if event.z_pos is not None:
             self._set_event_z(event)
 
+
         if event.slm_image is not None:
-            slm_dev = self._mmc.getSLMDevice()
-            if slm_dev:
-                try:
-                    self._mmc.setSLMImage(slm_dev, event.slm_image)
-                    self._mmc.displaySLMImage(slm_dev)
-                except Exception as e:
-                    logger.warning("Failed to set SLM image. %s", e)
+            try:
+                # Get the SLM device
+                slm_device = event.slm_device or self._mmc.getSLMDevice()
+
+                # Retrieve the ON-value for the SLM device, defaulting to 1 if not found
+                slm_pixel_on_value = _SLM_DEVICES.get(slm_device, 1)
+
+                # Handle NDArray inputs
+                if isinstance(event.slm_image, NDArray):
+                    if event.slm_image.dtype == bool:
+                        # NDArray of bools: Replace True with ON-value
+                        slm_image = event.slm_image.astype(int)
+                        slm_image[event.slm_image] = slm_pixel_on_value
+                    else:
+                        # NDArray of ints: Use as-is
+                        slm_image = event.slm_image
+
+                    try:
+                        # Set and display the SLM image
+                        self._mmc.setSLMImage(slm_device, slm_image)
+                        self._mmc.displaySLMImage(slm_device)
+                    except Exception as e:
+                        logger.warning("Failed to set or display SLM image. %s", e)
+
+                # Handle single value inputs (bool or int)
+                elif isinstance(event.slm_image, (bool, int)):
+                    if isinstance(event.slm_image, bool):
+                        # Single bool: True sets all to ON, False sets all to OFF
+                        pixel_value = slm_pixel_on_value if event.slm_image else 0
+                    else:
+                        # Single int: Use as-is
+                        pixel_value = event.slm_image
+
+                    try:
+                        # Set all SLM pixels to the specified value
+                        self._mmc.setSLMPixelsTo(slm_device, pixel_value)
+                    except Exception as e:
+                        logger.warning("Failed to set all SLM pixels. %s", e)
+
+                # Handle unsupported formats
+                else:
+                    logger.error("Unsupported format for slm_image. Expected NDArray of bools/ints or single bool/int.")
+
+            except Exception as e:
+                logger.warning("Failed to retrieve or handle SLM device. %s", e)
+                                
+
 
         if event.channel is not None:
             try:
