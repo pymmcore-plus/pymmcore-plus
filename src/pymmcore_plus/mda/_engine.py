@@ -275,7 +275,6 @@ class MDAEngine(PMDAEngine):
                     try:
                         # Set and display the SLM image
                         self._mmc.setSLMImage(slm_device, np.array(slm_image.data))
-                        self._mmc.displaySLMImage(slm_device)
                     except Exception as e:
                         logger.warning("Failed to set or display SLM image. %s", e)
 
