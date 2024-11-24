@@ -4,8 +4,8 @@ import time
 from contextlib import suppress
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
-import numpy as np
 
+import numpy as np
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
@@ -19,7 +19,6 @@ from pymmcore_plus.metadata import (
     frame_metadata,
     summary_metadata,
 )
-
 
 from ._protocol import PMDAEngine
 
@@ -250,7 +249,6 @@ class MDAEngine(PMDAEngine):
         if event.z_pos is not None:
             self._set_event_z(event)
 
-
         if event.slm_image is not None:
             try:
                 # Get the SLM device
@@ -295,12 +293,12 @@ class MDAEngine(PMDAEngine):
 
                 # Handle unsupported formats
                 else:
-                    logger.error("Unsupported format for slm_image. Expected NDArray of bools/ints or single bool/int.")
+                    logger.error(
+                        "Unsupported format for slm_image. Expected NDArray of bools/ints or single bool/int."
+                    )
 
             except Exception as e:
                 logger.warning("Failed to retrieve or handle SLM device. %s", e)
-                                
-
 
         if event.channel is not None:
             try:
