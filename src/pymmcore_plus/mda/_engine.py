@@ -4,6 +4,7 @@ import time
 from contextlib import suppress
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
+import numpy as np
 
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
@@ -19,7 +20,6 @@ from pymmcore_plus.metadata import (
     summary_metadata,
 )
 
-from pymmcore_plus.core._mmcore_plus import _SLM_DEVICES
 
 from ._protocol import PMDAEngine
 
@@ -34,6 +34,17 @@ if TYPE_CHECKING:
     from ._protocol import PImagePayload
 
     IncludePositionArg: TypeAlias = Literal[True, False, "unsequenced-only"]
+
+
+# these are SLM devices that have a known pixel_on_value.
+# there is currently no way to extract this information from the core,
+# so it is hard-coded here.
+# maps device_name -> pixel_on_value
+_SLM_DEVICES_PIXEL_ON_VALUES: dict[str, int] = {
+    "MightexPolygon1000": 255,
+    "Mosaic3": 1,
+    "genericSLMDevice": 255,
+}
 
 
 class MDAEngine(PMDAEngine):
@@ -243,36 +254,39 @@ class MDAEngine(PMDAEngine):
         if event.slm_image is not None:
             try:
                 # Get the SLM device
-                slm_device = event.slm_device or self._mmc.getSLMDevice()
+                slm_device = event.slm_image.device or self._mmc.getSLMDevice()
 
                 # Retrieve the ON-value for the SLM device, defaulting to 1 if not found
-                slm_pixel_on_value = _SLM_DEVICES.get(slm_device, 1)
+                slm_pixel_on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
 
                 # Handle NDArray inputs
-                if isinstance(event.slm_image, NDArray):
-                    if event.slm_image.dtype == bool:
+                if isinstance(event.slm_image.data, np.ndarray):
+                    # Get the SLM image data and cast to numpy array
+                    slm_image_data = np.array(event.slm_image.data)
+
+                    if event.slm_image.data.dtype == bool:
                         # NDArray of bools: Replace True with ON-value
-                        slm_image = event.slm_image.astype(int)
-                        slm_image[event.slm_image] = slm_pixel_on_value
+                        slm_image = slm_image_data.astype(int)
+                        slm_image[slm_image_data] = slm_pixel_on_value
                     else:
                         # NDArray of ints: Use as-is
-                        slm_image = event.slm_image
+                        slm_image = event.slm_image.data
 
                     try:
                         # Set and display the SLM image
-                        self._mmc.setSLMImage(slm_device, slm_image)
+                        self._mmc.setSLMImage(slm_device, np.array(slm_image.data))
                         self._mmc.displaySLMImage(slm_device)
                     except Exception as e:
                         logger.warning("Failed to set or display SLM image. %s", e)
 
                 # Handle single value inputs (bool or int)
-                elif isinstance(event.slm_image, (bool, int)):
-                    if isinstance(event.slm_image, bool):
+                elif isinstance(event.slm_image.data, (bool, int)):
+                    if isinstance(event.slm_image.data, bool):
                         # Single bool: True sets all to ON, False sets all to OFF
-                        pixel_value = slm_pixel_on_value if event.slm_image else 0
+                        pixel_value = slm_pixel_on_value if event.slm_image.data else 0
                     else:
                         # Single int: Use as-is
-                        pixel_value = event.slm_image
+                        pixel_value = event.slm_image.data
 
                     try:
                         # Set all SLM pixels to the specified value
