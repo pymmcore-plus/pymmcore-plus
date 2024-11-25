@@ -24,14 +24,16 @@ print(f"core XY device is {core.getXYStageDevice()!r}")
 core.setXYPosition(100, 200)
 print(f"pos: {core.getXYPosition()}")
 
-# load a python XY stage device and set it
+# load a python XY stage device
 core.load_py_device("pyXY", MyStage())
+# set the core XY stage device to the python device, dropping the C-side device
 core.setXYStageDevice("pyXY")
 
 print(f"core XY device is {core.getXYStageDevice()!r}")
 core.setXYPosition(10, 20)
 print(f"pos: {core.getXYPosition()}")
 
+# can still set and query the C-side device directly
 core.waitForDevice("XY")
 core.setXYPosition("XY", 1.5, 3.7)
 print(f"XY pos: {core.getXYPosition("XY")}")
