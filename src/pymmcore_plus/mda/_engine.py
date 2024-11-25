@@ -252,44 +252,7 @@ class MDAEngine(PMDAEngine):
 
 
         if event.slm_image is not None:
-            try:
-                # Get the SLM device
-                if not (
-                    slm_device := event.slm_image.device or self._mmc.getSLMDevice()
-                ):
-                    raise ValueError("No SLM device found or specified.")
-
-                # cast to numpy array
-                slm_array = np.asarray(event.slm_image)
-                # if it's a single value, we can just set all pixels to that value
-                if slm_array.ndim == 0:
-                    value = slm_array.item()
-                    if isinstance(value, bool):
-                        on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
-                        value = on_value if value else 0
-                    self._mmc.setSLMPixelsTo(slm_device, int(value))
-                elif slm_array.size == 3:
-                    # if it's a 3-valued array, we assume it's RGB
-                    r, g, b = slm_array.astype(int)
-                    self._mmc.setSLMPixelsTo(slm_device, r, g, b)
-                elif slm_array.ndim in (2, 3):
-                    # if it's a 2D/3D array, we assume it's an image
-                    # where 3D is RGB with shape (h, w, 3)
-                    if slm_array.ndim == 3:
-                        if not slm_array.shape[2] == 3:
-                            raise ValueError(
-                                "SLM image must be 2D or 3D with 3 channels (RGB)."
-                            )
-                    # convert boolean on/off values to pixel values
-                    if slm_array.dtype == bool:
-                        on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
-                        slm_array = np.where(slm_array, on_value, 0).astype(np.uint8)
-                    self._mmc.setSLMImage(slm_device, slm_array)
-
-            except Exception as e:
-                logger.warning("Failed to set SLM Image: %s", e)
-                                
-
+            self._set_event_slm_image(event)
 
         if event.channel is not None:
             try:
@@ -620,6 +583,44 @@ class MDAEngine(PMDAEngine):
         p_idx = event.index.get("p", None)
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self._mmc.setZPosition(cast("float", event.z_pos) + correction)
+
+    def _set_event_slm_image(self, event: MDAEvent) -> None:
+        try:
+            # Get the SLM device
+            if not (
+                slm_device := event.slm_image.device or self._mmc.getSLMDevice()
+            ):
+                raise ValueError("No SLM device found or specified.")
+
+            # cast to numpy array
+            slm_array = np.asarray(event.slm_image)
+            # if it's a single value, we can just set all pixels to that value
+            if slm_array.ndim == 0:
+                value = slm_array.item()
+                if isinstance(value, bool):
+                    on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
+                    value = on_value if value else 0
+                self._mmc.setSLMPixelsTo(slm_device, int(value))
+            elif slm_array.size == 3:
+                # if it's a 3-valued array, we assume it's RGB
+                r, g, b = slm_array.astype(int)
+                self._mmc.setSLMPixelsTo(slm_device, r, g, b)
+            elif slm_array.ndim in (2, 3):
+                # if it's a 2D/3D array, we assume it's an image
+                # where 3D is RGB with shape (h, w, 3)
+                if slm_array.ndim == 3:
+                    if not slm_array.shape[2] == 3:
+                        raise ValueError(
+                            "SLM image must be 2D or 3D with 3 channels (RGB)."
+                        )
+                # convert boolean on/off values to pixel values
+                if slm_array.dtype == bool:
+                    on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
+                    slm_array = np.where(slm_array, on_value, 0).astype(np.uint8)
+                self._mmc.setSLMImage(slm_device, slm_array)
+
+        except Exception as e:
+            logger.warning("Failed to set SLM Image: %s", e)
 
     def _update_config_device_props(self) -> None:
         # store devices/props that make up each config group for faster lookup
