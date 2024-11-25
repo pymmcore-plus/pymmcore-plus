@@ -254,51 +254,40 @@ class MDAEngine(PMDAEngine):
         if event.slm_image is not None:
             try:
                 # Get the SLM device
-                slm_device = event.slm_image.device or self._mmc.getSLMDevice()
+                if not (
+                    slm_device := event.slm_image.device or self._mmc.getSLMDevice()
+                ):
+                    raise ValueError("No SLM device found or specified.")
 
-                # Retrieve the ON-value for the SLM device, defaulting to 1 if not found
-                slm_pixel_on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
-
-                # Handle NDArray inputs
-                if isinstance(event.slm_image.data, np.ndarray):
-                    # Get the SLM image data and cast to numpy array
-                    slm_image_data = np.array(event.slm_image.data)
-
-                    if event.slm_image.data.dtype == bool:
-                        # NDArray of bools: Replace True with ON-value
-                        slm_image = slm_image_data.astype(int)
-                        slm_image[slm_image_data] = slm_pixel_on_value
-                    else:
-                        # NDArray of ints: Use as-is
-                        slm_image = event.slm_image.data
-
-                    try:
-                        # Set and display the SLM image
-                        self._mmc.setSLMImage(slm_device, np.array(slm_image.data))
-                    except Exception as e:
-                        logger.warning("Failed to set or display SLM image. %s", e)
-
-                # Handle single value inputs (bool or int)
-                elif isinstance(event.slm_image.data, (bool, int)):
-                    if isinstance(event.slm_image.data, bool):
-                        # Single bool: True sets all to ON, False sets all to OFF
-                        pixel_value = slm_pixel_on_value if event.slm_image.data else 0
-                    else:
-                        # Single int: Use as-is
-                        pixel_value = event.slm_image.data
-
-                    try:
-                        # Set all SLM pixels to the specified value
-                        self._mmc.setSLMPixelsTo(slm_device, pixel_value)
-                    except Exception as e:
-                        logger.warning("Failed to set all SLM pixels. %s", e)
-
-                # Handle unsupported formats
-                else:
-                    logger.error("Unsupported format for slm_image. Expected NDArray of bools/ints or single bool/int.")
+                # cast to numpy array
+                slm_array = np.asarray(event.slm_image)
+                # if it's a single value, we can just set all pixels to that value
+                if slm_array.ndim == 0:
+                    value = slm_array.item()
+                    if isinstance(value, bool):
+                        on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
+                        value = on_value if value else 0
+                    self._mmc.setSLMPixelsTo(slm_device, int(value))
+                elif slm_array.size == 3:
+                    # if it's a 3-valued array, we assume it's RGB
+                    r, g, b = slm_array.astype(int)
+                    self._mmc.setSLMPixelsTo(slm_device, r, g, b)
+                elif slm_array.ndim in (2, 3):
+                    # if it's a 2D/3D array, we assume it's an image
+                    # where 3D is RGB with shape (h, w, 3)
+                    if slm_array.ndim == 3:
+                        if not slm_array.shape[2] == 3:
+                            raise ValueError(
+                                "SLM image must be 2D or 3D with 3 channels (RGB)."
+                            )
+                    # convert boolean on/off values to pixel values
+                    if slm_array.dtype == bool:
+                        on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
+                        slm_array = np.where(slm_array, on_value, 0).astype(np.uint8)
+                    self._mmc.setSLMImage(slm_device, slm_array)
 
             except Exception as e:
-                logger.warning("Failed to retrieve or handle SLM device. %s", e)
+                logger.warning("Failed to set SLM Image: %s", e)
                                 
 
 
