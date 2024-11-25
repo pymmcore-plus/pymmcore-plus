@@ -277,6 +277,16 @@ def can_sequence_events(
     elif cur_length >= core.getExposureSequenceMaxLength(cam_dev):  # pragma: no cover
         return _nope(f"Camera {cam_dev!r} {max_len=} < {cur_length=}")
 
+   # SLM
+    if e1.slm_image != e2.slm_image:
+        return _nope("SLMImage sequences are not supported yet.")
+        #slm_dev = core.getSLMDevice()
+        #max_len = core.getSLMSequenceMaxLength(slm_dev)
+        #if max_len==0:
+        #    return _nope(f"SLM {slm_dev!r} is not sequenceable")
+        #if cur_length >= max_len:  # pragma: no cover
+        #    return _nope(f"SLM {slm_dev!r} {max_len=} < {cur_length=}")
+
     # time
     # TODO: use better axis keys when they are available
     if (
