@@ -249,7 +249,7 @@ class MDAEngine(PMDAEngine):
         if event.z_pos is not None:
             self._set_event_z(event)
         if event.slm_image is not None:
-           self. _set_event_slm_image(event)
+            self._set_event_slm_image(event)
         if event.channel is not None:
             try:
                 # possible speedup by setting manually.
@@ -583,9 +583,7 @@ class MDAEngine(PMDAEngine):
     def _set_event_slm_image(self, event: MDAEvent) -> None:
         try:
             # Get the SLM device
-            if not (
-                slm_device := event.slm_image.device or self._mmc.getSLMDevice()
-            ):
+            if not (slm_device := event.slm_image.device or self._mmc.getSLMDevice()):
                 raise ValueError("No SLM device found or specified.")
 
             # cast to numpy array
