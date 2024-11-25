@@ -3,9 +3,8 @@ from __future__ import annotations
 from itertools import product
 from typing import TYPE_CHECKING, Literal, overload
 
-from useq import AcquireImage, MDAEvent
-
 import numpy as np
+from useq import AcquireImage, MDAEvent
 
 from pymmcore_plus.core._constants import DeviceType
 
@@ -279,7 +278,7 @@ def can_sequence_events(
     elif cur_length >= core.getExposureSequenceMaxLength(cam_dev):  # pragma: no cover
         return _nope(f"Camera {cam_dev!r} {max_len=} < {cur_length=}")
 
-   # SLM
+    # SLM
     try:
         if e1.slm_image != e2.slm_image:
             return _nope("SLMImage sequences are not supported yet.")
@@ -288,11 +287,11 @@ def can_sequence_events(
             return _nope("SLMImage sequences are not supported yet.")
         # slm_dev = core.getSLMDevice()
         # if core.isSLMSequenceable(slm_dev)
-            # max_len = core.getSLMSequenceMaxLength(slm_dev)
-                # if cur_length >= max_len:  # pragma: no cover
-                    # return _nope(f"SLM {slm_dev!r} {max_len=} < {cur_length=}")
+        # max_len = core.getSLMSequenceMaxLength(slm_dev)
+        # if cur_length >= max_len:  # pragma: no cover
+        # return _nope(f"SLM {slm_dev!r} {max_len=} < {cur_length=}")
         # else:
-            # return _nope(f"SLM {slm_dev!r} is not sequenceable")
+        # return _nope(f"SLM {slm_dev!r} is not sequenceable")
 
     # time
     # TODO: use better axis keys when they are available
