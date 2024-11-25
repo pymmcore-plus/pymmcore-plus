@@ -4,8 +4,8 @@ import time
 from contextlib import suppress
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
-import numpy as np
 
+import numpy as np
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
@@ -19,7 +19,6 @@ from pymmcore_plus.metadata import (
     frame_metadata,
     summary_metadata,
 )
-
 
 from ._protocol import PMDAEngine
 
@@ -249,11 +248,8 @@ class MDAEngine(PMDAEngine):
             self._set_event_position(event)
         if event.z_pos is not None:
             self._set_event_z(event)
-
-
         if event.slm_image is not None:
-            self._set_event_slm_image(event)
-
+           self. _set_event_slm_image(event)
         if event.channel is not None:
             try:
                 # possible speedup by setting manually.
