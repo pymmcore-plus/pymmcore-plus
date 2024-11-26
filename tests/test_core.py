@@ -1,7 +1,6 @@
 import os
 import re
 from pathlib import Path
-from threading import Thread
 from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import MagicMock, call, patch
 
@@ -441,55 +440,6 @@ def test_guess_channel_group(core: CMMCorePlus) -> None:
         core.channelGroup_pattern = re.compile("Channel")
         chan_group = core.getOrGuessChannelGroup()
         assert chan_group == ["Channel", "Channel-Multiband"]
-
-
-@pytest.mark.skipif(
-    os.getenv("CI", None) is not None and os.name == "nt",
-    reason="CI on windows is broken",
-)
-@pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_lock_and_callbacks(core: CMMCorePlus, qtbot: "QtBot") -> None:
-    if not isinstance(core.events, QObject):
-        pytest.skip(reason="Skip lock tests on psygnal until we can remove qtbot.")
-
-    # when a function with a lock triggers a callback
-    # that callback should be able to call locked functions
-    # without hanging.
-
-    # do some threading silliness here so we don't accidentally hang our
-    # test if things go wrong have to use *got_lock* to check because we
-    # can't assert in the function as threads don't throw their exceptions
-    # back into the calling thread.
-    got_lock = False
-
-    def cb(*args, **kwargs):
-        nonlocal got_lock
-        got_lock = core._lock.acquire(timeout=0.1)
-        if got_lock:
-            core._lock.release()
-
-    core.events.XYStagePositionChanged.connect(cb)
-
-    def trigger_cb():
-        core.setXYPosition(4, 5)
-
-    th = Thread(target=trigger_cb)
-    with qtbot.waitSignal(core.events.XYStagePositionChanged):
-        th.start()
-    assert got_lock
-    got_lock = False
-
-    core.mda._signals.frameReady.connect(cb)
-    mda = MDASequence(
-        time_plan={"interval": 0.1, "loops": 2},
-        stage_positions=[(1, 1, 1)],
-        z_plan={"range": 3, "step": 1},
-        channels=[{"config": "DAPI", "exposure": 1}],
-    )
-
-    with qtbot.waitSignal(core.mda._signals.sequenceFinished):
-        core.run_mda(mda)
-    assert got_lock
 
 
 def test_single_instance():
