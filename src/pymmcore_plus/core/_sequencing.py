@@ -3,7 +3,6 @@ from __future__ import annotations
 from itertools import product
 from typing import TYPE_CHECKING, Literal, overload
 
-import numpy as np
 from useq import AcquireImage, MDAEvent
 
 from pymmcore_plus.core._constants import DeviceType

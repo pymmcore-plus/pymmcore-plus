@@ -284,7 +284,7 @@ class MDAEngine(PMDAEngine):
         """
         if event.slm_image is not None:
             self._exec_event_slm_image(event)
-            
+
         try:
             self._mmc.snapImage()
             # taking event time after snapImage includes exposure time
@@ -629,7 +629,7 @@ class MDAEngine(PMDAEngine):
                 self._mmc.setSLMExposure(event.slm_image.exposure)
             except Exception as e:
                 logger.warning("Failed to set SLM Exposure: %s", e)
-    
+
     def _exec_event_slm_image(self, event: MDAEvent) -> None:
         if not event.slm_image:
             return
