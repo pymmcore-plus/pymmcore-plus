@@ -1324,32 +1324,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self.setPosition(val)
 
-    @overload
-    def setPosition(self, position: float) -> None: ...
-
-    @overload
-    def setPosition(self, stageLabel: str, position: float) -> None: ...
-
-    def setPosition(self, *args: Any, **kwargs: Any) -> None:
-        """Set position of the stage in microns.
-
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
-        """
-        return super().setPosition(*args, **kwargs)
-
-    @overload
-    def setXYPosition(self, x: float, y: float) -> None: ...
-
-    @overload
-    def setXYPosition(self, xyStageLabel: str, x: float, y: float) -> None: ...
-
-    def setXYPosition(self, *args: Any, **kwargs: Any) -> None:
-        """Sets the position of the XY stage in microns.
-
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
-        """
-        return super().setXYPosition(*args, **kwargs)
-
     def getCameraChannelNames(self) -> tuple[str, ...]:
         """Convenience method to call `getCameraChannelName` for all camera channels.
 
@@ -1363,7 +1337,8 @@ class CMMCorePlus(pymmcore.CMMCore):
     def snapImage(self) -> None:
         """Acquires a single image with current settings.
 
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
+        **Why Override?** to emit the `imageSnapped` event after snapping an image.
+        and to emit shutter property changes if `getAutoShutter` is `True`.
         """
         if autoshutter := self.getAutoShutter():
             self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
