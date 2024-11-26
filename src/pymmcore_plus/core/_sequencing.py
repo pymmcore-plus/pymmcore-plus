@@ -279,19 +279,8 @@ def can_sequence_events(
         return _nope(f"Camera {cam_dev!r} {max_len=} < {cur_length=}")
 
     # SLM
-    try:
-        if e1.slm_image != e2.slm_image:
-            return _nope("SLMImage sequences are not supported yet.")
-    except ValueError:
-        if not np.array_equal(e1.slm_image, e2.slm_image):
-            return _nope("SLMImage sequences are not supported yet.")
-        # slm_dev = core.getSLMDevice()
-        # if core.isSLMSequenceable(slm_dev)
-        # max_len = core.getSLMSequenceMaxLength(slm_dev)
-        # if cur_length >= max_len:  # pragma: no cover
-        # return _nope(f"SLM {slm_dev!r} {max_len=} < {cur_length=}")
-        # else:
-        # return _nope(f"SLM {slm_dev!r} is not sequenceable")
+    if e1.slm_image != e2.slm_image:
+        return _nope("SLMImage sequences are not supported yet.")
 
     # time
     # TODO: use better axis keys when they are available
