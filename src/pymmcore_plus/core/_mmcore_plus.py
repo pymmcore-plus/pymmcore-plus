@@ -49,7 +49,7 @@ from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_clas
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
-    from typing import Literal, TypedDict
+    from typing import Literal, TypedDict, Unpack
 
     import numpy as np
     from useq import MDAEvent
@@ -82,10 +82,48 @@ if TYPE_CHECKING:
         type: str
         properties: dict[str, PropertySchema]
 
+    class SetContextKwargs(TypedDict, total=False):
+        """All the valid keywords and their types for the `setContext` method."""
+
+        autoFocusDevice: str
+        autoFocusOffset: float
+        autoShutter: bool
+        cameraDevice: str
+        channelGroup: str
+        circularBufferMemoryFootprint: int
+        deviceAdapterSearchPaths: list[str]
+        deviceDelayMs: tuple[str, float]
+        exposure: float | tuple[str, float]
+        focusDevice: str
+        focusDirection: str
+        galvoDevice: str
+        galvoPosition: tuple[str, float, float]
+        imageProcessorDevice: str
+        multiROI: tuple[list[int], list[int], list[int], list[int]]
+        parentLabel: tuple[str, str]
+        pixelSizeAffine: tuple[str, list[float]]
+        pixelSizeUm: tuple[str, float]
+        position: float | tuple[str, float]
+        primaryLogFile: str | tuple[str, bool]
+        property: tuple[str, str, bool | float | int | str]
+        ROI: tuple[int, int, int, int] | tuple[str, int, int, int, int]
+        SLMDevice: str
+        SLMExposure: tuple[str, float]
+        shutterDevice: str
+        shutterOpen: bool | tuple[str, bool]
+        state: tuple[str, int]
+        stateLabel: tuple[str, str]
+        systemState: pymmcore.Configuration
+        timeoutMs: int
+        XYPosition: tuple[float, float] | tuple[str, float, float]
+        XYStageDevice: str
+        ZPosition: float | tuple[str, float]
+
     def synchronized(lock: RLock) -> Callable[[_F], _F]: ...
 
 else:
     from wrapt import synchronized
+
 
 _OBJDEV_REGEX = re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
@@ -2091,7 +2129,7 @@ class CMMCorePlus(pymmcore.CMMCore):
                 self.events.propertyChanged.emit(device, properties[i], val)
 
     @contextmanager
-    def setContext(self, **kwargs: Any) -> Iterator[None]:
+    def setContext(self, **kwargs: Unpack[SetContextKwargs]) -> Iterator[None]:
         """Set core properties in a context restoring the initial values on exit.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -2100,9 +2138,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         ----------
         **kwargs : Any
             Keyword arguments may be any `Name` for which `get<Name>` and `set<Name>`
-            methods exist.  For example, `setContext(exposure=10)` will call
+            methods exist (where the first letter in `<Name>` may be either lower or
+            upper case).  For example, `setContext(exposure=10)` will call
             `setExposure(10)` when entering the context and `setExposure(<initial>)`
-            when exiting the context.
+            when exiting the context. If the property is not found, a warning is logged
+            and the property is skipped. If the value is a tuple, it is unpacked and
+            passed to the `set<Name>` method (but lists are not unpacked).
 
         Examples
         --------
@@ -2122,11 +2163,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         try:
             for name, v in kwargs.items():
                 name = name[0].upper() + name[1:]
-                try:
-                    orig_values[name] = getattr(self, f"get{name}")()
-                    getattr(self, f"set{name}")(v)
-                except AttributeError:
+                get_name, set_name = f"get{name}", f"set{name}"
+                if not hasattr(self, get_name) or not hasattr(self, set_name):
                     logger.warning("%s is not a valid property, skipping.", name)
+                    continue
+
+                orig_values[name] = getattr(self, get_name)()
+                if isinstance(v, tuple):
+                    getattr(self, set_name)(*v)
+                else:
+                    getattr(self, set_name)(v)
             yield
         finally:
             for k, v in orig_values.items():
