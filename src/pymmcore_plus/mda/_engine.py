@@ -282,6 +282,9 @@ class MDAEngine(PMDAEngine):
         `exec_event`, which *is* part of the protocol), but it is made public
         in case a user wants to subclass this engine and override this method.
         """
+        if event.slm_image is not None:
+            self._exec_event_slm_image(event)
+            
         try:
             self._mmc.snapImage()
             # taking event time after snapImage includes exposure time
@@ -387,7 +390,8 @@ class MDAEngine(PMDAEngine):
                     core.stopPropertySequence(dev, prop)
                 core.loadPropertySequence(dev, prop, value_sequence)
 
-        # TODO: SLM
+        if event.slm_image:
+            self._set_event_slm_image(event)
 
         # preparing a Sequence while another is running is dangerous.
         if core.isSequenceRunning():
@@ -448,6 +452,9 @@ class MDAEngine(PMDAEngine):
 
         t0 = event.metadata.get("runner_t0") or time.perf_counter()
         event_t0_ms = (time.perf_counter() - t0) * 1000
+
+        if event.slm_image is not None:
+            self._exec_event_slm_image(event)
 
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
@@ -581,6 +588,8 @@ class MDAEngine(PMDAEngine):
         self._mmc.setZPosition(cast("float", event.z_pos) + correction)
 
     def _set_event_slm_image(self, event: MDAEvent) -> None:
+        if not event.slm_image:
+            return
         try:
             # Get the SLM device
             if not (slm_device := event.slm_image.device or self._mmc.getSLMDevice()):
@@ -615,6 +624,20 @@ class MDAEngine(PMDAEngine):
 
         except Exception as e:
             logger.warning("Failed to set SLM Image: %s", e)
+        if event.slm_image.exposure:
+            try:
+                self._mmc.setSLMExposure(event.slm_image.exposure)
+            except Exception as e:
+                logger.warning("Failed to set SLM Exposure: %s", e)
+    
+    def _exec_event_slm_image(self, event: MDAEvent) -> None:
+        if not event.slm_image:
+            return
+        if slm_device := event.slm_image.device or self._mmc.getSLMDevice():
+            try:
+                self._mmc.displaySLMImage(slm_device)
+            except Exception as e:
+                logger.warning("Failed to set SLM Image: %s", e)
 
     def _update_config_device_props(self) -> None:
         # store devices/props that make up each config group for faster lookup
