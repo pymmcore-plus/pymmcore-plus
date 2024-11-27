@@ -1,6 +1,15 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, NewType, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Literal,
+    NewType,
+    TypeVar,
+    cast,
+    overload,
+)
 
 from pymmcore_plus.core import CMMCorePlus, Keyword
 from pymmcore_plus.core import DeviceType as DT
@@ -13,9 +22,11 @@ if TYPE_CHECKING:
 
     from pymmcore import DeviceLabel
 
+    from ._device import Device
+
     PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
 
-    from pymmcore_plus.unicore._device import Device
+    _T = TypeVar("_T")
 
 
 class _CoreDevice:
@@ -50,11 +61,25 @@ class UniMMCore(CMMCorePlus):
 
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__(mm_path, adapter_paths)
-        self._pydevices = PyDeviceManager()
-        self._pycore = _CoreDevice()
+        self._pydevices = PyDeviceManager()  # manager for python devices
+        self._pycore = _CoreDevice()  # virtual core device
 
     def load_py_device(self, label: str, device: Device) -> None:
-        # prevent conflicts with CMMCore device names
+        """Load a `pymmcore_plus.unicore.Device` as a python device.
+
+        This API allows you to create python-side Device objects that can be used in
+        tandem with the C++ devices. Whenever a method is called that would normally
+        interact with a C++ device, this class will first check if a python device with
+        the same label exists, and if so, use that instead.
+
+        Parameters
+        ----------
+        label : str
+            The label to assign to the device.
+        device : pymmcore_plus.unicore.Device
+            The device object to load.  Use the appropriate subclass of `Device` for the
+            type of device you are creating.
+        """
         if label in self.getLoadedDevices():
             raise ValueError(f"The specified device label {label!r} is already in use")
         self._pydevices.load_device(label, device)
@@ -91,17 +116,12 @@ class UniMMCore(CMMCorePlus):
     @overload
     def setXYPosition(self, xyStageLabel: str, x: float, y: float, /) -> None: ...
     def setXYPosition(self, *args: Any) -> None:
-        if len(args) == 3:
-            label, x, y = args
-        elif len(args) == 2:
-            x, y = args
-            label = self.getXYStageDevice()
-
+        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
         if label not in self._pydevices:
-            return super().setXYPosition(label, x, y)
+            return super().setXYPosition(label, *args)
 
         with self._pydevices.require_device_type(label, DT.XYStage) as dev:
-            dev.set_position_um(x, y)
+            dev.set_position_um(*args)
 
     @overload
     def getXYPosition(self) -> tuple[float, float]: ...
@@ -207,17 +227,12 @@ class UniMMCore(CMMCorePlus):
         The current position of the stage becomes (newXUm, newYUm). It is recommended
         that setOriginXY() be used instead where available.
         """
-        if len(args) == 3:
-            label, x, y = args
-        elif len(args) == 2:
-            x, y = args
-            label = self.getXYStageDevice()
-
+        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
         if label not in self._pydevices:
-            return super().setAdapterOriginXY(label, x, y)
+            return super().setAdapterOriginXY(label, *args)
 
         with self._pydevices.require_device_type(label, DT.XYStage) as dev:
-            dev.set_adapter_origin_um(x, y)
+            dev.set_adapter_origin_um(*args)
 
     @overload
     def setRelativeXYPosition(self, dx: float, dy: float, /) -> None: ...
@@ -226,22 +241,37 @@ class UniMMCore(CMMCorePlus):
         self, xyStageLabel: DeviceLabel | str, dx: float, dy: float, /
     ) -> None: ...
     def setRelativeXYPosition(self, *args: Any) -> None:
-        """Sets the relatizve position of the XY stage in microns."""
-        super().setRelativeXYPosition(*args)
+        """Sets the relative position of the XY stage in microns."""
+        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
+        if label not in self._pydevices:
+            return super().setRelativeXYPosition(label, *args)
+
+        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+            dev.set_relative_position_um(*args)
 
     def startXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
         """Starts an ongoing sequence of triggered events in an XY stage.
 
-        This should only be called for stages
+        This should only be called for stages that are sequenceable
         """
-        super().startXYStageSequence(xyStageLabel)
+        label = xyStageLabel or self.getXYStageDevice()
+        if label not in self._pydevices:
+            return super().startXYStageSequence(label)
+
+        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+            dev.start_sequence()
 
     def stopXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
         """Stops an ongoing sequence of triggered events in an XY stage.
 
         This should only be called for stages that are sequenceable
         """
-        super().stopXYStageSequence(xyStageLabel)
+        label = xyStageLabel or self.getXYStageDevice()
+        if label not in self._pydevices:
+            return super().stopXYStageSequence(label)
+
+        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+            dev.stop_sequence()
 
     # -----------------------------------------------------------------------
     # ---------------------------- Any Stage --------------------------------
@@ -262,3 +292,21 @@ class UniMMCore(CMMCorePlus):
 
         dev = self._pydevices.require_device_type(xyOrZStageLabel, DT.XYStage, DT.Stage)
         dev.stop()
+
+
+def _ensure_label(
+    args: tuple[_T, ...], min_args: int, getter: Callable[[], str]
+) -> tuple[str, tuple[_T, ...]]:
+    """Ensure we have a device label.
+
+    Designed to be used with overloaded methods that MAY take a device label as the
+    first argument.
+
+    If the number of arguments is less than `min_args`, the label is obtained from the
+    getter function. If the number of arguments is greater than or equal to `min_args`,
+    the label is the first argument and the remaining arguments are returned as a tuple
+    """
+    if len(args) < min_args:
+        # we didn't get the label
+        return getter(), args
+    return cast(str, args[0]), args[1:]

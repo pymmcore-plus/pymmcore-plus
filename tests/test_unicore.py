@@ -63,6 +63,9 @@ def test_unicore():
     assert core.getXYPosition("pyXY") == (0, 0)
     assert tuple(stage.ORIGIN) == NEW_POS
 
+    core.setRelativeXYPosition("pyXY", 1, 2)
+    assert core.getXYPosition("pyXY") == (1, 2)
+
     core.home("pyXY")
     core.stop("pyXY")
     assert stage.HOMED
