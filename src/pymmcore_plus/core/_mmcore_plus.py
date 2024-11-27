@@ -12,15 +12,8 @@ from datetime import datetime
 from pathlib import Path
 from re import Pattern
 from textwrap import dedent
-from threading import RLock, Thread
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    NamedTuple,
-    TypeVar,
-    overload,
-)
+from threading import Thread
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, overload
 
 import pymmcore
 from psygnal import SignalInstance
@@ -58,7 +51,6 @@ if TYPE_CHECKING:
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
-    _F = TypeVar("_F", bound=Callable[..., Any])
     ListOrTuple = list[_T] | tuple[_T, ...]
 
     class PropertySchema(TypedDict, total=False):
@@ -82,10 +74,6 @@ if TYPE_CHECKING:
         type: str
         properties: dict[str, PropertySchema]
 
-    def synchronized(lock: RLock) -> Callable[[_F], _F]: ...
-
-else:
-    from wrapt import synchronized
 
 _OBJDEV_REGEX = re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
@@ -150,8 +138,6 @@ class CMMCorePlus(pymmcore.CMMCore):
     adapter_paths : Sequence[str], optional
         Paths to search for device adapters, by default ()
     """
-
-    _lock = RLock()
 
     @classmethod
     def instance(cls) -> CMMCorePlus:
@@ -245,7 +231,6 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     # Re-implemented methods from the CMMCore API
 
-    @synchronized(_lock)
     def setProperty(
         self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
@@ -260,7 +245,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         with self._property_change_emission_ensured(label, (propName,)):
             super().setProperty(label, propName, propValue)
 
-    @synchronized(_lock)
     def setState(self, stateDeviceLabel: str, state: int) -> None:
         """Set state (by position) on `stateDeviceLabel`, with reliable event emission.
 
@@ -273,7 +257,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             super().setState(stateDeviceLabel, state)
 
-    @synchronized(_lock)
     def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
         """Set state (by label) on `stateDeviceLabel`, with reliable event emission.
 
@@ -356,7 +339,6 @@ class CMMCorePlus(pymmcore.CMMCore):
                         )
             raise RuntimeError(msg) from e
 
-    @synchronized(_lock)
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
     ) -> None:
@@ -584,7 +566,6 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def getLastImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]: ...
 
-    @synchronized(_lock)
     def getLastImageAndMD(
         self, channel: int | None = None, slice: int | None = None, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
@@ -630,7 +611,6 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def popNextImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]: ...
 
-    @synchronized(_lock)
     def popNextImageAndMD(
         self, channel: int = 0, slice: int = 0, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
@@ -665,7 +645,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         img = super().popNextImageMD(channel, slice, md)
         return (self.fixImage(img) if fix else img, md)
 
-    @synchronized(_lock)
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
 
@@ -682,7 +661,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         img: np.ndarray = super().popNextImage()
         return self.fixImage(img) if fix else img
 
-    @synchronized(_lock)
     def getNBeforeLastImageAndMD(
         self, n: int, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
@@ -1346,35 +1324,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self.setPosition(val)
 
-    @overload
-    def setPosition(self, position: float) -> None: ...
-
-    @overload
-    def setPosition(self, stageLabel: str, position: float) -> None: ...
-
-    @synchronized(_lock)
-    def setPosition(self, *args: Any, **kwargs: Any) -> None:
-        """Set position of the stage in microns.
-
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
-        """
-        return super().setPosition(*args, **kwargs)
-
-    @overload
-    def setXYPosition(self, x: float, y: float) -> None: ...
-
-    @overload
-    def setXYPosition(self, xyStageLabel: str, x: float, y: float) -> None: ...
-
-    @synchronized(_lock)
-    def setXYPosition(self, *args: Any, **kwargs: Any) -> None:
-        """Sets the position of the XY stage in microns.
-
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
-        """
-        return super().setXYPosition(*args, **kwargs)
-
-    @synchronized(_lock)
     def getCameraChannelNames(self) -> tuple[str, ...]:
         """Convenience method to call `getCameraChannelName` for all camera channels.
 
@@ -1385,11 +1334,11 @@ class CMMCorePlus(pymmcore.CMMCore):
             for i in range(self.getNumberOfCameraChannels())
         )
 
-    @synchronized(_lock)
     def snapImage(self) -> None:
         """Acquires a single image with current settings.
 
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
+        **Why Override?** to emit the `imageSnapped` event after snapping an image.
+        and to emit shutter property changes if `getAutoShutter` is `True`.
         """
         if autoshutter := self.getAutoShutter():
             self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
