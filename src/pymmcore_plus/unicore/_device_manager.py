@@ -1,11 +1,16 @@
-from collections.abc import Iterator, KeysView
-from typing import Literal, overload
+from __future__ import annotations
 
-from pymmcore_plus.core import DeviceType
+from typing import TYPE_CHECKING, Literal, overload
 
 from ._device import Device
-from ._stage import StageDevice, _BaseStage
-from ._xy_stage_device import XYStageDevice
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, KeysView
+
+    from pymmcore_plus.core import DeviceType
+
+    from ._stage import StageDevice, _BaseStage
+    from ._xy_stage_device import XYStageDevice
 
 
 class PyDeviceManager:
