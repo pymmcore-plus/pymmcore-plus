@@ -621,14 +621,10 @@ class MDAEngine(PMDAEngine):
                     on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
                     slm_array = np.where(slm_array, on_value, 0).astype(np.uint8)
                 self._mmc.setSLMImage(slm_device, slm_array)
-
+            if event.slm_image.exposure:
+                self._mmc.setSLMExposure(slm_device, event.slm_image.exposure)
         except Exception as e:
             logger.warning("Failed to set SLM Image: %s", e)
-        if event.slm_image.exposure:
-            try:
-                self._mmc.setSLMExposure(event.slm_image.exposure)
-            except Exception as e:
-                logger.warning("Failed to set SLM Exposure: %s", e)
 
     def _exec_event_slm_image(self, event: MDAEvent) -> None:
         if not event.slm_image:
