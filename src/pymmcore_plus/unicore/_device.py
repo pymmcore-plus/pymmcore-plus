@@ -2,9 +2,11 @@ from __future__ import annotations
 
 import threading
 from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, Self, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 if TYPE_CHECKING:
+    from typing import Any, Self
+
     from pymmcore_plus.core import DeviceType
 
 
