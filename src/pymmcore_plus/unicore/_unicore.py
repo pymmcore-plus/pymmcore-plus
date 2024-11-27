@@ -1,24 +1,17 @@
 from __future__ import annotations
 
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    Literal,
-    NewType,
-    TypeVar,
-    cast,
-    overload,
-)
+from typing import TYPE_CHECKING, cast, overload
 
 from pymmcore_plus.core import CMMCorePlus, Keyword
-from pymmcore_plus.core import DeviceType as DT
 from pymmcore_plus.core import Keyword as KW
 
 from ._device_manager import PyDeviceManager
+from ._stage import _BaseStage
+from ._xy_stage_device import XYStageDevice
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from typing import Any, Callable, Literal, NewType, TypeVar
 
     from pymmcore import DeviceLabel
 
@@ -62,7 +55,7 @@ class UniMMCore(CMMCorePlus):
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__(mm_path, adapter_paths)
         self._pydevices = PyDeviceManager()  # manager for python devices
-        self._pycore = _CoreDevice()  # virtual core device
+        self._pycore = _CoreDevice()  # virtual core device for python devices
 
     def load_py_device(self, label: str, device: Device) -> None:
         """Load a `pymmcore_plus.unicore.Device` as a python device.
@@ -97,6 +90,17 @@ class UniMMCore(CMMCorePlus):
         return label
 
     # -----------------------------------------------------------------------
+    # ----------------------------- All Devices -----------------------------
+    # -----------------------------------------------------------------------
+
+    def getLoadedDevices(self) -> tuple[DeviceLabel, ...]:
+        return tuple(self._pydevices) + super().getLoadedDevices()
+
+    def getLoadedDevicesOfType(self, devType: int) -> tuple[DeviceLabel, ...]:
+        pydevs = self._pydevices.get_labels_of_type(devType)
+        return pydevs + super().getLoadedDevicesOfType(devType)
+
+    # -----------------------------------------------------------------------
     # ---------------------------- XYStageDevice ----------------------------
     # -----------------------------------------------------------------------
 
@@ -114,13 +118,16 @@ class UniMMCore(CMMCorePlus):
     @overload
     def setXYPosition(self, x: float, y: float, /) -> None: ...
     @overload
-    def setXYPosition(self, xyStageLabel: str, x: float, y: float, /) -> None: ...
+    def setXYPosition(
+        self, xyStageLabel: DeviceLabel | str, x: float, y: float, /
+    ) -> None: ...
     def setXYPosition(self, *args: Any) -> None:
+        """Sets the position of the XY stage in microns."""
         label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
         if label not in self._pydevices:
             return super().setXYPosition(label, *args)
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.set_position_um(*args)
 
     @overload
@@ -135,7 +142,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return tuple(super().getXYPosition(label))  # type: ignore
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             return dev.get_position_um()
 
     @overload
@@ -186,7 +193,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return super().setOriginX(label)
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.set_origin_x()
 
     @overload
@@ -199,7 +206,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return super().setOriginY(label)
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.set_origin_y()
 
     @overload
@@ -212,7 +219,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return super().setOriginXY(label)
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.set_origin()
 
     @overload
@@ -231,7 +238,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return super().setAdapterOriginXY(label, *args)
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.set_adapter_origin_um(*args)
 
     @overload
@@ -246,7 +253,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return super().setRelativeXYPosition(label, *args)
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.set_relative_position_um(*args)
 
     def startXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
@@ -258,7 +265,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return super().startXYStageSequence(label)
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.start_sequence()
 
     def stopXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
@@ -270,7 +277,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return super().stopXYStageSequence(label)
 
-        with self._pydevices.require_device_type(label, DT.XYStage) as dev:
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.stop_sequence()
 
     # -----------------------------------------------------------------------
@@ -282,7 +289,7 @@ class UniMMCore(CMMCorePlus):
         if (dev := self._pydevices.get(xyOrZStageLabel)) is None:
             return super().home(xyOrZStageLabel)
 
-        dev = self._pydevices.require_device_type(xyOrZStageLabel, DT.XYStage, DT.Stage)
+        dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
         dev.home()
 
     def stop(self, xyOrZStageLabel: DeviceLabel | str) -> None:
@@ -290,7 +297,7 @@ class UniMMCore(CMMCorePlus):
         if (dev := self._pydevices.get(xyOrZStageLabel)) is None:
             return super().stop(xyOrZStageLabel)
 
-        dev = self._pydevices.require_device_type(xyOrZStageLabel, DT.XYStage, DT.Stage)
+        dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
         dev.stop()
 
 

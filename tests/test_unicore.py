@@ -45,6 +45,8 @@ def test_unicore():
     # load a python XY stage device
     stage = MyStage()
     core.load_py_device("pyXY", stage)
+    assert "pyXY" in core.getLoadedDevices()
+
     # set the core XY stage device to the python device, dropping the C-side device
     core.setXYStageDevice("pyXY")
     assert core.getXYStageDevice() == "pyXY"

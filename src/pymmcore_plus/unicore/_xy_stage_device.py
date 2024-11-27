@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pymmcore_plus.core import DeviceType
 
@@ -10,12 +10,11 @@ from ._stage import _BaseStage
 class XYStageDevice(_BaseStage[tuple[float, float]]):
     """ABC for XYStage devices."""
 
+    _TYPE: ClassVar[Literal[DeviceType.XYStage]] = DeviceType.XYStage
+
     # TODO:
     # we can probably extend this base class with better initial functionality
     # see CXYStageBase in mmCoreAndDevices
-
-    def type(self) -> Literal[DeviceType.XYStage]:
-        return DeviceType.XYStage
 
     @abstractmethod
     def set_position_um(self, x: float, y: float) -> None:

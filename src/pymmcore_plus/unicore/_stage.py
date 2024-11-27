@@ -1,5 +1,5 @@
 from abc import abstractmethod
-from typing import Literal
+from typing import ClassVar, Literal
 
 from pymmcore_plus.core._constants import DeviceType
 from pymmcore_plus.unicore._device import SeqT, SequenceableDevice
@@ -22,8 +22,7 @@ class _BaseStage(SequenceableDevice[SeqT]):
 class StageDevice(_BaseStage[float]):
     """ABC for Stage devices."""
 
-    def type(self) -> Literal[DeviceType.Stage]:
-        return DeviceType.Stage
+    _TYPE: ClassVar[Literal[DeviceType.Stage]] = DeviceType.Stage
 
     @abstractmethod
     def set_position(self, val: float) -> None:

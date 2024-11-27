@@ -1,13 +1,13 @@
 from __future__ import annotations
 
 import threading
-from abc import ABC, abstractmethod
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from abc import ABC
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+
+from pymmcore_plus.core import DeviceType
 
 if TYPE_CHECKING:
-    from typing import Any, Self
-
-    from pymmcore_plus.core import DeviceType
+    from typing_extensions import Any, Self
 
 
 class _Lockable:
@@ -37,9 +37,12 @@ class _Lockable:
 class Device(_Lockable, ABC):
     """ABC for all Devices."""
 
-    @abstractmethod
-    def type(self) -> DeviceType:
+    _TYPE: ClassVar[DeviceType] = DeviceType.UnknownType
+
+    @classmethod
+    def type(cls) -> DeviceType:
         """Return the type of the device."""
+        return cls._TYPE
 
 
 SeqT = TypeVar("SeqT")

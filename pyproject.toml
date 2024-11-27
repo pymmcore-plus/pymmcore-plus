@@ -156,6 +156,9 @@ disallow_subclassing_any = false
 show_error_codes = true
 pretty = true
 plugins = "pydantic.mypy"
+# see https://github.com/python/mypy/issues/5374 and related discussions
+# it causes more pain than it solves
+disable_error_code = ["type-abstract"]
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
