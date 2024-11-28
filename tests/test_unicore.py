@@ -1,5 +1,6 @@
 from typing import ClassVar
 
+from pymmcore_plus.core._constants import DeviceInitializationState
 from pymmcore_plus.unicore import UniMMCore
 from pymmcore_plus.unicore._xy_stage_device import XYStageDevice
 
@@ -11,6 +12,9 @@ class MyStage(XYStageDevice):
     HOMED = False
     ORIGIN: ClassVar[list[float]] = [0.0, 0.0]
     _pos: ClassVar[list[float]] = [0.0, 0.0]
+
+    def initialize(self) -> None:
+        self.register_property("PropertyA", value=10.0, limits=(0.0, 100.0))
 
     def set_position_um(self, x: float, y: float) -> None:
         """Set the position of the stage."""
@@ -46,6 +50,18 @@ def test_unicore():
     stage = MyStage()
     core.load_py_device("pyXY", stage)
     assert "pyXY" in core.getLoadedDevices()
+
+    assert (
+        core.getDeviceInitializationState("pyXY")
+        is DeviceInitializationState.Uninitialized
+    )
+    core.initializeDevice("pyXY")
+    assert (
+        core.getDeviceInitializationState("pyXY")
+        is DeviceInitializationState.InitializedSuccessfully
+    )
+    assert "PropertyA" in core.getDevicePropertyNames("pyXY")
+    assert core._pydevices["pyXY"].properties()["PropertyA"].is_pre_init is False
 
     # set the core XY stage device to the python device, dropping the C-side device
     core.setXYStageDevice("pyXY")

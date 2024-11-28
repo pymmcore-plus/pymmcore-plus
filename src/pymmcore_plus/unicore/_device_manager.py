@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING, TypeVar, cast
+
+from pymmcore_plus.core._constants import DeviceInitializationState
 
 from ._device import Device
 
@@ -11,6 +14,7 @@ if TYPE_CHECKING:
 
 
 DevT = TypeVar("DevT", bound=Device)
+logger = logging.getLogger(__name__)
 
 
 class PyDeviceManager:
@@ -25,6 +29,28 @@ class PyDeviceManager:
             raise ValueError(f"The specified device label {label!r} is already in use")
         # TODO other stuff
         self._devices[label] = device
+
+    def initialize_device(self, label: str) -> None:
+        """Initialize the device with the given label."""
+        device = self[label]
+        try:
+            # we're setting this *just* before calling initialize so that
+            # properties registered in the initialize method can know that they are
+            # NOT pre-init propss
+            device._initialized = True  # noqa: SLF001
+            device.initialize()
+        except Exception as e:
+            device._initialized = e  # noqa: SLF001
+            logger.exception(f"Failed to initialize device {label!r}")
+
+    def get_device_initialization_state(self, label: str) -> DeviceInitializationState:
+        """Return the initialization state of the device with the given label."""
+        state = self[label]._initialized  # noqa: SLF001
+        if state is True:
+            return DeviceInitializationState.InitializedSuccessfully
+        if state is False:
+            return DeviceInitializationState.Uninitialized
+        return DeviceInitializationState.InitializationFailed
 
     def unload_device(self, device: str | Device) -> None:
         """Unload a loaded device by label or instance."""

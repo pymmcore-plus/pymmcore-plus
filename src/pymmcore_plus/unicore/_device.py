@@ -2,14 +2,27 @@ from __future__ import annotations
 
 import threading
 from abc import ABC
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
+from types import MappingProxyType
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    ClassVar,
+    Generic,
+    TypeVar,
+    final,
+    overload,
+)
 
 from pymmcore_plus.core import DeviceType
 
+from ._properties import Property
+
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from typing_extensions import Any, Self
 
-    from ._properties import Property
+    from ._properties import PropType
 
 
 class _Lockable:
@@ -45,8 +58,69 @@ class Device(_Lockable, ABC):
         super().__init__()
         self._properties: dict[str, Property] = {}
         self._label: str = ""
+        # False -> Not initialized
+        # True -> Initialized successfully
+        # Exception -> Initialization failed, contains the exception
+        self._initialized: bool | BaseException = False
+
+    @overload
+    def register_property(self, prop: Property, /) -> Property: ...
+    @overload
+    def register_property(
+        self,
+        name: str,
+        /,
+        *,
+        value: PropType | None = None,
+        read_only: bool = False,
+        allowed_values: Sequence[PropType] | None = None,
+        limits: tuple[float, float] | None = None,
+        sequence_max_length: int = 0,
+    ) -> Property: ...
+    @final  # may not be overridden
+    def register_property(
+        self,
+        name_or_prop: str | Property,
+        value: PropType | None = None,
+        read_only: bool = False,
+        allowed_values: Sequence[PropType] | None = None,
+        limits: tuple[float, float] | None = None,
+        sequence_max_length: int = 0,
+    ) -> Property:
+        """Register a property."""
+        if isinstance(name_or_prop, str):
+            prop = Property(
+                name=name_or_prop,
+                value=value,
+                read_only=read_only,
+                allowed_values=allowed_values,
+                limits=limits,
+                sequence_max_length=sequence_max_length,
+            )
+        elif not isinstance(name_or_prop, Property):
+            raise TypeError("name_or_prop must be a string or Property instance.")
+        prop.is_pre_init = self._initialized is False
+        self._properties[prop.name] = prop
+        return prop
 
     @final
+    def get_property(self, name: str) -> Any:
+        """Get the value of a property."""
+        try:
+            prop = self._properties[name]
+        except KeyError:
+            raise KeyError(f"Property '{name}' not found.") from None
+        return prop.get()
+
+    @final
+    def properties(self) -> Mapping[str, Property]:
+        """Return a dictionary of the device's properties."""
+        return MappingProxyType(self._properties)
+
+    def initialize(self) -> None:
+        """Initialize the device."""
+
+    @final  # may not be overridden
     def get_label(self) -> str:
         return self._label
 
@@ -68,15 +142,6 @@ class Device(_Lockable, ABC):
     def description(self) -> str:
         """Return a description of the device."""
         return ""
-
-    @final
-    def get_property(self, name: str) -> Any:
-        """Get the value of a property."""
-        try:
-            prop = self._properties[name]
-        except KeyError:
-            raise KeyError(f"Property '{name}' not found.") from None
-        return prop.get()
 
 
 SeqT = TypeVar("SeqT")

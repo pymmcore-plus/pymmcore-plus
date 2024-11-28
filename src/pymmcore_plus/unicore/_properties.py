@@ -42,6 +42,7 @@ class Property(Generic[PropType]):
     limits: tuple[float, float] | None = None
     action: PropertyAction | None = None
     sequence_max_length: int = 0
+    is_pre_init: bool = False
 
     @property
     def is_sequenceable(self) -> bool:

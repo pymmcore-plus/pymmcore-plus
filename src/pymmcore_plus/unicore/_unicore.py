@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from pymmcore import DeviceLabel, DeviceName, PropertyName
 
-    from pymmcore_plus.core._constants import DeviceType
+    from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
 
     from ._device import Device
 
@@ -101,6 +101,15 @@ class UniMMCore(CMMCorePlus):
     # -----------------------------------------------------------------------
     # ----------------------------- All Devices -----------------------------
     # -----------------------------------------------------------------------
+    def initializeDevice(self, label: DeviceLabel | str) -> None:
+        if label not in self._pydevices:
+            return super().initializeDevice(label)
+        return self._pydevices.initialize_device(label)
+
+    def getDeviceInitializationState(self, label: str) -> DeviceInitializationState:
+        if label in self._pydevices:
+            return self._pydevices.get_device_initialization_state(label)
+        return super().getDeviceInitializationState(label)
 
     def getLoadedDevices(self) -> tuple[DeviceLabel, ...]:
         return tuple(self._pydevices) + super().getLoadedDevices()
@@ -129,7 +138,10 @@ class UniMMCore(CMMCorePlus):
     def getDevicePropertyNames(
         self, label: DeviceLabel | str
     ) -> tuple[PropertyName, ...]:
-        return super().getDevicePropertyNames(label)
+        if label not in self._pydevices:
+            return super().getDevicePropertyNames(label)
+        names = tuple(self._pydevices[label].properties())
+        return cast("tuple[PropertyName, ...]", names)
 
     def hasProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str
