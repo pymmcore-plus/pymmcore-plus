@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, cast, overload
+import threading
+from collections.abc import Iterator, MutableMapping
+from typing import TYPE_CHECKING, Any, cast, overload
 
 from pymmcore_plus.core import CMMCorePlus, Keyword
 from pymmcore_plus.core import Keyword as KW
@@ -11,9 +13,11 @@ from ._xy_stage_device import XYStageDevice
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from typing import Any, Callable, Literal, NewType, TypeVar
+    from typing import Callable, Literal, NewType, TypeVar
 
-    from pymmcore import DeviceLabel
+    from pymmcore import DeviceLabel, DeviceName, PropertyName
+
+    from pymmcore_plus.core._constants import DeviceType
 
     from ._device import Device
 
@@ -31,7 +35,8 @@ class _CoreDevice:
     determine which real device to use.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, state_cache: PropertyStateCache) -> None:
+        self._state_cache = state_cache
         self._pycurrent: dict[Keyword, PyDeviceLabel | None] = {
             KW.CoreCamera: None,
             KW.CoreShutter: None,
@@ -47,6 +52,7 @@ class _CoreDevice:
 
     def set_current(self, keyword: Keyword, label: str | None) -> None:
         self._pycurrent[keyword] = cast("PyDeviceLabel", label)
+        self._state_cache[(KW.CoreDevice, keyword)] = label
 
 
 class UniMMCore(CMMCorePlus):
@@ -55,7 +61,8 @@ class UniMMCore(CMMCorePlus):
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__(mm_path, adapter_paths)
         self._pydevices = PyDeviceManager()  # manager for python devices
-        self._pycore = _CoreDevice()  # virtual core device for python devices
+        self._state_cache = PropertyStateCache()  # threadsafe cache for property states
+        self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
 
     def load_py_device(self, label: str, device: Device) -> None:
         """Load a `pymmcore_plus.unicore.Device` as a python device.
@@ -87,6 +94,8 @@ class UniMMCore(CMMCorePlus):
         if label in self._pydevices:
             self._pycore.set_current(keyword, label)
             label = ""
+        elif not label:
+            self._pycore.set_current(keyword, None)
         return label
 
     # -----------------------------------------------------------------------
@@ -99,6 +108,50 @@ class UniMMCore(CMMCorePlus):
     def getLoadedDevicesOfType(self, devType: int) -> tuple[DeviceLabel, ...]:
         pydevs = self._pydevices.get_labels_of_type(devType)
         return pydevs + super().getLoadedDevicesOfType(devType)
+
+    def getDeviceType(self, label: str) -> DeviceType:
+        if label in self._pydevices:
+            return self._pydevices[label].type()
+        return super().getDeviceType(label)
+
+    # getDeviceLibrary
+
+    def getDeviceName(self, label: DeviceLabel | str) -> DeviceName:
+        if label in self._pydevices:
+            return cast("DeviceName", self._pydevices[label].name())
+        return super().getDeviceName(label)
+
+    def getDeviceDescription(self, label: DeviceLabel | str) -> str:
+        if label in self._pydevices:
+            return self._pydevices[label].description()
+        return super().getDeviceDescription(label)
+
+    def getDevicePropertyNames(
+        self, label: DeviceLabel | str
+    ) -> tuple[PropertyName, ...]:
+        return super().getDevicePropertyNames(label)
+
+    def hasProperty(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> bool:
+        return super().hasProperty(label, propName)
+
+    def getProperty(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> Any:  # broadening to Any, because pydevices can return non-string values?
+        if label not in self._pydevices:
+            return super().getProperty(label, propName)
+        with self._pydevices[label] as dev:
+            value = dev.get_property(propName)
+            self._state_cache[(label, propName)] = value
+        return value
+
+    def getPropertyFromCache(
+        self, deviceLabel: DeviceLabel | str, propName: PropertyName | str
+    ) -> Any:
+        if deviceLabel not in self._pydevices:
+            return super().getPropertyFromCache(deviceLabel, propName)
+        return self._state_cache[(deviceLabel, propName)]
 
     # -----------------------------------------------------------------------
     # ---------------------------- XYStageDevice ----------------------------
@@ -317,3 +370,49 @@ def _ensure_label(
         # we didn't get the label
         return getter(), args
     return cast(str, args[0]), args[1:]
+
+
+class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
+    """A thread-safe cache for property states.
+
+    Keys are tuples of (device_label, property_name), and values are the last known
+    value of that property.
+    """
+
+    def __init__(self) -> None:
+        self._store: dict[tuple[str, str], Any] = {}
+        self._lock = threading.Lock()
+
+    def __getitem__(self, key: tuple[str, str]) -> Any:
+        with self._lock:
+            try:
+                return self._store[key]
+            except KeyError:
+                prop, dev = key
+                raise KeyError(
+                    f"Property {prop!r} of device {dev!r} not found in cache"
+                ) from None
+
+    def __setitem__(self, key: tuple[str, str], value: Any) -> None:
+        with self._lock:
+            self._store[key] = value
+
+    def __delitem__(self, key: tuple[str, str]) -> None:
+        with self._lock:
+            del self._store[key]
+
+    def __contains__(self, key: object) -> bool:
+        with self._lock:
+            return key in self._store
+
+    def __iter__(self) -> Iterator[tuple[str, str]]:
+        with self._lock:
+            return iter(self._store.copy())  # Prevent modifications during iteration
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._store)
+
+    def __repr__(self) -> str:
+        with self._lock:
+            return f"{self.__class__.__name__}({self._store!r})"

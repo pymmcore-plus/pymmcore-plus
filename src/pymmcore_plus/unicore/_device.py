@@ -2,12 +2,14 @@ from __future__ import annotations
 
 import threading
 from abc import ABC
-from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
 
 if TYPE_CHECKING:
     from typing_extensions import Any, Self
+
+    from ._properties import Property
 
 
 class _Lockable:
@@ -39,10 +41,42 @@ class Device(_Lockable, ABC):
 
     _TYPE: ClassVar[DeviceType] = DeviceType.UnknownType
 
+    def __init__(self) -> None:
+        super().__init__()
+        self._properties: dict[str, Property] = {}
+        self._label: str = ""
+
+    @final
+    def get_label(self) -> str:
+        return self._label
+
+    @final
+    def set_label(self, value: str) -> None:
+        # for use by the device manager, but the device may know it's own label.
+        self._label = str(value)
+
+    @final
     @classmethod
     def type(cls) -> DeviceType:
         """Return the type of the device."""
         return cls._TYPE
+
+    def name(self) -> str:
+        """Return the name of the device."""
+        return f"{self.__class__.__name__}"
+
+    def description(self) -> str:
+        """Return a description of the device."""
+        return ""
+
+    @final
+    def get_property(self, name: str) -> Any:
+        """Get the value of a property."""
+        try:
+            prop = self._properties[name]
+        except KeyError:
+            raise KeyError(f"Property '{name}' not found.") from None
+        return prop.get()
 
 
 SeqT = TypeVar("SeqT")
