@@ -73,7 +73,7 @@ class ConfigGroup(MutableMapping[str, Configuration]):
     def __getitem__(self, configName: str) -> Configuration:
         try:
             return self._mmc.getConfigData(self._name, configName)
-        except ValueError as e:
+        except (ValueError, RuntimeError) as e:
             if configName not in self:
                 raise KeyError(
                     f"Group {self._name!r} does not have a config {configName!r}"
