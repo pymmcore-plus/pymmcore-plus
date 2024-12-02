@@ -39,7 +39,7 @@ except ImportError:
     from contextlib import nullcontext as no_stdout
 
 
-__all__ = ["find_micromanager", "retry", "no_stdout", "signals_backend"]
+__all__ = ["find_micromanager", "no_stdout", "retry", "signals_backend"]
 
 APP_NAME = "pymmcore-plus"
 USER_DATA_DIR = Path(user_data_dir(appname=APP_NAME))
