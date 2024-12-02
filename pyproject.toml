@@ -38,7 +38,8 @@ dependencies = [
     "platformdirs >=3.0.0",
     "numpy >=1.17.3",
     "psygnal >=0.7",
-    "pymmcore >=10.7.0.71.0",
+    # "pymmcore >=10.7.0.71.0",
+    "pymmcore-nano @ git+https://github.com/pymmcore-plus/pymmcore-nano.git@main",
     "typing-extensions",                    # not actually required at runtime
     "useq-schema >=0.5.0",
     "tensorstore; python_version < '3.13'",

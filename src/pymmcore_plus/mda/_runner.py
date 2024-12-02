@@ -298,6 +298,8 @@ class MDARunner:
                 event.metadata["runner_t0"] = self._sequence_t0
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in output:
+                    if not payload:
+                        continue
                     img, event, meta = payload
                     event.metadata.pop("runner_t0", None)
                     # if the engine calculated its own time, don't overwrite it

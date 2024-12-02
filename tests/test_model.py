@@ -199,6 +199,15 @@ def test_scope_errs():
         Microscope(devices=[CoreDevice()])
 
 
+try:
+    import pymmcore_swig
+except ImportError:
+    pymmcore_swig = None
+
+
+@pytest.mark.skipif(
+    pymmcore_swig is not None, reason="Doesn't yet work for pymmcore-nano"
+)
 def test_apply():
     core1 = CMMCorePlus()
     core1.loadSystemConfiguration()

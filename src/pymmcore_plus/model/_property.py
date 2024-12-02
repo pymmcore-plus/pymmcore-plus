@@ -53,7 +53,7 @@ class Property(CoreObject):
             "exists": CMMCorePlus.hasProperty,
         }
 
-    def __reduce__(self) -> tuple[type, tuple, tuple]:
+    def __reduce__(self) -> tuple:
         # Return the class, arguments for __init__, and any state to restore
         state = asdict(self)
         return self.__class__, (self.device_name, self.name), state

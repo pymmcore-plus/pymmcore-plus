@@ -641,8 +641,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         tuple[np.ndarray, Metadata]
             Image and metadata
         """
-        md = Metadata()
+        import _pymmcore_nano
+
+        md = _pymmcore_nano.Metadata()
         img = super().popNextImageMD(channel, slice, md)
+        md = Metadata(md)
         return (self.fixImage(img) if fix else img, md)
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
@@ -1880,8 +1883,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             """
             if _:
                 warnings.warn(  # pragma: no cover
-                    "Unlike pymmcore, CMMCorePlus.getMultiROI does not require arguments."
-                    "Arguments are ignored.",
+                    "Unlike pymmcore, CMMCorePlus.getMultiROI does not require "
+                    "arguments. Arguments are ignored.",
                     stacklevel=2,
                 )
 
