@@ -5,7 +5,7 @@ from ._tensorstore_handler import TensorStoreHandler
 
 __all__ = [
     "ImageSequenceWriter",
-    "OMEZarrWriter",
     "OMETiffWriter",
+    "OMEZarrWriter",
     "TensorStoreHandler",
 ]
