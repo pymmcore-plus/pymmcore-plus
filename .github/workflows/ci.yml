@@ -111,7 +111,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           python -m pip install -e .[test,PyQt6]
-          python -m pip uninstall pymmcore
+          python -m pip uninstall -y pymmcore
           python -m pip install pymmcore-nano
 
       - name: Set cache path
