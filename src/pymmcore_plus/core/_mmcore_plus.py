@@ -601,7 +601,10 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = super().getLastImageMD(channel, slice, md)
         else:
             img = super().getLastImageMD(md)
-        return (self.fixImage(img) if fix else img, md)
+        return (
+            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
+            md,
+        )
 
     @overload
     def popNextImageAndMD(
@@ -646,7 +649,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         md = _pymmcore_nano.Metadata()
         img = super().popNextImageMD(channel, slice, md)
         md = Metadata(md)
-        return (self.fixImage(img) if fix else img, md)
+        return (
+            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
+            md,
+        )
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
@@ -662,7 +668,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
         img: np.ndarray = super().popNextImage()
-        return self.fixImage(img) if fix else img
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
 
     def getNBeforeLastImageAndMD(
         self, n: int, *, fix: bool = True
@@ -690,7 +696,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().getNBeforeLastImageMD(n, md)
-        return self.fixImage(img) if fix else img, md
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
         """Applies a configuration to a group.
@@ -1456,7 +1462,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         if ncomponents is None:
             ncomponents = self.getNumberOfComponents()
-        if ncomponents == 4 and not img.ndim == 3:  # not needed in pymmcore-nano
+        if ncomponents == 4 and img.ndim != 3:
             new_shape = (*img.shape, 4)
             img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
             img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
@@ -1623,7 +1629,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if numChannel is not None
             else super().getImage()
         )
-        return self.fixImage(img) if fix else img
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition.

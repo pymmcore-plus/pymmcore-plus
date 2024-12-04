@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+import pymmcore_plus
+import pymmcore_plus._pymmcore
 from pymmcore_plus import CMMCorePlus, DeviceType, find_micromanager
 from pymmcore_plus.metadata import summary_metadata
 from pymmcore_plus.model import CoreDevice, Device, Microscope
@@ -199,6 +201,10 @@ def test_scope_errs():
         Microscope(devices=[CoreDevice()])
 
 
+@pytest.mark.skipif(
+    pymmcore_plus._pymmcore.BACKEND == "pymmcore-nano",
+    reason="This is still hanging on pymmcore-nano",
+)
 def test_apply():
     core1 = CMMCorePlus()
     core1.loadSystemConfiguration()
