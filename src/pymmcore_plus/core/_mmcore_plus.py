@@ -644,9 +644,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         tuple[np.ndarray, Metadata]
             Image and metadata
         """
-        import _pymmcore_nano
-
-        md = _pymmcore_nano.Metadata()
+        md = Metadata()
         img = super().popNextImageMD(channel, slice, md)
         md = Metadata(md)
         return (
