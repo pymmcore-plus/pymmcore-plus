@@ -1456,10 +1456,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         if ncomponents is None:
             ncomponents = self.getNumberOfComponents()
-        if ncomponents == 4:
-            if not img.ndim == 3:
-                new_shape = (*img.shape, 4)
-                img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
+        if ncomponents == 4 and not img.ndim == 3:  # not needed in pymmcore-nano
+            new_shape = (*img.shape, 4)
+            img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
             img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
         return img
 
