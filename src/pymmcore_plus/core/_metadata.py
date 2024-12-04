@@ -4,7 +4,7 @@ from collections.abc import ItemsView, Iterator, KeysView, Mapping, ValuesView
 from types import new_class
 from typing import Any, cast
 
-import pymmcore
+import pymmcore_plus._pymmcore as pymmcore
 
 _NULL = object()
 

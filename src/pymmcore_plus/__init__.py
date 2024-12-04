@@ -6,12 +6,7 @@ try:
     __version__ = version("pymmcore-plus")
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
-try:
-    import pymmcore_nano
 
-    pymmcore_nano.patch_pymmcore()
-except ImportError:
-    pass
 
 from ._logger import configure_logging
 from ._util import find_micromanager, use_micromanager

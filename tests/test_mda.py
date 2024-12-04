@@ -375,6 +375,7 @@ def test_runner_cancel(qtbot: QtBot) -> None:
     # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
     # for what we're trying to avoid
     core = CMMCorePlus()
+    core.loadSystemConfiguration()
     core.mda.engine.use_hardware_sequencing = False
 
     engine = MagicMock(wraps=core.mda.engine)
@@ -396,6 +397,7 @@ def test_runner_pause(qtbot: QtBot) -> None:
     # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
     # for what we're trying to avoid
     core = CMMCorePlus()
+    core.loadSystemConfiguration()
     core.mda.engine.use_hardware_sequencing = False
 
     engine = MagicMock(wraps=core.mda.engine)

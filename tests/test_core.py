@@ -6,11 +6,10 @@ from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 import psygnal
-import pymmcore
 import pytest
-from pymmcore import CMMCore, PropertySetting
 from useq import MDASequence
 
+import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus import (
     CMMCorePlus,
     Configuration,
@@ -35,7 +34,7 @@ except ImportError:
 
 def test_core(core: CMMCorePlus) -> None:
     assert isinstance(core, CMMCorePlus)
-    assert isinstance(core, CMMCore)
+    assert isinstance(core, pymmcore.CMMCore)
     # because the fixture tries to find micromanager, this should be populated
     assert core.getDeviceAdapterSearchPaths()
     assert isinstance(
@@ -368,7 +367,7 @@ def test_configuration(core: CMMCorePlus) -> None:
         assert "Camera" in state
 
     assert state["Camera", "Binning"] == "1"
-    assert PropertySetting("Camera", "Binning", "1") in state
+    assert pymmcore.PropertySetting("Camera", "Binning", "1") in state
     assert state in state
 
     assert ("Camera", "Binning") in state

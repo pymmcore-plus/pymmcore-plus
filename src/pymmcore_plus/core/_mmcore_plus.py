@@ -15,9 +15,9 @@ from textwrap import dedent
 from threading import Thread
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, overload
 
-import pymmcore
 from psygnal import SignalInstance
 
+import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus._logger import current_logfile, logger
 from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine

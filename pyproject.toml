@@ -39,7 +39,7 @@ dependencies = [
     "numpy >=1.17.3",
     "psygnal >=0.7",
     # "pymmcore >=10.7.0.71.0",
-    "pymmcore-nano @ git+https://github.com/pymmcore-plus/pymmcore-nano.git@main",
+    "pymmcore-nano",
     "typing-extensions",                    # not actually required at runtime
     "useq-schema >=0.5.0",
     "tensorstore; python_version < '3.13'",
@@ -103,7 +103,7 @@ include = ["/src", "/tests"]
 only-include = ["src"]
 sources = ["src"]
 
-# https://beta.ruff.rs/docs/rules/
+# https://docs.astral.sh/ruff/rules/
 [tool.ruff]
 line-length = 88
 target-version = "py39"
@@ -122,7 +122,7 @@ select = [
     "A001", # flake8-builtins
     "RUF",  # ruff-specific rules
     "TID",  # tidy
-    "TCH",  # typecheck
+    "TC",   # typecheck
     "SLF",  # private-access
 ]
 ignore = [
