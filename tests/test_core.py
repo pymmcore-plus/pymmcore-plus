@@ -68,7 +68,7 @@ def test_load_system_config(core: CMMCorePlus) -> None:
     config_path = Path(__file__).parent / "local_config.cfg"
     core.loadSystemConfiguration(str(config_path))
     assert core.systemConfigurationFile() == str(config_path)
-    assert set(core.getLoadedDevices()) == {
+    assert tuple(core.getLoadedDevices()) == (
         "DHub",
         "Camera",
         "Dichroic",
@@ -81,7 +81,7 @@ def test_load_system_config(core: CMMCorePlus) -> None:
         "Shutter",
         "Autofocus",
         "Core",
-    }
+    )
 
 
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
