@@ -208,21 +208,22 @@ def test_scope_errs():
 def test_apply():
     core1 = CMMCorePlus()
     core1.loadSystemConfiguration()
-    core1.getSystemState()
+    state1 = core1.getSystemState()
     model = Microscope.create_from_core(core1)
     assert model.get_device("LED Shutter").get_property("State Device").value == "LED"
     assert core1.getProperty("Core", "XYStage") == "XY"
 
     core2 = CMMCorePlus()
     model.apply_to_core(core2)
-    core2.getSystemState()
+    state2 = core2.getSystemState()
+
     assert core2.getProperty("LED Shutter", "State Device") == "LED"
     assert core2.getProperty("Core", "XYStage") == "XY"
-    # assert list(state1) == list(state2)
+    assert list(state1) == list(state2)  # type: ignore
 
-    # core3 = CMMCorePlus()
-    # model.initialize(core3)
-    # assert core3.getProperty("Camera", "Binning") == "1"
+    core3 = CMMCorePlus()
+    model.initialize(core3)
+    assert core3.getProperty("Camera", "Binning") == "1"
 
 
 def test_rich_repr():

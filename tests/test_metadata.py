@@ -1,6 +1,7 @@
 from typing import Callable
 from unittest.mock import Mock
 
+import numpy as np
 import pytest
 import useq
 
@@ -39,8 +40,10 @@ def test_metadata_during_mda(
     core: CMMCorePlus, dumps: Callable, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(serialize, "json_dumps", dumps)
-    getattr(serialize, dumps.__name__.replace("_dumps", "_loads"))
-    getattr(serialize, dumps.__name__.replace("_json_dumps", "_to_builtins"))
+    loader = getattr(serialize, dumps.__name__.replace("_dumps", "_loads"))
+    to_builtins = getattr(
+        serialize, dumps.__name__.replace("_json_dumps", "_to_builtins")
+    )
 
     seq = useq.MDASequence(
         channels=["DAPI", "FITC"],
@@ -54,30 +57,30 @@ def test_metadata_during_mda(
 
     core.mda.run(seq)
 
-    # seq_started_mock.assert_called_once()
-    # _seq, _meta = seq_started_mock.call_args.args
-    # assert _seq == seq
-    # assert isinstance(_meta, dict)
-    # assert _meta["format"] == "summary-dict"
-    # assert isinstance(_meta["mda_sequence"], useq.MDASequence)
-    # dumped = dumps(_meta)
-    # assert isinstance(to_builtins(_meta), dict)
-    # assert isinstance(dumped, bytes)
-    # loaded = loader(dumped)
-    # assert isinstance(loaded, dict)
+    seq_started_mock.assert_called_once()
+    _seq, _meta = seq_started_mock.call_args.args
+    assert _seq == seq
+    assert isinstance(_meta, dict)
+    assert _meta["format"] == "summary-dict"
+    assert isinstance(_meta["mda_sequence"], useq.MDASequence)
+    dumped = dumps(_meta)
+    assert isinstance(to_builtins(_meta), dict)
+    assert isinstance(dumped, bytes)
+    loaded = loader(dumped)
+    assert isinstance(loaded, dict)
 
-    # frame_ready_mock.assert_called()
-    # _frame, _event, _meta = frame_ready_mock.call_args.args
-    # assert isinstance(_frame, np.ndarray)
-    # assert isinstance(_event, useq.MDAEvent)
-    # assert isinstance(_meta, dict)
-    # assert _meta["format"] == "frame-dict"
-    # assert any(pv["dev"] == "Excitation" for pv in _meta["property_values"])
-    # dumped = dumps(_meta, indent=2)
-    # assert isinstance(to_builtins(_meta), dict)
-    # assert isinstance(dumped, bytes)
-    # loaded = loader(dumped)
-    # assert isinstance(loaded, dict)
+    frame_ready_mock.assert_called()
+    _frame, _event, _meta = frame_ready_mock.call_args.args
+    assert isinstance(_frame, np.ndarray)
+    assert isinstance(_event, useq.MDAEvent)
+    assert isinstance(_meta, dict)
+    assert _meta["format"] == "frame-dict"
+    assert any(pv["dev"] == "Excitation" for pv in _meta["property_values"])
+    dumped = dumps(_meta, indent=2)
+    assert isinstance(to_builtins(_meta), dict)
+    assert isinstance(dumped, bytes)
+    loaded = loader(dumped)
+    assert isinstance(loaded, dict)
 
 
 @pytest.mark.parametrize("sequenced", [True, False], ids=["sequenced", "not-sequenced"])

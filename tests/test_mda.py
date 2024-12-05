@@ -24,7 +24,6 @@ try:
 except ImportError:
     pytestqt = None
 
-
 SKIP_NO_PYTESTQT = pytest.mark.skipif(
     pytestqt is None, reason="pytest-qt not installed"
 )
