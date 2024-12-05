@@ -13,13 +13,13 @@ __all__ = [
     "DeviceProperty",
     "DeviceType",
     "FocusDirection",
-    "iter_sequenced_events",
     "Keyword",
     "Metadata",
     "PixelFormat",
     "PortType",
     "PropertyType",
     "SequencedEvent",
+    "iter_sequenced_events",
 ]
 
 from ._adapter import DeviceAdapter
