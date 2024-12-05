@@ -1,6 +1,6 @@
 from typing import ClassVar
 
-from pymmcore_plus.core._constants import DeviceInitializationState
+from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 from pymmcore_plus.unicore import UniMMCore
 from pymmcore_plus.unicore._properties import pymm_property
 from pymmcore_plus.unicore._xy_stage_device import XYStageDevice
@@ -68,6 +68,12 @@ def test_unicore():
     assert core.hasProperty("pyXY", PROP_NAME)
     assert core.isPropertyPreInit("pyXY", PROP_NAME) is False
     assert core.isPropertyReadOnly("pyXY", PROP_NAME) is False
+    assert core.hasPropertyLimits("pyXY", PROP_NAME)
+    assert core.getPropertyLowerLimit("pyXY", PROP_NAME) == 0.0
+    assert core.getPropertyUpperLimit("pyXY", PROP_NAME) == 100.0
+    assert core.getPropertyType("pyXY", PROP_NAME) == PropertyType.Float
+    assert core.getProperty("pyXY", PROP_NAME) == 1.0
+    assert core.getPropertyFromCache("pyXY", PROP_NAME) == 1.0
 
     # set the core XY stage device to the python device, dropping the C-side device
     core.setXYStageDevice("pyXY")

@@ -17,7 +17,11 @@ if TYPE_CHECKING:
 
     from pymmcore import DeviceLabel, DeviceName, PropertyName
 
-    from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
+    from pymmcore_plus.core._constants import (
+        DeviceInitializationState,
+        DeviceType,
+        PropertyType,
+    )
 
     from ._device import Device
 
@@ -169,6 +173,39 @@ class UniMMCore(CMMCorePlus):
         if deviceLabel not in self._pydevices:
             return super().getPropertyFromCache(deviceLabel, propName)
         return self._state_cache[(deviceLabel, propName)]
+
+    def getPropertyType(self, label: str, propName: str) -> PropertyType:
+        if label not in self._pydevices:
+            return super().getPropertyType(label, propName)
+        return self._pydevices[label].property(propName).type
+
+    def hasPropertyLimits(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> bool:
+        if label not in self._pydevices:
+            return super().hasPropertyLimits(label, propName)
+        with self._pydevices[label] as dev:
+            return dev.property(propName).limits is not None
+
+    def getPropertyLowerLimit(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> float:
+        if label not in self._pydevices:
+            return super().getPropertyLowerLimit(label, propName)
+        with self._pydevices[label] as dev:
+            if lims := dev.property(propName).limits:
+                return lims[0]
+            return 0
+
+    def getPropertyUpperLimit(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> float:
+        if label not in self._pydevices:
+            return super().getPropertyUpperLimit(label, propName)
+        with self._pydevices[label] as dev:
+            if lims := dev.property(propName).limits:
+                return lims[1]
+            return 0
 
     def isPropertyPreInit(
         self, label: DeviceLabel | str, propName: PropertyName | str

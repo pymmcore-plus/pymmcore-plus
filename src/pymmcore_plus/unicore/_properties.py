@@ -12,6 +12,8 @@ from typing import (
     overload,
 )
 
+from pymmcore_plus.core._constants import PropertyType
+
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
@@ -35,6 +37,7 @@ class PropertyInfo(Generic[TProp]):
     limits: tuple[int | float, int | float] | None = None
     sequence_max_length: int = 0
     description: str | None = None
+    type: PropertyType = PropertyType.Undef
 
     allowed_values: Sequence[TProp] | None = None
     is_read_only: bool = False
@@ -145,6 +148,7 @@ def pymm_property(
     sequence_max_length: int = ...,
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
+    name: str | None = None,
 ) -> Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]: ...
 @overload  # when used with keyword arguments including limits
 def pymm_property(
@@ -153,6 +157,7 @@ def pymm_property(
     sequence_max_length: int = ...,
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
+    name: str | None = None,
 ) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
 @overload  # when used with keyword arguments without allowed_values or limits
 def pymm_property(
@@ -160,6 +165,7 @@ def pymm_property(
     sequence_max_length: int = ...,
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
+    name: str | None = None,
 ) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
 def pymm_property(
     fget: Callable[[TDev], TProp] | None = None,
@@ -169,6 +175,7 @@ def pymm_property(
     allowed_values: Sequence[TProp] | None = None,
     is_read_only: bool = False,
     is_pre_init: bool = False,
+    name: str | None = None,  # taken from fget if None
 ) -> (
     PropertyController[TDev, TProp]
     | Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]
@@ -176,14 +183,24 @@ def pymm_property(
     """Decorate a pymmcore property method."""
 
     def _inner(fget: Callable[[TDev], TProp]) -> PropertyController[TDev, TProp]:
+        prop_type = PropertyType.Undef
+        if return_type := fget.__annotations__.get("return", None):
+            if return_type is float:
+                prop_type = PropertyType.Float
+            elif return_type is int:
+                prop_type = PropertyType.Integer
+            elif return_type is str:
+                prop_type = PropertyType.String
+
         prop = PropertyInfo(
-            name=fget.__name__,
+            name=name or fget.__name__,
             description=fget.__doc__,
             limits=limits,
             sequence_max_length=sequence_max_length,
             allowed_values=allowed_values,
             is_read_only=is_read_only,
             is_pre_init=is_pre_init,
+            type=prop_type,
         )
 
         return PropertyController(property=prop, fget=fget)
