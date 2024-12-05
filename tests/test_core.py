@@ -579,7 +579,9 @@ def test_core_state(core: CMMCorePlus) -> None:
 # TODO: we need to double check whether pymmcore-plus was actually doing the right
 # thing fixing RGB images with pymmcore, and then reconcile with pymmcore-nano,
 # which does the fix already on the C++ side.
-@pytest.mark.skipif(pymmcore.BACKEND == "pymmcore-nano")
+@pytest.mark.skipif(
+    pymmcore.BACKEND == "pymmcore-nano", reason="Nano does the fix differently."
+)
 def test_snap_rgb(core: CMMCorePlus) -> None:
     core.setProperty("Camera", "PixelType", "32bitRGB")
     core.setProperty("Camera", "Mode", "Color Test Pattern")
