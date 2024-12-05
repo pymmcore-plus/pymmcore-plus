@@ -15,9 +15,9 @@ from textwrap import dedent
 from threading import Thread
 from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, overload
 
-import pymmcore
 from psygnal import SignalInstance
 
+import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus._logger import current_logfile, logger
 from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
@@ -638,7 +638,10 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = super().getLastImageMD(channel, slice, md)
         else:
             img = super().getLastImageMD(md)
-        return (self.fixImage(img) if fix else img, md)
+        return (
+            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
+            md,
+        )
 
     @overload
     def popNextImageAndMD(
@@ -680,7 +683,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().popNextImageMD(channel, slice, md)
-        return (self.fixImage(img) if fix else img, md)
+        md = Metadata(md)
+        return (
+            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
+            md,
+        )
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
@@ -696,7 +703,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
         img: np.ndarray = super().popNextImage()
-        return self.fixImage(img) if fix else img
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
 
     def getNBeforeLastImageAndMD(
         self, n: int, *, fix: bool = True
@@ -724,7 +731,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().getNBeforeLastImageMD(n, md)
-        return self.fixImage(img) if fix else img, md
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
         """Applies a configuration to a group.
@@ -1490,7 +1497,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         if ncomponents is None:
             ncomponents = self.getNumberOfComponents()
-        if ncomponents == 4:
+        if ncomponents == 4 and img.ndim != 3:
             new_shape = (*img.shape, 4)
             img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
             img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
@@ -1657,7 +1664,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if numChannel is not None
             else super().getImage()
         )
-        return self.fixImage(img) if fix else img
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition.
@@ -1901,30 +1908,33 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().definePixelSizeConfig(*args, **kwargs)
         self.events.pixelSizeChanged.emit(0.0)
 
-    def getMultiROI(  # type: ignore [override]
-        self, *_: Any
-    ) -> tuple[list[int], list[int], list[int], list[int]]:
-        """Get multiple ROIs from the current camera device.
+    # pymmcore-SWIG needs this, but pymmcore-nano doesn't
+    if hasattr(pymmcore, "UnsignedVector"):
 
-        Will fail if the camera does not support multiple ROIs. Will return empty
-        vectors if multiple ROIs are not currently being used.
+        def getMultiROI(  # type: ignore [override]
+            self, *_: Any
+        ) -> tuple[list[int], list[int], list[int], list[int]]:
+            """Get multiple ROIs from the current camera device.
 
-        **Why Override?** So that the user doesn't need to pass in four empty
-        pymmcore.UnsignedVector() objects.
-        """
-        if _:
-            warnings.warn(  # pragma: no cover
-                "Unlike pymmcore, CMMCorePlus.getMultiROI does not require arguments."
-                "Arguments are ignored.",
-                stacklevel=2,
-            )
+            Will fail if the camera does not support multiple ROIs. Will return empty
+            vectors if multiple ROIs are not currently being used.
 
-        xs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
-        ys = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
-        ws = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
-        hs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
-        super().getMultiROI(xs, ys, ws, hs)
-        return list(xs), list(ys), list(ws), list(hs)
+            **Why Override?** So that the user doesn't need to pass in four empty
+            pymmcore.UnsignedVector() objects.
+            """
+            if _:
+                warnings.warn(  # pragma: no cover
+                    "Unlike pymmcore, CMMCorePlus.getMultiROI does not require "
+                    "arguments. Arguments are ignored.",
+                    stacklevel=2,
+                )
+
+            xs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+            ys = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+            ws = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+            hs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+            super().getMultiROI(xs, ys, ws, hs)
+            return list(xs), list(ys), list(ws), list(hs)
 
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None: ...
