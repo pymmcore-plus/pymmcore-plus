@@ -5,9 +5,9 @@ from ._thread_relay import mda_listeners_connected
 from .events import PMDASignaler
 
 __all__ = [
-    "mda_listeners_connected",
     "MDAEngine",
     "MDARunner",
     "PMDAEngine",
     "PMDASignaler",
+    "mda_listeners_connected",
 ]

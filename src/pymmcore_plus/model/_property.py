@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from dataclasses import asdict, dataclass, field
+from typing import TYPE_CHECKING, Any
 
 from pymmcore_plus import CMMCorePlus, PropertyType
 
@@ -52,6 +52,15 @@ class Property(CoreObject):
             # "sequence_max_length": CMMCorePlus.getPropertySequenceMaxLength,
             "exists": CMMCorePlus.hasProperty,
         }
+
+    def __reduce__(self) -> tuple:
+        # Return the class, arguments for __init__, and any state to restore
+        state = asdict(self)
+        return self.__class__, (self.device_name, self.name), state
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        # Restore the state of the object
+        self.__dict__.update(state)
 
     def _core_args(self) -> tuple[str, str]:
         # the first two args to all of the funcs in CORE_GETTERS

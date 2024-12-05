@@ -5,13 +5,13 @@ ci:
 
 repos:
   - repo: https://github.com/crate-ci/typos
-    rev: typos-dict-v0.11.35
+    rev: typos-dict-v0.11.37
     hooks:
       - id: typos
         args: [--force-exclude]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.7.4
+    rev: v0.8.1
     hooks:
       - id: ruff
         args: [--fix, --unsafe-fixes]

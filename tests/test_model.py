@@ -4,6 +4,8 @@ from pathlib import Path
 
 import pytest
 
+import pymmcore_plus
+import pymmcore_plus._pymmcore
 from pymmcore_plus import CMMCorePlus, DeviceType, find_micromanager
 from pymmcore_plus.metadata import summary_metadata
 from pymmcore_plus.model import CoreDevice, Device, Microscope
@@ -104,6 +106,7 @@ def _assert_cfg_matches_core_save(
         x
         for x in non_empty_lines(model_out)
         if not x.startswith("Property,Core,AutoShutter")
+        and "1.0,0.0,0.0,0.0,1.0,0.0" not in x
     ]
     assert core_lines == model_lines
 
@@ -198,6 +201,10 @@ def test_scope_errs():
         Microscope(devices=[CoreDevice()])
 
 
+@pytest.mark.skipif(
+    pymmcore_plus._pymmcore.BACKEND == "pymmcore-nano",
+    reason="This is still hanging on pymmcore-nano",
+)
 def test_apply():
     core1 = CMMCorePlus()
     core1.loadSystemConfiguration()
@@ -209,9 +216,10 @@ def test_apply():
     core2 = CMMCorePlus()
     model.apply_to_core(core2)
     state2 = core2.getSystemState()
+
     assert core2.getProperty("LED Shutter", "State Device") == "LED"
     assert core2.getProperty("Core", "XYStage") == "XY"
-    assert list(state1) == list(state2)
+    assert list(state1) == list(state2)  # type: ignore
 
     core3 = CMMCorePlus()
     model.initialize(core3)

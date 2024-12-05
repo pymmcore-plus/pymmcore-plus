@@ -3,7 +3,7 @@ from __future__ import annotations
 from enum import Enum, IntEnum
 from typing import Literal
 
-import pymmcore
+import pymmcore_plus._pymmcore as pymmcore
 
 # NOTE: by using pymmcore.attributes, we guarantee that the values are the same
 # however, we also risk AttributeErrors in the future.
