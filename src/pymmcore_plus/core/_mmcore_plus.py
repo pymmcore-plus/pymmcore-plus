@@ -1871,6 +1871,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().definePixelSizeConfig(*args, **kwargs)
         self.events.pixelSizeChanged.emit(0.0)
 
+    # pymmcore-SWIG needs this, but pymmcore-nano doesn't
     if hasattr(pymmcore, "UnsignedVector"):
 
         def getMultiROI(  # type: ignore [override]
