@@ -41,7 +41,6 @@ dependencies = [
     "pymmcore >=10.7.0.71.0",
     "typing-extensions",                    # not actually required at runtime
     "useq-schema >=0.5.0",
-    "wrapt >=1.14",
     "tensorstore; python_version < '3.13'",
     # cli requirements included by default for now
     "typer >=0.4.2",
@@ -103,7 +102,7 @@ include = ["/src", "/tests"]
 only-include = ["src"]
 sources = ["src"]
 
-# https://beta.ruff.rs/docs/rules/
+# https://docs.astral.sh/ruff/rules/
 [tool.ruff]
 line-length = 88
 target-version = "py39"
@@ -122,7 +121,7 @@ select = [
     "A001", # flake8-builtins
     "RUF",  # ruff-specific rules
     "TID",  # tidy
-    "TCH",  # typecheck
+    "TC",   # typecheck
     "SLF",  # private-access
 ]
 ignore = [

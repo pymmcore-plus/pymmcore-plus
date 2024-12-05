@@ -28,11 +28,17 @@ app = typer.Typer(name="mmcore", no_args_is_help=True)
 
 def _show_version_and_exit(value: bool) -> None:
     if value:
-        import pymmcore
-
         typer.echo(f"pymmcore-plus v{pymmcore_plus.__version__}")
-        typer.echo(f"pymmcore v{pymmcore.__version__}")
-        typer.echo(f"MMCore v{pymmcore.CMMCore().getAPIVersionInfo()}")
+        try:
+            import pymmcore_nano as pymmcore
+
+            typer.echo(f"pymmcore-nano v{pymmcore.__version__}")
+        except ImportError:
+            import pymmcore
+
+            typer.echo(f"pymmcore v{pymmcore.__version__}")
+        typer.echo(f"MMCore v{pymmcore.CMMCore().getVersionInfo()}")
+        typer.echo(f"{pymmcore.CMMCore().getAPIVersionInfo()}")
         raise typer.Exit()
 
 

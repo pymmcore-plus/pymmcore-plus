@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     import numpy as np
     from typing_extensions import Self  # py311
 
-__all__ = ["CameraInfo", "Setting", "SettingEvent", "InfoPacket", "decode_image"]
+__all__ = ["CameraInfo", "InfoPacket", "Setting", "SettingEvent", "decode_image"]
 
 
 @dataclass
