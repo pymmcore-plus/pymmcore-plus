@@ -101,6 +101,7 @@ class UniMMCore(CMMCorePlus):
     # -----------------------------------------------------------------------
     # ----------------------------- All Devices -----------------------------
     # -----------------------------------------------------------------------
+
     def initializeDevice(self, label: DeviceLabel | str) -> None:
         if label not in self._pydevices:
             return super().initializeDevice(label)
@@ -135,18 +136,22 @@ class UniMMCore(CMMCorePlus):
             return self._pydevices[label].description()
         return super().getDeviceDescription(label)
 
+    # ---------------------------- Properties ---------------------------
+
     def getDevicePropertyNames(
         self, label: DeviceLabel | str
     ) -> tuple[PropertyName, ...]:
         if label not in self._pydevices:
             return super().getDevicePropertyNames(label)
-        names = tuple(self._pydevices[label].properties())
+        names = tuple(self._pydevices[label].get_property_names())
         return cast("tuple[PropertyName, ...]", names)
 
     def hasProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> bool:
-        return super().hasProperty(label, propName)
+        if label not in self._pydevices:
+            return super().hasProperty(label, propName)
+        return propName in self._pydevices[label].get_property_names()
 
     def getProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -154,7 +159,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             return super().getProperty(label, propName)
         with self._pydevices[label] as dev:
-            value = dev.get_property(propName)
+            value = dev.get_property_value(propName)
             self._state_cache[(label, propName)] = value
         return value
 
@@ -164,6 +169,22 @@ class UniMMCore(CMMCorePlus):
         if deviceLabel not in self._pydevices:
             return super().getPropertyFromCache(deviceLabel, propName)
         return self._state_cache[(deviceLabel, propName)]
+
+    def isPropertyPreInit(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> bool:
+        if label not in self._pydevices:
+            return super().isPropertyPreInit(label, propName)
+        with self._pydevices[label] as dev:
+            return dev.property(propName).is_pre_init
+
+    def isPropertyReadOnly(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> bool:
+        if label not in self._pydevices:
+            return super().isPropertyReadOnly(label, propName)
+        with self._pydevices[label] as dev:
+            return dev.property(propName).is_read_only
 
     # -----------------------------------------------------------------------
     # ---------------------------- XYStageDevice ----------------------------

@@ -2,27 +2,16 @@ from __future__ import annotations
 
 import threading
 from abc import ABC
-from types import MappingProxyType
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    ClassVar,
-    Generic,
-    TypeVar,
-    final,
-    overload,
-)
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
 
-from ._properties import Property
+from ._properties import PropertyController, PropertyInfo
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import KeysView, Sequence
 
     from typing_extensions import Any, Self
-
-    from ._properties import PropType
 
 
 class _Lockable:
@@ -53,69 +42,59 @@ class Device(_Lockable, ABC):
     """ABC for all Devices."""
 
     _TYPE: ClassVar[DeviceType] = DeviceType.UnknownType
+    _prop_controllers: ClassVar[dict[str, PropertyController]]
 
     def __init__(self) -> None:
         super().__init__()
-        self._properties: dict[str, Property] = {}
         self._label: str = ""
         # False -> Not initialized
         # True -> Initialized successfully
         # Exception -> Initialization failed, contains the exception
         self._initialized: bool | BaseException = False
 
-    @overload
-    def register_property(self, prop: Property, /) -> Property: ...
-    @overload
-    def register_property(
-        self,
-        name: str,
-        /,
-        *,
-        value: PropType | None = None,
-        read_only: bool = False,
-        allowed_values: Sequence[PropType] | None = None,
-        limits: tuple[float, float] | None = None,
-        sequence_max_length: int = 0,
-    ) -> Property: ...
-    @final  # may not be overridden
-    def register_property(
-        self,
-        name_or_prop: str | Property,
-        value: PropType | None = None,
-        read_only: bool = False,
-        allowed_values: Sequence[PropType] | None = None,
-        limits: tuple[float, float] | None = None,
-        sequence_max_length: int = 0,
-    ) -> Property:
-        """Register a property."""
-        if isinstance(name_or_prop, str):
-            prop = Property(
-                name=name_or_prop,
-                value=value,
-                read_only=read_only,
-                allowed_values=allowed_values,
-                limits=limits,
-                sequence_max_length=sequence_max_length,
-            )
-        elif not isinstance(name_or_prop, Property):
-            raise TypeError("name_or_prop must be a string or Property instance.")
-        prop.is_pre_init = self._initialized is False
-        self._properties[prop.name] = prop
-        return prop
+    def __init_subclass__(cls) -> None:
+        """Initialize the property controllers."""
+        cls._prop_controllers = {
+            p.property.name: p
+            for p in cls.__dict__.values()
+            if isinstance(p, PropertyController)
+        }
+        return super().__init_subclass__()
 
-    @final
-    def get_property(self, name: str) -> Any:
-        """Get the value of a property."""
-        try:
-            prop = self._properties[name]
-        except KeyError:
-            raise KeyError(f"Property '{name}' not found.") from None
-        return prop.get()
+    @classmethod
+    def get_property_names(cls) -> KeysView[str]:
+        """Return the names of the properties."""
+        return cls._prop_controllers.keys()
 
-    @final
-    def properties(self) -> Mapping[str, Property]:
-        """Return a dictionary of the device's properties."""
-        return MappingProxyType(self._properties)
+    def property(self, prop_name: str) -> PropertyInfo:
+        """Return the property controller for a property."""
+        return self._prop_controllers[prop_name].property
+
+    def get_property_value(self, prop_name: str) -> Any:
+        """Return the value of a property."""
+        # TODO: catch errors
+        return self._prop_controllers[prop_name].__get__(self, self.__class__)
+
+    def set_property_value(self, prop_name: str, value: Any) -> None:
+        """Set the value of a property."""
+        # TODO: catch errors
+        self._prop_controllers[prop_name].__set__(self, value)
+
+    def set_property_allowed_values(
+        self, prop_name: str, allowed_values: Sequence[Any]
+    ) -> None:
+        """Set the allowed values of a property."""
+        self._prop_controllers[prop_name].property.allowed_values = allowed_values
+
+    def set_property_limits(
+        self, prop_name: str, limits: tuple[float, float] | None
+    ) -> None:
+        """Set the limits of a property."""
+        self._prop_controllers[prop_name].property.limits = limits
+
+    def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
+        """Set the sequence max length of a property."""
+        self._prop_controllers[prop_name].property.sequence_max_length = max_length
 
     def initialize(self) -> None:
         """Initialize the device."""
