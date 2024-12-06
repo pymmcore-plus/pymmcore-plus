@@ -44,7 +44,7 @@ class MyStage(XYStageDevice):
         self.HOMED = True
 
 
-def test_unicore():
+def test_unicore_xy_stage():
     core = UniMMCore()
     core.loadSystemConfiguration()
     # print status of C-side XY stage device
@@ -74,25 +74,6 @@ def test_unicore():
         is DeviceInitializationState.InitializedSuccessfully
     )
 
-    # PROPERTIES
-
-    PROP_NAME = "propA"
-    assert PROP_NAME in core.getDevicePropertyNames(PYDEV)
-    assert core.hasProperty(PYDEV, PROP_NAME)
-    assert core.isPropertyPreInit(PYDEV, PROP_NAME) is False
-    assert core.isPropertyReadOnly(PYDEV, PROP_NAME) is False
-    assert core.hasPropertyLimits(PYDEV, PROP_NAME)
-    assert core.getPropertyLowerLimit(PYDEV, PROP_NAME) == 0.0
-    assert core.getPropertyUpperLimit(PYDEV, PROP_NAME) == 100.0
-    assert core.getPropertyType(PYDEV, PROP_NAME) == PropertyType.Float
-    assert core.getProperty(PYDEV, PROP_NAME) == 1.0
-    assert core.getPropertyFromCache(PYDEV, PROP_NAME) == 1.0
-
-    assert not core.deviceBusy(PYDEV)
-    core.waitForDevice(PYDEV)
-
-    # METHODS
-
     # set the core XY stage device to the python device, dropping the C-side device
     core.setXYStageDevice(PYDEV)
     assert core.getXYStageDevice() == PYDEV
@@ -118,3 +99,26 @@ def test_unicore():
     core.stop(PYDEV)
     assert stage.HOMED
     assert stage.STOPPED
+
+
+def test_unicore_props():
+    core = UniMMCore()
+    PYDEV = "pyXY"
+    core.load_py_device(PYDEV, MyStage())
+    core.initializeDevice(PYDEV)
+    # PROPERTIES
+
+    PROP_NAME = "propA"
+    assert PROP_NAME in core.getDevicePropertyNames(PYDEV)
+    assert core.hasProperty(PYDEV, PROP_NAME)
+    assert core.isPropertyPreInit(PYDEV, PROP_NAME) is False
+    assert core.isPropertyReadOnly(PYDEV, PROP_NAME) is False
+    assert core.hasPropertyLimits(PYDEV, PROP_NAME)
+    assert core.getPropertyLowerLimit(PYDEV, PROP_NAME) == 0.0
+    assert core.getPropertyUpperLimit(PYDEV, PROP_NAME) == 100.0
+    assert core.getPropertyType(PYDEV, PROP_NAME) == PropertyType.Float
+    assert core.getProperty(PYDEV, PROP_NAME) == 1.0
+    assert core.getPropertyFromCache(PYDEV, PROP_NAME) == 1.0
+
+    assert not core.deviceBusy(PYDEV)
+    core.waitForDevice(PYDEV)
