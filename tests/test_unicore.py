@@ -5,9 +5,9 @@ from pymmcore_plus.core._constants import (
     DeviceType,
     PropertyType,
 )
-from pymmcore_plus.unicore import UniMMCore
-from pymmcore_plus.unicore._properties import pymm_property
-from pymmcore_plus.unicore._xy_stage_device import XYStageDevice
+from pymmcore_plus.experimental.unicore import UniMMCore
+from pymmcore_plus.experimental.unicore._properties import pymm_property
+from pymmcore_plus.experimental.unicore._xy_stage_device import XYStageDevice
 
 
 class MyStage(XYStageDevice):

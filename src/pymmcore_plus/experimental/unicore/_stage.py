@@ -2,7 +2,8 @@ from abc import abstractmethod
 from typing import ClassVar, Literal
 
 from pymmcore_plus.core._constants import DeviceType
-from pymmcore_plus.unicore._device import SeqT, SequenceableDevice
+
+from ._device import SeqT, SequenceableDevice
 
 __all__ = ["_BaseStage"]
 

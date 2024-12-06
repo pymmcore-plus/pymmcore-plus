@@ -9,8 +9,7 @@ This example demonstrates how to create a custom Python stage device and use it 
 with other C++ devices.
 """
 
-from pymmcore_plus.unicore import UniMMCore
-from pymmcore_plus.unicore._xy_stage_device import XYStageDevice
+from pymmcore_plus.experimental.unicore import UniMMCore, XYStageDevice
 
 
 class MyStage(XYStageDevice):

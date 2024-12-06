@@ -69,7 +69,7 @@ class UniMMCore(CMMCorePlus):
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
 
     def load_py_device(self, label: str, device: Device) -> None:
-        """Load a `pymmcore_plus.unicore.Device` as a python device.
+        """Load a `unicore.Device` as a python device.
 
         This API allows you to create python-side Device objects that can be used in
         tandem with the C++ devices. Whenever a method is called that would normally
@@ -80,7 +80,7 @@ class UniMMCore(CMMCorePlus):
         ----------
         label : str
             The label to assign to the device.
-        device : pymmcore_plus.unicore.Device
+        device : unicore.Device
             The device object to load.  Use the appropriate subclass of `Device` for the
             type of device you are creating.
         """
