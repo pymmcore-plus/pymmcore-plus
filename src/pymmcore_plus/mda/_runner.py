@@ -279,7 +279,9 @@ class MDARunner:
         self._reset_event_timer()
         self._sequence_t0 = self._t0
 
-        for event in _events:
+        cached_event = None
+
+        for _i, event in enumerate(_events):
             if event.reset_event_timer:
                 self._reset_event_timer()
             # If cancelled break out of the loop
@@ -288,7 +290,7 @@ class MDARunner:
 
             self._signals.eventStarted.emit(event)
             logger.info("%s", event)
-            engine.setup_event(event)
+            engine.setup_event(event, cached_event=cached_event)
 
             try:
                 runner_time_ms = self.seconds_elapsed() * 1000
@@ -296,6 +298,7 @@ class MDARunner:
                 # it is used for intra-event time calculations inside the engine.
                 # we pop it off after the event is executed.
                 event.metadata["runner_t0"] = self._sequence_t0
+                cached_event = event  # cache here to avoid event changing to MDAEvent
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in output:
                     img, event, meta = payload
