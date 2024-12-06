@@ -4,7 +4,11 @@ import threading
 from collections.abc import Iterator, MutableMapping, Sequence
 from typing import TYPE_CHECKING, Any, cast, overload
 
-from pymmcore_plus.core import CMMCorePlus, Keyword
+from pymmcore_plus.core import (
+    CMMCorePlus,
+    DeviceType,
+    Keyword,
+)
 from pymmcore_plus.core import Keyword as KW
 
 from ._device_manager import PyDeviceManager
@@ -15,13 +19,9 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Callable, Literal, NewType, TypeVar
 
-    from pymmcore import DeviceLabel, DeviceName, PropertyName
+    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
 
-    from pymmcore_plus.core._constants import (
-        DeviceInitializationState,
-        DeviceType,
-        PropertyType,
-    )
+    from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
     from ._device import Device
 
@@ -103,7 +103,7 @@ class UniMMCore(CMMCorePlus):
         return label
 
     # -----------------------------------------------------------------------
-    # ----------------------------- All Devices -----------------------------
+    # ----------------- Functionality for All Devices ------------------------
     # -----------------------------------------------------------------------
 
     def initializeDevice(self, label: DeviceLabel | str) -> None:
@@ -128,7 +128,10 @@ class UniMMCore(CMMCorePlus):
             return self._pydevices[label].type()
         return super().getDeviceType(label)
 
-    # getDeviceLibrary
+    def getDeviceLibrary(self, label: DeviceLabel | str) -> AdapterName:
+        if label in self._pydevices:
+            return cast("AdapterName", self._pydevices[label].library())
+        return super().getDeviceLibrary(label)
 
     def getDeviceName(self, label: DeviceLabel | str) -> DeviceName:
         if label in self._pydevices:
@@ -282,6 +285,59 @@ class UniMMCore(CMMCorePlus):
             return super().stopPropertySequence(label, propName)
         with self._pydevices[label] as dev:
             dev.stop_property_sequence(propName)
+
+    # ------------------------------ Ready State ----------------------------
+
+    def deviceBusy(self, label: DeviceLabel | str) -> bool:
+        if label not in self._pydevices:
+            return super().deviceBusy(label)
+        with self._pydevices[label] as dev:
+            return dev.busy()
+
+    def waitForDevice(self, label: DeviceLabel | str) -> None:
+        if label not in self._pydevices:
+            return super().waitForDevice(label)
+        self._pydevices[label].wait_for_device(self.getTimeoutMs())
+
+    # def waitForConfig
+
+    def systemBusy(self) -> bool:
+        return self.deviceTypeBusy(DeviceType.AnyType)
+
+    def waitForSystem(self) -> None:
+        self.waitForDeviceType(DeviceType.AnyType)
+
+    def waitForDeviceType(self, devType: int) -> None:
+        super().waitForDeviceType(devType)
+        for label in self._pydevices.get_labels_of_type(devType):
+            self._pydevices[label].wait_for_device(self.getTimeoutMs())
+
+    def deviceTypeBusy(self, devType: int) -> bool:
+        if super().deviceTypeBusy(devType):
+            return True
+
+        for label in self._pydevices.get_labels_of_type(devType):
+            with self._pydevices[label] as dev:
+                if dev.busy():
+                    return True
+        return False
+
+    def getDeviceDelayMs(self, label: DeviceLabel | str) -> float:
+        if label not in self._pydevices:
+            return super().getDeviceDelayMs(label)
+        return 0  # pydevices don't yet support delays
+
+    def setDeviceDelayMs(self, label: DeviceLabel | str, delayMs: float) -> None:
+        if label not in self._pydevices:
+            return super().setDeviceDelayMs(label, delayMs)
+        if delayMs != 0:
+            raise NotImplementedError("Python devices do not support delays")
+        return
+
+    def usesDeviceDelay(self, label: DeviceLabel | str) -> bool:
+        if label not in self._pydevices:
+            return super().usesDeviceDelay(label)
+        return False
 
     # -----------------------------------------------------------------------
     # ---------------------------- XYStageDevice ----------------------------

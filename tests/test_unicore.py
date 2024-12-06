@@ -1,6 +1,10 @@
 from typing import ClassVar
 
-from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
+from pymmcore_plus.core._constants import (
+    DeviceInitializationState,
+    DeviceType,
+    PropertyType,
+)
 from pymmcore_plus.unicore import UniMMCore
 from pymmcore_plus.unicore._properties import pymm_property
 from pymmcore_plus.unicore._xy_stage_device import XYStageDevice
@@ -51,33 +55,47 @@ def test_unicore():
 
     # load a python XY stage device
     stage = MyStage()
-    core.load_py_device("pyXY", stage)
-    assert "pyXY" in core.getLoadedDevices()
+
+    PYDEV = "pyXY"
+    core.load_py_device(PYDEV, stage)
+    assert PYDEV in core.getLoadedDevices()
+    assert core.getDeviceLibrary(PYDEV) == __name__  # because it's in this module
+    assert core.getDeviceName(PYDEV) == MyStage.__name__
+    assert core.getDeviceType(PYDEV) == DeviceType.XYStage
+    assert core.getDeviceDescription(PYDEV) == "Example XY stage device."  # docstring
 
     assert (
-        core.getDeviceInitializationState("pyXY")
+        core.getDeviceInitializationState(PYDEV)
         is DeviceInitializationState.Uninitialized
     )
-    core.initializeDevice("pyXY")
+    core.initializeDevice(PYDEV)
     assert (
-        core.getDeviceInitializationState("pyXY")
+        core.getDeviceInitializationState(PYDEV)
         is DeviceInitializationState.InitializedSuccessfully
     )
+
+    # PROPERTIES
+
     PROP_NAME = "propA"
-    assert PROP_NAME in core.getDevicePropertyNames("pyXY")
-    assert core.hasProperty("pyXY", PROP_NAME)
-    assert core.isPropertyPreInit("pyXY", PROP_NAME) is False
-    assert core.isPropertyReadOnly("pyXY", PROP_NAME) is False
-    assert core.hasPropertyLimits("pyXY", PROP_NAME)
-    assert core.getPropertyLowerLimit("pyXY", PROP_NAME) == 0.0
-    assert core.getPropertyUpperLimit("pyXY", PROP_NAME) == 100.0
-    assert core.getPropertyType("pyXY", PROP_NAME) == PropertyType.Float
-    assert core.getProperty("pyXY", PROP_NAME) == 1.0
-    assert core.getPropertyFromCache("pyXY", PROP_NAME) == 1.0
+    assert PROP_NAME in core.getDevicePropertyNames(PYDEV)
+    assert core.hasProperty(PYDEV, PROP_NAME)
+    assert core.isPropertyPreInit(PYDEV, PROP_NAME) is False
+    assert core.isPropertyReadOnly(PYDEV, PROP_NAME) is False
+    assert core.hasPropertyLimits(PYDEV, PROP_NAME)
+    assert core.getPropertyLowerLimit(PYDEV, PROP_NAME) == 0.0
+    assert core.getPropertyUpperLimit(PYDEV, PROP_NAME) == 100.0
+    assert core.getPropertyType(PYDEV, PROP_NAME) == PropertyType.Float
+    assert core.getProperty(PYDEV, PROP_NAME) == 1.0
+    assert core.getPropertyFromCache(PYDEV, PROP_NAME) == 1.0
+
+    assert not core.deviceBusy(PYDEV)
+    core.waitForDevice(PYDEV)
+
+    # METHODS
 
     # set the core XY stage device to the python device, dropping the C-side device
-    core.setXYStageDevice("pyXY")
-    assert core.getXYStageDevice() == "pyXY"
+    core.setXYStageDevice(PYDEV)
+    assert core.getXYStageDevice() == PYDEV
     NEW_POS = (10, 20)
     core.setXYPosition(*NEW_POS)
     assert core.getXYPosition() == NEW_POS
@@ -87,16 +105,16 @@ def test_unicore():
     core.setXYPosition("XY", 1.5, 3.7)
     x, y = core.getXYPosition("XY")
     assert (round(x, 1), round(y, 1)) == (1.5, 3.7)
-    assert core.getXYPosition("pyXY") == NEW_POS
+    assert core.getXYPosition(PYDEV) == NEW_POS
 
-    core.setOriginXY("pyXY")
-    assert core.getXYPosition("pyXY") == (0, 0)
+    core.setOriginXY(PYDEV)
+    assert core.getXYPosition(PYDEV) == (0, 0)
     assert tuple(stage.ORIGIN) == NEW_POS
 
-    core.setRelativeXYPosition("pyXY", 1, 2)
-    assert core.getXYPosition("pyXY") == (1, 2)
+    core.setRelativeXYPosition(PYDEV, 1, 2)
+    assert core.getXYPosition(PYDEV) == (1, 2)
 
-    core.home("pyXY")
-    core.stop("pyXY")
+    core.home(PYDEV)
+    core.stop(PYDEV)
     assert stage.HOMED
     assert stage.STOPPED

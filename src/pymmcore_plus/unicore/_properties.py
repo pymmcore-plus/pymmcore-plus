@@ -91,7 +91,7 @@ class PropertyInfo(Generic[TProp]):
 
     def __setattr__(self, name: str, value: Any) -> None:
         """Perform additional checks when setting attributes."""
-        super().__setattr__(name, value)
+        object.__setattr__(self, name, value)  # slots dataclass has no super()...
         # setting allowed values also removes the limits
         if name == "allowed_values" and value is not None:
             self.limits = None

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING, TypeVar, cast
 
-from pymmcore_plus.core._constants import DeviceInitializationState
+from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
 
 from ._device import Device
 
@@ -19,6 +19,8 @@ logger = logging.getLogger(__name__)
 
 class PyDeviceManager:
     """Manages loaded Python devices."""
+
+    __slots__ = ("_devices",)
 
     def __init__(self) -> None:
         self._devices: dict[str, Device] = {}
@@ -110,5 +112,5 @@ class PyDeviceManager:
         return tuple(
             cast("DeviceLabel", label)
             for label, device in self._devices.items()
-            if device.type() == dev_type
+            if dev_type == DeviceType.Any or device.type() == dev_type
         )

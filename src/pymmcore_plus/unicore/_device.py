@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import time
 from abc import ABC
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
@@ -61,6 +62,58 @@ class Device(_Lockable, ABC):
         }
         return super().__init_subclass__()
 
+    def initialize(self) -> None:
+        """Initialize the device."""
+
+    @final  # may not be overridden
+    def get_label(self) -> str:
+        return self._label
+
+    @final
+    def set_label(self, value: str) -> None:
+        # for use by the device manager, but the device may know it's own label.
+        self._label = str(value)
+
+    @final
+    @classmethod
+    def type(cls) -> DeviceType:
+        """Return the type of the device."""
+        return cls._TYPE
+
+    def library(self) -> str:
+        """Return the name of the module that implements the device."""
+        return self.__module__
+
+    def name(self) -> str:
+        """Return the name of the device."""
+        return f"{self.__class__.__name__}"
+
+    def description(self) -> str:
+        """Return a description of the device."""
+        return self.__doc__ or ""
+
+    def busy(self) -> bool:
+        """Return `True` if the device is busy."""
+        return False
+
+    def wait_for_device(self, timeout_ms: float) -> None:
+        """Wait for the device to not be busy."""
+        deadline = time.perf_counter() + timeout_ms / 1000
+        polling_interval = 0.01
+
+        while True:
+            with self:
+                if not self.busy():
+                    return
+            if time.perf_counter() > deadline:
+                label = self.get_label()
+                raise TimeoutError(
+                    f"Wait for device {label!r} timed out after {timeout_ms} ms"
+                )
+            time.sleep(polling_interval)
+
+    # PROPERTIES
+
     @classmethod
     def get_property_names(cls) -> KeysView[str]:
         """Return the names of the properties."""
@@ -111,32 +164,6 @@ class Device(_Lockable, ABC):
     def is_property_sequenceable(self, prop_name: str) -> bool:
         """Return `True` if the property is sequenceable."""
         return self._prop_controllers[prop_name].is_sequenceable
-
-    def initialize(self) -> None:
-        """Initialize the device."""
-
-    @final  # may not be overridden
-    def get_label(self) -> str:
-        return self._label
-
-    @final
-    def set_label(self, value: str) -> None:
-        # for use by the device manager, but the device may know it's own label.
-        self._label = str(value)
-
-    @final
-    @classmethod
-    def type(cls) -> DeviceType:
-        """Return the type of the device."""
-        return cls._TYPE
-
-    def name(self) -> str:
-        """Return the name of the device."""
-        return f"{self.__class__.__name__}"
-
-    def description(self) -> str:
-        """Return a description of the device."""
-        return ""
 
 
 SeqT = TypeVar("SeqT")
