@@ -33,10 +33,11 @@ TLim = TypeVar("TLim", bound=Union[int, float])
 
 
 slots_true = {"slots": True} if sys.version_info >= (3, 10) else {}
+kw_only_true = {"kw_only": True} if sys.version_info >= (3, 10) else {}
 
 
 # TODO: maybe use pydantic
-@dataclass(kw_only=True, **slots_true)
+@dataclass(**kw_only_true, **slots_true)
 class PropertyInfo(Generic[TProp]):
     """State of a property of a device.
 
