@@ -80,6 +80,18 @@ class Device(_Lockable, ABC):
         # TODO: catch errors
         self._prop_controllers[prop_name].__set__(self, value)
 
+    def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
+        """Load a sequence into a property."""
+        self._prop_controllers[prop_name].load_sequence(self, sequence)
+
+    def start_property_sequence(self, prop_name: str) -> None:
+        """Start a sequence of a property."""
+        self._prop_controllers[prop_name].start_sequence(self)
+
+    def stop_property_sequence(self, prop_name: str) -> None:
+        """Stop a sequence of a property."""
+        self._prop_controllers[prop_name].stop_sequence(self)
+
     def set_property_allowed_values(
         self, prop_name: str, allowed_values: Sequence[Any]
     ) -> None:
@@ -95,6 +107,10 @@ class Device(_Lockable, ABC):
     def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
         """Set the sequence max length of a property."""
         self._prop_controllers[prop_name].property.sequence_max_length = max_length
+
+    def is_property_sequenceable(self, prop_name: str) -> bool:
+        """Return `True` if the property is sequenceable."""
+        return self._prop_controllers[prop_name].is_sequenceable
 
     def initialize(self) -> None:
         """Initialize the device."""

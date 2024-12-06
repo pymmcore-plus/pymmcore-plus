@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator, MutableMapping
+from collections.abc import Iterator, MutableMapping, Sequence
 from typing import TYPE_CHECKING, Any, cast, overload
 
 from pymmcore_plus.core import CMMCorePlus, Keyword
@@ -174,6 +174,15 @@ class UniMMCore(CMMCorePlus):
             return super().getPropertyFromCache(deviceLabel, propName)
         return self._state_cache[(deviceLabel, propName)]
 
+    def setProperty(
+        self, label: str, propName: str, propValue: bool | float | int | str
+    ) -> None:
+        if label not in self._pydevices:
+            return super().setProperty(label, propName, propValue)
+        with self._pydevices[label] as dev:
+            dev.set_property_value(propName, propValue)
+            self._state_cache[(label, propName)] = propValue
+
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         if label not in self._pydevices:
             return super().getPropertyType(label, propName)
@@ -207,6 +216,14 @@ class UniMMCore(CMMCorePlus):
                 return lims[1]
             return 0
 
+    def getAllowedPropertyValues(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> tuple[str, ...]:
+        if label not in self._pydevices:
+            return super().getAllowedPropertyValues(label, propName)
+        with self._pydevices[label] as dev:
+            return tuple(dev.property(propName).allowed_values or ())
+
     def isPropertyPreInit(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> bool:
@@ -222,6 +239,49 @@ class UniMMCore(CMMCorePlus):
             return super().isPropertyReadOnly(label, propName)
         with self._pydevices[label] as dev:
             return dev.property(propName).is_read_only
+
+    def isPropertySequenceable(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> bool:
+        if label not in self._pydevices:
+            return super().isPropertySequenceable(label, propName)
+        with self._pydevices[label] as dev:
+            return dev.is_property_sequenceable(propName)
+
+    def getPropertySequenceMaxLength(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> int:
+        if label not in self._pydevices:
+            return super().getPropertySequenceMaxLength(label, propName)
+        with self._pydevices[label] as dev:
+            return dev.property(propName).sequence_max_length
+
+    def loadPropertySequence(
+        self,
+        label: DeviceLabel | str,
+        propName: PropertyName | str,
+        eventSequence: Sequence[str],
+    ) -> None:
+        if label not in self._pydevices:
+            return super().loadPropertySequence(label, propName, eventSequence)
+        with self._pydevices[label] as dev:
+            dev.load_property_sequence(propName, eventSequence)
+
+    def startPropertySequence(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> None:
+        if label not in self._pydevices:
+            return super().startPropertySequence(label, propName)
+        with self._pydevices[label] as dev:
+            dev.start_property_sequence(propName)
+
+    def stopPropertySequence(
+        self, label: DeviceLabel | str, propName: PropertyName | str
+    ) -> None:
+        if label not in self._pydevices:
+            return super().stopPropertySequence(label, propName)
+        with self._pydevices[label] as dev:
+            dev.stop_property_sequence(propName)
 
     # -----------------------------------------------------------------------
     # ---------------------------- XYStageDevice ----------------------------

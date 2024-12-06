@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from enum import Enum, IntEnum
-from typing import Literal
+from typing import Any, Literal
 
 import pymmcore_plus._pymmcore as pymmcore
 
@@ -166,6 +166,26 @@ class PropertyType(IntEnum):
 
     def __repr__(self) -> Literal["undefined", "float", "int", "str"]:
         return getattr(self.to_python(), "__name__", "undefined")
+
+    @classmethod
+    def create(cls, value: Any) -> PropertyType:
+        if isinstance(value, PropertyType):
+            return value
+        if value is None:
+            return PropertyType.Undef
+        if isinstance(value, str):
+            return PropertyType[value.lower().capitalize()]
+        if isinstance(value, type):
+            if value is float:
+                return PropertyType.Float
+            elif value is int:
+                return PropertyType.Integer
+            elif value is str:
+                return PropertyType.String
+        raise TypeError(
+            f"Property type must be a PropertyType enum member, "
+            f"a string, or a type. Got: {type(value)}"
+        )
 
 
 class ActionType(IntEnum):

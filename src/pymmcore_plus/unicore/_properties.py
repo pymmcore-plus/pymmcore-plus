@@ -1,11 +1,13 @@
 from __future__ import annotations
 
+import sys
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
     Callable,
     Generic,
+    Literal,
     TypeVar,
     Union,
     cast,
@@ -17,19 +19,50 @@ from pymmcore_plus.core._constants import PropertyType
 if TYPE_CHECKING:
     from collections.abc import Sequence
 
-    from typing_extensions import Self
+    from typing_extensions import Self, TypeAlias
 
     from ._device import Device
+
+    PropArg: TypeAlias = (
+        PropertyType | type | Literal["float", "integer", "string"] | None
+    )
 
 TDev = TypeVar("TDev", bound="Device")
 TProp = TypeVar("TProp")
 TLim = TypeVar("TLim", bound=Union[int, float])
 
 
+slots_true = {"slots": True} if sys.version_info >= (3, 10) else {}
+
+
 # TODO: maybe use pydantic
-@dataclass
+@dataclass(kw_only=True, **slots_true)
 class PropertyInfo(Generic[TProp]):
-    """State of a property of a device."""
+    """State of a property of a device.
+
+    Attributes
+    ----------
+    name : str
+        The name of the property.
+    default_value : TProp, optional
+        The default value of the property, by default None.
+    last_value : TProp, optional
+        The last value seen from the device, by default None.
+    limits : tuple[int | float, int | float], optional
+        The minimum and maximum values of the property, by default None.
+    sequence_max_length : int
+        The maximum length of a sequence of property values.
+    description : str, optional
+        A description of the property, by default None.
+    type : PropertyType
+        The type of the property.
+    allowed_values : Sequence[TProp], optional
+        The allowed values of the property, by default None.
+    is_read_only : bool
+        Whether the property is read-only.
+    is_pre_init : bool
+        Whether the property must be set before initialization.
+    """
 
     name: str
     default_value: TProp | None = None  # could be used for a "reset"?
@@ -43,6 +76,11 @@ class PropertyInfo(Generic[TProp]):
     is_read_only: bool = False
     is_pre_init: bool = False
 
+    @property
+    def is_sequenceable(self) -> bool:
+        """Return True if the property is sequenceable."""
+        return self.sequence_max_length > 0
+
     def __post_init__(self) -> None:
         """Ensure sound property configuration."""
         if self.allowed_values and self.limits:
@@ -54,14 +92,25 @@ class PropertyInfo(Generic[TProp]):
     def __setattr__(self, name: str, value: Any) -> None:
         """Perform additional checks when setting attributes."""
         super().__setattr__(name, value)
-
         # setting allowed values also removes the limits
         if name == "allowed_values" and value is not None:
             self.limits = None
 
 
 class PropertyController(Generic[TDev, TProp]):
-    """Controls the state of a property connected to a device."""
+    """Controls the state of a property connected to a device.
+
+    PropertyController instances are descriptors (i.e. they behave like @property),
+    that can get and set the value of a property on a Device instance using the
+    getter and setter methods provided at initialization.  They can also load and
+    start sequences of property values, if the property is sequenceable (i.e. it has
+    a non-zero sequence_max_length and has been provided with `sequence_loader` and
+    `sequence_starter` methods).
+
+    Device subclasses maintain PropertyController instances in a ClassVar dictionary,
+    `_prop_controllers`, where the keys are the property names and the values are the
+    PropertyController instances.
+    """
 
     def __init__(
         self,
@@ -95,6 +144,11 @@ class PropertyController(Generic[TDev, TProp]):
         """Update the property value by calling the setter on the Device instance."""
         if self.fset is None:
             raise AttributeError("can't set attribute")
+        value = self.validate(value)
+        self.fset(instance, value)
+
+    def validate(self, value: Any) -> TProp:
+        """Validate a property value."""
         if self.property.allowed_values and value not in self.property.allowed_values:
             raise ValueError(
                 f"Value '{value}' is not allowed for property '{self.property.name}'. "
@@ -102,7 +156,7 @@ class PropertyController(Generic[TDev, TProp]):
             )
         if self.property.limits:
             try:
-                value = float(value)  # type: ignore
+                value = float(value)
             except (ValueError, TypeError) as e:
                 raise ValueError(
                     f"Non-numeric value {value!r} cannot be compared to the limits "
@@ -114,7 +168,46 @@ class PropertyController(Generic[TDev, TProp]):
                     f"Value {value!r} is not within the allowed range of property "
                     f"{self.property.name!r}: {self.property.limits}."
                 )
-        self.fset(instance, value)
+        return cast("TProp", value)
+
+    @property
+    def is_sequenceable(self) -> bool:
+        """Return True if the property is sequenceable."""
+        return (
+            self.property.is_sequenceable
+            and self.fseq_load is not None
+            and self.fseq_start is not None
+        )
+
+    def load_sequence(self, instance: TDev, sequence: Sequence[TProp]) -> None:
+        """Send a sequence of property values to the device."""
+        if self.fseq_load is None:
+            raise RuntimeError(
+                f"Property {self.property.name!r} has no sequence loader"
+            )
+        if (seq_len := len(sequence)) > (max_len := self.property.sequence_max_length):
+            raise ValueError(
+                f"Sequence length {seq_len} exceeds the maximum allowed length "
+                f"of property {self.property.name!r}: {max_len}."
+            )
+        seq = [self.validate(val) for val in sequence]
+        self.fseq_load(instance, seq)
+
+    def start_sequence(self, instance: TDev) -> None:
+        """Tell the device to start the previously loaded sequence."""
+        if self.fseq_start is None:
+            raise RuntimeError(
+                f"Property {self.property.name!r} has no sequence starter"
+            )
+        self.fseq_start(instance)
+
+    def stop_sequence(self, instance: TDev) -> None:
+        """Stop the sequence."""
+        # it's not an error if there is no stopper
+        if self.fseq_stop is not None:
+            self.fseq_stop(instance)
+
+    # ------------------------- Decorators -------------------------
 
     def setter(self, fset: Callable[[TDev, TProp], None]) -> Self:
         """Decorate a method to set the property on the device."""
@@ -148,7 +241,8 @@ def pymm_property(
     sequence_max_length: int = ...,
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
-    name: str | None = None,
+    name: str | None = ...,
+    prop_type: PropArg = ...,
 ) -> Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]: ...
 @overload  # when used with keyword arguments including limits
 def pymm_property(
@@ -157,7 +251,8 @@ def pymm_property(
     sequence_max_length: int = ...,
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
-    name: str | None = None,
+    name: str | None = ...,
+    prop_type: PropArg = ...,
 ) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
 @overload  # when used with keyword arguments without allowed_values or limits
 def pymm_property(
@@ -165,7 +260,8 @@ def pymm_property(
     sequence_max_length: int = ...,
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
-    name: str | None = None,
+    name: str | None = ...,
+    prop_type: PropArg = ...,
 ) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
 def pymm_property(
     fget: Callable[[TDev], TProp] | None = None,
@@ -176,22 +272,85 @@ def pymm_property(
     is_read_only: bool = False,
     is_pre_init: bool = False,
     name: str | None = None,  # taken from fget if None
+    prop_type: PropArg = None,
 ) -> (
     PropertyController[TDev, TProp]
     | Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]
 ):
-    """Decorate a pymmcore property method."""
+    """Decorates a (getter) method to create a device property.
 
-    def _inner(fget: Callable[[TDev], TProp]) -> PropertyController[TDev, TProp]:
-        prop_type = PropertyType.Undef
-        if return_type := fget.__annotations__.get("return", None):
-            if return_type is float:
-                prop_type = PropertyType.Float
-            elif return_type is int:
-                prop_type = PropertyType.Integer
-            elif return_type is str:
-                prop_type = PropertyType.String
+    The returned PropertyController instance can be additionally used (similar to
+    `@property`) to decorate `setter`, `sequence_loader`, `sequence_starter`, and/or
+    `sequence_stopper` methods.
 
+    Properties can have limits, allowed values, but may not have both.
+
+    Properties will only be considered "sequenceable" (i.e. they support hardware
+    triggering) if they have a non-zero sequence_max_length AND have decorated
+    `sequence_loader` and `sequence_starter` methods.
+
+    Parameters
+    ----------
+    fget : Callable[[TDev], TProp], optional
+        The getter method for the property, by default None.
+    limits : tuple[float, float], optional
+        The minimum and maximum values of the property, by default None. Cannot be
+        combined with `allowed_values`.
+    sequence_max_length : int, optional
+        The maximum length of a sequence of property values, by default 0.
+    allowed_values : Sequence[TProp], optional
+        The allowed values of the property, by default None. Cannot be combined with
+        `limits`.
+    is_read_only : bool, optional
+        Whether the property is read-only, by default False.
+    is_pre_init : bool, optional
+        Whether the property must be set before initialization, by default False.
+    name : str, optional
+        The name of the property, by default, the name of the getter method is used.
+    prop_type : PropArg, optional
+        The type of the property, by default the return annotation of the getter method
+        is used (but must be one of `float`, `int`, or `str`).
+
+
+    Examples
+    --------
+    ```python
+    class MyDevice(Device):
+        @pymm_property(limits=(0, 100), sequence_max_length=10)
+        def position(self) -> float:
+            # get position from device
+            return 42.0
+
+        @position.setter
+        def position(self, value: float) -> None:
+            print(f"Setting position to {value}")
+
+        @position.sequence_loader
+        def load_position_sequence(self, sequence: Sequence[float]) -> None:
+            print(f"Loading position sequence: {sequence}")
+
+        @position.sequence_starter
+        def start_position_sequence(self) -> None:
+            print("Starting position sequence")
+
+        @pymm_property(is_read_only=True)
+        def pressure(self) -> float:
+            return 1.0
+
+        @pymm_property(allowed_values=["low", "medium", "high"])
+        def speed(self) -> str:
+            # get speed from device
+            return "medium"
+
+        @speed.setter
+        def speed(self, value: str) -> None:
+            print(f"Setting speed to {value}")
+    ```
+    """
+
+    def _inner(
+        fget: Callable[[TDev], TProp], _pt: PropArg = prop_type
+    ) -> PropertyController[TDev, TProp]:
         prop = PropertyInfo(
             name=name or fget.__name__,
             description=fget.__doc__,
@@ -200,7 +359,7 @@ def pymm_property(
             allowed_values=allowed_values,
             is_read_only=is_read_only,
             is_pre_init=is_pre_init,
-            type=prop_type,
+            type=PropertyType.create(_pt or fget.__annotations__.get("return", None)),
         )
 
         return PropertyController(property=prop, fget=fget)
