@@ -1,20 +1,30 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, TypeVar, cast
+from typing import TYPE_CHECKING, TypeVar, cast, overload
 
 from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
 
-from ._device import Device
+from .devices._device import Device
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
 
     from pymmcore import DeviceLabel
 
-
+T = TypeVar("T")
 DevT = TypeVar("DevT", bound=Device)
 logger = logging.getLogger(__name__)
+
+
+class NULL:
+    """Sentinel value for default arguments."""
+
+    def __bool__(self) -> bool:
+        return False
+
+
+_NULL = NULL()
 
 
 class PyDeviceManager:
@@ -62,11 +72,15 @@ class PyDeviceManager:
             label = device
         if label not in self._devices:
             raise KeyError(f"No device with label '{label!r}'")
+        with self._devices[label] as dev:
+            dev.shutdown()
+            dev._initialized = False  # noqa: SLF001
         self._devices.pop(label)
 
     def unload_all_devices(self) -> None:
         """Unload all loaded devices."""
-        self._devices.clear()  # TODO ...
+        for label in list(self._devices):
+            self.unload_device(label)
 
     def __len__(self) -> int:
         """Return the number of loaded device labels."""
@@ -86,9 +100,24 @@ class PyDeviceManager:
             raise KeyError(f"No device with label '{label!r}'")
         return self._devices[label]
 
-    def get(self, label: str) -> Device | None:
+    @overload
+    def get(self, label: str, *, require_initialized: bool = ...) -> Device: ...
+    @overload
+    def get(
+        self, label: str, default: T, *, require_initialized: bool = ...
+    ) -> Device | T: ...
+    def get(
+        self, label: str, default: T | NULL = _NULL, *, require_initialized: bool = True
+    ) -> Device | T:
         """Get device by label, returning None if it does not exist."""
-        return self._devices.get(label, None)
+        if label not in self._devices:
+            if isinstance(default, NULL):
+                raise KeyError(f"No device with label '{label!r}'")
+            return default
+        device = self._devices[label]
+        if require_initialized and device._initialized is not True:  # noqa: SLF001
+            raise ValueError(f"Device {label!r} is not initialized")
+        return device
 
     def get_device_of_type(self, label: str, *types: type[DevT]) -> DevT:
         """Get device by label, ensuring it is of the correct type.

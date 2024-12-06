@@ -1,8 +1,7 @@
-from ._device import Device
-from ._properties import PropertyInfo, pymm_property
-from ._stage import StageDevice
 from ._unicore import UniMMCore
-from ._xy_stage_device import XYStageDevice
+from .devices._device import Device
+from .devices._properties import PropertyInfo, pymm_property
+from .devices._stage import StageDevice, XYStageDevice
 
 __all__ = [
     "Device",

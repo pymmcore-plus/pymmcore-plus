@@ -6,8 +6,10 @@ from abc import ABC
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
-
-from ._properties import PropertyController, PropertyInfo
+from pymmcore_plus.experimental.unicore.devices._properties import (
+    PropertyController,
+    PropertyInfo,
+)
 
 if TYPE_CHECKING:
     from collections.abc import KeysView, Sequence
@@ -51,6 +53,8 @@ class Device(_Lockable, ABC):
         # False -> Not initialized
         # True -> Initialized successfully
         # Exception -> Initialization failed, contains the exception
+        # TODO: consider storing this state outside of the class so as to prevent
+        # accidental tinkering from subclasses
         self._initialized: bool | BaseException = False
 
     def __init_subclass__(cls) -> None:
@@ -64,6 +68,9 @@ class Device(_Lockable, ABC):
 
     def initialize(self) -> None:
         """Initialize the device."""
+
+    def shutdown(self) -> None:
+        """Shutdown the device."""
 
     @final  # may not be overridden
     def get_label(self) -> str:

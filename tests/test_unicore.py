@@ -1,3 +1,4 @@
+import weakref
 from typing import ClassVar
 
 from pymmcore_plus.core._constants import (
@@ -6,8 +7,8 @@ from pymmcore_plus.core._constants import (
     PropertyType,
 )
 from pymmcore_plus.experimental.unicore import UniMMCore
-from pymmcore_plus.experimental.unicore._properties import pymm_property
-from pymmcore_plus.experimental.unicore._xy_stage_device import XYStageDevice
+from pymmcore_plus.experimental.unicore.devices._properties import pymm_property
+from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice
 
 
 class MyStage(XYStageDevice):
@@ -44,20 +45,14 @@ class MyStage(XYStageDevice):
         self.HOMED = True
 
 
-def test_unicore_xy_stage():
+def test_device_load_unload():
     core = UniMMCore()
-    core.loadSystemConfiguration()
-    # print status of C-side XY stage device
-    assert core.getXYStageDevice() == "XY"
-    core.setXYPosition(100, 200)
-    x, y = core.getXYPosition()
-    assert (round(x), round(y)) == (100, 200)
-
-    # load a python XY stage device
-    stage = MyStage()
-
     PYDEV = "pyXY"
-    core.load_py_device(PYDEV, stage)
+    device = MyStage()
+    core.loadPyDevice(PYDEV, device)
+    devref = weakref.ref(device)
+    del device
+
     assert PYDEV in core.getLoadedDevices()
     assert core.getDeviceLibrary(PYDEV) == __name__  # because it's in this module
     assert core.getDeviceName(PYDEV) == MyStage.__name__
@@ -74,6 +69,37 @@ def test_unicore_xy_stage():
         is DeviceInitializationState.InitializedSuccessfully
     )
 
+    core.unloadDevice(PYDEV)
+    assert PYDEV not in core.getLoadedDevices()
+    assert devref() is None  # we hold no references to the device
+
+
+def test_device_load_from_module():
+    core = UniMMCore()
+    PYDEV = "pyXY"
+    core.loadDevice(PYDEV, __name__, MyStage.__name__)
+    assert PYDEV in core.getLoadedDevices()
+    core.setXYStageDevice(PYDEV)
+    core.setXYPosition(1, 2)
+    assert core.getXYPosition() == (1, 2)
+
+
+def test_unicore_xy_stage():
+    core = UniMMCore()
+    core.loadSystemConfiguration()
+
+    # print status of C-side XY stage device
+    assert core.getXYStageDevice() == "XY"
+    core.setXYPosition(100, 200)
+    x, y = core.getXYPosition()
+    assert (round(x), round(y)) == (100, 200)
+
+    # load a python XY stage device
+    stage = MyStage()
+    PYDEV = "pyXY"
+    core.load_py_device(PYDEV, stage)
+    core.initializeDevice(PYDEV)
+
     # set the core XY stage device to the python device, dropping the C-side device
     core.setXYStageDevice(PYDEV)
     assert core.getXYStageDevice() == PYDEV
@@ -88,6 +114,7 @@ def test_unicore_xy_stage():
     assert (round(x, 1), round(y, 1)) == (1.5, 3.7)
     assert core.getXYPosition(PYDEV) == NEW_POS
 
+    # test stage methods
     core.setOriginXY(PYDEV)
     assert core.getXYPosition(PYDEV) == (0, 0)
     assert tuple(stage.ORIGIN) == NEW_POS

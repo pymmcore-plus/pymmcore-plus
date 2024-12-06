@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Iterator, MutableMapping, Sequence
+from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast, overload
+
+import pymmcore
 
 from pymmcore_plus.core import (
     CMMCorePlus,
@@ -12,8 +15,8 @@ from pymmcore_plus.core import (
 from pymmcore_plus.core import Keyword as KW
 
 from ._device_manager import PyDeviceManager
-from ._stage import _BaseStage
-from ._xy_stage_device import XYStageDevice
+from .devices._device import Device
+from .devices._stage import XYStageDevice, _BaseStage
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -23,11 +26,19 @@ if TYPE_CHECKING:
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
-    from ._device import Device
-
     PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
 
     _T = TypeVar("_T")
+
+CURRENT = {
+    KW.CoreCamera: None,
+    KW.CoreShutter: None,
+    KW.CoreFocus: None,
+    KW.CoreXYStage: None,
+    KW.CoreAutoFocus: None,
+    KW.CoreSLM: None,
+    KW.CoreGalvo: None,
+}
 
 
 class _CoreDevice:
@@ -41,15 +52,11 @@ class _CoreDevice:
 
     def __init__(self, state_cache: PropertyStateCache) -> None:
         self._state_cache = state_cache
-        self._pycurrent: dict[Keyword, PyDeviceLabel | None] = {
-            KW.CoreCamera: None,
-            KW.CoreShutter: None,
-            KW.CoreFocus: None,
-            KW.CoreXYStage: None,
-            KW.CoreAutoFocus: None,
-            KW.CoreSLM: None,
-            KW.CoreGalvo: None,
-        }
+        self._pycurrent: dict[Keyword, PyDeviceLabel | None] = {}
+        self.reset_current()
+
+    def reset_current(self) -> None:
+        self._pycurrent.update(CURRENT)
 
     def current(self, keyword: Keyword) -> PyDeviceLabel | None:
         return self._pycurrent[keyword]
@@ -68,7 +75,76 @@ class UniMMCore(CMMCorePlus):
         self._state_cache = PropertyStateCache()  # threadsafe cache for property states
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
 
-    def load_py_device(self, label: str, device: Device) -> None:
+    def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
+        """Helper function to set the current core device if it is a python device.
+
+        If the label is a python device, the current device is set and the label is
+        cleared (in preparation for calling `super().setDevice()`), otherwise the
+        label is returned unchanged.
+        """
+        if label in self._pydevices:
+            self._pycore.set_current(keyword, label)
+            label = ""
+        elif not label:
+            self._pycore.set_current(keyword, None)
+        return label
+
+    # -----------------------------------------------------------------------
+    # ------------------------ General Core methods  ------------------------
+    # -----------------------------------------------------------------------
+
+    def reset(self) -> None:
+        with suppress(TimeoutError):
+            self.waitForSystem()
+        self.unloadAllDevices()
+        self._pycore.reset_current()
+        super().reset()
+
+    # -----------------------------------------------------------------------
+    # ----------------- Functionality for All Devices ------------------------
+    # -----------------------------------------------------------------------
+
+    def loadDevice(
+        self, label: str, moduleName: AdapterName | str, deviceName: DeviceName | str
+    ) -> None:
+        """Loads a device from the plugin library, or python module.
+
+        In the standard MM case, this will load a device from the plugin library:
+
+        ```python
+        core.loadDevice("cam", "DemoCamera", "DCam")
+        ```
+
+        For python devices, this will load a device from a python module:
+
+        ```python
+        core.loadDevice("pydev", "package.module", "DeviceClass")
+        ```
+
+        """
+        try:
+            pymmcore.CMMCore.loadDevice(self, label, moduleName, deviceName)
+        except RuntimeError as e:
+            try:
+                pydev = self._get_py_device_instance(moduleName, deviceName)
+                self.loadPyDevice(label, pydev)
+            except Exception:
+                if exc := self._load_error_with_info(
+                    label, moduleName, deviceName, str(e)
+                ):
+                    raise exc from e
+
+    def _get_py_device_instance(self, module_name: str, cls_name: str) -> Device:
+        try:
+            module = __import__(module_name, fromlist=[cls_name])
+            cls = getattr(module, cls_name)
+        except (ImportError, AttributeError) as e:
+            raise ImportError(f"Could not import {cls_name} from {module}") from e
+        if isinstance(cls, type) and issubclass(cls, Device):
+            return cls()
+        raise TypeError(f"{cls_name} is not a subclass of Device")
+
+    def loadPyDevice(self, label: str, device: Device) -> None:
         """Load a `unicore.Device` as a python device.
 
         This API allows you to create python-side Device objects that can be used in
@@ -88,23 +164,16 @@ class UniMMCore(CMMCorePlus):
             raise ValueError(f"The specified device label {label!r} is already in use")
         self._pydevices.load_device(label, device)
 
-    def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
-        """Helper function to set the current core device if it is a python device.
+    load_py_device = loadPyDevice
 
-        If the label is a python device, the current device is set and the label is
-        cleared (in preparation for calling `super().setDevice()`), otherwise the
-        label is returned unchanged.
-        """
-        if label in self._pydevices:
-            self._pycore.set_current(keyword, label)
-            label = ""
-        elif not label:
-            self._pycore.set_current(keyword, None)
-        return label
+    def unloadDevice(self, label: DeviceLabel | str) -> None:
+        if label not in self._pydevices:
+            return super().unloadDevice(label)
+        self._pydevices.unload_device(label)
 
-    # -----------------------------------------------------------------------
-    # ----------------- Functionality for All Devices ------------------------
-    # -----------------------------------------------------------------------
+    def unloadAllDevices(self) -> None:
+        self._pydevices.unload_all_devices()
+        super().unloadAllDevices()
 
     def initializeDevice(self, label: DeviceLabel | str) -> None:
         if label not in self._pydevices:
