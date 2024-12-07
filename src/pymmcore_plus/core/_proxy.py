@@ -20,9 +20,16 @@ class PSignalInstance(Protocol):
 
 
 class CoreEventsProxy(Protocol):
-    """Exposed signals from CMMCorePlus events."""
+    """Signals that Device Adapters can emit directly."""
 
-    imageSnapped: PSignalInstance
+    propertyChanged: PSignalInstance  # (str, str, str)
+    stagePositionChanged: PSignalInstance  # (str, float)
+    XYStagePositionChanged: PSignalInstance  # (str, float, float)
+    exposureChanged: PSignalInstance  # (str, float)
+    SLMExposureChanged: PSignalInstance  # (str, float)
+    # channelGroupChanged: PSignalInstance  # (str)
+    # configGroupChanged: PSignalInstance  # (str, str)
+    # configSet: PSignalInstance  # (str, str)
 
 
 class CMMCoreProxy(Protocol):

@@ -125,8 +125,6 @@ class XYStepperStageDevice(XYStageDevice):
         self.register_property(name=Keyword.Transpose_MirrorY, default_value=False)
         self._origin_x_steps: int = 0
         self._origin_y_steps: int = 0
-        self._x_pos_um: float = 0
-        self._y_pos_um: float = 0
 
     def set_position_um(self, x: float, y: float) -> None:
         """Set the position of the XY stage in microns."""
@@ -144,10 +142,8 @@ class XYStepperStageDevice(XYStageDevice):
         x_steps = self._origin_x_steps + steps_x
         y_steps = self._origin_y_steps + steps_y
         self.set_position_steps(x_steps, y_steps)
-        self._x_pos_um = x
-        self._y_pos_um = y
 
-        # TODO: call OnXYStagePositionChanged(x, y)
+        self.core.events.XYStagePositionChanged.emit(self.get_label(), x, y)
 
     def get_position_um(self) -> tuple[float, float]:
         """Get the position of the XY stage in microns."""
@@ -162,8 +158,6 @@ class XYStepperStageDevice(XYStageDevice):
         if not mirror_y:
             y = -y
 
-        self._x_pos_um = x
-        self._y_pos_um = y
         return x, y
 
     def set_relative_position_steps(self, dx: int, dy: int) -> None:
@@ -180,8 +174,6 @@ class XYStepperStageDevice(XYStageDevice):
         Can be overridden for more efficient implementations.
         """
         mirror_x, mirror_y = self._get_orientation()
-        x = self._x_pos_um + dx
-        y = self._y_pos_um + dy
 
         if mirror_x:
             dx = -dx
@@ -193,10 +185,8 @@ class XYStepperStageDevice(XYStageDevice):
 
         self.set_relative_position_steps(steps_x, steps_y)
 
-        # TODO: call OnXYStagePositionChanged(x, y)
-
-        self._x_pos_um = x
-        self._y_pos_um = y
+        x, y = self.get_position_um()
+        self.core.events.XYStagePositionChanged.emit(self.get_label(), x, y)
 
     def set_adapter_origin_um(self, x: float = 0.0, y: float = 0.0) -> None:
         """Alter the software coordinate translation between micrometers and steps.
