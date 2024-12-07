@@ -45,10 +45,6 @@ class XYStageDevice(_BaseStage[tuple[float, float]]):
 
     _TYPE: ClassVar[Literal[DeviceType.XYStage]] = DeviceType.XYStage
 
-    # TODO:
-    # we can probably extend this base class with better initial functionality
-    # see CXYStageBase in mmCoreAndDevices
-
     @abstractmethod
     def set_position_um(self, x: float, y: float) -> None:
         """Set the position of the XY stage in microns."""
@@ -96,7 +92,22 @@ class XYStageDevice(_BaseStage[tuple[float, float]]):
 
 
 class XYStepperStageDevice(XYStageDevice):
-    """ABC for XYStage devices that support stepper motors."""
+    """ABC for XYStage devices that support stepper motors.
+
+    In this variant, rather than providing `set_position_um` and `get_position_um`,
+    you provide `set_position_steps`, `get_position_steps`, `get_step_size_x_um`,
+    and `get_step_size_y_um`.  A default implementation of `set_position_um` and
+    `get_position_um` is then provided that uses these methods, taking into account
+    the XY-mirroring properties of the device.
+    """
+
+    @abstractmethod
+    def set_position_steps(self, x: int, y: int) -> None:
+        """Set the position of the XY stage in steps."""
+
+    @abstractmethod
+    def get_position_steps(self) -> tuple[int, int]:
+        """Returns the current position of the XY stage in steps."""
 
     @abstractmethod
     def get_step_size_x_um(self) -> float:
@@ -105,14 +116,6 @@ class XYStepperStageDevice(XYStageDevice):
     @abstractmethod
     def get_step_size_y_um(self) -> float:
         """Returns the step size of the Y axis in microns."""
-
-    @abstractmethod
-    def get_position_steps(self) -> tuple[int, int]:
-        """Returns the current position of the XY stage in steps."""
-
-    @abstractmethod
-    def set_position_steps(self, x: int, y: int) -> None:
-        """Set the position of the XY stage in steps."""
 
     # ----------------------------------------------------------------
 
