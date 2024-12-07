@@ -77,9 +77,9 @@ class XYStageDevice(_BaseStage[tuple[float, float]]):
         ... such that the current position becomes the given coordinates.
         """
         # I don't quite understand what this method is supposed to do yet.
-        # i think we can provide a base implementation, so it won't be abstractmethod
-        # but i don't know what to put here.
-        raise NotImplementedError("This method is not implemented for this device.")
+        # I believe it's here to give device adapter implementations a way to to set
+        # the origin of some translation between micrometers and steps, rather than to
+        # directly update the origin on the device itself.
 
     def set_origin(self) -> None:
         """Zero the stage's coordinates at the current position.
@@ -154,12 +154,12 @@ class XYStepperStageDevice(XYStageDevice):
         # Converts the current steps to micrometer coordinates and returns the position.
         mirror_x, mirror_y = self._get_orientation()
         x_steps, y_steps = self.get_position_steps()
+
         x = (self._origin_x_steps - x_steps) * self.get_step_size_x_um()
         y = (self._origin_y_steps - y_steps) * self.get_step_size_y_um()
-
-        if mirror_x:
+        if not mirror_x:
             x = -x
-        if mirror_y:
+        if not mirror_y:
             y = -y
 
         self._x_pos_um = x
@@ -198,7 +198,7 @@ class XYStepperStageDevice(XYStageDevice):
         self._x_pos_um = x
         self._y_pos_um = y
 
-    def set_adapter_origin_um(self, x: float, y: float) -> None:
+    def set_adapter_origin_um(self, x: float = 0.0, y: float = 0.0) -> None:
         """Alter the software coordinate translation between micrometers and steps.
 
         ... such that the current position becomes the given coordinates.
@@ -211,6 +211,18 @@ class XYStepperStageDevice(XYStageDevice):
 
         self._origin_x_steps = x_steps + (steps_x if mirror_x else -steps_x)
         self._origin_y_steps = y_steps + (steps_y if mirror_y else -steps_y)
+
+    def set_origin(self) -> None:
+        """Zero the stage's coordinates at the current position."""
+        self.set_adapter_origin_um()
+
+    def set_origin_x(self) -> None:
+        """Zero the stage's X coordinates at the current position."""
+        raise NotImplementedError  # pragma: no cover
+
+    def set_origin_y(self) -> None:
+        """Zero the stage's Y coordinates at the current position."""
+        raise NotImplementedError  # pragma: no cover
 
     def _get_orientation(self) -> tuple[bool, bool]:
         return (

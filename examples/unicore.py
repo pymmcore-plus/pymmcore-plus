@@ -43,13 +43,15 @@ class MyStage(XYStageDevice):
 
 core = UniMMCore()
 core.loadSystemConfiguration()
+
 # print status of C-side XY stage device
 print(f"core XY device is {core.getXYStageDevice()!r}")
 core.setXYPosition(100, 200)
 print(f"pos: {core.getXYPosition()}")
 
 # load a python XY stage device
-core.load_py_device("pyXY", MyStage())
+core.loadPyDevice("pyXY", MyStage())
+core.initializeDevice("pyXY")
 # set the core XY stage device to the python device, dropping the C-side device
 core.setXYStageDevice("pyXY")
 

@@ -125,21 +125,29 @@ class UniMMCore(CMMCorePlus):
         try:
             pymmcore.CMMCore.loadDevice(self, label, moduleName, deviceName)
         except RuntimeError as e:
-            try:
+            # it was a C++ device, should have worked ... raise the error
+            if moduleName not in super().getDeviceAdapterNames():
                 pydev = self._get_py_device_instance(moduleName, deviceName)
                 self.loadPyDevice(label, pydev)
-            except Exception:
-                if exc := self._load_error_with_info(
-                    label, moduleName, deviceName, str(e)
-                ):
-                    raise exc from e
+                return
+            if exc := self._load_error_with_info(label, moduleName, deviceName, str(e)):
+                raise exc from e
 
     def _get_py_device_instance(self, module_name: str, cls_name: str) -> Device:
+        """Import and instantiate a python device from `module_name.cls_name`."""
         try:
             module = __import__(module_name, fromlist=[cls_name])
+        except ImportError as e:
+            raise type(e)(
+                f"{module_name!r} is not a known Micro-manager DeviceAdapter, or "
+                "an importable python module "
+            ) from e
+        try:
             cls = getattr(module, cls_name)
-        except (ImportError, AttributeError) as e:
-            raise ImportError(f"Could not import {cls_name} from {module}") from e
+        except AttributeError as e:
+            raise AttributeError(
+                f"Could not find class {cls_name!r} in python module {module_name!r}"
+            ) from e
         if isinstance(cls, type) and issubclass(cls, Device):
             return cls()
         raise TypeError(f"{cls_name} is not a subclass of Device")
@@ -162,28 +170,32 @@ class UniMMCore(CMMCorePlus):
         """
         if label in self.getLoadedDevices():
             raise ValueError(f"The specified device label {label!r} is already in use")
-        self._pydevices.load_device(label, device)
+        self._pydevices.load(label, device, self.create_proxy())
 
     load_py_device = loadPyDevice
 
     def unloadDevice(self, label: DeviceLabel | str) -> None:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().unloadDevice(label)
-        self._pydevices.unload_device(label)
+        self._pydevices.unload(label)
 
     def unloadAllDevices(self) -> None:
-        self._pydevices.unload_all_devices()
+        self._pydevices.unload_all()
         super().unloadAllDevices()
 
     def initializeDevice(self, label: DeviceLabel | str) -> None:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().initializeDevice(label)
-        return self._pydevices.initialize_device(label)
+        return self._pydevices.initialize(label)
+
+    def initializeAllDevices(self) -> None:
+        super().initializeAllDevices()
+        return self._pydevices.initialize_all()
 
     def getDeviceInitializationState(self, label: str) -> DeviceInitializationState:
-        if label in self._pydevices:
-            return self._pydevices.get_device_initialization_state(label)
-        return super().getDeviceInitializationState(label)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().getDeviceInitializationState(label)
+        return self._pydevices.get_initialization_state(label)
 
     def getLoadedDevices(self) -> tuple[DeviceLabel, ...]:
         return tuple(self._pydevices) + super().getLoadedDevices()
@@ -193,31 +205,31 @@ class UniMMCore(CMMCorePlus):
         return pydevs + super().getLoadedDevicesOfType(devType)
 
     def getDeviceType(self, label: str) -> DeviceType:
-        if label in self._pydevices:
-            return self._pydevices[label].type()
-        return super().getDeviceType(label)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().getDeviceType(label)
+        return self._pydevices[label].type()
 
     def getDeviceLibrary(self, label: DeviceLabel | str) -> AdapterName:
-        if label in self._pydevices:
-            return cast("AdapterName", self._pydevices[label].library())
-        return super().getDeviceLibrary(label)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().getDeviceLibrary(label)
+        return cast("AdapterName", self._pydevices[label].__module__)
 
     def getDeviceName(self, label: DeviceLabel | str) -> DeviceName:
-        if label in self._pydevices:
-            return cast("DeviceName", self._pydevices[label].name())
-        return super().getDeviceName(label)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().getDeviceName(label)
+        return cast("DeviceName", self._pydevices[label].name())
 
     def getDeviceDescription(self, label: DeviceLabel | str) -> str:
-        if label in self._pydevices:
-            return self._pydevices[label].description()
-        return super().getDeviceDescription(label)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().getDeviceDescription(label)
+        return self._pydevices[label].description()
 
     # ---------------------------- Properties ---------------------------
 
     def getDevicePropertyNames(
         self, label: DeviceLabel | str
     ) -> tuple[PropertyName, ...]:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().getDevicePropertyNames(label)
         names = tuple(self._pydevices[label].get_property_names())
         return cast("tuple[PropertyName, ...]", names)
@@ -225,14 +237,14 @@ class UniMMCore(CMMCorePlus):
     def hasProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> bool:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().hasProperty(label, propName)
         return propName in self._pydevices[label].get_property_names()
 
     def getProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> Any:  # broadening to Any, because pydevices can return non-string values?
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().getProperty(label, propName)
         with self._pydevices[label] as dev:
             value = dev.get_property_value(propName)
@@ -249,21 +261,21 @@ class UniMMCore(CMMCorePlus):
     def setProperty(
         self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().setProperty(label, propName, propValue)
         with self._pydevices[label] as dev:
             dev.set_property_value(propName, propValue)
             self._state_cache[(label, propName)] = propValue
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyType(label, propName)
         return self._pydevices[label].property(propName).type
 
     def hasPropertyLimits(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> bool:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().hasPropertyLimits(label, propName)
         with self._pydevices[label] as dev:
             return dev.property(propName).limits is not None
@@ -271,7 +283,7 @@ class UniMMCore(CMMCorePlus):
     def getPropertyLowerLimit(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> float:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyLowerLimit(label, propName)
         with self._pydevices[label] as dev:
             if lims := dev.property(propName).limits:
@@ -281,7 +293,7 @@ class UniMMCore(CMMCorePlus):
     def getPropertyUpperLimit(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> float:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyUpperLimit(label, propName)
         with self._pydevices[label] as dev:
             if lims := dev.property(propName).limits:
@@ -291,7 +303,7 @@ class UniMMCore(CMMCorePlus):
     def getAllowedPropertyValues(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> tuple[str, ...]:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().getAllowedPropertyValues(label, propName)
         with self._pydevices[label] as dev:
             return tuple(dev.property(propName).allowed_values or ())
@@ -299,7 +311,7 @@ class UniMMCore(CMMCorePlus):
     def isPropertyPreInit(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> bool:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().isPropertyPreInit(label, propName)
         with self._pydevices[label] as dev:
             return dev.property(propName).is_pre_init
@@ -307,7 +319,7 @@ class UniMMCore(CMMCorePlus):
     def isPropertyReadOnly(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> bool:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().isPropertyReadOnly(label, propName)
         with self._pydevices[label] as dev:
             return dev.property(propName).is_read_only
@@ -315,7 +327,7 @@ class UniMMCore(CMMCorePlus):
     def isPropertySequenceable(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> bool:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().isPropertySequenceable(label, propName)
         with self._pydevices[label] as dev:
             return dev.is_property_sequenceable(propName)
@@ -323,7 +335,7 @@ class UniMMCore(CMMCorePlus):
     def getPropertySequenceMaxLength(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> int:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().getPropertySequenceMaxLength(label, propName)
         with self._pydevices[label] as dev:
             return dev.property(propName).sequence_max_length
@@ -334,7 +346,7 @@ class UniMMCore(CMMCorePlus):
         propName: PropertyName | str,
         eventSequence: Sequence[str],
     ) -> None:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().loadPropertySequence(label, propName, eventSequence)
         with self._pydevices[label] as dev:
             dev.load_property_sequence(propName, eventSequence)
@@ -342,7 +354,7 @@ class UniMMCore(CMMCorePlus):
     def startPropertySequence(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> None:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().startPropertySequence(label, propName)
         with self._pydevices[label] as dev:
             dev.start_property_sequence(propName)
@@ -350,7 +362,7 @@ class UniMMCore(CMMCorePlus):
     def stopPropertySequence(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> None:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().stopPropertySequence(label, propName)
         with self._pydevices[label] as dev:
             dev.stop_property_sequence(propName)
@@ -358,15 +370,15 @@ class UniMMCore(CMMCorePlus):
     # ------------------------------ Ready State ----------------------------
 
     def deviceBusy(self, label: DeviceLabel | str) -> bool:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().deviceBusy(label)
         with self._pydevices[label] as dev:
             return dev.busy()
 
     def waitForDevice(self, label: DeviceLabel | str) -> None:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().waitForDevice(label)
-        self._pydevices[label].wait_for_device(self.getTimeoutMs())
+        self._pydevices.wait_for(label, self.getTimeoutMs())
 
     # def waitForConfig
 
@@ -378,8 +390,7 @@ class UniMMCore(CMMCorePlus):
 
     def waitForDeviceType(self, devType: int) -> None:
         super().waitForDeviceType(devType)
-        for label in self._pydevices.get_labels_of_type(devType):
-            self._pydevices[label].wait_for_device(self.getTimeoutMs())
+        self._pydevices.wait_for_device_type(devType, self.getTimeoutMs())
 
     def deviceTypeBusy(self, devType: int) -> bool:
         if super().deviceTypeBusy(devType):
@@ -392,19 +403,19 @@ class UniMMCore(CMMCorePlus):
         return False
 
     def getDeviceDelayMs(self, label: DeviceLabel | str) -> float:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().getDeviceDelayMs(label)
         return 0  # pydevices don't yet support delays
 
     def setDeviceDelayMs(self, label: DeviceLabel | str, delayMs: float) -> None:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().setDeviceDelayMs(label, delayMs)
         if delayMs != 0:
             raise NotImplementedError("Python devices do not support delays")
         return
 
     def usesDeviceDelay(self, label: DeviceLabel | str) -> bool:
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().usesDeviceDelay(label)
         return False
 
@@ -432,7 +443,7 @@ class UniMMCore(CMMCorePlus):
     def setXYPosition(self, *args: Any) -> None:
         """Sets the position of the XY stage in microns."""
         label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().setXYPosition(label, *args)
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -447,7 +458,7 @@ class UniMMCore(CMMCorePlus):
     ) -> tuple[float, float]:
         """Obtains the current position of the XY stage in microns."""
         label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return tuple(super().getXYPosition(label))  # type: ignore
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -498,7 +509,7 @@ class UniMMCore(CMMCorePlus):
     def setOriginX(self, xyStageLabel: DeviceLabel | str = "") -> None:
         """Zero the given XY stage's X coordinate at the current position."""
         label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().setOriginX(label)
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -511,7 +522,7 @@ class UniMMCore(CMMCorePlus):
     def setOriginY(self, xyStageLabel: DeviceLabel | str = "") -> None:
         """Zero the given XY stage's Y coordinate at the current position."""
         label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().setOriginY(label)
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -524,7 +535,7 @@ class UniMMCore(CMMCorePlus):
     def setOriginXY(self, xyStageLabel: DeviceLabel | str = "") -> None:
         """Zero the given XY stage's coordinates at the current position."""
         label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().setOriginXY(label)
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -543,7 +554,7 @@ class UniMMCore(CMMCorePlus):
         that setOriginXY() be used instead where available.
         """
         label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().setAdapterOriginXY(label, *args)
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -558,7 +569,7 @@ class UniMMCore(CMMCorePlus):
     def setRelativeXYPosition(self, *args: Any) -> None:
         """Sets the relative position of the XY stage in microns."""
         label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().setRelativeXYPosition(label, *args)
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -570,7 +581,7 @@ class UniMMCore(CMMCorePlus):
         This should only be called for stages that are sequenceable
         """
         label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().startXYStageSequence(label)
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -582,7 +593,7 @@ class UniMMCore(CMMCorePlus):
         This should only be called for stages that are sequenceable
         """
         label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:
+        if label not in self._pydevices:  # pragma: no cover
             return super().stopXYStageSequence(label)
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
@@ -594,7 +605,7 @@ class UniMMCore(CMMCorePlus):
 
     def home(self, xyOrZStageLabel: DeviceLabel | str) -> None:
         """Perform a hardware homing operation for an XY or focus/Z stage."""
-        if (dev := self._pydevices.get(xyOrZStageLabel)) is None:
+        if xyOrZStageLabel not in self._pydevices:
             return super().home(xyOrZStageLabel)
 
         dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
@@ -602,7 +613,7 @@ class UniMMCore(CMMCorePlus):
 
     def stop(self, xyOrZStageLabel: DeviceLabel | str) -> None:
         """Stop the XY or focus/Z stage."""
-        if (dev := self._pydevices.get(xyOrZStageLabel)) is None:
+        if xyOrZStageLabel not in self._pydevices:
             return super().stop(xyOrZStageLabel)
 
         dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
@@ -642,7 +653,7 @@ class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
         with self._lock:
             try:
                 return self._store[key]
-            except KeyError:
+            except KeyError:  # pragma: no cover
                 prop, dev = key
                 raise KeyError(
                     f"Property {prop!r} of device {dev!r} not found in cache"

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import threading
-import time
 from abc import ABC
 from collections import ChainMap
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, final
@@ -17,6 +16,8 @@ if TYPE_CHECKING:
     from collections.abc import KeysView, Sequence
 
     from typing_extensions import Any, Self
+
+    from pymmcore_plus.core._proxy import CMMCoreProxy
 
     from ._properties import PropArg, TDev, TProp
 
@@ -53,17 +54,22 @@ class Device(_Lockable, ABC):
 
     def __init__(self) -> None:
         super().__init__()
-        self._label: str = ""
-        # False -> Not initialized
-        # True -> Initialized successfully
-        # Exception -> Initialization failed, contains the exception
-        # TODO: consider storing this state outside of the class so as to prevent
-        # accidental tinkering from subclasses
-        self._initialized: bool | BaseException = False
-        self._prop_controllers = ChainMap(
-            {},
-            self._cls_prop_controllers,
+
+        # NOTE: The following attributes are here for the core to manipulate.
+        # Device Adapter subclasses should not touch these attributes.
+        self._label_: str = ""
+        self._initialized_: bool | BaseException = False
+        self._prop_controllers_ = ChainMap[str, PropertyController](
+            {}, self._cls_prop_controllers
         )
+        self._core_proxy_: CMMCoreProxy | None = None
+
+    @property
+    def core(self) -> CMMCoreProxy:
+        """The device may use this to access a restricted subset of the Core API."""
+        if self._core_proxy_ is None:
+            raise AttributeError("CoreProxy not set. Has this device been loaded?")
+        return self._core_proxy_
 
     def __init_subclass__(cls) -> None:
         """Initialize the property controllers."""
@@ -80,6 +86,7 @@ class Device(_Lockable, ABC):
         *,
         default_value: TProp | None = None,
         getter: Callable[[TDev], TProp] | None = None,
+        setter: Callable[[TDev, TProp], None] | None = None,
         limits: tuple[int | float, int | float] | None = None,
         sequence_max_length: int = 0,
         allowed_values: Sequence[TProp] | None = None,
@@ -87,7 +94,17 @@ class Device(_Lockable, ABC):
         is_pre_init: bool = False,
         property_type: PropArg = None,
     ) -> None:
-        """Register a property."""
+        """Manually register a property.
+
+        This is an alternative to using the `@pymm_property` decorator.  It can be used
+        to register properties that are not defined in the class body.  This is useful
+        for pure "user-side" properties that are not used by the adapter, but which the
+        adapter may want to access (such as a preference or a configuration setting
+        that doesn't affect the device's behavior, but which the adapter may want to
+        read).
+
+        Properties defined this way are not accessible as class attributes.
+        """
         if property_type is None and default_value is not None:
             property_type = type(default_value)
 
@@ -103,8 +120,8 @@ class Device(_Lockable, ABC):
             is_pre_init=is_pre_init,
             type=PropertyType.create(property_type),
         )
-        controller = PropertyController(property=prop_info, fget=getter)
-        self._prop_controllers[name] = controller
+        controller = PropertyController(property=prop_info, fget=getter, fset=setter)
+        self._prop_controllers_[name] = controller
 
     def initialize(self) -> None:
         """Initialize the device."""
@@ -114,26 +131,18 @@ class Device(_Lockable, ABC):
 
     @final  # may not be overridden
     def get_label(self) -> str:
-        return self._label
+        return self._label_
 
-    @final
-    def set_label(self, value: str) -> None:
-        # for use by the device manager, but the device may know it's own label.
-        self._label = str(value)
-
-    @final
+    @final  # may not be overridden
     @classmethod
     def type(cls) -> DeviceType:
         """Return the type of the device."""
         return cls._TYPE
 
-    def library(self) -> str:
-        """Return the name of the module that implements the device."""
-        return self.__module__
-
-    def name(self) -> str:
+    @classmethod
+    def name(cls) -> str:
         """Return the name of the device."""
-        return f"{self.__class__.__name__}"
+        return f"{cls.__name__}"
 
     def description(self) -> str:
         """Return a description of the device."""
@@ -143,79 +152,64 @@ class Device(_Lockable, ABC):
         """Return `True` if the device is busy."""
         return False
 
-    def wait_for_device(self, timeout_ms: float) -> None:
-        """Wait for the device to not be busy."""
-        deadline = time.perf_counter() + timeout_ms / 1000
-        polling_interval = 0.01
-
-        while True:
-            with self:
-                if not self.busy():
-                    return
-            if time.perf_counter() > deadline:
-                label = self.get_label()
-                raise TimeoutError(
-                    f"Wait for device {label!r} timed out after {timeout_ms} ms"
-                )
-            time.sleep(polling_interval)
-
     # PROPERTIES
 
     def get_property_names(self) -> KeysView[str]:
         """Return the names of the properties."""
-        return self._cls_prop_controllers.keys()
+        return self._prop_controllers_.keys()
 
     def property(self, prop_name: str) -> PropertyInfo:
         """Return the property controller for a property."""
-        return self._cls_prop_controllers[prop_name].property
+        return self._prop_controllers_[prop_name].property
 
     def get_property_value(self, prop_name: str) -> Any:
         """Return the value of a property."""
         # TODO: catch errors
-        ctrl = self._cls_prop_controllers[prop_name]
+        ctrl = self._prop_controllers_[prop_name]
         if ctrl.fget is None:
             return ctrl.property.last_value
-        return self._cls_prop_controllers[prop_name].__get__(self, self.__class__)
+        return self._prop_controllers_[prop_name].__get__(self, self.__class__)
 
     def set_property_value(self, prop_name: str, value: Any) -> None:
         """Set the value of a property."""
         # TODO: catch errors
-        ctrl = self._cls_prop_controllers[prop_name]
+        ctrl = self._prop_controllers_[prop_name]
         if ctrl.fset is None:
             ctrl.property.last_value = value
-        self._cls_prop_controllers[prop_name].__set__(self, value)
+            return
+        self._prop_controllers_[prop_name].__set__(self, value)
 
     def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
         """Load a sequence into a property."""
-        self._cls_prop_controllers[prop_name].load_sequence(self, sequence)
+        self._prop_controllers_[prop_name].load_sequence(self, sequence)
 
     def start_property_sequence(self, prop_name: str) -> None:
         """Start a sequence of a property."""
-        self._cls_prop_controllers[prop_name].start_sequence(self)
+        self._prop_controllers_[prop_name].start_sequence(self)
 
     def stop_property_sequence(self, prop_name: str) -> None:
         """Stop a sequence of a property."""
-        self._cls_prop_controllers[prop_name].stop_sequence(self)
+        self._prop_controllers_[prop_name].stop_sequence(self)
 
     def set_property_allowed_values(
         self, prop_name: str, allowed_values: Sequence[Any]
     ) -> None:
         """Set the allowed values of a property."""
-        self._cls_prop_controllers[prop_name].property.allowed_values = allowed_values
+        self._prop_controllers_[prop_name].property.allowed_values = allowed_values
 
     def set_property_limits(
         self, prop_name: str, limits: tuple[float, float] | None
     ) -> None:
         """Set the limits of a property."""
-        self._cls_prop_controllers[prop_name].property.limits = limits
+        self._prop_controllers_[prop_name].property.limits = limits
 
     def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
         """Set the sequence max length of a property."""
-        self._cls_prop_controllers[prop_name].property.sequence_max_length = max_length
+        self._prop_controllers_[prop_name].property.sequence_max_length = max_length
 
     def is_property_sequenceable(self, prop_name: str) -> bool:
         """Return `True` if the property is sequenceable."""
-        return self._cls_prop_controllers[prop_name].is_sequenceable
+        return self._prop_controllers_[prop_name].is_sequenceable
 
 
 SeqT = TypeVar("SeqT")

@@ -47,6 +47,7 @@ if TYPE_CHECKING:
     import numpy as np
     from useq import MDAEvent
 
+    from pymmcore_plus.core._proxy import CMMCoreProxy
     from pymmcore_plus.mda._runner import SingleOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
@@ -2198,6 +2199,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         ```
         """
         return can_sequence_events(self, e1, e2, cur_length)
+
+    def create_proxy(self) -> CMMCoreProxy:
+        """Create a restricted proxy object this `CMMCorePlus` instance."""
+        from ._proxy import create_core_proxy
+
+        return create_core_proxy(self)
 
 
 for name in (

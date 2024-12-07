@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, TypeVar, cast, overload
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from typing import TYPE_CHECKING, TypeVar, cast
 
 from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
 
@@ -12,19 +14,10 @@ if TYPE_CHECKING:
 
     from pymmcore import DeviceLabel
 
-T = TypeVar("T")
+    from pymmcore_plus.core._proxy import CMMCoreProxy
+
 DevT = TypeVar("DevT", bound=Device)
 logger = logging.getLogger(__name__)
-
-
-class NULL:
-    """Sentinel value for default arguments."""
-
-    def __bool__(self) -> bool:
-        return False
-
-
-_NULL = NULL()
 
 
 class PyDeviceManager:
@@ -35,52 +28,94 @@ class PyDeviceManager:
     def __init__(self) -> None:
         self._devices: dict[str, Device] = {}
 
-    def load_device(self, label: str, device: Device) -> None:
+    def load(self, label: str, device: Device, proxy: CMMCoreProxy) -> None:
         """Load a device and assign it a label."""
-        if label in self._devices:
+        if label in self._devices:  # pragma: no cover
+            # we probably won't ever get here because the core checks this too
             raise ValueError(f"The specified device label {label!r} is already in use")
-        # TODO other stuff
         self._devices[label] = device
+        device._label_ = label
+        device._core_proxy_ = proxy
 
-    def initialize_device(self, label: str) -> None:
+    def initialize(self, label: str) -> None:
         """Initialize the device with the given label."""
         device = self[label]
         try:
-            # we're setting this *just* before calling initialize so that
-            # properties registered in the initialize method can know that they are
-            # NOT pre-init propss
-            device._initialized = True  # noqa: SLF001
             device.initialize()
+            device._initialized_ = True
         except Exception as e:
-            device._initialized = e  # noqa: SLF001
+            device._initialized_ = e
             logger.exception(f"Failed to initialize device {label!r}")
 
-    def get_device_initialization_state(self, label: str) -> DeviceInitializationState:
+    def initialize_all(self) -> None:
+        if not (labels := self.get_labels_of_type(DeviceType.Any)):
+            return  # pragma: no cover
+
+        # Initialize all devices in parallel
+        with ThreadPoolExecutor() as executor:
+            for future in as_completed(
+                executor.submit(self.initialize, label) for label in labels
+            ):
+                future.result()
+
+    def wait_for(
+        self, label: str, timeout_ms: float = 5000, polling_interval: float = 0.01
+    ) -> None:
+        """Wait for the device to not be busy."""
+        device = self[label]
+        deadline = time.perf_counter() + timeout_ms / 1000
+
+        while True:
+            with device:
+                if not device.busy():
+                    return
+            if time.perf_counter() > deadline:
+                raise TimeoutError(
+                    f"Wait for device {label!r} timed out after {timeout_ms} ms"
+                )
+            time.sleep(polling_interval)
+
+    def wait_for_device_type(self, dev_type: int, timeout_ms: float = 5000) -> None:
+        if not (labels := self.get_labels_of_type(dev_type)):
+            return  # pragma: no cover
+
+        # Wait for all python devices of the given type in parallel
+        with ThreadPoolExecutor() as executor:
+            futures = (
+                executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
+            )
+            for future in as_completed(futures):
+                future.result()  # Raises any exceptions from wait_for_device
+
+    def get_initialization_state(self, label: str) -> DeviceInitializationState:
         """Return the initialization state of the device with the given label."""
-        state = self[label]._initialized  # noqa: SLF001
+        state = self[label]._initialized_
         if state is True:
             return DeviceInitializationState.InitializedSuccessfully
         if state is False:
             return DeviceInitializationState.Uninitialized
         return DeviceInitializationState.InitializationFailed
 
-    def unload_device(self, device: str | Device) -> None:
+    def unload(self, label_or_device: str | Device) -> None:
         """Unload a loaded device by label or instance."""
-        if isinstance(device, Device):
-            label = next((k for k, v in self._devices.items() if v is device), None)
+        if isinstance(label_or_device, Device):
+            if label_or_device not in self._devices.values():
+                raise ValueError("Device instance is not loaded")  # pragma: no cover
+            _device, label = label_or_device, label_or_device._label_
         else:
-            label = device
-        if label not in self._devices:
-            raise KeyError(f"No device with label '{label!r}'")
-        with self._devices[label] as dev:
+            _device, label = self[label_or_device], label_or_device
+
+        with _device as dev:
             dev.shutdown()
-            dev._initialized = False  # noqa: SLF001
+            dev._initialized_ = False
+            dev._label_ = ""
+            dev._core_proxy_ = None
         self._devices.pop(label)
 
-    def unload_all_devices(self) -> None:
+    def unload_all(self) -> None:
         """Unload all loaded devices."""
         for label in list(self._devices):
-            self.unload_device(label)
+            self.unload(label)
 
     def __len__(self) -> int:
         """Return the number of loaded device labels."""
@@ -100,22 +135,15 @@ class PyDeviceManager:
             raise KeyError(f"No device with label '{label!r}'")
         return self._devices[label]
 
-    @overload
-    def get(self, label: str, *, require_initialized: bool = ...) -> Device: ...
-    @overload
-    def get(
-        self, label: str, default: T, *, require_initialized: bool = ...
-    ) -> Device | T: ...
-    def get(
-        self, label: str, default: T | NULL = _NULL, *, require_initialized: bool = True
-    ) -> Device | T:
-        """Get device by label, returning None if it does not exist."""
-        if label not in self._devices:
-            if isinstance(default, NULL):
-                raise KeyError(f"No device with label '{label!r}'")
-            return default
-        device = self._devices[label]
-        if require_initialized and device._initialized is not True:  # noqa: SLF001
+    def get_initialized(
+        self, label: str, *, require_initialized: bool = True
+    ) -> Device:
+        """Get device by label, returning None if it does not exist.
+
+        This method is a convenience wrapper around __getitem__ that ensures the device
+        is both loaded and initialized.
+        """
+        if (device := self[label])._initialized_ is not True and require_initialized:
             raise ValueError(f"Device {label!r} is not initialized")
         return device
 
@@ -133,7 +161,7 @@ class PyDeviceManager:
         if isinstance(device, types):
             return device
         raise ValueError(
-            f"Device {label!r} is of the wrong type for the requested operation"
+            f"Device {label!r} is the wrong device type for the requested operation"
         )
 
     def get_labels_of_type(self, dev_type: int) -> tuple[DeviceLabel, ...]:
