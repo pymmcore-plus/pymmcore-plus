@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum, IntEnum
+from enum import Enum, IntEnum, auto
 from typing import Any, Literal
 
 import pymmcore_plus._pymmcore as pymmcore
@@ -157,6 +157,7 @@ class PropertyType(IntEnum):
     String = pymmcore.String
     Float = pymmcore.Float
     Integer = pymmcore.Integer
+    Boolean = auto()  # not supported in pymmcore
 
     def to_python(self) -> type | None:
         return {0: None, 1: str, 2: float, 3: int}[self]
@@ -182,6 +183,9 @@ class PropertyType(IntEnum):
                 return PropertyType.Integer
             elif value is str:
                 return PropertyType.String
+            elif value is bool:
+                return PropertyType.Boolean
+
         raise TypeError(
             f"Property type must be a PropertyType enum member, "
             f"a string, or a type. Got: {type(value)}"

@@ -24,7 +24,7 @@ if TYPE_CHECKING:
     from ._device import Device
 
     PropArg: TypeAlias = (
-        PropertyType | type | Literal["float", "integer", "string"] | None
+        PropertyType | type | Literal["float", "integer", "string", "boolean"] | None
     )
 
 TDev = TypeVar("TDev", bound="Device")
@@ -116,7 +116,7 @@ class PropertyController(Generic[TDev, TProp]):
     def __init__(
         self,
         property: PropertyInfo[TProp],
-        fget: Callable[[TDev], TProp],  # there must be a getter
+        fget: Callable[[TDev], TProp] | None = None,
         fset: Callable[[TDev, TProp], None] | None = None,
         fseq_load: Callable[[TDev, Sequence[TProp]], None] | None = None,
         fseq_start: Callable[[TDev], None] | None = None,
@@ -136,6 +136,8 @@ class PropertyController(Generic[TDev, TProp]):
         """Update the property value by calling the getter on the Device instance."""
         if instance is None:
             return self
+        if self.fget is None:
+            raise AttributeError("Unreadable property")
         val = self.fget(instance)  # cache the value
         object.__setattr__(self.property, "last_value", val)
         return val
@@ -144,7 +146,7 @@ class PropertyController(Generic[TDev, TProp]):
     def __set__(self, instance: TDev, value: TProp) -> None:
         """Update the property value by calling the setter on the Device instance."""
         if self.fset is None:
-            raise AttributeError("can't set attribute")
+            raise AttributeError("Unsettable property")
         value = self.validate(value)
         self.fset(instance, value)
 
@@ -243,7 +245,7 @@ def pymm_property(
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
     name: str | None = ...,
-    prop_type: PropArg = ...,
+    property_type: PropArg = ...,
 ) -> Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]: ...
 @overload  # when used with keyword arguments including limits
 def pymm_property(
@@ -253,7 +255,7 @@ def pymm_property(
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
     name: str | None = ...,
-    prop_type: PropArg = ...,
+    property_type: PropArg = ...,
 ) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
 @overload  # when used with keyword arguments without allowed_values or limits
 def pymm_property(
@@ -262,7 +264,7 @@ def pymm_property(
     is_read_only: bool = ...,
     is_pre_init: bool = ...,
     name: str | None = ...,
-    prop_type: PropArg = ...,
+    property_type: PropArg = ...,
 ) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
 def pymm_property(
     fget: Callable[[TDev], TProp] | None = None,
@@ -273,7 +275,7 @@ def pymm_property(
     is_read_only: bool = False,
     is_pre_init: bool = False,
     name: str | None = None,  # taken from fget if None
-    prop_type: PropArg = None,
+    property_type: PropArg = None,
 ) -> (
     PropertyController[TDev, TProp]
     | Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]
@@ -350,7 +352,7 @@ def pymm_property(
     """
 
     def _inner(
-        fget: Callable[[TDev], TProp], _pt: PropArg = prop_type
+        fget: Callable[[TDev], TProp], _pt: PropArg = property_type
     ) -> PropertyController[TDev, TProp]:
         prop = PropertyInfo(
             name=name or fget.__name__,
