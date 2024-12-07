@@ -382,9 +382,11 @@ class UniMMCore(CMMCorePlus):
 
     # def waitForConfig
 
+    # probably only needed because C++ method is not virtual
     def systemBusy(self) -> bool:
         return self.deviceTypeBusy(DeviceType.AnyType)
 
+    # probably only needed because C++ method is not virtual
     def waitForSystem(self) -> None:
         self.waitForDeviceType(DeviceType.AnyType)
 
@@ -464,6 +466,7 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             return dev.get_position_um()
 
+    # reimplementation needed because the C++ method are not virtual
     @overload
     def getXPosition(self) -> float: ...
     @overload
@@ -472,6 +475,7 @@ class UniMMCore(CMMCorePlus):
         """Obtains the current position of the X axis of the XY stage in microns."""
         return self.getXYPosition(xyStageLabel)[0]
 
+    # reimplementation needed because the C++ method are not virtual
     @overload
     def getYPosition(self) -> float: ...
     @overload
@@ -482,11 +486,17 @@ class UniMMCore(CMMCorePlus):
 
     def getXYStageSequenceMaxLength(self, xyStageLabel: DeviceLabel | str) -> int:
         """Gets the maximum length of an XY stage's position sequence."""
-        return super().getXYStageSequenceMaxLength(xyStageLabel)
+        if xyStageLabel not in self._pydevices:  # pragma: no cover
+            return super().getXYStageSequenceMaxLength(xyStageLabel)
+        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
+        return dev.get_sequence_max_length()
 
     def isXYStageSequenceable(self, xyStageLabel: DeviceLabel | str) -> bool:
         """Queries XY stage if it can be used in a sequence."""
-        return super().isXYStageSequenceable(xyStageLabel)
+        if xyStageLabel not in self._pydevices:  # pragma: no cover
+            return super().isXYStageSequenceable(xyStageLabel)
+        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
+        return dev.is_sequenceable()
 
     def loadXYStageSequence(
         self,
@@ -500,7 +510,17 @@ class UniMMCore(CMMCorePlus):
         xSequence and ySequence must have the same length. This should only be called
         for XY stages that are sequenceable
         """
-        super().loadXYStageSequence(xyStageLabel, xSequence, ySequence)
+        if xyStageLabel not in self._pydevices:  # pragma: no cover
+            return super().loadXYStageSequence(xyStageLabel, xSequence, ySequence)
+        if len(xSequence) != len(ySequence):
+            raise ValueError("xSequence and ySequence must have the same length")
+        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
+        seq = tuple(zip(xSequence, ySequence))
+        if len(seq) > dev.get_sequence_max_length():
+            raise ValueError(
+                f"Sequence is too long. Max length is {dev.get_sequence_max_length()}"
+            )
+        dev.send_sequence(seq)
 
     @overload
     def setOriginX(self) -> None: ...

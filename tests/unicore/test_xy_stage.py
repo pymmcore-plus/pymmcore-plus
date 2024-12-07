@@ -1,3 +1,5 @@
+import pytest
+
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.experimental.unicore import (
     UniMMCore,
@@ -54,15 +56,19 @@ def test_unicore_xy_stage():
     # load a python XY stage device
     stage = MyStage()
 
-    core.load_py_device(XYDEV, stage)
+    core.loadPyDevice(XYDEV, stage)
     core.initializeDevice(XYDEV)
-
     # set the core XY stage device to the python device, dropping the C-side device
     core.setXYStageDevice(XYDEV)
+    assert not core.isXYStageSequenceable(XYDEV)
+    assert core.getXYStageSequenceMaxLength(XYDEV) == 0
+
     assert core.getXYStageDevice() == XYDEV
     NEW_POS = (10, 20)
     core.setXYPosition(*NEW_POS)
     assert core.getXYPosition() == NEW_POS
+    assert round(core.getXPosition()) == NEW_POS[0]
+    assert round(core.getYPosition()) == NEW_POS[1]
 
     # can still set and query the C-side device directly
     core.waitForDevice("XY")
@@ -88,6 +94,7 @@ def test_unicore_xy_stage():
     assert core._pycore.current(Keyword.CoreXYStage) is None
 
 
+# this one is also sequenceable
 class MyStepperStage(XYStepperStageDevice):
     def __init__(self) -> None:
         super().__init__()
@@ -111,6 +118,18 @@ class MyStepperStage(XYStepperStageDevice):
     def home(self) -> None:
         self.HOMED = True
 
+    def get_sequence_max_length(self) -> int:
+        return 10
+
+    def send_sequence(self, sequence: tuple[tuple[float, float], ...]) -> None:
+        self.SEQ_SENT = sequence
+
+    def start_sequence(self) -> None:
+        self.SEQ_STARTED = True
+
+    def stop_sequence(self) -> None:
+        self.SEQ_STOPPED = True
+
 
 def test_unicore_xy_stepper_stage():
     core = UniMMCore()
@@ -118,7 +137,7 @@ def test_unicore_xy_stepper_stage():
     # load a python XY stage device
     stage = MyStepperStage()
 
-    core.load_py_device(XYDEV, stage)
+    core.loadPyDevice(XYDEV, stage)
     core.initializeDevice(XYDEV)
     core.setXYStageDevice(XYDEV)
 
@@ -146,3 +165,28 @@ def test_unicore_xy_stepper_stage():
 
     core.setAdapterOriginXY(500, 600)
     assert core.getXYPosition() == (500, 600)
+
+
+def test_unicore_xy_stepper_stage_sequenceable():
+    core = UniMMCore()
+    dev = MyStepperStage()
+    core.loadPyDevice(XYDEV, dev)
+    core.initializeDevice(XYDEV)
+
+    assert core.isXYStageSequenceable(XYDEV)
+    assert core.getXYStageSequenceMaxLength(XYDEV) == 10
+
+    with pytest.raises(ValueError, match="must have the same length"):
+        core.loadXYStageSequence(XYDEV, range(10), range(10, 21))
+
+    with pytest.raises(ValueError, match="Sequence is too long"):
+        core.loadXYStageSequence(XYDEV, range(100), range(100))
+
+    core.loadXYStageSequence(XYDEV, range(10), range(10, 20))
+    assert dev.SEQ_SENT == tuple(zip(range(10), range(10, 20)))
+
+    core.startXYStageSequence(XYDEV)
+    assert dev.SEQ_STARTED
+
+    core.stopXYStageSequence(XYDEV)
+    assert dev.SEQ_STOPPED

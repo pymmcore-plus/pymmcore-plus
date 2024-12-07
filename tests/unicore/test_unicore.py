@@ -178,6 +178,14 @@ def test_waiting():
 
     core.loadPyDevice(PYDEV, MyDevice())
     core.initializeDevice(PYDEV)
+
+    assert not core.deviceBusy(PYDEV)
+    core.waitForDevice(PYDEV)
+    core.waitForSystem()
+
+    assert not core.deviceTypeBusy(DeviceType.Any)
+    assert not core.systemBusy()
+
     core.setTimeoutMs(1000)
     pydev_mock = MagicMock(wraps=core._pydevices)
     core._pydevices = pydev_mock
@@ -220,10 +228,6 @@ def test_unicore_props():
     with pytest.raises(ValueError, match="Non-numeric value"):
         core.setProperty(PYDEV, PROP_B, "bad")
 
-    assert not core.deviceBusy(PYDEV)
-    core.waitForDevice(PYDEV)
-    core.waitForSystem()
-
 
 def test_property_sequences():
     core = UniMMCore()
@@ -255,3 +259,28 @@ def test_property_sequences():
 
     core.stopPropertySequence(PYDEV, PROP_S)
     assert dev._prop_stopped
+
+
+def test_device_can_update_props():
+    core = UniMMCore()
+    dev = MyDevice()
+    core.loadPyDevice(PYDEV, dev)
+    core.initializeDevice(PYDEV)
+
+    with pytest.raises(ValueError, match="20 exceeds the maximum allowed"):
+        core.loadPropertySequence(PYDEV, PROP_S, [1, 2] * 10)
+
+    dev.set_property_sequence_max_length(PROP_S, 20)
+    core.loadPropertySequence(PYDEV, PROP_S, [1, 2] * 10)
+    assert dev._prop_s_seq == (1, 2) * 10
+
+    with pytest.raises(ValueError, match="not within the allowed range"):
+        core.setProperty(PYDEV, PROP_B, 200)
+    dev.set_property_limits(PROP_B, (0.0, 200.0))
+    core.setProperty(PYDEV, PROP_B, 200)
+
+    with pytest.raises(ValueError, match="Value '3' is not allowed"):
+        core.loadPropertySequence(PYDEV, PROP_S, [1, 2, 3])
+
+    dev.set_property_allowed_values(PROP_S, [1, 2, 3])
+    core.loadPropertySequence(PYDEV, PROP_S, [1, 2, 3])
