@@ -1,4 +1,5 @@
 import weakref
+from collections.abc import Sequence
 from types import ModuleType
 from unittest.mock import MagicMock
 
@@ -8,19 +9,59 @@ from pymmcore_plus import DeviceInitializationState, DeviceType, PropertyType
 from pymmcore_plus.experimental.unicore import Device, UniMMCore, pymm_property
 
 DOC = """Example generic device."""
-PROP_NAME = "propA"  # must match below
+PROP_A = "propA"  # must match below
+PROP_B = "propB"  # must match below
+PROP_S = "propS"  # must match below
 ERR = RuntimeError("Bad device")
 PYDEV = "pyDev"
+MAX_LEN = 4
 
 
 class RandomClass: ...
 
 
 class MyDevice(Device):
-    @pymm_property(limits=(0.0, 100.0))
-    def propA(self) -> float:
+    @pymm_property
+    def propA(self) -> str:
         """Some property."""
-        return 1
+        return "hi"
+
+    _prop_b = 10.0
+
+    @pymm_property(limits=(0.0, 100.0))
+    def propB(self) -> float:
+        """Some other property."""
+        return self._prop_b
+
+    @propB.setter
+    def _set_prop_b(self, value: int) -> None:
+        self._prop_b = value
+
+    _prop_s = 1
+    _prop_s_seq: tuple[int, ...] = ()
+    _prop_started = False
+    _prop_stopped = False
+
+    @pymm_property(allowed_values=[1, 2, 4, 8], sequence_max_length=MAX_LEN)
+    def propS(self) -> int:
+        """Some sequence property."""
+        return self._prop_s
+
+    @propS.setter
+    def _set_prop_s(self, value: int) -> None:
+        self._prop_s = value
+
+    @propS.sequence_loader
+    def _load_prop_s(self, sequence: Sequence[int]) -> None:
+        self._prop_s_seq = tuple(sequence)
+
+    @propS.sequence_starter
+    def _start_prop_s(self) -> None:
+        self._prop_started = True
+
+    @propS.sequence_stopper
+    def _stop_prop_s(self) -> None:
+        self._prop_stopped = True
 
 
 class BadDevice(Device):
@@ -150,16 +191,67 @@ def test_unicore_props():
     core.load_py_device(PYDEV, MyDevice())
     core.initializeDevice(PYDEV)
 
-    assert PROP_NAME in core.getDevicePropertyNames(PYDEV)
-    assert core.hasProperty(PYDEV, PROP_NAME)
-    assert core.isPropertyPreInit(PYDEV, PROP_NAME) is False
-    assert core.isPropertyReadOnly(PYDEV, PROP_NAME) is False
-    assert core.hasPropertyLimits(PYDEV, PROP_NAME)
-    assert core.getPropertyLowerLimit(PYDEV, PROP_NAME) == 0.0
-    assert core.getPropertyUpperLimit(PYDEV, PROP_NAME) == 100.0
-    assert core.getPropertyType(PYDEV, PROP_NAME) == PropertyType.Float
-    assert core.getProperty(PYDEV, PROP_NAME) == 1.0
-    assert core.getPropertyFromCache(PYDEV, PROP_NAME) == 1.0
+    assert PROP_A in core.getDevicePropertyNames(PYDEV)
+    assert core.hasProperty(PYDEV, PROP_A)
+    assert core.isPropertyPreInit(PYDEV, PROP_A) is False
+    assert core.isPropertyReadOnly(PYDEV, PROP_A) is True
+    assert core.isPropertyReadOnly(PYDEV, PROP_B) is False
+    assert core.hasPropertyLimits(PYDEV, PROP_B)
+    assert not core.hasPropertyLimits(PYDEV, PROP_A)
+    assert core.getPropertyLowerLimit(PYDEV, PROP_B) == 0.0
+    assert core.getPropertyUpperLimit(PYDEV, PROP_B) == 100.0
+    assert core.getPropertyType(PYDEV, PROP_A) == PropertyType.String
+    assert core.getPropertyType(PYDEV, PROP_B) == PropertyType.Float
+
+    assert core.getProperty(PYDEV, PROP_A) == "hi"
+    assert core.getPropertyFromCache(PYDEV, PROP_A) == "hi"
+    with pytest.raises(KeyError, match="not found in cache"):
+        core.getPropertyFromCache(PYDEV, PROP_B)
+
+    with pytest.raises(ValueError, match="Property 'propA' is read-only"):
+        core.setProperty(PYDEV, PROP_A, 50.0)
+
+    core.setProperty(PYDEV, PROP_B, 50)
+    assert core.getProperty(PYDEV, PROP_B) == 50.0
+
+    with pytest.raises(ValueError, match="not within the allowed range"):
+        core.setProperty(PYDEV, PROP_B, 101.0)
+
+    with pytest.raises(ValueError, match="Non-numeric value"):
+        core.setProperty(PYDEV, PROP_B, "bad")
 
     assert not core.deviceBusy(PYDEV)
     core.waitForDevice(PYDEV)
+    core.waitForSystem()
+
+
+def test_property_sequences():
+    core = UniMMCore()
+
+    dev = MyDevice()
+    core.loadPyDevice(PYDEV, dev)
+    core.initializeDevice(PYDEV)
+
+    assert not core.isPropertySequenceable(PYDEV, PROP_A)
+    assert core.isPropertySequenceable(PYDEV, PROP_S)
+    assert core.getPropertySequenceMaxLength(PYDEV, PROP_S) == MAX_LEN
+
+    with pytest.raises(RuntimeError, match="'propA' is not sequenceable"):
+        core.loadPropertySequence(PYDEV, PROP_A, [1, 2, 3])
+    with pytest.raises(RuntimeError, match="'propA' is not sequenceable"):
+        core.startPropertySequence(PYDEV, PROP_A)
+
+    with pytest.raises(ValueError, match="Value '3' is not allowed"):
+        core.loadPropertySequence(PYDEV, PROP_S, [1, 2, 3])
+
+    with pytest.raises(ValueError, match="20 exceeds the maximum allowed"):
+        core.loadPropertySequence(PYDEV, PROP_S, [1, 2] * 10)
+
+    core.loadPropertySequence(PYDEV, PROP_S, [1, 2, 4])
+    assert dev._prop_s_seq == (1, 2, 4)
+
+    core.startPropertySequence(PYDEV, PROP_S)
+    assert dev._prop_started
+
+    core.stopPropertySequence(PYDEV, PROP_S)
+    assert dev._prop_stopped

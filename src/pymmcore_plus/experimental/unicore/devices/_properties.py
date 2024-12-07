@@ -74,7 +74,7 @@ class PropertyInfo(Generic[TProp]):
     type: PropertyType = PropertyType.Undef
 
     allowed_values: Sequence[TProp] | None = None
-    is_read_only: bool = False
+    is_read_only: bool | None = None
     is_pre_init: bool = False
 
     @property
@@ -84,7 +84,7 @@ class PropertyInfo(Generic[TProp]):
 
     def __post_init__(self) -> None:
         """Ensure sound property configuration."""
-        if self.allowed_values and self.limits:
+        if self.allowed_values and self.limits:  # pragma: no cover
             raise ValueError(
                 f"Property {self.name!r} cannot have both allowed values and limits. "
                 "Please choose one or the other."
@@ -132,11 +132,19 @@ class PropertyController(Generic[TDev, TProp]):
         self.doc = doc
 
     # same as "Property::Update" in CMMCore
-    def __get__(self, instance: TDev, owner: type[TDev]) -> TProp:
+    @overload
+    def __get__(
+        self, instance: None, owner: type[TDev]
+    ) -> PropertyController[TDev, TProp]: ...
+    @overload
+    def __get__(self, instance: TDev, owner: type[TDev]) -> TProp: ...
+    def __get__(
+        self, instance: TDev | None, owner: type[TDev]
+    ) -> TProp | PropertyController[TDev, TProp]:
         """Update the property value by calling the getter on the Device instance."""
-        if instance is None:
+        if instance is None:  # pragma: no cover
             return self
-        if self.fget is None:
+        if self.fget is None:  # pragma: no cover
             raise AttributeError("Unreadable property")
         val = self.fget(instance)  # cache the value
         object.__setattr__(self.property, "last_value", val)
@@ -145,7 +153,7 @@ class PropertyController(Generic[TDev, TProp]):
     # same as "Property::Apply" in CMMCore
     def __set__(self, instance: TDev, value: TProp) -> None:
         """Update the property value by calling the setter on the Device instance."""
-        if self.fset is None:
+        if self.fset is None:  # pragma: no cover
             raise AttributeError("Unsettable property")
         value = self.validate(value)
         self.fset(instance, value)
@@ -182,11 +190,27 @@ class PropertyController(Generic[TDev, TProp]):
             and self.fseq_start is not None
         )
 
+    @property
+    def is_read_only(self) -> bool:
+        """Return True if the property is read-only.
+
+        We consider a property read-only either if the device has explicitly set it as
+        such, or if the property has a getter but no setter.
+        If it has *neither* a getter nor a setter, and is not explicitly marked as
+        read-only, it is considered writeable: this is assumed to be a "configuration"
+        property that the device adapter cares about, but which is likely never sent
+        to the device itself.
+        """
+        return self.property.is_read_only is True or (
+            self.fset is None and self.fget is not None
+        )
+
     def load_sequence(self, instance: TDev, sequence: Sequence[TProp]) -> None:
         """Send a sequence of property values to the device."""
         if self.fseq_load is None:
             raise RuntimeError(
-                f"Property {self.property.name!r} has no sequence loader"
+                f"Property {self.property.name!r} is not sequenceable. "
+                "No sequence loader is defined."
             )
         if (seq_len := len(sequence)) > (max_len := self.property.sequence_max_length):
             raise ValueError(
@@ -200,7 +224,8 @@ class PropertyController(Generic[TDev, TProp]):
         """Tell the device to start the previously loaded sequence."""
         if self.fseq_start is None:
             raise RuntimeError(
-                f"Property {self.property.name!r} has no sequence starter"
+                f"Property {self.property.name!r} is not sequenceable. "
+                "No sequence starter is defined."
             )
         self.fseq_start(instance)
 
@@ -215,6 +240,8 @@ class PropertyController(Generic[TDev, TProp]):
     def setter(self, fset: Callable[[TDev, TProp], None]) -> Self:
         """Decorate a method to set the property on the device."""
         self.fset = fset
+        if self.property.is_read_only is None:
+            self.property.is_read_only = False
         return self
 
     def sequence_loader(
@@ -242,7 +269,7 @@ def pymm_property(
     *,
     allowed_values: Sequence[TProp] | None,  # cannot be combined with limits
     sequence_max_length: int = ...,
-    is_read_only: bool = ...,
+    is_read_only: bool | None = ...,
     is_pre_init: bool = ...,
     name: str | None = ...,
     property_type: PropArg = ...,
@@ -252,7 +279,7 @@ def pymm_property(
     *,
     limits: tuple[TLim, TLim] | None,  # cannot be combined with allowed_values
     sequence_max_length: int = ...,
-    is_read_only: bool = ...,
+    is_read_only: bool | None = ...,
     is_pre_init: bool = ...,
     name: str | None = ...,
     property_type: PropArg = ...,
@@ -261,7 +288,7 @@ def pymm_property(
 def pymm_property(
     *,
     sequence_max_length: int = ...,
-    is_read_only: bool = ...,
+    is_read_only: bool | None = ...,
     is_pre_init: bool = ...,
     name: str | None = ...,
     property_type: PropArg = ...,
@@ -272,7 +299,7 @@ def pymm_property(
     limits: tuple[TLim, TLim] | None = None,
     sequence_max_length: int = 0,
     allowed_values: Sequence[TProp] | None = None,
-    is_read_only: bool = False,
+    is_read_only: bool | None = None,
     is_pre_init: bool = False,
     name: str | None = None,  # taken from fget if None
     property_type: PropArg = None,
@@ -360,6 +387,10 @@ def pymm_property(
             limits=limits,
             sequence_max_length=sequence_max_length,
             allowed_values=allowed_values,
+            # all @pymm_property properties are read-only by default
+            # until they are decorated with a setter
+            # this does not apply to properties that are manually registered
+            # with Device.register_property.
             is_read_only=is_read_only,
             is_pre_init=is_pre_init,
             type=PropertyType.create(_pt or fget.__annotations__.get("return", None)),

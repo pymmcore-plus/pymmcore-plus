@@ -322,7 +322,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().isPropertyReadOnly(label, propName)
         with self._pydevices[label] as dev:
-            return dev.property(propName).is_read_only
+            return dev.is_property_read_only(propName)
 
     def isPropertySequenceable(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -344,7 +344,7 @@ class UniMMCore(CMMCorePlus):
         self,
         label: DeviceLabel | str,
         propName: PropertyName | str,
-        eventSequence: Sequence[str],
+        eventSequence: Sequence[Any],
     ) -> None:
         if label not in self._pydevices:  # pragma: no cover
             return super().loadPropertySequence(label, propName, eventSequence)

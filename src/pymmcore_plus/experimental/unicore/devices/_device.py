@@ -174,10 +174,12 @@ class Device(_Lockable, ABC):
         """Set the value of a property."""
         # TODO: catch errors
         ctrl = self._prop_controllers_[prop_name]
-        if ctrl.fset is None:
-            ctrl.property.last_value = value
-            return
-        self._prop_controllers_[prop_name].__set__(self, value)
+        if ctrl.is_read_only:
+            raise ValueError(f"Property {prop_name!r} is read-only.")
+        if ctrl.fset is not None:
+            ctrl.__set__(self, value)
+        else:
+            ctrl.property.last_value = ctrl.validate(value)
 
     def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
         """Load a sequence into a property."""
@@ -210,6 +212,10 @@ class Device(_Lockable, ABC):
     def is_property_sequenceable(self, prop_name: str) -> bool:
         """Return `True` if the property is sequenceable."""
         return self._prop_controllers_[prop_name].is_sequenceable
+
+    def is_property_read_only(self, prop_name: str) -> bool:
+        """Return `True` if the property is read-only."""
+        return self._prop_controllers_[prop_name].is_read_only
 
 
 SeqT = TypeVar("SeqT")
