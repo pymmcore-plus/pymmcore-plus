@@ -1,3 +1,5 @@
+from unittest.mock import Mock
+
 import pytest
 
 from pymmcore_plus.core._constants import Keyword
@@ -133,6 +135,8 @@ class MyStepperStage(XYStepperStageDevice):
 
 def test_unicore_xy_stepper_stage():
     core = UniMMCore()
+    mock = Mock()
+    core.events.XYStagePositionChanged.connect(mock)
 
     # load a python XY stage device
     stage = MyStepperStage()
@@ -143,6 +147,7 @@ def test_unicore_xy_stepper_stage():
 
     # test position
     core.setXYPosition(100.5, 200.5)
+    mock.assert_called_once_with(XYDEV, 100.5, 200.5)
     assert stage.position_steps == (1005, 2005)
     assert core.getXYPosition() == (100.5, 200.5)
 
@@ -154,7 +159,9 @@ def test_unicore_xy_stepper_stage():
     assert stage.position_steps == (-1055, -2055)
     assert core.getXYPosition() == (105.5, 205.5)
 
+    mock.reset_mock()
     core.setRelativeXYPosition(1.5, 2.5)
+    mock.assert_called_once_with(XYDEV, 107.0, 208.0)
     assert core.getXYPosition() == (107.0, 208.0)
     steps = stage.position_steps
     assert steps == (-1070, -2080)
