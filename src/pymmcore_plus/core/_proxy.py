@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import types
-from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
+from itertools import chain
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast, get_type_hints
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
@@ -92,8 +93,11 @@ def create_proxy(
     ```
     """
     sub_proxies = sub_proxies or {}
-    allowed_names = {x for x in dir(protocol) if not x.startswith("_")}
-    allowed_names.update(x for x in protocol.__annotations__ if not x.startswith("_"))
+    allowed_names = {
+        x
+        for x in chain(dir(protocol), get_type_hints(protocol))
+        if not x.startswith("_")
+    }
     proxy = _ImmutableModule(protocol.__name__)
     for attr_name in allowed_names:
         attr = getattr(obj, attr_name)
