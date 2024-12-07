@@ -5,8 +5,6 @@ from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast, overload
 
-import pymmcore
-
 from pymmcore_plus.core import (
     CMMCorePlus,
     DeviceType,
@@ -123,7 +121,7 @@ class UniMMCore(CMMCorePlus):
 
         """
         try:
-            pymmcore.CMMCore.loadDevice(self, label, moduleName, deviceName)
+            CMMCorePlus.loadDevice(self, label, moduleName, deviceName)
         except RuntimeError as e:
             # it was a C++ device, should have worked ... raise the error
             if moduleName not in super().getDeviceAdapterNames():
@@ -198,7 +196,7 @@ class UniMMCore(CMMCorePlus):
         return self._pydevices.get_initialization_state(label)
 
     def getLoadedDevices(self) -> tuple[DeviceLabel, ...]:
-        return tuple(self._pydevices) + super().getLoadedDevices()
+        return tuple(self._pydevices) + tuple(super().getLoadedDevices())
 
     def getLoadedDevicesOfType(self, devType: int) -> tuple[DeviceLabel, ...]:
         pydevs = self._pydevices.get_labels_of_type(devType)
