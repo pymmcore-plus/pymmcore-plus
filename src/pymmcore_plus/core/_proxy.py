@@ -1,8 +1,12 @@
-import types
-from collections.abc import Mapping
-from typing import Any, Protocol, TypeVar, cast
+from __future__ import annotations
 
-from pymmcore_plus.core._mmcore_plus import CMMCorePlus
+import types
+from typing import TYPE_CHECKING, Any, Protocol, TypeVar, cast
+
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
+    from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
 T = TypeVar("T")
 
@@ -41,13 +45,13 @@ class _ImmutableModule(types.ModuleType):
 
     def __setattr__(self, name: str, value: Any) -> None:
         if self.__frozen__:
-            raise AttributeError(
+            raise AttributeError(  # pragma: no cover
                 f"Attributes on proxy {self.__name__!r} cannot be modified."
             )
         super().__setattr__(name, value)
 
     def __delattr__(self, name: str) -> None:
-        raise AttributeError(
+        raise AttributeError(  # pragma: no cover
             f"Attributes on proxy {self.__name__!r} cannot be modified."
         )
 
