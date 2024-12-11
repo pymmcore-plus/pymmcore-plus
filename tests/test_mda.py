@@ -8,6 +8,7 @@ import pytest
 import useq
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
+from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
@@ -16,7 +17,6 @@ if TYPE_CHECKING:
     from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
 
-    from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
 
 try:
@@ -29,7 +29,7 @@ SKIP_NO_PYTESTQT = pytest.mark.skipif(
 )
 
 
-def test_mda_waiting(core: CMMCorePlus):
+def test_mda_waiting(core: CMMCorePlus) -> None:
     seq = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -46,7 +46,7 @@ def test_mda_waiting(core: CMMCorePlus):
     assert t1 - t0 >= 1.5
 
 
-def test_setting_position(core: CMMCorePlus):
+def test_setting_position(core: CMMCorePlus) -> None:
     core.mda._running = True
     event1 = MDAEvent(exposure=123, x_pos=123, y_pos=456, z_pos=1)
     core.mda.engine.setup_event(event1)
@@ -73,7 +73,7 @@ class BrokenEngine:
 
 
 @SKIP_NO_PYTESTQT
-def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
+def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
     mda = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -251,22 +251,28 @@ DEVICE_ERRORS: dict[str, list[str]] = {
 def test_mda_no_device(
     device: str, core: CMMCorePlus, caplog: LogCaptureFixture
 ) -> None:
-    core.unloadDevice(device)
+    from pymmcore_plus._logger import logger
 
-    if device == "Autofocus":
-        event = MDAEvent(
-            action=HardwareAutofocus(
-                autofocus_device_name="Z", autofocus_motor_offset=10
+    logger.setLevel("DEBUG")
+    try:
+        core.unloadDevice(device)
+
+        if device == "Autofocus":
+            event = MDAEvent(
+                action=HardwareAutofocus(
+                    autofocus_device_name="Z", autofocus_motor_offset=10
+                )
             )
-        )
-    else:
-        event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
-    engine = cast("MDAEngine", core.mda.engine)
-    engine.setup_event(event)
-    list(engine.exec_event(event))
+        else:
+            event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
+        engine = cast("MDAEngine", core.mda.engine)
+        engine.setup_event(event)
+        list(engine.exec_event(event))
 
-    for e in DEVICE_ERRORS[device]:
-        assert e in caplog.text
+        for e in DEVICE_ERRORS[device]:
+            assert e in caplog.text
+    finally:
+        logger.setLevel("CRITICAL")
 
 
 def test_keep_shutter_open(core: CMMCorePlus) -> None:
@@ -362,7 +368,15 @@ def test_engine_protocol(core: CMMCorePlus) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_runner_cancel(qtbot: QtBot) -> None:
+    # not using the parametrized fixture because we only want to test Qt here.
+    # see https://github.com/pymmcore-plus/pymmcore-plus/issues/95 and
+    # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
+    # for what we're trying to avoid
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    core.mda.engine.use_hardware_sequencing = False
+
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
     event1 = MDAEvent()
@@ -376,7 +390,15 @@ def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_runner_pause(qtbot: QtBot) -> None:
+    # not using the parametrized fixture because we only want to test Qt here.
+    # see https://github.com/pymmcore-plus/pymmcore-plus/issues/95 and
+    # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
+    # for what we're trying to avoid
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    core.mda.engine.use_hardware_sequencing = False
+
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
     with qtbot.waitSignal(core.mda.events.frameReady):

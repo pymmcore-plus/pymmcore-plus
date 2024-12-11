@@ -8,12 +8,12 @@ from ._protocol import PMDASignaler
 from ._psygnal import MDASignaler
 
 if TYPE_CHECKING:
-    from ._qsignals import QMDASignaler  # noqa: TCH004
+    from ._qsignals import QMDASignaler  # noqa: TC004
 
 
 __all__ = [
-    "PMDASignaler",
     "MDASignaler",
+    "PMDASignaler",
     "QMDASignaler",
     "_get_auto_MDA_callback_class",
 ]

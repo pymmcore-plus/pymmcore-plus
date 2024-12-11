@@ -39,7 +39,7 @@ except ImportError:
     from contextlib import nullcontext as no_stdout
 
 
-__all__ = ["find_micromanager", "retry", "no_stdout", "signals_backend"]
+__all__ = ["find_micromanager", "no_stdout", "retry", "signals_backend"]
 
 APP_NAME = "pymmcore-plus"
 USER_DATA_DIR = Path(user_data_dir(appname=APP_NAME))
@@ -550,16 +550,25 @@ def system_info() -> dict[str, str]:
 
     This backs the `mmcore info` command in the CLI.
     """
-    import pymmcore
-
     import pymmcore_plus
 
     info = {
         "python": sys.version,
         "platform": platform.platform(),
         "pymmcore-plus": getattr(pymmcore_plus, "__version__", "err"),
-        "pymmcore": getattr(pymmcore, "__version__", "err"),
     }
+    try:
+        import pymmcore
+
+        info["pymmcore"] = getattr(pymmcore, "__version__", "err")
+    except ImportError:
+        info["pymmcore"] = ""
+    try:
+        import pymmcore_nano
+
+        info["pymmcore-nano"] = getattr(pymmcore_nano, "__version__", "err")
+    except ImportError:
+        info["pymmcore-nano"] = ""
 
     with suppress(Exception):
         core = pymmcore_plus.CMMCorePlus.instance()

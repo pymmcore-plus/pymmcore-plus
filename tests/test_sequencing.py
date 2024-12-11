@@ -40,14 +40,9 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     assert len(events) == EXPECTED_SEQUENCES
 
     engine.use_hardware_sequencing = True
-    from rich import print
 
     runner = MDARunner()
     runner.set_engine(engine)
-
-    @runner.events.frameReady.connect
-    def frame_ready(f, e, m):
-        print(m)
 
     runner.run(mda)
     assert core_mock.prepareSequenceAcquisition.call_count == EXPECTED_SEQUENCES
@@ -93,6 +88,9 @@ def test_fully_sequenceable_core() -> None:
     core_mock.getRemainingImageCount.return_value = 0
     core_mock.isBufferOverflowed.return_value = False
     core_mock.getCameraDevice.return_value = CAM
+    core_mock.getXYPosition.return_value = (0, 0)
+    core_mock.getXPosition.return_value = 0
+    core_mock.getYPosition.return_value = 0
     core_mock.getXYStageDevice.return_value = XYSTAGE
     core_mock.getFocusDevice.return_value = FOCUS
     core_mock.getFocusDevice.return_value = FOCUS

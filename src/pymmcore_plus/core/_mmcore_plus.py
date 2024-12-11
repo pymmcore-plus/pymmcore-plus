@@ -12,19 +12,12 @@ from datetime import datetime
 from pathlib import Path
 from re import Pattern
 from textwrap import dedent
-from threading import RLock, Thread
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    NamedTuple,
-    TypeVar,
-    overload,
-)
+from threading import Thread
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, overload
 
-import pymmcore
 from psygnal import SignalInstance
 
+import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus._logger import current_logfile, logger
 from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
@@ -49,7 +42,7 @@ from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_clas
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
-    from typing import Literal, TypedDict
+    from typing import Literal, TypedDict, Unpack
 
     import numpy as np
     from useq import MDAEvent
@@ -58,7 +51,6 @@ if TYPE_CHECKING:
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
-    _F = TypeVar("_F", bound=Callable[..., Any])
     ListOrTuple = list[_T] | tuple[_T, ...]
 
     class PropertySchema(TypedDict, total=False):
@@ -82,10 +74,43 @@ if TYPE_CHECKING:
         type: str
         properties: dict[str, PropertySchema]
 
-    def synchronized(lock: RLock) -> Callable[[_F], _F]: ...
+    class SetContextKwargs(TypedDict, total=False):
+        """All the valid keywords and their types for the `setContext` method."""
 
-else:
-    from wrapt import synchronized
+        autoFocusDevice: str
+        autoFocusOffset: float
+        autoShutter: bool
+        cameraDevice: str
+        channelGroup: str
+        circularBufferMemoryFootprint: int
+        deviceAdapterSearchPaths: list[str]
+        deviceDelayMs: tuple[str, float]
+        exposure: float | tuple[str, float]
+        focusDevice: str
+        focusDirection: str
+        galvoDevice: str
+        galvoPosition: tuple[str, float, float]
+        imageProcessorDevice: str
+        multiROI: tuple[list[int], list[int], list[int], list[int]]
+        parentLabel: tuple[str, str]
+        pixelSizeAffine: tuple[str, list[float]]
+        pixelSizeUm: tuple[str, float]
+        position: float | tuple[str, float]
+        primaryLogFile: str | tuple[str, bool]
+        property: tuple[str, str, bool | float | int | str]
+        ROI: tuple[int, int, int, int] | tuple[str, int, int, int, int]
+        SLMDevice: str
+        SLMExposure: tuple[str, float]
+        shutterDevice: str
+        shutterOpen: bool | tuple[str, bool]
+        state: tuple[str, int]
+        stateLabel: tuple[str, str]
+        systemState: pymmcore.Configuration
+        timeoutMs: int
+        XYPosition: tuple[float, float] | tuple[str, float, float]
+        XYStageDevice: str
+        ZPosition: float | tuple[str, float]
+
 
 _OBJDEV_REGEX = re.compile("(.+)?(nosepiece|obj(ective)?)(turret)?s?", re.IGNORECASE)
 _CHANNEL_REGEX = re.compile("(chan{1,2}(el)?|filt(er)?)s?", re.IGNORECASE)
@@ -150,8 +175,6 @@ class CMMCorePlus(pymmcore.CMMCore):
     adapter_paths : Sequence[str], optional
         Paths to search for device adapters, by default ()
     """
-
-    _lock = RLock()
 
     @classmethod
     def instance(cls) -> CMMCorePlus:
@@ -240,10 +263,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
         self.unloadAllDevices()
+        # clean up logging
+        self.setPrimaryLogFile("")
 
     # Re-implemented methods from the CMMCore API
 
-    @synchronized(_lock)
     def setProperty(
         self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
@@ -258,7 +282,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         with self._property_change_emission_ensured(label, (propName,)):
             super().setProperty(label, propName, propValue)
 
-    @synchronized(_lock)
     def setState(self, stateDeviceLabel: str, state: int) -> None:
         """Set state (by position) on `stateDeviceLabel`, with reliable event emission.
 
@@ -271,7 +294,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             super().setState(stateDeviceLabel, state)
 
-    @synchronized(_lock)
     def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
         """Set state (by label) on `stateDeviceLabel`, with reliable event emission.
 
@@ -354,7 +376,6 @@ class CMMCorePlus(pymmcore.CMMCore):
                         )
             raise RuntimeError(msg) from e
 
-    @synchronized(_lock)
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
     ) -> None:
@@ -582,7 +603,6 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def getLastImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]: ...
 
-    @synchronized(_lock)
     def getLastImageAndMD(
         self, channel: int | None = None, slice: int | None = None, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
@@ -618,7 +638,10 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = super().getLastImageMD(channel, slice, md)
         else:
             img = super().getLastImageMD(md)
-        return (self.fixImage(img) if fix else img, md)
+        return (
+            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
+            md,
+        )
 
     @overload
     def popNextImageAndMD(
@@ -628,7 +651,6 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def popNextImageAndMD(self, *, fix: bool = True) -> tuple[np.ndarray, Metadata]: ...
 
-    @synchronized(_lock)
     def popNextImageAndMD(
         self, channel: int = 0, slice: int = 0, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
@@ -661,9 +683,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().popNextImageMD(channel, slice, md)
-        return (self.fixImage(img) if fix else img, md)
+        md = Metadata(md)
+        return (
+            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
+            md,
+        )
 
-    @synchronized(_lock)
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
 
@@ -678,9 +703,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
         img: np.ndarray = super().popNextImage()
-        return self.fixImage(img) if fix else img
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
 
-    @synchronized(_lock)
     def getNBeforeLastImageAndMD(
         self, n: int, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
@@ -707,7 +731,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().getNBeforeLastImageMD(n, md)
-        return self.fixImage(img) if fix else img, md
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
         """Applies a configuration to a group.
@@ -1344,35 +1368,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return self.setPosition(val)
 
-    @overload
-    def setPosition(self, position: float) -> None: ...
-
-    @overload
-    def setPosition(self, stageLabel: str, position: float) -> None: ...
-
-    @synchronized(_lock)
-    def setPosition(self, *args: Any, **kwargs: Any) -> None:
-        """Set position of the stage in microns.
-
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
-        """
-        return super().setPosition(*args, **kwargs)
-
-    @overload
-    def setXYPosition(self, x: float, y: float) -> None: ...
-
-    @overload
-    def setXYPosition(self, xyStageLabel: str, x: float, y: float) -> None: ...
-
-    @synchronized(_lock)
-    def setXYPosition(self, *args: Any, **kwargs: Any) -> None:
-        """Sets the position of the XY stage in microns.
-
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
-        """
-        return super().setXYPosition(*args, **kwargs)
-
-    @synchronized(_lock)
     def getCameraChannelNames(self) -> tuple[str, ...]:
         """Convenience method to call `getCameraChannelName` for all camera channels.
 
@@ -1383,11 +1378,11 @@ class CMMCorePlus(pymmcore.CMMCore):
             for i in range(self.getNumberOfCameraChannels())
         )
 
-    @synchronized(_lock)
     def snapImage(self) -> None:
         """Acquires a single image with current settings.
 
-        **Why Override?** To add a lock to prevent concurrent calls across threads.
+        **Why Override?** to emit the `imageSnapped` event after snapping an image.
+        and to emit shutter property changes if `getAutoShutter` is `True`.
         """
         if autoshutter := self.getAutoShutter():
             self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
@@ -1502,7 +1497,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         if ncomponents is None:
             ncomponents = self.getNumberOfComponents()
-        if ncomponents == 4:
+        if ncomponents == 4 and img.ndim != 3:
             new_shape = (*img.shape, 4)
             img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
             img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
@@ -1669,7 +1664,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if numChannel is not None
             else super().getImage()
         )
-        return self.fixImage(img) if fix else img
+        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition.
@@ -1913,30 +1908,33 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().definePixelSizeConfig(*args, **kwargs)
         self.events.pixelSizeChanged.emit(0.0)
 
-    def getMultiROI(  # type: ignore [override]
-        self, *_: Any
-    ) -> tuple[list[int], list[int], list[int], list[int]]:
-        """Get multiple ROIs from the current camera device.
+    # pymmcore-SWIG needs this, but pymmcore-nano doesn't
+    if hasattr(pymmcore, "UnsignedVector"):
 
-        Will fail if the camera does not support multiple ROIs. Will return empty
-        vectors if multiple ROIs are not currently being used.
+        def getMultiROI(  # type: ignore [override]
+            self, *_: Any
+        ) -> tuple[list[int], list[int], list[int], list[int]]:
+            """Get multiple ROIs from the current camera device.
 
-        **Why Override?** So that the user doesn't need to pass in four empty
-        pymmcore.UnsignedVector() objects.
-        """
-        if _:
-            warnings.warn(  # pragma: no cover
-                "Unlike pymmcore, CMMCorePlus.getMultiROI does not require arguments."
-                "Arguments are ignored.",
-                stacklevel=2,
-            )
+            Will fail if the camera does not support multiple ROIs. Will return empty
+            vectors if multiple ROIs are not currently being used.
 
-        xs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
-        ys = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
-        ws = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
-        hs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
-        super().getMultiROI(xs, ys, ws, hs)
-        return list(xs), list(ys), list(ws), list(hs)
+            **Why Override?** So that the user doesn't need to pass in four empty
+            pymmcore.UnsignedVector() objects.
+            """
+            if _:
+                warnings.warn(  # pragma: no cover
+                    "Unlike pymmcore, CMMCorePlus.getMultiROI does not require "
+                    "arguments. Arguments are ignored.",
+                    stacklevel=2,
+                )
+
+            xs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+            ys = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+            ws = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+            hs = pymmcore.UnsignedVector()  # type: ignore [attr-defined]
+            super().getMultiROI(xs, ys, ws, hs)
+            return list(xs), list(ys), list(ws), list(hs)
 
     @overload
     def setROI(self, x: int, y: int, width: int, height: int) -> None: ...
@@ -2089,7 +2087,7 @@ class CMMCorePlus(pymmcore.CMMCore):
                 self.events.propertyChanged.emit(device, properties[i], val)
 
     @contextmanager
-    def setContext(self, **kwargs: Any) -> Iterator[None]:
+    def setContext(self, **kwargs: Unpack[SetContextKwargs]) -> Iterator[None]:
         """Set core properties in a context restoring the initial values on exit.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -2098,9 +2096,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         ----------
         **kwargs : Any
             Keyword arguments may be any `Name` for which `get<Name>` and `set<Name>`
-            methods exist.  For example, `setContext(exposure=10)` will call
+            methods exist (where the first letter in `<Name>` may be either lower or
+            upper case).  For example, `setContext(exposure=10)` will call
             `setExposure(10)` when entering the context and `setExposure(<initial>)`
-            when exiting the context.
+            when exiting the context. If the property is not found, a warning is logged
+            and the property is skipped. If the value is a tuple, it is unpacked and
+            passed to the `set<Name>` method (but lists are not unpacked).
 
         Examples
         --------
@@ -2120,11 +2121,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         try:
             for name, v in kwargs.items():
                 name = name[0].upper() + name[1:]
-                try:
-                    orig_values[name] = getattr(self, f"get{name}")()
-                    getattr(self, f"set{name}")(v)
-                except AttributeError:
+                get_name, set_name = f"get{name}", f"set{name}"
+                if not hasattr(self, get_name) or not hasattr(self, set_name):
                     logger.warning("%s is not a valid property, skipping.", name)
+                    continue
+
+                orig_values[name] = getattr(self, get_name)()
+                if isinstance(v, tuple):
+                    getattr(self, set_name)(*v)
+                else:
+                    getattr(self, set_name)(v)
             yield
         finally:
             for k, v in orig_values.items():
