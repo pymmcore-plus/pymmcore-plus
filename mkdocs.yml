@@ -41,6 +41,7 @@ nav:
       - metadata.md
       - cli.md
       - troubleshooting.md
+      - profiling.md
       - contributing.md
   - useq-schema: /useq-schema/
   - pymmcore-widgets: /pymmcore-widgets/
