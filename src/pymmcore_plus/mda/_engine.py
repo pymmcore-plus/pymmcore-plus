@@ -43,7 +43,7 @@ if TYPE_CHECKING:
 _SLM_DEVICES_PIXEL_ON_VALUES: dict[str, int] = {
     "MightexPolygon1000": 255,
     "Mosaic3": 1,
-    "genericSLMDevice": 255,
+    "GenericSLM": 255,
 }
 
 
@@ -604,9 +604,8 @@ class MDAEngine(PMDAEngine):
             if slm_array.ndim == 0:
                 value = slm_array.item()
                 if isinstance(value, bool):
-                    # FIXME: we need to look up the device library/name
-                    # not the device label (which is user defined)
-                    on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
+                    dev_name = self._mmc.getDeviceName(slm_device)
+                    on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(dev_name, 1)
                     value = on_value if value else 0
                 self._mmc.setSLMPixelsTo(slm_device, int(value))
             elif slm_array.size == 3:
@@ -622,9 +621,8 @@ class MDAEngine(PMDAEngine):
                     )
                 # convert boolean on/off values to pixel values
                 if slm_array.dtype == bool:
-                    # FIXME: we need to look up the device library/name
-                    # not the device label (which is user defined)
-                    on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(slm_device, 1)
+                    dev_name = self._mmc.getDeviceName(slm_device)
+                    on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(dev_name, 1)
                     slm_array = np.where(slm_array, on_value, 0).astype(np.uint8)
                 self._mmc.setSLMImage(slm_device, slm_array)
             if event.slm_image.exposure:
