@@ -550,16 +550,25 @@ def system_info() -> dict[str, str]:
 
     This backs the `mmcore info` command in the CLI.
     """
-    import pymmcore
-
     import pymmcore_plus
 
     info = {
         "python": sys.version,
         "platform": platform.platform(),
         "pymmcore-plus": getattr(pymmcore_plus, "__version__", "err"),
-        "pymmcore": getattr(pymmcore, "__version__", "err"),
     }
+    try:
+        import pymmcore
+
+        info["pymmcore"] = getattr(pymmcore, "__version__", "err")
+    except ImportError:
+        info["pymmcore"] = ""
+    try:
+        import pymmcore_nano
+
+        info["pymmcore-nano"] = getattr(pymmcore_nano, "__version__", "err")
+    except ImportError:
+        info["pymmcore-nano"] = ""
 
     with suppress(Exception):
         core = pymmcore_plus.CMMCorePlus.instance()

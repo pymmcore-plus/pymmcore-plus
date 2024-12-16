@@ -6,11 +6,10 @@ from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 import psygnal
-import pymmcore
 import pytest
-from pymmcore import CMMCore, PropertySetting
 from useq import MDASequence
 
+import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus import (
     CMMCorePlus,
     Configuration,
@@ -35,7 +34,7 @@ except ImportError:
 
 def test_core(core: CMMCorePlus) -> None:
     assert isinstance(core, CMMCorePlus)
-    assert isinstance(core, CMMCore)
+    assert isinstance(core, pymmcore.CMMCore)
     # because the fixture tries to find micromanager, this should be populated
     assert core.getDeviceAdapterSearchPaths()
     assert isinstance(
@@ -69,7 +68,7 @@ def test_load_system_config(core: CMMCorePlus) -> None:
     config_path = Path(__file__).parent / "local_config.cfg"
     core.loadSystemConfiguration(str(config_path))
     assert core.systemConfigurationFile() == str(config_path)
-    assert core.getLoadedDevices() == (
+    assert tuple(core.getLoadedDevices()) == (
         "DHub",
         "Camera",
         "Dichroic",
@@ -187,8 +186,11 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
 
 
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot") -> None:
+def test_mda_pause_cancel(qtbot: "QtBot") -> None:
     """Test signal emission during MDA with cancelation"""
+    core = CMMCorePlus.instance()
+    core.loadSystemConfiguration()
+
     mda = MDASequence(
         time_plan={"interval": 0.25, "loops": 10},
         stage_positions=[(1, 1, 1)],
@@ -368,7 +370,7 @@ def test_configuration(core: CMMCorePlus) -> None:
         assert "Camera" in state
 
     assert state["Camera", "Binning"] == "1"
-    assert PropertySetting("Camera", "Binning", "1") in state
+    assert pymmcore.PropertySetting("Camera", "Binning", "1") in state
     assert state in state
 
     assert ("Camera", "Binning") in state
@@ -593,4 +595,4 @@ def test_snap_rgb(core: CMMCorePlus) -> None:
         ],
         dtype="uint8",
     )
-    assert np.array_equal(img[::64, -1], expect)
+    np.testing.assert_equal(img[::64, -1], expect)
