@@ -543,7 +543,7 @@ def test_describe(
 
         monkeypatch.setattr(builtins, "__import__", no_rich)
 
-    core.describe(sort="Type")
+    core.describe(sort="Type", show_available=True, show_config_groups=True)
     assert "Core" in capsys.readouterr().out
 
 
