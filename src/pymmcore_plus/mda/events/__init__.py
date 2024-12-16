@@ -8,12 +8,12 @@ from useq.experimental.pysgnals import MDASignaler
 from pymmcore_plus import _util
 
 if TYPE_CHECKING:
-    from ._qsignals import QMDASignaler  # noqa: TCH004
+    from ._qsignals import QMDASignaler  # noqa: TC004
 
 
 __all__ = [
-    "PMDASignaler",
     "MDASignaler",
+    "PMDASignaler",
     "QMDASignaler",
     "_get_auto_MDA_callback_class",
 ]

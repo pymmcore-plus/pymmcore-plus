@@ -134,8 +134,8 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
 
         # if we don't check this here, we'll get an error when creating the first array
         if (
-            not overwrite and any(self._group.arrays()) or self._group.attrs
-        ):  # pragma: no cover
+            not overwrite and any(self._group.arrays())
+        ) or self._group.attrs:  # pragma: no cover
             path = self._group.store.path if hasattr(self._group.store, "path") else ""
             raise ValueError(
                 f"There is already data in {path!r}. Use 'overwrite=True' to overwrite."

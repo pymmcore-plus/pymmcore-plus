@@ -5,7 +5,7 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import TYPE_CHECKING, Any, overload
 
-import pymmcore
+import pymmcore_plus._pymmcore as pymmcore
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator

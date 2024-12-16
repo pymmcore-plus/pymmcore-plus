@@ -8,6 +8,7 @@ import pytest
 import useq
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
+from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
@@ -16,7 +17,6 @@ if TYPE_CHECKING:
     from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
 
-    from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
 
 try:
@@ -368,7 +368,15 @@ def test_engine_protocol(core: CMMCorePlus) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_runner_cancel(qtbot: QtBot) -> None:
+    # not using the parametrized fixture because we only want to test Qt here.
+    # see https://github.com/pymmcore-plus/pymmcore-plus/issues/95 and
+    # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
+    # for what we're trying to avoid
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    core.mda.engine.use_hardware_sequencing = False
+
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
     event1 = MDAEvent()
@@ -382,7 +390,15 @@ def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_runner_pause(qtbot: QtBot) -> None:
+    # not using the parametrized fixture because we only want to test Qt here.
+    # see https://github.com/pymmcore-plus/pymmcore-plus/issues/95 and
+    # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
+    # for what we're trying to avoid
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    core.mda.engine.use_hardware_sequencing = False
+
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
     with qtbot.waitSignal(core.mda.events.frameReady):
