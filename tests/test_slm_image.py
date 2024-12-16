@@ -13,6 +13,7 @@ def test_slm_image():
     mmc = CMMCorePlus.instance()
     mmc.loadSystemConfiguration()
     mock_core = MagicMock(wraps=mmc)
+    mock_core.getDeviceName.return_value = "Mosaic3"  # for device name lookup
     mock_core.setSLMPixelsTo.return_value = None
     mock_core.setSLMImage.return_value = None
     mock_core.displaySLMImage.return_value = None
@@ -27,6 +28,8 @@ def test_slm_image():
     events = [x.replace(slm_image=useq.SLMImage(data=True, device=DEV)) for x in seq]
     mock_core.mda.run(events)
     assert mock_core.setSLMPixelsTo.call_count == len(events)
+    # asserting called with 1 because that is the "on" value for Mosaic3 device
+    # which we mocked above.
     mock_core.setSLMPixelsTo.assert_called_with(DEV, 1)
     mock_core.setSLMPixelsTo.reset_mock()
 
