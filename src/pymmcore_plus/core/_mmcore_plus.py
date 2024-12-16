@@ -1998,7 +1998,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         with open(filename, "a") as f:
             f.write("\n".join(cfg))
 
-    def describe(self, sort: str | None = None) -> None:
+    def describe(
+        self,
+        sort: str | None = None,
+        show_config_groups: bool = False,
+        show_available: bool = False,
+    ) -> None:
         """Print information table with the current configuration.
 
         Intended to provide a quick overview of the microscope configuration during
@@ -2030,7 +2035,49 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         print(f"{self.getVersionInfo()}, {self.getAPIVersionInfo()}")
         print("Adapter path:", ",".join(self.getDeviceAdapterSearchPaths()))
+        print("\nLoaded Devices:")
         print_tabular_data(data, sort=sort)
+
+        state = self.state(cached=False)
+        if show_config_groups:
+            group_data: defaultdict[str, list[str]] = defaultdict(list)
+            groups = state["config_groups"]
+            for group in groups:
+                for pi, preset in enumerate(group["presets"]):
+                    for si, stng in enumerate(preset["settings"]):
+                        dev, prop, val = stng["dev"], stng["prop"], stng["val"]
+                        group_name = group["name"] if (pi == 0 and si == 0) else ""
+                        preset_name = preset["name"] if si == 0 else ""
+                        group_data["Group"].append(group_name)
+                        group_data["Preset"].append(preset_name)
+                        group_data["Device"].append(dev)
+                        group_data["Property"].append(prop)
+                        group_data["Value"].append(val)
+                    # add break between presets
+                    group_data["Group"].append("")
+                    group_data["Preset"].append("")
+                    group_data["Device"].append("")
+                    group_data["Property"].append("")
+                    group_data["Value"].append("")
+
+            print("\nConfig Groups:")
+            print_tabular_data(group_data, sort=sort)
+
+        if show_available:
+            avail_data: defaultdict[str, list[str]] = defaultdict(list)
+            avail_adapters = self.getDeviceAdapterNames()
+            for adapt in avail_adapters:
+                with suppress(Exception):
+                    devices = self.getAvailableDevices(adapt)
+                    descriptions = self.getAvailableDeviceDescriptions(adapt)
+                    types = self.getAvailableDeviceTypes(adapt)
+                    for dev, desc, type_ in zip(devices, descriptions, types):
+                        avail_data["Library, DeviceName"].append(f"{adapt!r}, {dev!r}")
+                        avail_data["Type"].append(str(DeviceType(type_)))
+                        avail_data["Description"].append(desc)
+
+            print("\nAvailable Devices:")
+            print_tabular_data(avail_data, sort=sort)
 
     def state(
         self, *, cached: bool = True, include_time: bool = False, **_kwargs: Any
