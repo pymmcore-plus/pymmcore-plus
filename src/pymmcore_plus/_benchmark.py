@@ -1,16 +1,20 @@
 import timeit
+import warnings
+from collections.abc import Iterable
 
 from pymmcore import CMMCore
+
 try:
     from tqdm import tqdm
 except ImportError:
-    def tqdm(iterable, *args, **kwargs):
+
+    def tqdm(iterable: Iterable) -> Iterable:
         return iterable
+
 
 def benchmark_core(core: CMMCore, number: int = 1000) -> dict:
     """Take an initialized core with devices and benchmark various methods."""
     data: dict[str, float | str] = {}
-    core.setExposure(1)
     methods: list[str | tuple[str, tuple]] = [
         "getDeviceAdapterNames",
         "getLoadedDevices",
@@ -23,6 +27,11 @@ def benchmark_core(core: CMMCore, number: int = 1000) -> dict:
     ]
 
     if cam := core.getCameraDevice():
+        core.setExposure(1)
+        if not (exp := core.getExposure()) == 1:
+            warnings.warn(
+                f"Exposure setting failed, real exposure: {exp}", stacklevel=2
+            )
         methods.extend(
             [
                 "getMultiROI",
@@ -67,6 +76,7 @@ def benchmark_core(core: CMMCore, number: int = 1000) -> dict:
                 ("setPosition", (zstage, core.getPosition(zstage))),
             ]
         )
+
     if pxcfgs := core.getAvailablePixelSizeConfigs():
         methods.append(("getPixelSizeConfigData", (pxcfgs[0],)))
     for item in tqdm(methods):
@@ -76,7 +86,7 @@ def benchmark_core(core: CMMCore, number: int = 1000) -> dict:
             meth, args = item, ()
         try:
             t = timeit.timeit(f"core.{meth}(*{args})", globals=locals(), number=number)
-            data[meth] = round(1000 * t / number, 4)
+            data[meth] = round(1000 * t / number, 3)
         except Exception as e:
             data[meth] = str(e)
 
@@ -91,7 +101,7 @@ if __name__ == "__main__":
     from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
     core = CMMCorePlus()
-    if len(sys.argv) > 1:
+    if len(sys.argv) > 1 and (cfg := sys.argv[1]) != "demo":
         print("Loading system configuration from", sys.argv[1])
         core.loadSystemConfiguration(sys.argv[1])
     else:
@@ -101,4 +111,21 @@ if __name__ == "__main__":
         number = int(sys.argv[2])
     else:
         number = 1000
-    print(benchmark_core(core, number))
+    data = benchmark_core(core, number)
+
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        table = Table(title="Benchmark results")
+        table.add_column("Method", justify="right", style="green")
+        table.add_column("Time (ms)", justify="right")
+        for method, time in data.items():
+            if isinstance(time, float):
+                time = f"{time:.4f}"
+            table.add_row(method, str(time))
+
+        console = Console()
+        console.print(table)
+    except ImportError:
+        print(data)
