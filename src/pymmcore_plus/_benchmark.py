@@ -1,10 +1,15 @@
+from __future__ import annotations
+
 import timeit
-from collections.abc import Iterable
-from types import NoneType
-from typing import Iterator
+import warnings
+from typing import TYPE_CHECKING
 
 from pymmcore_plus import CMMCorePlus, DeviceType
-from pymmcore_plus.core._device import Device
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator, Sequence
+
+    from pymmcore_plus.core._device import Device
 
 
 class Benchmark:
@@ -24,6 +29,17 @@ class Benchmark:
 
     def run(self, number: int) -> Iterator[tuple[str, float | str]]:
         # get methods in the order of definition, in reverse MRO order
+
+        try:
+            self.setup()
+        except Exception as e:  # pragma: no cover
+            warnings.warn(
+                f"Setup failed on device {self.label!r}: {e}",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+            return
+
         methods: list[str] = []
         for base in reversed(type(self).mro()):
             methods.extend(m for m in base.__dict__ if m.startswith("bench_"))
@@ -141,7 +157,10 @@ class StateBenchmark(Benchmark):
 
     def setup(self) -> None:
         self.initial_state = self.core.getState(self.label)
-        self.labels = self.core.getStateLabels(self.label)
+        try:
+            self.labels: Sequence[str] = self.core.getStateLabels(self.label)
+        except Exception:
+            self.labels = []
 
     def bench_getState(self) -> None:
         self.core.getState(self.label)
@@ -163,60 +182,22 @@ class StateBenchmark(Benchmark):
 def benchmark_core_and_devices(
     core: CMMCorePlus, number: int = 100
 ) -> Iterable[Device | None | tuple[str, float | str]]:
-    """Take an initialized core with devices and benchmark various methods."""
+    """Take an initialized core with devices and benchmark various methods.
+
+    Yields
+    ------
+    Device | None | tuple[str, float | str]
+        If a `Device`, it is the device object being benchmarked.
+        If None, it is the core object being benchmarked.
+        If a tuple, it is the method name and the time taken to run it.
+    """
     for cls in Benchmark.__subclasses__():
         if cls.device_type == DeviceType.Core:
             bench = cls(core, "Core")
             yield bench.device()
-            bench.setup()
             yield from bench.run(number)
         else:
             for dev in core.getLoadedDevicesOfType(cls.device_type):
                 bench = cls(core, dev)
                 yield bench.device()
-                bench.setup()
                 yield from bench.run(number)
-
-
-def print_benchmarks(data: dict[str, dict[str, float | str]]) -> None:
-    """Print the benchmark results in a human-readable format."""
-    try:
-        from rich.console import Console
-        from rich.table import Table
-
-        table = Table(title="Benchmark results")
-        table.add_column("Method", justify="right", style="green")
-        table.add_column("Time (ms)", justify="right")
-        for device, benches in data.items():
-            table.add_row(f"Device: {device}", "------", style="yellow")
-            for method, time in benches.items():
-                if isinstance(time, float):
-                    time = f"{time:.4f}"
-                table.add_row(method, str(time))
-
-        console = Console()
-        console.print(table)
-    except ImportError:
-        print(data)
-
-
-if __name__ == "__main__":
-    import sys
-
-    from rich import print
-
-    from pymmcore_plus.core._mmcore_plus import CMMCorePlus
-
-    core = CMMCorePlus()
-    if len(sys.argv) > 1 and (cfg := sys.argv[1]) != "demo":
-        print("Loading system configuration from", sys.argv[1])
-        core.loadSystemConfiguration(sys.argv[1])
-    else:
-        print("using demo configuration")
-        core.loadSystemConfiguration()
-    if len(sys.argv) > 2:
-        number = int(sys.argv[2])
-    else:
-        number = 1000
-    data = benchmark_core_and_devices(core, number)
-    print_benchmarks(dict(x for x in data if not isinstance(x, (Device, NoneType))))
