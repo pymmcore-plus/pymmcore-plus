@@ -442,7 +442,7 @@ def bench(
     ),
 ) -> None:
     """Run a benchmark of Core and Devices loaded with `config` (or Demo)."""
-    from pymmcore_plus._benchmark import benchmark_core_and_devices, print_benchmarks
+    from pymmcore_plus._benchmark import benchmark_core_and_devices
 
     core = CMMCorePlus()
     if config is not None:
@@ -450,8 +450,20 @@ def bench(
     else:
         core.loadSystemConfiguration()
 
-    data = benchmark_core_and_devices(core, number)
-    print_benchmarks(data)
+    from rich.live import Live
+    from rich.table import Table
+
+    table = Table()
+    table.add_column("Method")
+    table.add_column("Time (ms)")
+
+    with Live(table, refresh_per_second=4):  # update 4 times a second to feel fluid
+        for device, data in benchmark_core_and_devices(core, number):
+            table.add_row(f"Device: {device}", "------", style="yellow")
+            for method, time in data.items():
+                if isinstance(time, float):
+                    time = f"{time:.4f}"
+                table.add_row(method, str(time))
 
 
 def main() -> None:  # pragma: no cover

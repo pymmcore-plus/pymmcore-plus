@@ -1,4 +1,5 @@
 import timeit
+from collections.abc import Iterable
 
 from pymmcore_plus import CMMCorePlus, DeviceType
 
@@ -120,22 +121,18 @@ class CoreBenchmark(Benchmark):
 
 def benchmark_core_and_devices(
     core: CMMCorePlus, number: int = 100
-) -> dict[str, dict[str, float | str]]:
+) -> Iterable[tuple[str, dict[str, float | str]]]:
     """Take an initialized core with devices and benchmark various methods."""
-    data: dict[str, dict[str, float | str]] = {}
-
     for cls in Benchmark.__subclasses__():
         if cls.device_type == DeviceType.Core:
             bench = cls(core, "Core")
             bench.setup()
-            data["Core"] = bench.run(number)
+            yield "Core", bench.run(number)
         else:
             for dev in core.getLoadedDevicesOfType(cls.device_type):
                 bench = cls(core, dev)
                 bench.setup()
-                data[dev] = bench.run(number)
-
-    return data
+                yield dev, bench.run(number)
 
 
 def print_benchmarks(data: dict[str, dict[str, float | str]]) -> None:
@@ -179,4 +176,4 @@ if __name__ == "__main__":
     else:
         number = 1000
     data = benchmark_core_and_devices(core, number)
-    print_benchmarks(data)
+    print_benchmarks(dict(data))
