@@ -439,7 +439,7 @@ def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
 def bench(
     config: Optional[Path] = CONFIG_PARAM,
     number: int = typer.Option(
-        100, "-n", "--number", help="Number of iterations for each test."
+        10, "-n", "--number", help="Number of iterations for each test."
     ),
 ) -> None:
     """Run a benchmark of Core and Devices loaded with `config` (or Demo)."""
