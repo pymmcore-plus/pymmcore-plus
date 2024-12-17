@@ -8,6 +8,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Optional, Union, cast
 
+from pymmcore_plus.core._device import Device
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
 try:
@@ -446,25 +447,42 @@ def bench(
 
     core = CMMCorePlus()
     if config is not None:
+        typer.secho(
+            f"Loading system configuration from {config}", fg=typer.colors.BRIGHT_BLUE
+        )
         core.loadSystemConfiguration(str(config))
     else:
+        typer.secho("Loading DEMO configuration", fg=typer.colors.BRIGHT_BLUE)
         core.loadSystemConfiguration()
 
+    from rich.console import Console
     from rich.live import Live
     from rich.table import Table
 
+    console = Console()
     table = Table()
     table.add_column("Method")
     table.add_column("Time (ms)")
 
-    with Live(table, refresh_per_second=4):  # update 4 times a second to feel fluid
-        for device, data in benchmark_core_and_devices(core, number):
-            table.add_row(f"Device: {device}", "------", style="yellow")
-            for method, time in data.items():
-                if isinstance(time, float):
-                    table.add_row(method, f"{time:.4f}")
-                else:
-                    table.add_row(method, str(time), style="red")
+    with Live(table, console=console, refresh_per_second=4):
+        for item in benchmark_core_and_devices(core, number):
+            if item is None:
+                table.add_row("Device: Core", "------", style="yellow")
+            elif isinstance(item, Device):
+                console.log(
+                    f"Measuring ({item.type()}) Device: "
+                    f"{item.label!r} <{item.library()}::{item.name()}>"
+                    f": {item.description()}",
+                    style="#333333",
+                )
+                table.add_row(f"Device: {item.label}", "------", style="yellow")
+            else:
+                device, data = item
+                for method, time in data.items():
+                    if isinstance(time, float):
+                        table.add_row(method, f"{time:.4f}")
+                    else:
+                        table.add_row(method, str(time), style="red")
 
 
 def main() -> None:  # pragma: no cover
