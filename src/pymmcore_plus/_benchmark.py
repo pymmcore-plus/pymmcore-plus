@@ -93,6 +93,26 @@ def benchmark_core(core: CMMCore, number: int = 1000) -> dict:
     return data
 
 
+def print_benchmarks(data: dict[str, float | str]) -> None:
+    """Print the benchmark results in a human-readable format."""
+    try:
+        from rich.console import Console
+        from rich.table import Table
+
+        table = Table(title="Benchmark results")
+        table.add_column("Method", justify="right", style="green")
+        table.add_column("Time (ms)", justify="right")
+        for method, time in data.items():
+            if isinstance(time, float):
+                time = f"{time:.4f}"
+            table.add_row(method, str(time))
+
+        console = Console()
+        console.print(table)
+    except ImportError:
+        print(data)
+
+
 if __name__ == "__main__":
     import sys
 
@@ -112,20 +132,4 @@ if __name__ == "__main__":
     else:
         number = 1000
     data = benchmark_core(core, number)
-
-    try:
-        from rich.console import Console
-        from rich.table import Table
-
-        table = Table(title="Benchmark results")
-        table.add_column("Method", justify="right", style="green")
-        table.add_column("Time (ms)", justify="right")
-        for method, time in data.items():
-            if isinstance(time, float):
-                time = f"{time:.4f}"
-            table.add_row(method, str(time))
-
-        console = Console()
-        console.print(table)
-    except ImportError:
-        print(data)
+    print_benchmarks(data)

@@ -8,6 +8,8 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Optional, Union, cast
 
+from pymmcore_plus.core._mmcore_plus import CMMCorePlus
+
 try:
     import typer
     from rich import print
@@ -40,6 +42,17 @@ def _show_version_and_exit(value: bool) -> None:
         typer.echo(f"MMCore v{pymmcore.CMMCore().getVersionInfo()}")
         typer.echo(f"{pymmcore.CMMCore().getAPIVersionInfo()}")
         raise typer.Exit()
+
+
+CONFIG_PARAM = typer.Option(
+    None,
+    "-c",
+    "--config",
+    dir_okay=False,
+    exists=True,
+    resolve_path=True,
+    help="Path to Micro-Manager system configuration file.",
+)
 
 
 @app.callback()
@@ -174,15 +187,7 @@ def run(
         resolve_path=True,
         help="Path to useq-schema file.",
     ),
-    config: Optional[Path] = typer.Option(
-        None,
-        "-c",
-        "--config",
-        dir_okay=False,
-        exists=True,
-        resolve_path=True,
-        help="Path to Micro-Manager system configuration file.",
-    ),
+    config: Optional[Path] = CONFIG_PARAM,
     z_go_up: Optional[bool] = typer.Option(None, help="Acquire from bottom to top."),
     z_top: Optional[float] = typer.Option(None, help="Top of z-stack."),
     z_bottom: Optional[float] = typer.Option(None, help="Bottom of z-stack."),
@@ -427,6 +432,24 @@ def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
 
             # Sleep for a short interval before checking again
             time.sleep(1)
+
+
+@app.command()
+def benchmark(
+    config: Optional[Path] = CONFIG_PARAM,
+    number: int = typer.Option(100, help="Number of iterations for each test."),
+) -> None:
+    """Run a benchmark of the Micro-Manager API."""
+    from pymmcore_plus._benchmark import benchmark_core, print_benchmarks
+
+    core = CMMCorePlus()
+    if config is not None:
+        core.loadSystemConfiguration(str(config))
+    else:
+        core.loadSystemConfiguration()
+
+    data = benchmark_core(core, number)
+    print_benchmarks(data)
 
 
 def main() -> None:  # pragma: no cover
