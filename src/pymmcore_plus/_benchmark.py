@@ -1,6 +1,7 @@
 import timeit
 from collections.abc import Iterable
 from types import NoneType
+from typing import Iterator
 
 from pymmcore_plus import CMMCorePlus, DeviceType
 from pymmcore_plus.core._device import Device
@@ -21,9 +22,7 @@ class Benchmark:
             return self.core.getDeviceObject(self.label)
         return None
 
-    def run(self, number: int) -> dict[str, float | str]:
-        data: dict[str, float | str] = {}
-
+    def run(self, number: int) -> Iterator[tuple[str, float | str]]:
         # get methods in the order of definition, in reverse MRO order
         methods: list[str] = []
         for base in reversed(type(self).mro()):
@@ -35,8 +34,7 @@ class Benchmark:
                 result: float | str = round(1000 * t / number, 3)
             except Exception as e:
                 result = str(e)
-            data[method_name[6:]] = result
-        return data
+            yield method_name[6:], result
 
 
 class CoreBenchmark(Benchmark):
@@ -164,20 +162,20 @@ class StateBenchmark(Benchmark):
 
 def benchmark_core_and_devices(
     core: CMMCorePlus, number: int = 100
-) -> Iterable[Device | None | tuple[str, dict[str, float | str]]]:
+) -> Iterable[Device | None | tuple[str, float | str]]:
     """Take an initialized core with devices and benchmark various methods."""
     for cls in Benchmark.__subclasses__():
         if cls.device_type == DeviceType.Core:
             bench = cls(core, "Core")
             yield bench.device()
             bench.setup()
-            yield "Core", bench.run(number)
+            yield from bench.run(number)
         else:
             for dev in core.getLoadedDevicesOfType(cls.device_type):
                 bench = cls(core, dev)
                 yield bench.device()
                 bench.setup()
-                yield dev, bench.run(number)
+                yield from bench.run(number)
 
 
 def print_benchmarks(data: dict[str, dict[str, float | str]]) -> None:

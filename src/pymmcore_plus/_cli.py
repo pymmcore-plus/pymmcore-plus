@@ -481,12 +481,11 @@ def bench(
                 )
                 table.add_row(f"Device: {item.label}", "------", style="yellow")
             else:
-                device, data = item
-                for method, time in data.items():
-                    if isinstance(time, float):
-                        table.add_row(method, f"{time:.4f}")
-                    else:
-                        table.add_row(method, str(time), style="red")
+                method, time = item
+                if isinstance(time, float):
+                    table.add_row(method, f"{time:.4f}")
+                else:
+                    table.add_row(method, str(time), style="red")
 
 
 def main() -> None:  # pragma: no cover
