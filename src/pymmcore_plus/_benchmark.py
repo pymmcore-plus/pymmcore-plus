@@ -1,7 +1,11 @@
 import timeit
 
 from pymmcore import CMMCore
-
+try:
+    from tqdm import tqdm
+except ImportError:
+    def tqdm(iterable, *args, **kwargs):
+        return iterable
 
 def benchmark_core(core: CMMCore, number: int = 1000) -> dict:
     """Take an initialized core with devices and benchmark various methods."""
@@ -65,7 +69,7 @@ def benchmark_core(core: CMMCore, number: int = 1000) -> dict:
         )
     if pxcfgs := core.getAvailablePixelSizeConfigs():
         methods.append(("getPixelSizeConfigData", (pxcfgs[0],)))
-    for item in methods:
+    for item in tqdm(methods):
         if isinstance(item, tuple):
             meth, args = item
         else:
@@ -88,7 +92,13 @@ if __name__ == "__main__":
 
     core = CMMCorePlus()
     if len(sys.argv) > 1:
+        print("Loading system configuration from", sys.argv[1])
         core.loadSystemConfiguration(sys.argv[1])
     else:
+        print("using demo configuration")
         core.loadSystemConfiguration()
-    print(benchmark_core(core))
+    if len(sys.argv) > 2:
+        number = int(sys.argv[2])
+    else:
+        number = 1000
+    print(benchmark_core(core, number))
