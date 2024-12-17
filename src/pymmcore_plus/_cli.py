@@ -435,12 +435,14 @@ def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
 
 
 @app.command()
-def benchmark(
+def bench(
     config: Optional[Path] = CONFIG_PARAM,
-    number: int = typer.Option(100, help="Number of iterations for each test."),
+    number: int = typer.Option(
+        100, "-n", "--number", help="Number of iterations for each test."
+    ),
 ) -> None:
-    """Run a benchmark of the Micro-Manager API."""
-    from pymmcore_plus._benchmark import benchmark_core, print_benchmarks
+    """Run a benchmark of Core and Devices loaded with `config` (or Demo)."""
+    from pymmcore_plus._benchmark import benchmark_core_and_devices, print_benchmarks
 
     core = CMMCorePlus()
     if config is not None:
@@ -448,7 +450,7 @@ def benchmark(
     else:
         core.loadSystemConfiguration()
 
-    data = benchmark_core(core, number)
+    data = benchmark_core_and_devices(core, number)
     print_benchmarks(data)
 
 
