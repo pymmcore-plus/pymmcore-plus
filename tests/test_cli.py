@@ -346,5 +346,5 @@ def test_cli_bench() -> None:
     local = Path(__file__).parent / "local_config.cfg"
     result = runner.invoke(app, ["bench", "--config", str(local)])
     assert result.exit_code == 0
+    assert "Loading config" in result.stdout
     assert "Core" in result.stdout
-    assert "local_config" in result.stdout
