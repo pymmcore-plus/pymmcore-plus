@@ -80,10 +80,15 @@ def benchmark_core(core: CMMCore, number: int = 1000) -> dict:
 
 
 if __name__ == "__main__":
+    import sys
+
     from rich import print
 
     from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
     core = CMMCorePlus()
-    core.loadSystemConfiguration()
+    if len(sys.argv) > 1:
+        core.loadSystemConfiguration(sys.argv[1])
+    else:
+        core.loadSystemConfiguration()
     print(benchmark_core(core))
