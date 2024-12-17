@@ -473,7 +473,7 @@ def bench(
             if item is None:
                 table.add_row("Device: Core", "------", style="yellow")
             elif isinstance(item, Device):
-                console.log(
+                console.print(
                     f"Measuring ({item.type()}) Device: "
                     f"{item.label!r} <{item.library()}::{item.name()}>"
                     f": {item.description()}",
