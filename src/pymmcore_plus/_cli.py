@@ -443,23 +443,27 @@ def bench(
     ),
 ) -> None:
     """Run a benchmark of Core and Devices loaded with `config` (or Demo)."""
-    from pymmcore_plus._benchmark import benchmark_core_and_devices
-
-    core = CMMCorePlus()
-    if config is not None:
-        typer.secho(
-            f"Loading system configuration from {config}", fg=typer.colors.BRIGHT_BLUE
-        )
-        core.loadSystemConfiguration(str(config))
-    else:
-        typer.secho("Loading DEMO configuration", fg=typer.colors.BRIGHT_BLUE)
-        core.loadSystemConfiguration()
-
     from rich.console import Console
     from rich.live import Live
     from rich.table import Table
 
+    from pymmcore_plus._benchmark import benchmark_core_and_devices
+
     console = Console()
+
+    core = CMMCorePlus()
+    if config is not None:
+        console.log(
+            f"Loading config {config} ...",
+            style="bright_blue",
+            end="",
+        )
+        core.loadSystemConfiguration(str(config))
+    else:
+        console.log("Loading DEMO configuration ...", style="bright_blue", end="")
+        core.loadSystemConfiguration()
+    console.log("Loaded.", style="bright_blue")
+
     table = Table()
     table.add_column("Method")
     table.add_column("Time (ms)")
