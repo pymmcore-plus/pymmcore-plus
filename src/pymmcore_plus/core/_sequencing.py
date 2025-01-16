@@ -21,6 +21,38 @@ if TYPE_CHECKING:
 
 T = TypeVar("T")
 
+__all__ = ["SequencedEvent", "get_all_sequenceable", "iter_sequenced_events"]
+
+
+def iter_sequenced_events(
+    core: CMMCorePlus, events: Iterable[MDAEvent]
+) -> Iterator[MDAEvent | SequencedEvent]:
+    """Iterate over a sequence of MDAEvents, yielding SequencedEvents when possible.
+
+    Parameters
+    ----------
+    core : CMMCorePlus
+        The core object to use for determining sequenceable properties.
+    events : Iterable[MDAEvent]
+        The events to iterate over.
+
+    Returns
+    -------
+    Iterator[MDAEvent | SequencedEvent]
+        A new iterator that will combine multiple MDAEvents into a single SequencedEvent
+        when possible, based on the sequenceable properties of the core object.
+        Note that `SequencedEvent` itself is a subclass of `MDAEvent`, but it's up to
+        the engine to check `isinstance(event, SequencedEvent)` in order to handle
+        SequencedEvents differently.
+    """
+    combiner = EventCombiner(core)
+    for e in events:
+        if (flushed := combiner.feed_event(e)) is not None:
+            yield flushed
+
+    if (leftover := combiner.flush()) is not None:
+        yield leftover
+
 
 class SequencedEvent(MDAEvent):
     """Subclass of MDAEvent that represents a sequence of triggered events."""
@@ -52,11 +84,20 @@ class SequencedEvent(MDAEvent):
             yield k, v
 
 
-def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str], int]:
+def get_all_sequenceable(
+    core: CMMCorePlus, include_properties: bool = True
+) -> dict[tuple[str | DeviceType, str], int]:
     """Return all sequenceable devices in `core`.
 
     This is just a convenience function to help determine which devices can be
     sequenced on a given configuration.
+
+    Parameters
+    ----------
+    core : CMMCorePlus
+        The core object to use for determining sequenceable properties.
+    include_properties : bool
+        Whether to check/include all device properties in the result.
 
     Returns
     -------
@@ -73,9 +114,10 @@ def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str]
     """
     d: dict[tuple[str | DeviceType, str], int] = {}
     for device in core.iterDevices():
-        for prop in device.properties:
-            if prop.isSequenceable():
-                d[(prop.device, prop.name)] = prop.sequenceMaxLength()
+        if include_properties:
+            for prop in device.properties:
+                if prop.isSequenceable():
+                    d[(prop.device, prop.name)] = prop.sequenceMaxLength()
         if device.type() == DeviceType.Stage:
             # isStageLinearSequenceable?
             if core.isStageSequenceable(device.label):
@@ -96,6 +138,16 @@ def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str]
 
 
 class EventCombiner:
+    """Helper class to combine multiple MDAEvents into a single SequencedEvent.
+
+    See also: `iter_sequenced_events`, which is the primary way that this class is used.
+
+    Parameters
+    ----------
+    core : CMMCorePlus
+        The core object to use for determining sequenceable properties
+    """
+
     def __init__(self, core: CMMCorePlus) -> None:
         self.core = core
         self.max_lengths: dict[Keyword | tuple[str, str], int] = (
@@ -124,7 +176,7 @@ class EventCombiner:
         """Feed one new event into the combiner.
 
         Returns a flushed MDAEvent/SequencedEvent if the new event *cannot* extend the
-        current batch, or None otherwise.
+        current batch, or `None` otherwise.
         """
         if not self.event_batch:
             # Starting a new batch
@@ -139,7 +191,7 @@ class EventCombiner:
 
         # we've hit the end of the sequence
         # first, flus the existing batch...
-        flushed = self._flush_batch()
+        flushed = self._create_sequenced_event()
 
         # Then start a new batch with this new event...
         self._reset_tracking()
@@ -152,7 +204,6 @@ class EventCombiner:
     def can_extend(self, event: MDAEvent) -> bool:
         """Return True if the new event can be added to the current batch."""
         # cannot add pre-existing SequencedEvents to the sequence
-
         if not self.event_batch:
             return True
 
@@ -167,6 +218,17 @@ class EventCombiner:
             return False
 
         new_chunk_len = len(self.event_batch) + 1
+
+        # NOTE: these should be ordered from "fastest to check / most likely to fail",
+        # to "slowest to check / most likely to pass"
+
+        # If it's a new timepoint, and they have a different start time
+        # we don't (yet) support sequencing.
+        if (
+            event.index.get("t") != e0.index.get("t")
+            and event.min_start_time != e0.min_start_time
+        ):
+            return False
 
         # Exposure
         if event.exposure != e0.exposure:
@@ -210,11 +272,15 @@ class EventCombiner:
         """Flush any remaining events in the buffer."""
         if not self.event_batch:
             return None
-        result = self._flush_batch()
+        result = self._create_sequenced_event()
         self._reset_tracking()
         return result
 
-    def _flush_batch(self) -> MDAEvent | SequencedEvent:
+    def _create_sequenced_event(self) -> MDAEvent | SequencedEvent:
+        """Convert self.event_batch into a SequencedEvent.
+
+        If the batch contains only a single event, that event is returned directly.
+        """
         if not self.event_batch:
             raise RuntimeError("Cannot flush an empty chunk")
 
@@ -318,51 +384,6 @@ class EventCombiner:
         return self._prop_lengths[dev_prop]
 
 
-def iter_sequenced_events(
-    core: CMMCorePlus, events: Iterable[MDAEvent]
-) -> Iterator[MDAEvent | SequencedEvent]:
-    """Iterate over a sequence of MDAEvents, yielding SequencedEvents when possible.
-
-    Parameters
-    ----------
-    core : CMMCorePlus
-        The core object to use for determining sequenceable properties.
-    events : Iterable[MDAEvent]
-        The events to iterate over.
-
-    Returns
-    -------
-    Iterator[MDAEvent | SequencedEvent]
-        A new iterator that will combine multiple MDAEvents into a single SequencedEvent
-        when possible, based on the sequenceable properties of the core object.
-        Note that `SequencedEvent` itself is a subclass of `MDAEvent`, but it's up to
-        the engine to check `isinstance(event, SequencedEvent)` in order to handle
-        SequencedEvents differently.
-    """
-    combiner = EventCombiner(core)
-    for e in events:
-        if (flushed := combiner.feed_event(e)) is not None:
-            yield flushed
-
-    if (leftover := combiner.flush()) is not None:
-        yield leftover
-
-
-def can_sequence_events(core: CMMCorePlus, e1: MDAEvent, e2: MDAEvent) -> bool:
-    """Check whether two [`useq.MDAEvent`][] are sequenceable.
-
-    !!! warning
-        This function is deprecated and should not be used in new code. It is only
-        retained for backwards compatibility.
-    """
-    # this is an old function that simply exists to return a value in the deprecated
-    # core.canSequenceEvents method.  It is not used in the current implementation
-    # and should not be used in new code.
-    combiner = EventCombiner(core)
-    combiner.feed_event(e1)
-    return combiner.can_extend(e2)
-
-
 def _get_max_sequence_lengths(core: CMMCorePlus) -> dict[Keyword, int]:
     max_lengths: dict[Keyword, int] = {}
     for keyword, get_device, is_sequenceable, get_max_length in (
@@ -396,3 +417,18 @@ def _get_max_sequence_lengths(core: CMMCorePlus) -> dict[Keyword, int]:
             if (device := get_device()) and is_sequenceable(device):
                 max_lengths[keyword] = get_max_length(device)
     return max_lengths
+
+
+def can_sequence_events(core: CMMCorePlus, e1: MDAEvent, e2: MDAEvent) -> bool:
+    """Check whether two [`useq.MDAEvent`][] are sequenceable.
+
+    !!! warning
+        This function is deprecated and should not be used in new code. It is only
+        retained for backwards compatibility.
+    """
+    # this is an old function that simply exists to return a value in the deprecated
+    # core.canSequenceEvents method.  It is not used in the current implementation
+    # and should not be used in new code.
+    combiner = EventCombiner(core)
+    combiner.feed_event(e1)
+    return combiner.can_extend(e2)
