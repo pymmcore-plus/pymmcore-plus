@@ -13,6 +13,7 @@ from pymmcore_plus.core import (
 from pymmcore_plus.core import Keyword as KW
 
 from ._device_manager import PyDeviceManager
+from ._proxy import create_core_proxy
 from .devices._device import Device
 from .devices._stage import XYStageDevice, _BaseStage
 
@@ -168,7 +169,7 @@ class UniMMCore(CMMCorePlus):
         """
         if label in self.getLoadedDevices():
             raise ValueError(f"The specified device label {label!r} is already in use")
-        self._pydevices.load(label, device, self.create_proxy())
+        self._pydevices.load(label, device, create_core_proxy(self))
 
     load_py_device = loadPyDevice
 

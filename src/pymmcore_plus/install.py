@@ -37,14 +37,12 @@ try:
         rich_print(f"{emoji}{color}{text}")
 
     @contextmanager
-    def _spinner(
-        text: str = "", color: str = "bold blue"
-    ) -> Iterator[progress.Progress]:
+    def _spinner(text: str, color: str = "bold blue") -> Iterator[None]:
         with progress.Progress(
             progress.SpinnerColumn(), progress.TextColumn(f"[{color}]{text}")
         ) as pbar:
             pbar.add_task(description=text, total=None)
-            yield pbar
+            yield None
 
 except ImportError:  # pragma: no cover
     progress = None  # type: ignore
@@ -53,7 +51,7 @@ except ImportError:  # pragma: no cover
         print(text)
 
     @contextmanager
-    def _spinner(text: str = "", color: str = "") -> Iterator[None]:
+    def _spinner(text: str, color: str = "") -> Iterator[None]:
         print(text)
         yield
 
@@ -78,8 +76,8 @@ def _get_spinner(log_msg: _MsgLogger) -> Callable[[str], AbstractContextManager]
     else:
 
         @contextmanager
-        def spinner(msg: str) -> Iterator[None]:
-            log_msg(msg)
+        def spinner(text: str, color: str = "") -> Iterator[None]:
+            log_msg(text)
             yield
 
     return spinner

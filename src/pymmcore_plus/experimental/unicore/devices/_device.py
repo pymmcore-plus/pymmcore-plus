@@ -17,7 +17,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import Any, Self
 
-    from pymmcore_plus.core._proxy import CMMCoreProxy
+    from pymmcore_plus.experimental.unicore._proxy import CMMCoreProxy
 
     from ._properties import PropArg, TDev, TProp
 

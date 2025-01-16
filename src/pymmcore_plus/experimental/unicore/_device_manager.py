@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 
     from pymmcore import DeviceLabel
 
-    from pymmcore_plus.core._proxy import CMMCoreProxy
+    from ._proxy import CMMCoreProxy
 
 DevT = TypeVar("DevT", bound=Device)
 logger = logging.getLogger(__name__)

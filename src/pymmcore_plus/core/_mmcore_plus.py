@@ -1505,7 +1505,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             ncomponents = self.getNumberOfComponents()
         if ncomponents == 4 and img.ndim != 3:
             new_shape = (*img.shape, 4)
-            img = img.view(dtype=f"u{img.dtype.itemsize//4}").reshape(new_shape)
+            img = img.view(dtype=f"u{img.dtype.itemsize // 4}").reshape(new_shape)
             img = img[..., [2, 1, 0]]  # Convert from BGRA to RGB
         return img
 
@@ -1520,7 +1520,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         # best as I can tell, this is a hard-coded string in Utilities/MultiCamera.cpp
         # (it also appears in ArduinoCounter.cpp).  This appears to be "the way"
         # to get at the original camera when using the multi-camera utility.
-        prop_name = f"Physical Camera {channel_index+1}"
+        prop_name = f"Physical Camera {channel_index + 1}"
         if self.hasProperty(cam_dev, prop_name):
             return self.getProperty(cam_dev, prop_name)
         if channel_index > 0:
