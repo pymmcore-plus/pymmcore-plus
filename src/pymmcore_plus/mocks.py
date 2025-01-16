@@ -28,7 +28,10 @@ class MockSequenceableCore(MagicMock):
             self.loadExposureSequence.return_value = None
             self.loadStageSequence.return_value = None
             self.loadXYStageSequence.return_value = None
-            self.loadSLMSequence.return_value = None
+            # TODO: add support in pymmcore-nano
+            if hasattr(CMMCorePlus, "loadSLMSequence"):
+                self.loadSLMSequence.return_value = None
+
             self.loadPropertySequence.return_value = None
 
             self.startExposureSequence.return_value = None
