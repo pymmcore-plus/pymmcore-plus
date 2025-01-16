@@ -37,7 +37,6 @@ from ._constants import (
 from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
-from ._sequencing import can_sequence_events
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
@@ -2244,7 +2243,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         False
         ```
         """
-        return can_sequence_events(self, e1, e2, cur_length)
+        warnings.warn(
+            "canSequenceEvents is deprecated.\nPlease use "
+            "`list(pymmcore_plus.core.iter_sequenced_events(core, [e1, e2]))` "
+            "to see how this core will combine MDAEvents into SequencedEvents.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        from ._sequencing import can_sequence_events
+
+        return can_sequence_events(self, e1, e2)
 
 
 for name in (
