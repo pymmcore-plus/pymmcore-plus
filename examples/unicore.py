@@ -62,8 +62,8 @@ print(f"pos: {core.getXYPosition()}")
 # can still set and query the C-side device directly
 core.waitForDevice("XY")
 core.setXYPosition("XY", 1.5, 3.7)
-print(f"XY pos: {core.getXYPosition("XY")}")
-print(f"pyXY pos: {core.getXYPosition("pyXY")}")
+print(f"XY pos: {core.getXYPosition('XY')}")
+print(f"pyXY pos: {core.getXYPosition('pyXY')}")
 
 core.home("pyXY")
 core.stop("pyXY")
