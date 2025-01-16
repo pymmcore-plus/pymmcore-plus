@@ -2250,9 +2250,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             DeprecationWarning,
             stacklevel=2,
         )
-        from ._sequencing import _can_sequence_events
+        from ._sequencing import can_sequence_events
 
-        return _can_sequence_events(self, e1, e2)
+        return can_sequence_events(self, e1, e2)
 
 
 for name in (

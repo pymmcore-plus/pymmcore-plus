@@ -1,21 +1,20 @@
 from __future__ import annotations
 
+from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import suppress
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, TypeVar
 
-import useq
 from pydantic import Field, model_validator
 from useq import AcquireImage, MDAEvent
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Sequence
+    from collections.abc import Iterable, Iterator
     from typing import Self
 
-    import useq._mda_event
+    from useq._mda_event import Channel as EventChannel
 
     from pymmcore_plus import CMMCorePlus
 
@@ -33,6 +32,8 @@ class SequencedEvent(MDAEvent):
     y_sequence: tuple[float, ...] = Field(default_factory=tuple)
     z_sequence: tuple[float, ...] = Field(default_factory=tuple)
     slm_sequence: tuple[bytes, ...] = Field(default_factory=tuple)
+
+    # all other property sequences
     property_sequences: dict[tuple[str, str], list[str]] = Field(default_factory=dict)
     # static properties should be added to MDAEvent.properties as usual
 
@@ -49,298 +50,6 @@ class SequencedEvent(MDAEvent):
             if isinstance(v, dict):
                 v = f"({len(v)} items)"
             yield k, v
-
-
-@dataclass
-class SequenceItem(Generic[T]):
-    """A single sequence of values for a given property.
-
-    This structure is used by `SequenceData` to keep track of the values for each
-    property that may need to be sequenced, (whether it be a core device or a device
-    property).
-
-    Parameters
-    ----------
-    max_length : int
-        The maximum allowed length of the sequence.  Usually determined by the core's
-        `get*SequenceMaxLength` method.  A max_length of 0 indicates that the property
-        is not sequenceable.
-    sequence : list[T], optional
-        The sequence of accumulated values, by default an empty list.
-    sequence_set : set[T], optional
-        A set of unique values in the sequence, by default an empty set.  This is
-        maintained in parallel with the `sequence` list to allow for quick lookups
-        of unique values.
-    """
-
-    max_length: int
-    sequence: list[T] = field(default_factory=list)
-    sequence_set: set[T] = field(default_factory=set)
-
-    def __len__(self) -> int:
-        """Return the length of the sequence."""
-        return len(self.sequence)
-
-    def has_multiple_values(self) -> int:
-        """Return True if the sequence has more than one unique value."""
-        return len(self.sequence_set) > 1
-
-    def append(self, value: Any) -> None:
-        """Append a value to the sequence."""
-        self.sequence.append(value)
-        self.sequence_set.add(value)
-
-    def can_append(self, value: Any) -> bool:
-        """Return True if `value` can be appended to the sequence."""
-        # if adding the new value would make the sequence non-unique
-        # then we can only append if the sequence is not already at max length
-        if len(self.sequence_set | {value}) > 1:
-            return len(self) < self.max_length
-
-        # otherwise, we can always append
-        return True
-
-
-@dataclass
-class SequenceData:
-    """Temporary data structure for constructing a SequencedEvent.
-
-    This object is used within the `iter_sequenced_events` function to accumulate
-    events and determine when a sequence has been completed.  It then converts the
-    accumulated data into a `SequencedEvent` object using the `to_mda_event` method.
-    """
-
-    core: CMMCorePlus
-    events: list[MDAEvent] = field(default_factory=list)
-    items: dict[str | tuple[str, str], SequenceItem] = field(default_factory=dict)
-
-    def __post_init__(self) -> None:
-        # initialize items dict with max sequenceable length of all core devices
-        self._cfg_cache: dict[
-            useq._mda_event.Channel, list[tuple[tuple[str, str], Any]]
-        ] = {}
-        for keyword, get_device, is_sequenceable, get_max_length in (
-            (
-                Keyword.CoreCamera,
-                self.core.getCameraDevice,
-                self.core.isExposureSequenceable,
-                self.core.getExposureSequenceMaxLength,
-            ),
-            (
-                Keyword.CoreFocus,
-                self.core.getFocusDevice,
-                self.core.isStageSequenceable,
-                self.core.getStageSequenceMaxLength,
-            ),
-            (
-                Keyword.CoreXYStage,
-                self.core.getXYStageDevice,
-                self.core.isXYStageSequenceable,
-                self.core.getXYStageSequenceMaxLength,
-            ),
-            (
-                Keyword.CoreSLM,
-                self.core.getSLMDevice,
-                lambda d: True,
-                self.core.getSLMSequenceMaxLength,
-            ),
-        ):
-            # if the keyword is already present, we can skip and save time.
-            if keyword not in self.items:
-                max_length = 0
-                with suppress(RuntimeError):
-                    if (device := get_device()) and is_sequenceable(device):
-                        max_length = get_max_length(device)
-                self.items[keyword] = SequenceItem(max_length)
-
-    # @profile
-    def try_add_event(self, event: MDAEvent) -> bool:
-        """Return True if the event was successfully added to the sequence."""
-        # TODO: consider returning a string instead of False to indicate why the event
-        # could not be added to the sequence.
-
-        # cannot add pre-existing SequencedEvents to the sequence
-        if isinstance(event, SequencedEvent):
-            return False
-        # cannot sequence non-'AcquireImage' events
-        if not isinstance(event.action, (AcquireImage, type(None))):
-            return False
-
-        event_vals = self._get_event_values(event)
-        for key, value in event_vals:
-            if key not in self.items:
-                # we've never seen this property before;
-                # check with the core to see if it's sequenceable and get the max length
-                dev, prop = cast("tuple[str, str]", key)
-                max_len = (
-                    self.core.getPropertySequenceMaxLength(dev, prop)
-                    if self.core.isPropertySequenceable(dev, prop)
-                    else 0
-                )
-                self.items[key] = SequenceItem(max_len)
-            # if we can't append the value to this particular axis,
-            # then we've reached the end of the sequence
-            if not self.items[key].can_append(value):
-                return False
-
-        # ATOMIC UPDATE
-        # if we've made it this far, we can actually add all of the values
-        for key, value in event_vals:
-            self.items[key].append(value)
-        self.events.append(event)
-
-        return True
-
-    # @profile
-    def _get_event_values(
-        self, event: MDAEvent
-    ) -> Sequence[tuple[str | tuple[str, str], Any]]:
-        """Extract the values from the event that should be checked for sequencing."""
-        vals: list[tuple[str | tuple[str, str], Any]] = [
-            (Keyword.CoreCamera, event.exposure),
-            (Keyword.CoreFocus, event.z_pos),
-            (Keyword.CoreXYStage, (event.x_pos, event.y_pos)),
-        ]
-        if (ch := event.channel) is not None:
-            # we've never seen this channel before; get the values from the core
-            # and cache them for future use
-            if not (data := self._cfg_cache.get(ch)):
-                # native slightly faster, though uglier
-                cfg = self.core.getConfigData(ch.group, ch.config, native=True)
-                self._cfg_cache[ch] = data = [
-                    (
-                        (
-                            (s := cfg.getSetting(n)).getDeviceLabel(),
-                            s.getPropertyName(),
-                        ),
-                        s.getPropertyValue(),
-                    )
-                    for n in range(cfg.size())
-                ]
-
-            vals.extend(data)
-        if event.properties:
-            for dev, prop, val in event.properties:
-                vals.append(((dev, prop), val))
-        return vals
-
-    def to_mda_event(self) -> SequencedEvent | MDAEvent:
-        """Convert the collected data into a SequencedEvent or MDAEvent."""
-        if not self.events:  # pragma: no cover
-            raise ValueError("SequenceData must have at least one event to convert.")
-
-        # if we only have one event, there's no need to merge into a SequencedEvent
-        first_event = self.events[0]
-        if len(self.events) == 1:
-            return first_event
-
-        # now we need to merge the data into a SequencedEvent
-        # in each case, if there is a single value, that axis does not need to be
-        # sequenced at all. We just include the static value in the regular MDAEvent
-        # field (see bottom half of SequencedEvent constructor).
-        # Otherwise we include the sequence extracted from the SequenceItem.
-
-        # xy stage sequence
-        items = self.items.copy()
-        xy_item: SequenceItem[tuple[float | None, float | None]]
-        xy_item = items.pop(Keyword.CoreXYStage)
-        x_seq, y_seq = (
-            zip(*xy_item.sequence) if xy_item.has_multiple_values() else ((), ())
-        )
-
-        # exposure sequence
-        cam_item: SequenceItem[float]
-        cam_item = items.pop(Keyword.CoreCamera)
-        exp_seq = tuple(cam_item.sequence) if cam_item.has_multiple_values() else ()
-
-        # focus sequence
-        z_item = items.pop(Keyword.CoreFocus)
-        z_seq = tuple(z_item.sequence) if z_item.has_multiple_values() else ()
-
-        # SLM not yet implemented.  TODO: This needs to be added to useq.MDAEvent first.
-        _slm_item = items.pop(Keyword.CoreSLM, None)
-
-        # all other property sequences
-        sequenced_props = {}
-        static_props = []
-        for k, v in items.items():
-            if v.has_multiple_values():
-                sequenced_props[k] = v.sequence
-            else:
-                static_props.append((*k, v.sequence[0]))
-
-        return SequencedEvent(
-            events=tuple(self.events),
-            exposure_sequence=exp_seq,
-            x_sequence=x_seq,
-            y_sequence=y_seq,
-            z_sequence=z_seq,
-            property_sequences=sequenced_props,
-            properties=static_props,
-            # all other "standard" MDAEvent fields are derived from the first event
-            # the engine will use these values if the corresponding sequence is empty
-            x_pos=first_event.x_pos,
-            y_pos=first_event.y_pos,
-            z_pos=first_event.z_pos,
-            exposure=first_event.exposure,
-            channel=first_event.channel,
-        )
-
-    def clear(self) -> None:
-        """Clear all sequences.
-
-        This resets the data structure to prepare for the next sequence, without losing
-        max_length information for each property.
-        """
-        self.events.clear()
-        for item in self.items.values():
-            item.sequence.clear()
-            item.sequence_set.clear()
-
-
-def iter_sequenced_events(
-    core: CMMCorePlus, events: Iterable[MDAEvent]
-) -> Iterator[MDAEvent | SequencedEvent]:
-    """Iterate over a sequence of MDAEvents, yielding SequencedEvents when possible.
-
-    Parameters
-    ----------
-    core : CMMCorePlus
-        The core object to use for determining sequenceable properties.
-    events : Iterable[MDAEvent]
-        The events to iterate over.
-
-    Returns
-    -------
-    Iterator[MDAEvent | SequencedEvent]
-        A new iterator that will combine multiple MDAEvents into a single SequencedEvent
-        when possible, based on the sequenceable properties of the core object.
-        Note that `SequencedEvent` itself is a subclass of `MDAEvent`, but it's up to
-        the engine to check `isisntance(event, SequencedEvent)` in order to handle
-        SequencedEvents differently.
-    """
-    seq_data = SequenceData(core)
-
-    for event in events:
-        # if try_add_event returns True, the event was successfully added to the seq.
-        # if not, we've reached the end of the sequence, and we need to yield the
-        # current sequence and start a new one.
-        if seq_data.try_add_event(event):
-            continue
-
-        if seq_data.events:
-            # if we've accumulated any events, merge and yield them
-            yield seq_data.to_mda_event()
-            seq_data.clear()
-
-        # add the current event to a new sequence...
-        # if it can't be added even as the first event, then we'll just yield it
-        if not seq_data.try_add_event(event):
-            yield event
-
-    # yield the last event if there are any
-    if len(seq_data.events):
-        yield seq_data.to_mda_event()
 
 
 def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str], int]:
@@ -383,10 +92,307 @@ def get_all_sequenceable(core: CMMCorePlus) -> dict[tuple[str | DeviceType, str]
     return d
 
 
-def _can_sequence_events(core: CMMCorePlus, e1: MDAEvent, e2: MDAEvent) -> bool:
-    """Check whether two [`useq.MDAEvent`][] are sequenceable."""
+# ==============================================
+
+
+class EventCombiner:
+    def __init__(self, core: CMMCorePlus) -> None:
+        self.core = core
+        self.max_lengths: dict[Keyword | tuple[str, str], int] = (
+            _get_max_sequence_lengths(core)  # type: ignore [assignment]
+        )
+
+        # cached property values for each channel
+        self._channel_props: dict[EventChannel, dict[tuple[str, str], Any]] = {}
+        # cached max sequence lengths for each property
+        self._prop_lengths: dict[tuple[str, str], int] = {}
+
+        # growing list of MDAEvents to be combined into a single SequencedEvent
+        self.event_batch: list[MDAEvent] = []
+
+        # whether a given attribute has changed in the current batch
+        self.attribute_changes: dict[Keyword | tuple[str, str], bool] = {}
+        self.first_event_props: dict[tuple[str, str], Any] = {}
+        self._reset_tracking()
+
+    def _reset_tracking(self) -> None:
+        self.event_batch.clear()
+        self.attribute_changes.clear()
+        self.first_event_props.clear()
+
+    def feed_event(self, event: MDAEvent) -> MDAEvent | SequencedEvent | None:
+        """Feed one new event into the combiner.
+
+        Returns a flushed MDAEvent/SequencedEvent if the new event *cannot* extend the
+        current batch, or None otherwise.
+        """
+        if not self.event_batch:
+            # Starting a new batch
+            self.event_batch.append(event)
+            self.first_event_props = self._event_properties(event)
+            return None
+
+        if self.can_extend(event):
+            # Extend the current batch
+            self.event_batch.append(event)
+            return None
+
+        # we've hit the end of the sequence
+        # first, flus the existing batch...
+        flushed = self._flush_batch()
+
+        # Then start a new batch with this new event...
+        self._reset_tracking()
+        self.event_batch.append(event)
+        self.first_event_props = self._event_properties(event)
+
+        # then return the flushed event
+        return flushed
+
+    def can_extend(self, event: MDAEvent) -> bool:
+        """Return True if the new event can be added to the current batch."""
+        # cannot add pre-existing SequencedEvents to the sequence
+
+        if not self.event_batch:
+            return True
+
+        e0 = self.event_batch[0]
+
+        # cannot sequence on top of SequencedEvents
+        if isinstance(e0, SequencedEvent) or isinstance(event, SequencedEvent):
+            return False
+        # cannot sequence on top of non-'AcquireImage' events
+        acq = (AcquireImage, type(None))
+        if not isinstance(e0.action, acq) or not isinstance(event.action, acq):
+            return False
+
+        new_chunk_len = len(self.event_batch) + 1
+
+        # Exposure
+        if event.exposure != e0.exposure:
+            if new_chunk_len > self.max_lengths[Keyword.CoreCamera]:
+                return False
+            self.attribute_changes[Keyword.CoreCamera] = True
+
+        # XY
+        if event.x_pos != e0.x_pos or event.y_pos != e0.y_pos:
+            if new_chunk_len > self.max_lengths[Keyword.CoreXYStage]:
+                return False
+            self.attribute_changes[Keyword.CoreXYStage] = True
+
+        # Z
+        if event.z_pos != e0.z_pos:
+            if new_chunk_len > self.max_lengths[Keyword.CoreFocus]:
+                return False
+            self.attribute_changes[Keyword.CoreFocus] = True
+
+        # SLM
+        if event.slm_image != e0.slm_image:
+            if new_chunk_len > self.max_lengths[Keyword.CoreSLM]:
+                return False
+            self.attribute_changes[Keyword.CoreSLM] = True
+
+        # properties
+        event_props = self._event_properties(event)
+        all_props = event_props.keys() | self.first_event_props.keys()
+        for dev_prop in all_props:
+            new_val = event_props.get(dev_prop)
+            old_val = self.first_event_props.get(dev_prop)
+            if new_val != old_val:
+                # if the property has changed, (or is missing in one dict)
+                if new_chunk_len > self._get_property_max_length(dev_prop):
+                    return False
+                self.attribute_changes[dev_prop] = True
+
+        return True
+
+    def flush(self) -> MDAEvent | SequencedEvent | None:
+        """Flush any remaining events in the buffer."""
+        if not self.event_batch:
+            return None
+        result = self._flush_batch()
+        self._reset_tracking()
+        return result
+
+    def _flush_batch(self) -> MDAEvent | SequencedEvent:
+        if not self.event_batch:
+            raise RuntimeError("Cannot flush an empty chunk")
+
+        first_event = self.event_batch[0]
+
+        if (num_events := len(self.event_batch)) == 1:
+            return first_event
+
+        exposures: list[float | None] = []
+        x_positions: list[float | None] = []
+        y_positions: list[float | None] = []
+        z_positions: list[float | None] = []
+        slm_images: list[Any] = []
+        property_sequences: defaultdict[tuple[str, str], list[Any]] = defaultdict(list)
+        static_props: list[tuple[str, str, Any]] = []
+
+        # Single pass
+        for e in self.event_batch:
+            exposures.append(e.exposure)
+            x_positions.append(e.x_pos)
+            y_positions.append(e.y_pos)
+            z_positions.append(e.z_pos)
+            slm_images.append(e.slm_image)
+            for dev_prop, val in self._event_properties(e).items():
+                property_sequences[dev_prop].append(val)
+
+        # remove any property sequences that are static
+        for key, prop_seq in list(property_sequences.items()):
+            if not self.attribute_changes.get(key):
+                static_props.append((*key, prop_seq[0]))
+                property_sequences.pop(key)
+            elif len(prop_seq) != num_events:
+                raise RuntimeError(
+                    "Property sequence length mismatch. "
+                    "Please report this with an example."
+                )
+
+        exp_changed = self.attribute_changes.get(Keyword.CoreCamera)
+        xy_changed = self.attribute_changes.get(Keyword.CoreXYStage)
+        z_changed = self.attribute_changes.get(Keyword.CoreFocus)
+        slm_changed = self.attribute_changes.get(Keyword.CoreSLM)
+
+        exp_seq = tuple(exposures) if exp_changed else ()
+        x_seq = tuple(x_positions) if xy_changed else ()
+        y_seq = tuple(y_positions) if xy_changed else ()
+        z_seq = tuple(z_positions) if z_changed else ()
+        slm_seq = tuple(slm_images) if slm_changed else ()
+
+        return SequencedEvent(
+            events=tuple(self.event_batch),
+            exposure_sequence=exp_seq,
+            x_sequence=x_seq,
+            y_sequence=y_seq,
+            z_sequence=z_seq,
+            slm_sequence=slm_seq,
+            property_sequences=property_sequences,
+            properties=static_props,
+            # all other "standard" MDAEvent fields are derived from the first event
+            # the engine will use these values if the corresponding sequence is empty
+            x_pos=first_event.x_pos,
+            y_pos=first_event.y_pos,
+            z_pos=first_event.z_pos,
+            exposure=first_event.exposure,
+            channel=first_event.channel,
+        )
+
+    # -------------- helper methods to query props & max lengths ----------------
+
+    def _event_properties(self, event: MDAEvent) -> dict[tuple[str, str], Any]:
+        """Return a dict of all property values for a given event."""
+        props: dict[tuple[str, str], Any] = {}
+
+        if (ch := event.channel) is not None:
+            props.update(self._get_channel_properties(ch))
+        if event.properties:
+            for dev, prop, val in event.properties:
+                props[(dev, prop)] = val
+        return props
+
+    def _get_channel_properties(self, ch: EventChannel) -> dict[tuple[str, str], Any]:
+        """Get (and cache) property values for a given channel."""
+        if ch not in self._channel_props:
+            cfg = self.core.getConfigData(ch.group, ch.config, native=True)
+            data: dict[tuple[str, str], Any] = {}
+            for n in range(cfg.size()):
+                s = cfg.getSetting(n)
+                data[(s.getDeviceLabel(), s.getPropertyName())] = s.getPropertyValue()
+            self._channel_props[ch] = data
+
+        return self._channel_props[ch]
+
+    def _get_property_max_length(self, dev_prop: tuple[str, str]) -> int:
+        """Get (and cache) the max sequence length for a given property."""
+        if dev_prop not in self._prop_lengths:
+            max_length = 0
+            with suppress(RuntimeError):
+                dev, prop = dev_prop
+                if self.core.isPropertySequenceable(dev, prop):
+                    max_length = self.core.getPropertySequenceMaxLength(dev, prop)
+            self._prop_lengths[dev_prop] = max_length
+        return self._prop_lengths[dev_prop]
+
+
+def iter_sequenced_events(
+    core: CMMCorePlus, events: Iterable[MDAEvent]
+) -> Iterator[MDAEvent | SequencedEvent]:
+    """Iterate over a sequence of MDAEvents, yielding SequencedEvents when possible.
+
+    Parameters
+    ----------
+    core : CMMCorePlus
+        The core object to use for determining sequenceable properties.
+    events : Iterable[MDAEvent]
+        The events to iterate over.
+
+    Returns
+    -------
+    Iterator[MDAEvent | SequencedEvent]
+        A new iterator that will combine multiple MDAEvents into a single SequencedEvent
+        when possible, based on the sequenceable properties of the core object.
+        Note that `SequencedEvent` itself is a subclass of `MDAEvent`, but it's up to
+        the engine to check `isinstance(event, SequencedEvent)` in order to handle
+        SequencedEvents differently.
+    """
+    combiner = EventCombiner(core)
+    for e in events:
+        if (flushed := combiner.feed_event(e)) is not None:
+            yield flushed
+
+    if (leftover := combiner.flush()) is not None:
+        yield leftover
+
+
+def can_sequence_events(core: CMMCorePlus, e1: MDAEvent, e2: MDAEvent) -> bool:
+    """Check whether two [`useq.MDAEvent`][] are sequenceable.
+
+    !!! warning
+        This function is deprecated and should not be used in new code. It is only
+        retained for backwards compatibility.
+    """
     # this is an old function that simply exists to return a value in the deprecated
     # core.canSequenceEvents method.  It is not used in the current implementation
     # and should not be used in new code.
-    seq_data = SequenceData(core)
-    return seq_data.try_add_event(e1) and seq_data.try_add_event(e2)
+    combiner = EventCombiner(core)
+    combiner.feed_event(e1)
+    return combiner.can_extend(e2)
+
+
+def _get_max_sequence_lengths(core: CMMCorePlus) -> dict[Keyword, int]:
+    max_lengths: dict[Keyword, int] = {}
+    for keyword, get_device, is_sequenceable, get_max_length in (
+        (
+            Keyword.CoreCamera,
+            core.getCameraDevice,
+            core.isExposureSequenceable,
+            core.getExposureSequenceMaxLength,
+        ),
+        (
+            Keyword.CoreFocus,
+            core.getFocusDevice,
+            core.isStageSequenceable,
+            core.getStageSequenceMaxLength,
+        ),
+        (
+            Keyword.CoreXYStage,
+            core.getXYStageDevice,
+            core.isXYStageSequenceable,
+            core.getXYStageSequenceMaxLength,
+        ),
+        (
+            Keyword.CoreSLM,
+            core.getSLMDevice,
+            lambda _device: True,  # there is no isSLMSequenceable method
+            core.getSLMSequenceMaxLength,
+        ),
+    ):
+        max_lengths[keyword] = 0
+        with suppress(RuntimeError):
+            if (device := get_device()) and is_sequenceable(device):
+                max_lengths[keyword] = get_max_length(device)
+    return max_lengths
