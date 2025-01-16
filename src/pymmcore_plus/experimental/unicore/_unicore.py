@@ -11,9 +11,9 @@ from pymmcore_plus.core import (
     Keyword,
 )
 from pymmcore_plus.core import Keyword as KW
-from pymmcore_plus.core._proxy import create_core_proxy
 
 from ._device_manager import PyDeviceManager
+from ._proxy import create_core_proxy
 from .devices._device import Device
 from .devices._stage import XYStageDevice, _BaseStage
 

@@ -1,3 +1,9 @@
+"""Proxy objects expose a subset of an object's API.
+
+Useful, e.g., for passing a core-like object to python-side device adapters without
+exposing the entirety of the core.
+"""
+
 from __future__ import annotations
 
 import types
