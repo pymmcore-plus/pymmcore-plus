@@ -25,7 +25,12 @@ class MockSequenceableCore(MagicMock):
 
             self.isPropertySequenceable.side_effect = self._isPropertySequenceable
 
-            self.loadSequencedEvent.return_value = None
+            self.loadExposureSequence.return_value = None
+            self.loadStageSequence.return_value = None
+            self.loadXYStageSequence.return_value = None
+            self.loadSLMSequence.return_value = None
+            self.loadPropertySequence.return_value = None
+
             self.startExposureSequence.return_value = None
             self.stopExposureSequence.return_value = None
 

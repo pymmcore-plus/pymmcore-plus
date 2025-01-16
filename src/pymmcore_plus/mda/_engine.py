@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import suppress
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
@@ -346,6 +347,44 @@ class MDAEngine(PMDAEngine):
 
     # ===================== Sequenced Events =====================
 
+    def _load_sequenced_event(self, event: SequencedEvent) -> None:
+        """Load a `SequencedEvent` into the core.
+
+        `SequencedEvent` is a special pymmcore-plus specific subclass of
+        `useq.MDAEvent`.
+        """
+        core = self._mmc
+        if event.exposure_sequence:
+            cam_device = core.getCameraDevice()
+            with suppress(RuntimeError):
+                core.stopExposureSequence(cam_device)
+            core.loadExposureSequence(cam_device, event.exposure_sequence)
+        if event.x_sequence:  # y_sequence is implied and will be the same length
+            stage = core.getXYStageDevice()
+            with suppress(RuntimeError):
+                core.stopXYStageSequence(stage)
+            core.loadXYStageSequence(stage, event.x_sequence, event.y_sequence)
+        if event.z_sequence:
+            zstage = core.getFocusDevice()
+            with suppress(RuntimeError):
+                core.stopStageSequence(zstage)
+            core.loadStageSequence(zstage, event.z_sequence)
+        if event.slm_sequence:
+            slm = core.getSLMDevice()
+            with suppress(RuntimeError):
+                core.stopSLMSequence(slm)
+            core.loadSLMSequence(slm, event.slm_sequence)  # type: ignore[arg-type]
+        if event.property_sequences:
+            for (dev, prop), value_sequence in event.property_sequences.items():
+                with suppress(RuntimeError):
+                    core.stopPropertySequence(dev, prop)
+                core.loadPropertySequence(dev, prop, value_sequence)
+
+        # set all static properties, these won't change over the course of the sequence.
+        if event.properties:
+            for dev, prop, value in event.properties:
+                core.setProperty(dev, prop, value)
+
     def setup_sequenced_event(self, event: SequencedEvent) -> None:
         """Setup hardware for a sequenced (triggered) event.
 
@@ -355,7 +394,7 @@ class MDAEngine(PMDAEngine):
         """
         core = self._mmc
 
-        core.loadSequencedEvent(event)
+        self._load_sequenced_event(event)
 
         # this is probably not necessary.  loadSequenceEvent will have already
         # set all the config properties individually/manually.  However, without

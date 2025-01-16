@@ -106,7 +106,7 @@ def test_fully_sequenceable_core(core: CMMCorePlus) -> None:
 
     n_img = prod(mda.shape)
     core_mock.startSequenceAcquisition.assert_called_once_with(n_img, 0, True)
-    core_mock.loadSequencedEvent.assert_called()
+    core_mock.loadExposureSequence.assert_called()
 
 
 def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:
