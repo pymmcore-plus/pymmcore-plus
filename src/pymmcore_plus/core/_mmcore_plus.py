@@ -349,31 +349,36 @@ class CMMCorePlus(pymmcore.CMMCore):
         try:
             super().loadDevice(label, moduleName, deviceName)
         except RuntimeError as e:
-            msg = str(e)
-            if label in self.getLoadedDevices():
-                lib = super().getDeviceLibrary(label)
-                name = super().getDeviceName(label)
-                if moduleName == lib and deviceName == name:
-                    msg += f". Device {label!r} appears to be loaded already."
-                    warnings.warn(msg, stacklevel=2)
-                    return
+            if exc := self._load_error_with_info(label, moduleName, deviceName, str(e)):
+                raise exc from e
 
-                msg += f". Device {label!r} is already taken by {lib}::{name}"
+    def _load_error_with_info(
+        self, label: str, moduleName: str, deviceName: str, msg: str = ""
+    ) -> RuntimeError | None:
+        if label in self.getLoadedDevices():
+            lib = super().getDeviceLibrary(label)
+            name = super().getDeviceName(label)
+            if moduleName == lib and deviceName == name:
+                msg += f". Device {label!r} appears to be loaded already."
+                warnings.warn(msg, stacklevel=2)
+                return None
+
+            msg += f". Device {label!r} is already taken by {lib}::{name}"
+        else:
+            adapters = super().getDeviceAdapterNames()
+            if moduleName not in adapters:
+                msg += (
+                    f". Adapter name {moduleName!r} not in list of known adapter "
+                    f"names: {adapters}."
+                )
             else:
-                adapters = super().getDeviceAdapterNames()
-                if moduleName not in adapters:
+                devices = super().getAvailableDevices(moduleName)
+                if deviceName not in devices:
                     msg += (
-                        f". Adapter name {moduleName!r} not in list of known adapter "
-                        f"names: {adapters}."
+                        f". Device name {deviceName!r} not in devices provided by "
+                        f"adapter {moduleName!r}: {devices}"
                     )
-                else:
-                    devices = super().getAvailableDevices(moduleName)
-                    if deviceName not in devices:
-                        msg += (
-                            f". Device name {deviceName!r} not in devices provided by "
-                            f"adapter {moduleName!r}: {devices}"
-                        )
-            raise RuntimeError(msg) from e
+        return RuntimeError(msg)
 
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
