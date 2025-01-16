@@ -12,7 +12,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import Keyword
-from pymmcore_plus.core._sequencing import SequencedEvent
+from pymmcore_plus.core._sequencing import SequencedEvent, iter_sequenced_events
 from pymmcore_plus.metadata import (
     FrameMetaV1,
     PropertyValue,
@@ -217,21 +217,7 @@ class MDAEngine(PMDAEngine):
             yield from events
             return
 
-        seq: list[MDAEvent] = []
-        for event in events:
-            # if the sequence is empty or the current event can be sequenced with the
-            # previous event, add it to the sequence
-            if not seq or self._mmc.canSequenceEvents(seq[-1], event, len(seq)):
-                seq.append(event)
-            else:
-                # otherwise, yield a SequencedEvent if the sequence has accumulated
-                # more than one event, otherwise yield the single event
-                yield seq[0] if len(seq) == 1 else SequencedEvent.create(seq)
-                # add this current event and start a new sequence
-                seq = [event]
-        # yield any remaining events
-        if seq:
-            yield seq[0] if len(seq) == 1 else SequencedEvent.create(seq)
+        yield from iter_sequenced_events(self._mmc, events)
 
     # ===================== Regular Events =====================
 
@@ -352,7 +338,7 @@ class MDAEngine(PMDAEngine):
                 core.stopXYStageSequence(core.getXYStageDevice())
             if event.z_sequence:
                 core.stopStageSequence(core.getFocusDevice())
-            for dev, prop in event.property_sequences(core):
+            for dev, prop in event.property_sequences:
                 core.stopPropertySequence(dev, prop)
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
@@ -361,17 +347,15 @@ class MDAEngine(PMDAEngine):
 
     # ===================== Sequenced Events =====================
 
-    def setup_sequenced_event(self, event: SequencedEvent) -> None:
-        """Setup hardware for a sequenced (triggered) event.
+    def _load_sequenced_event(self, event: SequencedEvent) -> None:
+        """Load a `SequencedEvent` into the core.
 
-        This method is not part of the PMDAEngine protocol (it is called by
-        `setup_event`, which *is* part of the protocol), but it is made public
-        in case a user wants to subclass this engine and override this method.
+        `SequencedEvent` is a special pymmcore-plus specific subclass of
+        `useq.MDAEvent`.
         """
         core = self._mmc
-        cam_device = self._mmc.getCameraDevice()
-
         if event.exposure_sequence:
+            cam_device = core.getCameraDevice()
             with suppress(RuntimeError):
                 core.stopExposureSequence(cam_device)
             core.loadExposureSequence(cam_device, event.exposure_sequence)
@@ -385,11 +369,43 @@ class MDAEngine(PMDAEngine):
             with suppress(RuntimeError):
                 core.stopStageSequence(zstage)
             core.loadStageSequence(zstage, event.z_sequence)
-        if prop_seqs := event.property_sequences(core):
-            for (dev, prop), value_sequence in prop_seqs.items():
+        if event.slm_sequence:
+            slm = core.getSLMDevice()
+            with suppress(RuntimeError):
+                core.stopSLMSequence(slm)
+            core.loadSLMSequence(slm, event.slm_sequence)  # type: ignore[arg-type]
+        if event.property_sequences:
+            for (dev, prop), value_sequence in event.property_sequences.items():
                 with suppress(RuntimeError):
                     core.stopPropertySequence(dev, prop)
                 core.loadPropertySequence(dev, prop, value_sequence)
+
+        # set all static properties, these won't change over the course of the sequence.
+        if event.properties:
+            for dev, prop, value in event.properties:
+                core.setProperty(dev, prop, value)
+
+    def setup_sequenced_event(self, event: SequencedEvent) -> None:
+        """Setup hardware for a sequenced (triggered) event.
+
+        This method is not part of the PMDAEngine protocol (it is called by
+        `setup_event`, which *is* part of the protocol), but it is made public
+        in case a user wants to subclass this engine and override this method.
+        """
+        core = self._mmc
+
+        self._load_sequenced_event(event)
+
+        # this is probably not necessary.  loadSequenceEvent will have already
+        # set all the config properties individually/manually.  However, without
+        # the call below, we won't be able to query `core.getCurrentConfig()`
+        # not sure that's necessary; and this is here for tests to pass for now,
+        # but this could be removed.
+        if event.channel is not None:
+            try:
+                core.setConfig(event.channel.group, event.channel.config)
+            except Exception as e:
+                logger.warning("Failed to set channel. %s", e)
 
         if event.slm_image:
             self._set_event_slm_image(event)
@@ -397,29 +413,27 @@ class MDAEngine(PMDAEngine):
         # preparing a Sequence while another is running is dangerous.
         if core.isSequenceRunning():
             self._await_sequence_acquisition()
-        core.prepareSequenceAcquisition(cam_device)
+        core.prepareSequenceAcquisition(core.getCameraDevice())
 
         # start sequences or set non-sequenced values
         if event.x_sequence:
-            core.startXYStageSequence(stage)
+            core.startXYStageSequence(core.getXYStageDevice())
         elif event.x_pos is not None or event.y_pos is not None:
             self._set_event_position(event)
 
         if event.z_sequence:
-            core.startStageSequence(zstage)
+            core.startStageSequence(core.getFocusDevice())
         elif event.z_pos is not None:
             self._set_event_z(event)
 
         if event.exposure_sequence:
-            core.startExposureSequence(cam_device)
+            core.startExposureSequence(core.getCameraDevice())
         elif event.exposure is not None:
             core.setExposure(event.exposure)
 
-        if prop_seqs:
-            for dev, prop in prop_seqs:
+        if event.property_sequences:
+            for dev, prop in event.property_sequences:
                 core.startPropertySequence(dev, prop)
-        elif event.channel is not None:
-            core.setConfig(event.channel.group, event.channel.config)
 
     def _await_sequence_acquisition(
         self, timeout: float = 5.0, poll_interval: float = 0.2
