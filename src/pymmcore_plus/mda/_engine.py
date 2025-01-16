@@ -4,6 +4,8 @@ import time
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
+import numpy as np
+import useq
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
@@ -31,6 +33,17 @@ if TYPE_CHECKING:
     from ._protocol import PImagePayload
 
     IncludePositionArg: TypeAlias = Literal[True, False, "unsequenced-only"]
+
+
+# these are SLM devices that have a known pixel_on_value.
+# there is currently no way to extract this information from the core,
+# so it is hard-coded here.
+# maps device_name -> pixel_on_value
+_SLM_DEVICES_PIXEL_ON_VALUES: dict[str, int] = {
+    "MightexPolygon1000": 255,
+    "Mosaic3": 1,
+    "GenericSLM": 255,
+}
 
 
 class MDAEngine(PMDAEngine):
@@ -221,7 +234,8 @@ class MDAEngine(PMDAEngine):
             self._set_event_position(event)
         if event.z_pos is not None:
             self._set_event_z(event)
-
+        if event.slm_image is not None:
+            self._set_event_slm_image(event)
         if event.channel is not None:
             try:
                 # possible speedup by setting manually.
@@ -254,6 +268,9 @@ class MDAEngine(PMDAEngine):
         `exec_event`, which *is* part of the protocol), but it is made public
         in case a user wants to subclass this engine and override this method.
         """
+        if event.slm_image is not None:
+            self._exec_event_slm_image(event.slm_image)
+
         try:
             self._mmc.snapImage()
             # taking event time after snapImage includes exposure time
@@ -339,6 +356,7 @@ class MDAEngine(PMDAEngine):
         core = self._mmc
 
         core.loadSequencedEvent(event)
+
         # this is probably not necessary.  loadSequenceEvent will have already
         # set all the config properties individually/manually.  However, without
         # the call below, we won't be able to query `core.getCurrentConfig()`
@@ -349,6 +367,9 @@ class MDAEngine(PMDAEngine):
                 core.setConfig(event.channel.group, event.channel.config)
             except Exception as e:
                 logger.warning("Failed to set channel. %s", e)
+
+        if event.slm_image:
+            self._set_event_slm_image(event)
 
         # preparing a Sequence while another is running is dangerous.
         if core.isSequenceRunning():
@@ -407,6 +428,9 @@ class MDAEngine(PMDAEngine):
 
         t0 = event.metadata.get("runner_t0") or time.perf_counter()
         event_t0_ms = (time.perf_counter() - t0) * 1000
+
+        if event.slm_image is not None:
+            self._exec_event_slm_image(event.slm_image)
 
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
@@ -538,6 +562,55 @@ class MDAEngine(PMDAEngine):
         p_idx = event.index.get("p", None)
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self._mmc.setZPosition(cast("float", event.z_pos) + correction)
+
+    def _set_event_slm_image(self, event: MDAEvent) -> None:
+        if not event.slm_image:
+            return
+        try:
+            # Get the SLM device
+            if not (
+                slm_device := event.slm_image.device or self._mmc.getSLMDevice()
+            ):  # pragma: no cover
+                raise ValueError("No SLM device found or specified.")
+
+            # cast to numpy array
+            slm_array = np.asarray(event.slm_image)
+            # if it's a single value, we can just set all pixels to that value
+            if slm_array.ndim == 0:
+                value = slm_array.item()
+                if isinstance(value, bool):
+                    dev_name = self._mmc.getDeviceName(slm_device)
+                    on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(dev_name, 1)
+                    value = on_value if value else 0
+                self._mmc.setSLMPixelsTo(slm_device, int(value))
+            elif slm_array.size == 3:
+                # if it's a 3-valued array, we assume it's RGB
+                r, g, b = slm_array.astype(int)
+                self._mmc.setSLMPixelsTo(slm_device, r, g, b)
+            elif slm_array.ndim in (2, 3):
+                # if it's a 2D/3D array, we assume it's an image
+                # where 3D is RGB with shape (h, w, 3)
+                if slm_array.ndim == 3 and slm_array.shape[2] != 3:
+                    raise ValueError(  # pragma: no cover
+                        "SLM image must be 2D or 3D with 3 channels (RGB)."
+                    )
+                # convert boolean on/off values to pixel values
+                if slm_array.dtype == bool:
+                    dev_name = self._mmc.getDeviceName(slm_device)
+                    on_value = _SLM_DEVICES_PIXEL_ON_VALUES.get(dev_name, 1)
+                    slm_array = np.where(slm_array, on_value, 0).astype(np.uint8)
+                self._mmc.setSLMImage(slm_device, slm_array)
+            if event.slm_image.exposure:
+                self._mmc.setSLMExposure(slm_device, event.slm_image.exposure)
+        except Exception as e:
+            logger.warning("Failed to set SLM Image: %s", e)
+
+    def _exec_event_slm_image(self, img: useq.SLMImage) -> None:
+        if slm_device := (img.device or self._mmc.getSLMDevice()):
+            try:
+                self._mmc.displaySLMImage(slm_device)
+            except Exception as e:
+                logger.warning("Failed to set SLM Image: %s", e)
 
     def _update_config_device_props(self) -> None:
         # store devices/props that make up each config group for faster lookup

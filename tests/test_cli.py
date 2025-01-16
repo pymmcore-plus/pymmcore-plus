@@ -8,7 +8,7 @@ import subprocess
 import time
 from multiprocessing import Process, Queue
 from time import sleep
-from typing import TYPE_CHECKING, Any, Callable, cast
+from typing import Any, Callable, cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -20,12 +20,11 @@ try:
 except ImportError:
     pytest.skip("cli extras not available", allow_module_level=True)
 
+from pathlib import Path
+
 from useq import MDASequence
 
 from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, _util, install
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 runner = CliRunner()
 subrun = subprocess.run
@@ -341,3 +340,11 @@ def test_cli_info() -> None:
     assert "pymmcore-plus" in result.stdout
     assert "python" in result.stdout
     assert "api-version-info" in result.stdout
+
+
+def test_cli_bench() -> None:
+    local = Path(__file__).parent / "local_config.cfg"
+    result = runner.invoke(app, ["bench", "--config", str(local)])
+    assert result.exit_code == 0
+    assert "Loading config" in result.stdout
+    assert "Core" in result.stdout

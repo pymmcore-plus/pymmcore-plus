@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from queue import Queue
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, Mock, patch
 
@@ -432,3 +433,20 @@ def test_reset_event_timer(core: CMMCorePlus) -> None:
     # ensure that the 4th event occurred at least 190ms after the 3rd event
     # (allow some jitter)
     assert meta[3] >= meta[2] + 190
+
+
+def test_queue_mda(core: CMMCorePlus) -> None:
+    """Test running a Queue iterable"""
+    mock_engine = MagicMock(wraps=core.mda.engine)
+    core.mda.set_engine(mock_engine)
+
+    queue: Queue[MDAEvent | None] = Queue()
+    queue.put(MDAEvent(index={"t": 0}))
+    queue.put(MDAEvent(index={"t": 1}))
+    queue.put(None)
+    iterable_queue = iter(queue.get, None)
+
+    core.mda.run(iterable_queue)
+    # make sure that the engine's iterator was NOT used when running an iter(Queue)
+    mock_engine.event_iterator.assert_not_called()
+    assert mock_engine.setup_event.call_count == 2

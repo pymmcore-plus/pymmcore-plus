@@ -418,13 +418,10 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
     """Return a list of rows, sorted by the given column name."""
     rows = list(zip(*data.values()))
     if sort is not None:
-        try:
+        with suppress(ValueError):
+            # silently ignore if the sort column is not found
             sort_idx = [x.lower() for x in data].index(sort.lower())
-        except ValueError:  # pragma: no cover
-            raise ValueError(
-                f"invalid sort column: {sort!r}. Must be one of {list(data)}"
-            ) from None
-        rows.sort(key=lambda x: x[sort_idx])
+            rows.sort(key=lambda x: x[sort_idx])
     return rows
 
 
