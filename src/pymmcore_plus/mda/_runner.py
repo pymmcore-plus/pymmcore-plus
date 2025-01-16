@@ -274,7 +274,14 @@ class MDARunner:
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
-        event_iterator = getattr(engine, "event_iterator", iter)
+        if isinstance(events, Iterator):
+            # if an iterator is passed directly, then we use that iterator
+            # instead of the engine's event_iterator.  Directly passing an iterator
+            # is an advanced use case, (for example, `iter(Queue(), None)` for event-
+            # driven acquisition) and we don't want the engine to interfere with it.
+            event_iterator = iter
+        else:
+            event_iterator = getattr(engine, "event_iterator", iter)
         _events: Iterator[MDAEvent] = event_iterator(events)
         self._reset_event_timer()
         self._sequence_t0 = self._t0
