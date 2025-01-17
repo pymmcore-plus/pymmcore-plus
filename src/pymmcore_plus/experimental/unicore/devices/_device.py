@@ -162,6 +162,10 @@ class Device(_Lockable, ABC):
         """Return the property controller for a property."""
         return self._prop_controllers_[prop_name].property
 
+    def has_property(self, prop_name: str) -> bool:
+        """Return `True` if the device has a property."""
+        return prop_name in self._prop_controllers_
+
     def get_property_value(self, prop_name: str) -> Any:
         """Return the value of a property."""
         # TODO: catch errors

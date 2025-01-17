@@ -16,12 +16,13 @@ from ._device_manager import PyDeviceManager
 from ._proxy import create_core_proxy
 from .devices._device import Device
 from .devices._stage import XYStageDevice, _BaseStage
+from .devices._state import StateDevice
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Callable, Literal, NewType, TypeVar
 
-    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
+    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName, StateLabel
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
@@ -637,6 +638,46 @@ class UniMMCore(CMMCorePlus):
 
         dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
         dev.stop()
+
+    # -----------------------------------------------------------------------
+    # ----------------------------- StateDevice -----------------------------
+    # -----------------------------------------------------------------------
+
+    def setState(self, stateDeviceLabel: str, state: int) -> None:
+        if stateDeviceLabel not in self._pydevices:
+            return super().setState(stateDeviceLabel, state)
+
+        with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
+            dev.set_position(state)
+
+        if dev.has_property(Keyword.State):
+            self._state_cache[(stateDeviceLabel, KW.State)] = state
+
+        if dev.has_property(Keyword.Label):
+            pos_label = dev.get_position(state)
+            self._state_cache[(stateDeviceLabel, Keyword.Label)] = pos_label
+
+    def getState(self, stateDeviceLabel: DeviceLabel | str) -> int:
+        return super().getState(stateDeviceLabel)
+
+    def getNumberOfStates(self, stateDeviceLabel: DeviceLabel | str) -> int:
+        return super().getNumberOfStates(stateDeviceLabel)
+
+    def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
+        return super().setStateLabel(stateDeviceLabel, stateLabel)
+
+    def getStateLabel(self, stateDeviceLabel: DeviceLabel | str) -> StateLabel:
+        return super().getStateLabel(stateDeviceLabel)
+
+    def getStateLabels(
+        self, stateDeviceLabel: DeviceLabel | str
+    ) -> tuple[StateLabel, ...]:
+        return super().getStateLabels(stateDeviceLabel)
+
+    def getStateFromLabel(
+        self, stateDeviceLabel: DeviceLabel | str, stateLabel: StateLabel | str
+    ) -> int:
+        return super().getStateFromLabel(stateDeviceLabel, stateLabel)
 
 
 def _ensure_label(
