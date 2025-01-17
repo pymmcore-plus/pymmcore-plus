@@ -248,7 +248,12 @@ class MDAEngine(PMDAEngine):
                 self._mmc.setExposure(event.exposure)
             except Exception as e:
                 logger.warning("Failed to set exposure. %s", e)
-
+        if event.properties is not None:
+            try:
+                for dev, prop, value in event.properties:
+                    self._mmc.setProperty(dev, prop, value)
+            except Exception as e:
+                logger.warning("Failed to set properties. %s", e)
         if (
             # (if autoshutter wasn't set at the beginning of the sequence
             # then it never matters...)

@@ -49,19 +49,33 @@ def test_mda_waiting(core: CMMCorePlus) -> None:
 
 def test_setting_position(core: CMMCorePlus) -> None:
     core.mda._running = True
-    event1 = MDAEvent(exposure=123, x_pos=123, y_pos=456, z_pos=1)
+    event1 = MDAEvent(
+        exposure=123,
+        x_pos=123,
+        y_pos=456,
+        z_pos=1,
+        properties=[("Camera", "TestProperty1", 0.05)],
+    )
     core.mda.engine.setup_event(event1)
     assert tuple(core.getXYPosition()) == (123, 456)
     assert core.getPosition() == 1
     assert core.getExposure() == 123
+    assert core.getProperty("Camera", "TestProperty1") == "0.0500"
 
     # check that we aren't check things like: if event.x_pos
     # because then we will not set to zero
-    event2 = MDAEvent(exposure=321, x_pos=0, y_pos=0, z_pos=0)
+    event2 = MDAEvent(
+        exposure=321,
+        x_pos=0,
+        y_pos=0,
+        z_pos=0,
+        properties=[("Camera", "TestProperty2", -0.07)],
+    )
     core.mda.engine.setup_event(event2)
     assert tuple(core.getXYPosition()) == (0, 0)
     assert core.getPosition() == 0
     assert core.getExposure() == 321
+    assert core.getProperty("Camera", "TestProperty2") == "-0.0700"
 
 
 class BrokenEngine:
