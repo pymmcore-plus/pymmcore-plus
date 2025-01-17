@@ -23,7 +23,7 @@ class StateDevice(Device):
     """
 
     _TYPE: ClassVar[Literal[DeviceType.State]] = DeviceType.State
-    _states: Mapping[int, str]
+    _states: dict[int, str]
 
     @overload
     def __init__(self, num_positions: int = ..., /) -> None: ...
@@ -42,16 +42,26 @@ class StateDevice(Device):
         else:
             self._states = {}
 
+        if not self._states:
+            raise ValueError("State device must have at least one state.")
+
     def initialize(self) -> None:
+        states, labels = zip(*self._states.items())
+        self.register_property(
+            name=Keyword.State,
+            default_value=states[0],
+            getter=type(self).get_current_position,
+            setter=type(self).set_position,
+            # sequence_max_length=...,
+            allowed_values=list(self._states.keys()),
+        )
         self.register_property(
             name=Keyword.Label,
-            default_value=...,
-            getter=...,
-            setter=...,
-            sequence_max_length=...,
-            allowed_values=...,
-            is_read_only=...,
-            is_pre_init=...,
+            default_value=labels[0],
+            getter=type(self).get_current_label,
+            setter=type(self).set_position,
+            # sequence_max_length=...,
+            allowed_values=list(self._states.values()),
         )
 
     @pymm_property(name=Keyword.Label)
@@ -67,8 +77,12 @@ class StateDevice(Device):
         """
         raise NotImplementedError
 
-    def get_position(self) -> int:
+    def get_current_position(self) -> int:
         """Return the current position of the device."""
+        raise NotImplementedError
+
+    def get_current_label(self) -> str:
+        """Return the label of the current position."""
         raise NotImplementedError
 
     def get_label_for_position(self, pos: int) -> str:
@@ -81,10 +95,6 @@ class StateDevice(Device):
 
     def get_number_of_positions(self) -> int:
         """Return the number of positions."""
-        raise NotImplementedError
-
-    def get_current_label(self) -> str:
-        """Return the label of the current position."""
         raise NotImplementedError
 
     # these methods are implemented in the C++ layer... but i think they're only there

@@ -660,7 +660,7 @@ class UniMMCore(CMMCorePlus):
             return super().getState(stateDeviceLabel)
 
         with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
-            return dev.get_position()
+            return dev.get_current_position()
 
     def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
         if stateDeviceLabel not in self._pydevices:
