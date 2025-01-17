@@ -2,7 +2,6 @@ from collections.abc import Iterable, Mapping
 from typing import ClassVar, Literal, overload
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
-from pymmcore_plus.experimental.unicore.devices._properties import pymm_property
 
 from ._device import Device
 
