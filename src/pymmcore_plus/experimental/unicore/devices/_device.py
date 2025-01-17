@@ -52,6 +52,17 @@ class Device(_Lockable, ABC):
     _TYPE: ClassVar[DeviceType] = DeviceType.UnknownType
     _cls_prop_controllers: ClassVar[dict[str, PropertyController]]
 
+    def __init_subclass__(cls) -> None:
+        """Initialize the property controllers."""
+        # this collects all the PropertyController from the class and its bases.
+        # (`@pymm_property` decorators return instances of PropertyController.)
+        cls._cls_prop_controllers = {
+            p.property.name: p
+            for p in cls.__dict__.values()
+            if isinstance(p, PropertyController)
+        }
+        return super().__init_subclass__()
+
     def __init__(self) -> None:
         super().__init__()
 
@@ -70,15 +81,6 @@ class Device(_Lockable, ABC):
         if self._core_proxy_ is None:
             raise AttributeError("CoreProxy not set. Has this device been loaded?")
         return self._core_proxy_
-
-    def __init_subclass__(cls) -> None:
-        """Initialize the property controllers."""
-        cls._cls_prop_controllers = {
-            p.property.name: p
-            for p in cls.__dict__.values()
-            if isinstance(p, PropertyController)
-        }
-        return super().__init_subclass__()
 
     def register_property(
         self,

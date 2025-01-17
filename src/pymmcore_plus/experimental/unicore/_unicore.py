@@ -5,11 +5,9 @@ from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast, overload
 
-from pymmcore_plus.core import (
-    CMMCorePlus,
-    DeviceType,
-    Keyword,
-)
+from pymmcore import StateLabel
+
+from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
 from pymmcore_plus.core import Keyword as KW
 
 from ._device_manager import PyDeviceManager
@@ -22,7 +20,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Callable, Literal, NewType, TypeVar
 
-    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName, StateLabel
+    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
@@ -650,34 +648,69 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
             dev.set_position(state)
 
-        if dev.has_property(Keyword.State):
-            self._state_cache[(stateDeviceLabel, KW.State)] = state
+            if dev.has_property(KW.State):
+                self._state_cache[(stateDeviceLabel, KW.State)] = state
 
-        if dev.has_property(Keyword.Label):
-            pos_label = dev.get_position(state)
-            self._state_cache[(stateDeviceLabel, Keyword.Label)] = pos_label
+            if dev.has_property(KW.Label):
+                pos_label = dev.get_label_for_position(state)
+                self._state_cache[(stateDeviceLabel, KW.Label)] = pos_label
 
     def getState(self, stateDeviceLabel: DeviceLabel | str) -> int:
-        return super().getState(stateDeviceLabel)
+        if stateDeviceLabel not in self._pydevices:
+            return super().getState(stateDeviceLabel)
 
-    def getNumberOfStates(self, stateDeviceLabel: DeviceLabel | str) -> int:
-        return super().getNumberOfStates(stateDeviceLabel)
+        with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
+            return dev.get_position()
 
     def setStateLabel(self, stateDeviceLabel: str, stateLabel: str) -> None:
-        return super().setStateLabel(stateDeviceLabel, stateLabel)
+        if stateDeviceLabel not in self._pydevices:
+            return super().setStateLabel(stateDeviceLabel, stateLabel)
+
+        with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
+            # may raise KeyError if stateLabel is not found
+            dev.set_position(stateLabel)
+
+            if dev.has_property(KW.Label):
+                self._state_cache[(stateDeviceLabel, KW.Label)] = stateLabel
+
+            if dev.has_property(KW.State):
+                pos = dev.get_position_for_label(stateLabel)
+                self._state_cache[(stateDeviceLabel, KW.State)] = pos
 
     def getStateLabel(self, stateDeviceLabel: DeviceLabel | str) -> StateLabel:
-        return super().getStateLabel(stateDeviceLabel)
+        if stateDeviceLabel not in self._pydevices:
+            return super().getStateLabel(stateDeviceLabel)
+
+        with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
+            return cast(StateLabel, dev.get_current_label())
 
     def getStateLabels(
         self, stateDeviceLabel: DeviceLabel | str
     ) -> tuple[StateLabel, ...]:
-        return super().getStateLabels(stateDeviceLabel)
+        if stateDeviceLabel not in self._pydevices:
+            return super().getStateLabels(stateDeviceLabel)
+
+        with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
+            return tuple(
+                cast(StateLabel, dev.get_label_for_position(i))
+                for i in range(dev.get_number_of_positions())
+            )
 
     def getStateFromLabel(
         self, stateDeviceLabel: DeviceLabel | str, stateLabel: StateLabel | str
     ) -> int:
-        return super().getStateFromLabel(stateDeviceLabel, stateLabel)
+        if stateDeviceLabel not in self._pydevices:
+            return super().getStateFromLabel(stateDeviceLabel, stateLabel)
+
+        with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
+            return dev.get_position_for_label(stateLabel)
+
+    def getNumberOfStates(self, stateDeviceLabel: DeviceLabel | str) -> int:
+        if stateDeviceLabel not in self._pydevices:
+            return super().getNumberOfStates(stateDeviceLabel)
+
+        with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
+            return dev.get_number_of_positions()
 
 
 def _ensure_label(

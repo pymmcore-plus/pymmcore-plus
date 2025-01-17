@@ -291,7 +291,7 @@ def pymm_property(
     is_pre_init: bool = ...,
     name: str | None = ...,
     property_type: PropArg = ...,
-) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
+) -> Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]: ...
 def pymm_property(
     fget: Callable[[TDev], TProp] | None = None,
     *,
