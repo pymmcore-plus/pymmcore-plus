@@ -5,8 +5,6 @@ from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast, overload
 
-from pymmcore import StateLabel
-
 from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
 from pymmcore_plus.core import Keyword as KW
 
@@ -20,7 +18,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Callable, Literal, NewType, TypeVar
 
-    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
+    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName, StateLabel
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
@@ -682,7 +680,7 @@ class UniMMCore(CMMCorePlus):
             return super().getStateLabel(stateDeviceLabel)
 
         with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
-            return cast(StateLabel, dev.get_current_label())
+            return cast("StateLabel", dev.get_current_label())
 
     def getStateLabels(
         self, stateDeviceLabel: DeviceLabel | str
@@ -692,7 +690,7 @@ class UniMMCore(CMMCorePlus):
 
         with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
             return tuple(
-                cast(StateLabel, dev.get_label_for_position(i))
+                cast("StateLabel", dev.get_label_for_position(i))
                 for i in range(dev.get_number_of_positions())
             )
 
@@ -711,6 +709,27 @@ class UniMMCore(CMMCorePlus):
 
         with self._pydevices.get_device_of_type(stateDeviceLabel, StateDevice) as dev:
             return dev.get_number_of_positions()
+
+    def defineStateLabel(
+        self, stateDeviceLabel: DeviceLabel | str, state: int, stateLabel: str
+    ) -> None:
+        if stateDeviceLabel not in self._pydevices:
+            return super().defineStateLabel(stateDeviceLabel, state, stateLabel)
+
+        dev_lbl = stateDeviceLabel
+        with self._pydevices.get_device_of_type(dev_lbl, StateDevice) as dev:
+            # grab old label so we can update existing configurations
+            old_label = dev.get_label_for_position(state)
+            dev.set_position_label(state, stateLabel)
+
+        # Fix existing configurations that use the old label
+        if old_label and stateLabel != old_label:
+            for group in self.getAvailableConfigGroups():
+                for cfg in self.getAvailableConfigs(group):
+                    conf = self.getConfigData(group, cfg)
+                    if (dev_lbl, KW.Label, old_label) in conf:
+                        self.deleteConfig(group, cfg, dev_lbl, KW.Label)
+                        self.defineConfig(group, cfg, dev_lbl, KW.Label, stateLabel)
 
 
 def _ensure_label(

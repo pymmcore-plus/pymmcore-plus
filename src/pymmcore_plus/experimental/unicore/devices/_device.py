@@ -13,7 +13,7 @@ from pymmcore_plus.experimental.unicore.devices._properties import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import KeysView, Sequence
+    from collections.abc import Sequence
 
     from typing_extensions import Any, Self
 
@@ -156,13 +156,23 @@ class Device(_Lockable, ABC):
 
     # PROPERTIES
 
-    def get_property_names(self) -> KeysView[str]:
+    def _get_prop_controller(self, prop_name: str) -> PropertyController:
+        # This is a helper method to get the property controller for a property.
+        # just here to provide a better error message.
+        try:
+            return self._prop_controllers_[prop_name]
+        except KeyError:
+            raise KeyError(
+                f"Device {self._label_!r} has no property {prop_name!r}."
+            ) from None
+
+    def get_property_names(self) -> tuple[str, ...]:
         """Return the names of the properties."""
-        return self._prop_controllers_.keys()
+        return tuple(self._prop_controllers_.keys())
 
     def property(self, prop_name: str) -> PropertyInfo:
         """Return the property controller for a property."""
-        return self._prop_controllers_[prop_name].property
+        return self._get_prop_controller(prop_name).property
 
     def has_property(self, prop_name: str) -> bool:
         """Return `True` if the device has a property."""
@@ -171,15 +181,15 @@ class Device(_Lockable, ABC):
     def get_property_value(self, prop_name: str) -> Any:
         """Return the value of a property."""
         # TODO: catch errors
-        ctrl = self._prop_controllers_[prop_name]
+        ctrl = self._get_prop_controller(prop_name)
         if ctrl.fget is None:
             return ctrl.property.last_value
-        return self._prop_controllers_[prop_name].__get__(self, self.__class__)
+        return self._get_prop_controller(prop_name).__get__(self, self.__class__)
 
     def set_property_value(self, prop_name: str, value: Any) -> None:
         """Set the value of a property."""
         # TODO: catch errors
-        ctrl = self._prop_controllers_[prop_name]
+        ctrl = self._get_prop_controller(prop_name)
         if ctrl.is_read_only:
             raise ValueError(f"Property {prop_name!r} is read-only.")
         if ctrl.fset is not None:
@@ -189,39 +199,39 @@ class Device(_Lockable, ABC):
 
     def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
         """Load a sequence into a property."""
-        self._prop_controllers_[prop_name].load_sequence(self, sequence)
+        self._get_prop_controller(prop_name).load_sequence(self, sequence)
 
     def start_property_sequence(self, prop_name: str) -> None:
         """Start a sequence of a property."""
-        self._prop_controllers_[prop_name].start_sequence(self)
+        self._get_prop_controller(prop_name).start_sequence(self)
 
     def stop_property_sequence(self, prop_name: str) -> None:
         """Stop a sequence of a property."""
-        self._prop_controllers_[prop_name].stop_sequence(self)
+        self._get_prop_controller(prop_name).stop_sequence(self)
 
     def set_property_allowed_values(
         self, prop_name: str, allowed_values: Sequence[Any]
     ) -> None:
         """Set the allowed values of a property."""
-        self._prop_controllers_[prop_name].property.allowed_values = allowed_values
+        self._get_prop_controller(prop_name).property.allowed_values = allowed_values
 
     def set_property_limits(
         self, prop_name: str, limits: tuple[float, float] | None
     ) -> None:
         """Set the limits of a property."""
-        self._prop_controllers_[prop_name].property.limits = limits
+        self._get_prop_controller(prop_name).property.limits = limits
 
     def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
         """Set the sequence max length of a property."""
-        self._prop_controllers_[prop_name].property.sequence_max_length = max_length
+        self._get_prop_controller(prop_name).property.sequence_max_length = max_length
 
     def is_property_sequenceable(self, prop_name: str) -> bool:
         """Return `True` if the property is sequenceable."""
-        return self._prop_controllers_[prop_name].is_sequenceable
+        return self._get_prop_controller(prop_name).is_sequenceable
 
     def is_property_read_only(self, prop_name: str) -> bool:
         """Return `True` if the property is read-only."""
-        return self._prop_controllers_[prop_name].is_read_only
+        return self._get_prop_controller(prop_name).is_read_only
 
 
 SeqT = TypeVar("SeqT")

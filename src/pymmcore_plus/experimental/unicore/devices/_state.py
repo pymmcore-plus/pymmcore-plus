@@ -35,39 +35,22 @@ class StateDevice(Device):
         self, arg0: int | Mapping[int, str] | Iterable[tuple[int, str]] = 0, /
     ) -> None:
         super().__init__()
+
         if isinstance(arg0, int):
             self._states = {i: f"State {i}" for i in range(arg0)}
-        elif arg0 is not None:
-            self._states = dict(arg0)
         else:
-            self._states = {}
+            self._states = dict(arg0) if arg0 is not None else {}
 
         if not self._states:
             raise ValueError("State device must have at least one state.")
 
-    def initialize(self) -> None:
         states, labels = zip(*self._states.items())
         self.register_property(
-            name=Keyword.State,
-            default_value=states[0],
-            getter=type(self).get_current_position,
-            setter=type(self).set_position,
-            # sequence_max_length=...,
-            allowed_values=list(self._states.keys()),
+            name=Keyword.State, default_value=states[0], allowed_values=states
         )
         self.register_property(
-            name=Keyword.Label,
-            default_value=labels[0],
-            getter=type(self).get_current_label,
-            setter=type(self).set_position,
-            # sequence_max_length=...,
-            allowed_values=list(self._states.values()),
+            name=Keyword.Label.value, default_value=labels[0], allowed_values=labels
         )
-
-    @pymm_property(name=Keyword.Label)
-    def label(self) -> str:
-        """Return the label of the current position."""
-        raise NotImplementedError
 
     def set_position(self, pos: int | str) -> None:
         """Set the position of the device.
@@ -75,27 +58,35 @@ class StateDevice(Device):
         If `pos` is an integer, it is the index of the state to set.
         If `pos` is a string, it is the label of the state to set.
         """
-        raise NotImplementedError
+        if isinstance(pos, str):
+            pos = self.get_position_for_label(pos)
+        if pos not in self._states:
+            raise ValueError(f"Position {pos} is not a valid state.")
+        self.set_property_value(Keyword.State, pos)
+
+    def set_position_label(self, pos: int, label: str) -> None:
+        """Assign a label to a position."""
+        self._states[pos] = label
 
     def get_current_position(self) -> int:
         """Return the current position of the device."""
-        raise NotImplementedError
+        return int(self.get_property_value(Keyword.State))
 
     def get_current_label(self) -> str:
         """Return the label of the current position."""
-        raise NotImplementedError
+        return self.get_label_for_position(self.get_current_position())
 
     def get_label_for_position(self, pos: int) -> str:
-        """Returns the label of the provided position."""
-        raise NotImplementedError
+        """Return the label of the provided position."""
+        return self._states[pos]
 
     def get_position_for_label(self, label: str) -> int:
-        """Returns the position of the provided label."""
-        raise NotImplementedError
+        """Return the position of the provided label."""
+        return next(pos for pos, lbl in self._states.items() if lbl == label)
 
     def get_number_of_positions(self) -> int:
         """Return the number of positions."""
-        raise NotImplementedError
+        return len(self._states)
 
     # these methods are implemented in the C++ layer... but i think they're only there
     # for the StateDeviceShutter utility?
