@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from queue import Queue
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, Mock, patch
 
@@ -8,6 +9,7 @@ import pytest
 import useq
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
+from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
@@ -16,7 +18,6 @@ if TYPE_CHECKING:
     from pytest import LogCaptureFixture
     from pytestqt.qtbot import QtBot
 
-    from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.mda import MDAEngine
 
 try:
@@ -29,7 +30,7 @@ SKIP_NO_PYTESTQT = pytest.mark.skipif(
 )
 
 
-def test_mda_waiting(core: CMMCorePlus):
+def test_mda_waiting(core: CMMCorePlus) -> None:
     seq = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -46,21 +47,35 @@ def test_mda_waiting(core: CMMCorePlus):
     assert t1 - t0 >= 1.5
 
 
-def test_setting_position(core: CMMCorePlus):
+def test_setting_position(core: CMMCorePlus) -> None:
     core.mda._running = True
-    event1 = MDAEvent(exposure=123, x_pos=123, y_pos=456, z_pos=1)
+    event1 = MDAEvent(
+        exposure=123,
+        x_pos=123,
+        y_pos=456,
+        z_pos=1,
+        properties=[("Camera", "TestProperty1", 0.05)],
+    )
     core.mda.engine.setup_event(event1)
     assert tuple(core.getXYPosition()) == (123, 456)
     assert core.getPosition() == 1
     assert core.getExposure() == 123
+    assert core.getProperty("Camera", "TestProperty1") == "0.0500"
 
     # check that we aren't check things like: if event.x_pos
     # because then we will not set to zero
-    event2 = MDAEvent(exposure=321, x_pos=0, y_pos=0, z_pos=0)
+    event2 = MDAEvent(
+        exposure=321,
+        x_pos=0,
+        y_pos=0,
+        z_pos=0,
+        properties=[("Camera", "TestProperty2", -0.07)],
+    )
     core.mda.engine.setup_event(event2)
     assert tuple(core.getXYPosition()) == (0, 0)
     assert core.getPosition() == 0
     assert core.getExposure() == 321
+    assert core.getProperty("Camera", "TestProperty2") == "-0.0700"
 
 
 class BrokenEngine:
@@ -73,7 +88,7 @@ class BrokenEngine:
 
 
 @SKIP_NO_PYTESTQT
-def test_mda_failures(core: CMMCorePlus, qtbot: QtBot):
+def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
     mda = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -251,22 +266,28 @@ DEVICE_ERRORS: dict[str, list[str]] = {
 def test_mda_no_device(
     device: str, core: CMMCorePlus, caplog: LogCaptureFixture
 ) -> None:
-    core.unloadDevice(device)
+    from pymmcore_plus._logger import logger
 
-    if device == "Autofocus":
-        event = MDAEvent(
-            action=HardwareAutofocus(
-                autofocus_device_name="Z", autofocus_motor_offset=10
+    logger.setLevel("DEBUG")
+    try:
+        core.unloadDevice(device)
+
+        if device == "Autofocus":
+            event = MDAEvent(
+                action=HardwareAutofocus(
+                    autofocus_device_name="Z", autofocus_motor_offset=10
+                )
             )
-        )
-    else:
-        event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
-    engine = cast("MDAEngine", core.mda.engine)
-    engine.setup_event(event)
-    list(engine.exec_event(event))
+        else:
+            event = MDAEvent(x_pos=1, z_pos=1, exposure=1, channel={"config": "FITC"})
+        engine = cast("MDAEngine", core.mda.engine)
+        engine.setup_event(event)
+        list(engine.exec_event(event))
 
-    for e in DEVICE_ERRORS[device]:
-        assert e in caplog.text
+        for e in DEVICE_ERRORS[device]:
+            assert e in caplog.text
+    finally:
+        logger.setLevel("CRITICAL")
 
 
 def test_keep_shutter_open(core: CMMCorePlus) -> None:
@@ -362,7 +383,15 @@ def test_engine_protocol(core: CMMCorePlus) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_runner_cancel(qtbot: QtBot) -> None:
+    # not using the parametrized fixture because we only want to test Qt here.
+    # see https://github.com/pymmcore-plus/pymmcore-plus/issues/95 and
+    # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
+    # for what we're trying to avoid
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    core.mda.engine.use_hardware_sequencing = False
+
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
     event1 = MDAEvent()
@@ -376,7 +405,15 @@ def test_runner_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_runner_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_runner_pause(qtbot: QtBot) -> None:
+    # not using the parametrized fixture because we only want to test Qt here.
+    # see https://github.com/pymmcore-plus/pymmcore-plus/issues/95 and
+    # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
+    # for what we're trying to avoid
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    core.mda.engine.use_hardware_sequencing = False
+
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
     with qtbot.waitSignal(core.mda.events.frameReady):
@@ -410,3 +447,20 @@ def test_reset_event_timer(core: CMMCorePlus) -> None:
     # ensure that the 4th event occurred at least 190ms after the 3rd event
     # (allow some jitter)
     assert meta[3] >= meta[2] + 190
+
+
+def test_queue_mda(core: CMMCorePlus) -> None:
+    """Test running a Queue iterable"""
+    mock_engine = MagicMock(wraps=core.mda.engine)
+    core.mda.set_engine(mock_engine)
+
+    queue: Queue[MDAEvent | None] = Queue()
+    queue.put(MDAEvent(index={"t": 0}))
+    queue.put(MDAEvent(index={"t": 1}))
+    queue.put(None)
+    iterable_queue = iter(queue.get, None)
+
+    core.mda.run(iterable_queue)
+    # make sure that the engine's iterator was NOT used when running an iter(Queue)
+    mock_engine.event_iterator.assert_not_called()
+    assert mock_engine.setup_event.call_count == 2

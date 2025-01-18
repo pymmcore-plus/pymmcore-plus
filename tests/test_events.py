@@ -5,10 +5,8 @@ from typing import get_args
 from unittest.mock import Mock, call
 
 import pytest
-from pymmcore import g_Keyword_Label as LABEL
-from pymmcore import g_Keyword_State as STATE
 
-from pymmcore_plus import CMMCorePlus
+from pymmcore_plus import CMMCorePlus, Keyword
 from pymmcore_plus._util import MMCORE_PLUS_SIGNALS_BACKEND
 from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler
 
@@ -97,8 +95,8 @@ def test_set_state_events(core: CMMCorePlus) -> None:
     core.setState("Objective", 3)
     mock.assert_has_calls(
         [
-            call("Objective", STATE, "3"),
-            call("Objective", LABEL, "Nikon 20X Plan Fluor ELWD"),
+            call("Objective", Keyword.State.value, "3"),
+            call("Objective", Keyword.Label.value, "Nikon 20X Plan Fluor ELWD"),
         ]
     )
     assert core.getState("Objective") == 3
@@ -107,7 +105,10 @@ def test_set_state_events(core: CMMCorePlus) -> None:
     assert core.getState("Dichroic") == 0
     core.setStateLabel("Dichroic", "Q505LP")
     mock.assert_has_calls(
-        [call("Dichroic", STATE, "1"), call("Dichroic", LABEL, "Q505LP")]
+        [
+            call("Dichroic", Keyword.State.value, "1"),
+            call("Dichroic", Keyword.Label.value, "Q505LP"),
+        ]
     )
     assert core.getState("Dichroic") == 1
 
@@ -116,26 +117,32 @@ def test_set_statedevice_property_emits_events(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.propertyChanged.connect(mock)
     assert core.getState("Objective") == 1
-    assert core.getProperty("Objective", STATE) == "1"
-    core.setProperty("Objective", STATE, "3")
+    assert core.getProperty("Objective", Keyword.State.value) == "1"
+    core.setProperty("Objective", Keyword.State.value, "3")
     mock.assert_has_calls(
         [
-            call("Objective", STATE, "3"),
-            call("Objective", LABEL, "Nikon 20X Plan Fluor ELWD"),
+            call("Objective", Keyword.State.value, "3"),
+            call("Objective", Keyword.Label.value, "Nikon 20X Plan Fluor ELWD"),
         ]
     )
     assert core.getState("Objective") == 3
-    assert core.getProperty("Objective", STATE) == "3"
-    assert core.getProperty("Objective", LABEL) == "Nikon 20X Plan Fluor ELWD"
+    assert core.getProperty("Objective", Keyword.State.value) == "3"
+    assert (
+        core.getProperty("Objective", Keyword.Label.value)
+        == "Nikon 20X Plan Fluor ELWD"
+    )
 
     mock.reset_mock()
-    assert core.getProperty("Dichroic", LABEL) == "400DCLP"
-    core.setProperty("Dichroic", LABEL, "Q505LP")
+    assert core.getProperty("Dichroic", Keyword.Label.value) == "400DCLP"
+    core.setProperty("Dichroic", Keyword.Label.value, "Q505LP")
     mock.assert_has_calls(
-        [call("Dichroic", STATE, "1"), call("Dichroic", LABEL, "Q505LP")]
+        [
+            call("Dichroic", Keyword.State.value, "1"),
+            call("Dichroic", Keyword.Label.value, "Q505LP"),
+        ]
     )
-    assert core.getProperty("Dichroic", LABEL) == "Q505LP"
-    assert core.getProperty("Dichroic", STATE) == "1"
+    assert core.getProperty("Dichroic", Keyword.Label.value) == "Q505LP"
+    assert core.getProperty("Dichroic", Keyword.State.value) == "1"
 
 
 def test_device_property_events(core: CMMCorePlus) -> None:
@@ -196,9 +203,9 @@ def test_shutter_device_events(core: CMMCorePlus) -> None:
     mock = Mock()
     core.events.propertyChanged.connect(mock)
     core.setShutterOpen("White Light Shutter", True)
-    mock.assert_called_once_with("White Light Shutter", STATE, "1")
+    mock.assert_called_once_with("White Light Shutter", Keyword.State.value, "1")
     assert core.getShutterOpen("White Light Shutter")
-    assert core.getProperty("White Light Shutter", STATE) == "1"
+    assert core.getProperty("White Light Shutter", Keyword.State.value) == "1"
 
 
 def test_autoshutter_device_events(core: CMMCorePlus) -> None:

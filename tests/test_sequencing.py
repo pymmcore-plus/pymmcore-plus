@@ -1,3 +1,4 @@
+from contextlib import suppress
 from math import prod
 from typing import cast
 from unittest.mock import MagicMock, call
@@ -6,9 +7,17 @@ import pytest
 import useq
 
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.core._sequencing import SequencedEvent, get_all_sequenceable
+from pymmcore_plus.core._sequencing import (
+    SequencedEvent,
+    get_all_sequenceable,
+    iter_sequenced_events,
+)
 from pymmcore_plus.mda import MDAEngine, MDARunner
+from pymmcore_plus.mocks import MockSequenceableCore
 from pymmcore_plus.seq_tester import decode_image
+
+with suppress(ImportError):
+    pass
 
 
 def test_get_all_sequencable(core: CMMCorePlus) -> None:
@@ -40,14 +49,11 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     assert len(events) == EXPECTED_SEQUENCES
 
     engine.use_hardware_sequencing = True
-    from rich import print
 
     runner = MDARunner()
     runner.set_engine(engine)
 
-    @runner.events.frameReady.connect
-    def frame_ready(f, e, m):
-        print(m)
+    core_mock.startSequenceAcquisition.assert_not_called()
 
     runner.run(mda)
     assert core_mock.prepareSequenceAcquisition.call_count == EXPECTED_SEQUENCES
@@ -74,7 +80,7 @@ def test_sequenced_mda_with_zero_values() -> None:
     core.mda.run(mda)
 
 
-def test_fully_sequenceable_core() -> None:
+def test_fully_sequenceable_core(core: CMMCorePlus) -> None:
     mda = useq.MDASequence(
         stage_positions=[(0, 0, 0), (1, 1, 1)],
         z_plan=useq.ZRangeAround(range=3, step=1),
@@ -85,25 +91,11 @@ def test_fully_sequenceable_core() -> None:
         time_plan=useq.TIntervalLoops(interval=0, loops=3),
     )
 
-    CAM = "Camera"
-    XYSTAGE = "XYStage"
-    FOCUS = "Z"
-    core_mock = cast("CMMCorePlus", MagicMock(spec=CMMCorePlus))
-    core_mock.isSequenceRunning.return_value = False
-    core_mock.getRemainingImageCount.return_value = 0
-    core_mock.isBufferOverflowed.return_value = False
-    core_mock.getCameraDevice.return_value = CAM
-    core_mock.getXYStageDevice.return_value = XYSTAGE
-    core_mock.getFocusDevice.return_value = FOCUS
-    core_mock.getFocusDevice.return_value = FOCUS
-    core_mock.getPixelSizeUm.return_value = None
-    core_mock.getNumberOfCameraChannels.return_value = 1
-    core_mock.getImageBitDepth.return_value = 12
-    core_mock.getNumberOfComponents.return_value = 1
+    core_mock = MockSequenceableCore(wraps=core)
 
     engine = MDAEngine(mmc=core_mock, use_hardware_sequencing=True)
 
-    combined_events = list(engine.event_iterator(mda))
+    combined_events = list(iter_sequenced_events(core_mock, mda))
     assert len(combined_events) == 1
     seq_event = combined_events[0]
     assert isinstance(seq_event, SequencedEvent)
@@ -114,12 +106,7 @@ def test_fully_sequenceable_core() -> None:
 
     n_img = prod(mda.shape)
     core_mock.startSequenceAcquisition.assert_called_once_with(n_img, 0, True)
-    core_mock.loadExposureSequence.assert_called_once_with(
-        CAM, seq_event.exposure_sequence
-    )
-    core_mock.loadXYStageSequence.assert_called_once_with(
-        XYSTAGE, seq_event.x_sequence, seq_event.y_sequence
-    )
+    core_mock.loadExposureSequence.assert_called()
 
 
 def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:

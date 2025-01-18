@@ -35,6 +35,7 @@ if TYPE_CHECKING:
         images_remaining_in_buffer: int
         camera_metadata: dict[str, Any]
         extra: dict[str, Any]
+        position: Position
 
 # -----------------------------------------------------------------
 # These are the two main functions that are called from the outside
@@ -77,10 +78,11 @@ def frame_metadata(
     runner_time_ms: float = -1,
     camera_device: str | None = None,
     property_values: tuple[PropertyValue, ...] = (),
+    include_position: bool = False,
     **kwargs: Unpack[_OptionalFrameMetaKwargs],
 ) -> FrameMetaV1:
     """Return metadata for the current frame."""
-    return {
+    info: FrameMetaV1 = {
         "format": "frame-dict",
         "version": "1.0",
         "runner_time_ms": runner_time_ms,
@@ -88,9 +90,11 @@ def frame_metadata(
         "property_values": property_values,
         "exposure_ms": core.getExposure(),
         "pixel_size_um": core.getPixelSizeUm(cached),
-        "position": position(core),
         **kwargs,
     }
+    if include_position and "position" not in kwargs:
+        info["position"] = position(core)
+    return info
 
 
 # ----------------------------------------------
@@ -212,12 +216,19 @@ def image_infos(core: CMMCorePlus) -> tuple[ImageInfo, ...]:
 def position(core: CMMCorePlus, all_stages: bool = False) -> Position:
     """Return current position of active (and, optionally, all) stages."""
     position: Position = {}
-    with suppress(Exception):
-        position["x"] = core.getXPosition()
-    with suppress(Exception):
-        position["y"] = core.getYPosition()
+
+    try:
+        # single shot faster when it works
+        position["x"], position["y"] = core.getXYPosition()
+    except RuntimeError:
+        with suppress(Exception):
+            position["x"] = core.getXPosition()
+        with suppress(Exception):
+            position["y"] = core.getYPosition()
+
     with suppress(Exception):
         position["z"] = core.getPosition()
+
     if all_stages:
         pos_list: list[StagePosition] = []
         for stage in core.getLoadedDevicesOfType(DeviceType.Stage):

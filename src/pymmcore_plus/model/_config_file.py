@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     Executor: TypeAlias = Callable[[Microscope, Sequence[str]], None]
 
-__all__ = ["load_from_string", "dump"]
+__all__ = ["dump", "load_from_string"]
 
 
 def load_from_string(text: str, scope: Microscope | None = None) -> Microscope:

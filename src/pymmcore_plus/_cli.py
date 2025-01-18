@@ -8,6 +8,9 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Optional, Union, cast
 
+from pymmcore_plus.core._device import Device
+from pymmcore_plus.core._mmcore_plus import CMMCorePlus
+
 try:
     import typer
     from rich import print
@@ -28,12 +31,29 @@ app = typer.Typer(name="mmcore", no_args_is_help=True)
 
 def _show_version_and_exit(value: bool) -> None:
     if value:
-        import pymmcore
-
         typer.echo(f"pymmcore-plus v{pymmcore_plus.__version__}")
-        typer.echo(f"pymmcore v{pymmcore.__version__}")
-        typer.echo(f"MMCore v{pymmcore.CMMCore().getAPIVersionInfo()}")
+        try:
+            import pymmcore_nano as pymmcore
+
+            typer.echo(f"pymmcore-nano v{pymmcore.__version__}")
+        except ImportError:
+            import pymmcore
+
+            typer.echo(f"pymmcore v{pymmcore.__version__}")
+        typer.echo(f"MMCore v{pymmcore.CMMCore().getVersionInfo()}")
+        typer.echo(f"{pymmcore.CMMCore().getAPIVersionInfo()}")
         raise typer.Exit()
+
+
+CONFIG_PARAM = typer.Option(
+    None,
+    "-c",
+    "--config",
+    dir_okay=False,
+    exists=True,
+    resolve_path=True,
+    help="Path to Micro-Manager system configuration file.",
+)
 
 
 @app.callback()
@@ -168,15 +188,7 @@ def run(
         resolve_path=True,
         help="Path to useq-schema file.",
     ),
-    config: Optional[Path] = typer.Option(
-        None,
-        "-c",
-        "--config",
-        dir_okay=False,
-        exists=True,
-        resolve_path=True,
-        help="Path to Micro-Manager system configuration file.",
-    ),
+    config: Optional[Path] = CONFIG_PARAM,
     z_go_up: Optional[bool] = typer.Option(None, help="Acquire from bottom to top."),
     z_top: Optional[float] = typer.Option(None, help="Top of z-stack."),
     z_bottom: Optional[float] = typer.Option(None, help="Bottom of z-stack."),
@@ -421,6 +433,59 @@ def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
 
             # Sleep for a short interval before checking again
             time.sleep(1)
+
+
+@app.command()
+def bench(
+    config: Optional[Path] = CONFIG_PARAM,
+    number: int = typer.Option(
+        10, "-n", "--number", help="Number of iterations for each test."
+    ),
+) -> None:
+    """Run a benchmark of Core and Devices loaded with `config` (or Demo)."""
+    from rich.console import Console
+    from rich.live import Live
+    from rich.table import Table
+
+    from pymmcore_plus._benchmark import benchmark_core_and_devices
+
+    console = Console()
+
+    core = CMMCorePlus()
+    if config is not None:
+        console.log(
+            f"Loading config {config} ...",
+            style="bright_blue",
+            end="",
+        )
+        core.loadSystemConfiguration(str(config))
+    else:
+        console.log("Loading DEMO configuration ...", style="bright_blue", end="")
+        core.loadSystemConfiguration()
+    console.log("Loaded.", style="bright_blue")
+
+    table = Table()
+    table.add_column("Method")
+    table.add_column("Time (ms)")
+
+    with Live(table, console=console, refresh_per_second=4):
+        for item in benchmark_core_and_devices(core, number):
+            if item is None:
+                table.add_row("Device: Core", "------", style="yellow")
+            elif isinstance(item, Device):
+                console.print(
+                    f"Measuring ({item.type()}) Device: "
+                    f"{item.label!r} <{item.library()}::{item.name()}>"
+                    f": {item.description()}",
+                    style="#333333",
+                )
+                table.add_row(f"Device: {item.label}", "------", style="yellow")
+            else:
+                method, time = item
+                if isinstance(time, float):
+                    table.add_row(method, f"{time:.4f}")
+                else:
+                    table.add_row(method, str(time), style="red")
 
 
 def main() -> None:  # pragma: no cover
