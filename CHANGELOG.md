@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.13.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.1) (2025-01-21)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.0...v0.13.1)
+
+**Fixed bugs:**
+
+- Fix Issue with useq MDA Event Properties Not Being Set in MDAEngine [\#421](https://github.com/pymmcore-plus/pymmcore-plus/pull/421) ([alandolt](https://github.com/alandolt))
+
 ## [v0.13.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.0) (2025-01-16)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.12.0...v0.13.0)
