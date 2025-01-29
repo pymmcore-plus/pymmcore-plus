@@ -5,7 +5,7 @@ import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 from useq import MDASequence
@@ -17,13 +17,40 @@ from ._thread_relay import mda_listeners_connected
 from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
-    from typing import TypeAlias
+    from typing import Protocol, TypeAlias
 
+    import numpy as np
     from useq import MDAEvent
+
+    from pymmcore_plus.metadata.schema import FrameMetaV1
 
     from ._engine import MDAEngine
 
-    SingleOutput: TypeAlias = Path | str | object
+    class FrameReady0(Protocol):
+        """Minimal protocol for a frameReady handler."""
+
+        def frameReady(self) -> None: ...
+
+    class FrameReady1(Protocol):
+        """Minimal protocol for a frameReady handler."""
+
+        def frameReady(self, img: np.ndarray, /) -> None: ...
+
+    class FrameReady2(Protocol):
+        """Minimal protocol for a frameReady handler."""
+
+        def frameReady(self, img: np.ndarray, event: MDAEvent, /) -> None: ...
+
+    class FrameReady3(Protocol):
+        """Minimal protocol for a frameReady handler."""
+
+        def frameReady(
+            self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1, /
+        ) -> None: ...
+
+
+SupportsFrameReady: TypeAlias = "FrameReady0 | FrameReady1 | FrameReady2 | FrameReady3"
+SingleOutput: TypeAlias = "Path | str | SupportsFrameReady"
 
 MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
@@ -67,7 +94,7 @@ class MDARunner:
         self._paused = False
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
-
+        self._handlers: list[SupportsFrameReady] = []
         self._canceled = False
         self._sequence: MDASequence | None = None
         # timer for the full sequence, reset only once at the beginning of the sequence
@@ -206,6 +233,9 @@ class MDARunner:
         if error is not None:
             raise error
 
+    def get_output_handlers(self) -> tuple[SupportsFrameReady, ...]:
+        return tuple(self._handlers)
+
     def seconds_elapsed(self) -> float:
         """Return the number of seconds since the start of the acquisition."""
         return time.perf_counter() - self._sequence_t0
@@ -229,10 +259,10 @@ class MDARunner:
             output = [output]
 
         # convert all items to handler objects
-        handlers: list[Any] = []
+        self._handlers.clear()
         for item in output:
             if isinstance(item, (str, Path)):
-                handlers.append(self._handler_for_path(item))
+                self._handlers.append(self._handler_for_path(item))
             else:
                 # TODO: better check for valid handler protocol
                 # quick hack for now.
@@ -241,11 +271,11 @@ class MDARunner:
                         "Output handlers must have a frameReady method. "
                         f"Got {item} with type {type(item)}."
                     )
-                handlers.append(item)
+                self._handlers.append(item)
 
-        return mda_listeners_connected(*handlers, mda_events=self._signals)
+        return mda_listeners_connected(*self._handlers, mda_events=self._signals)
 
-    def _handler_for_path(self, path: str | Path) -> object:
+    def _handler_for_path(self, path: str | Path) -> SupportsFrameReady:
         """Convert a string or Path into a handler object.
 
         This method picks from the built-in handlers based on the extension of the path.
