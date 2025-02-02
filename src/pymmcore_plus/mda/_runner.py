@@ -5,8 +5,9 @@ import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 from unittest.mock import MagicMock
+from weakref import WeakSet
 
 from useq import MDASequence
 
@@ -94,7 +95,7 @@ class MDARunner:
         self._paused = False
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
-        self._handlers: list[SupportsFrameReady] = []
+        self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
         self._canceled = False
         self._sequence: MDASequence | None = None
         # timer for the full sequence, reset only once at the beginning of the sequence
@@ -216,6 +217,10 @@ class MDARunner:
             - A handler object that implements the `DataHandler` protocol, currently
                 meaning it has a `frameReady` method.  See `mda_listeners_connected`
                 for more details.
+
+            During the course of the sequence, the `get_output_handlers` method can be
+            used to get the currently connected output handlers (including those that
+            were created automatically based on file paths).
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
@@ -234,6 +239,28 @@ class MDARunner:
             raise error
 
     def get_output_handlers(self) -> tuple[SupportsFrameReady, ...]:
+        """Return the data handlers that are currently connected.
+
+        Output handlers are connected by passing them to the `output` parameter of the
+        `run` method; the run method accepts objects with a `frameReady` method *or*
+        strings representing paths.  If a string is passed, a handler will be created
+        internally.
+
+        This method returns a tuple of currently connected handlers, including those
+        that were explicitly passed to `run()`, as well as those that were created based
+        on file paths.  Internally, handlers are held by weak references, so if you want
+        the handler to persist, you must keep a reference to it.  The only guaranteed
+        API that the handler will have is the `frameReady` method, but it could be any
+        user-defined object that implements that method.
+
+        Handlers are cleared each time `run()` is called, (but not at the end
+        of the sequence).
+
+        Returns
+        -------
+        tuple[SupportsFrameReady, ...]
+            Tuple of objects that (minimally) support the `frameReady` method.
+        """
         return tuple(self._handlers)
 
     def seconds_elapsed(self) -> float:
@@ -258,48 +285,33 @@ class MDARunner:
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
-        # convert all items to handler objects
-        self._handlers.clear()
+        # convert all items to handler objects, preserving order
+        _handlers: list[SupportsFrameReady] = []
         for item in output:
             if isinstance(item, (str, Path)):
-                self._handlers.append(self._handler_for_path(item))
+                _handlers.append(self._handler_for_path(item))
             else:
                 # TODO: better check for valid handler protocol
                 # quick hack for now.
-                if not hasattr(item, "frameReady"):
+                if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
-                        "Output handlers must have a frameReady method. "
+                        "Output handlers must have a callable frameReady method. "
                         f"Got {item} with type {type(item)}."
                     )
-                self._handlers.append(item)
+                _handlers.append(item)
 
-        return mda_listeners_connected(*self._handlers, mda_events=self._signals)
+        self._handlers.clear()
+        self._handlers.update(_handlers)
+        return mda_listeners_connected(*_handlers, mda_events=self._signals)
 
     def _handler_for_path(self, path: str | Path) -> SupportsFrameReady:
         """Convert a string or Path into a handler object.
 
         This method picks from the built-in handlers based on the extension of the path.
         """
-        path = str(Path(path).expanduser().resolve())
-        if path.endswith(".zarr"):
-            from pymmcore_plus.mda.handlers import OMEZarrWriter
+        from pymmcore_plus.mda.handlers import handler_for_path
 
-            return OMEZarrWriter(path)
-
-        if path.endswith((".tiff", ".tif")):
-            from pymmcore_plus.mda.handlers import OMETiffWriter
-
-            return OMETiffWriter(path)
-
-        # FIXME: ugly hack for the moment to represent a non-existent directory
-        # there are many features that ImageSequenceWriter supports, and it's unclear
-        # how to infer them all from a single string.
-        if not (Path(path).suffix or Path(path).exists()):
-            from pymmcore_plus.mda.handlers import ImageSequenceWriter
-
-            return ImageSequenceWriter(path)
-
-        raise ValueError(f"Could not infer a writer handler for path: '{path}'")
+        return cast("SupportsFrameReady", handler_for_path(path))
 
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
