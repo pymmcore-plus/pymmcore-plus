@@ -66,11 +66,11 @@ jobs:
 
       - name: Build Micro-Manager
         if: runner.os == 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: mmcore build-dev
+        run: uv run mmcore build-dev
 
       - name: Install Micro-Manager
         if: runner.os != 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: mmcore install
+        run: uv run mmcore install
 
       - name: Remove Qt
         if: runner.os == 'Linux'
