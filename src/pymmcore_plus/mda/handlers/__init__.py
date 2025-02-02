@@ -24,21 +24,15 @@ def handler_for_path(path: str | Path) -> object:
 
     path = str(Path(path).expanduser().resolve())
     if path.endswith(".zarr"):
-        from pymmcore_plus.mda.handlers import OMEZarrWriter
-
         return OMEZarrWriter(path)
 
     if path.endswith((".tiff", ".tif")):
-        from pymmcore_plus.mda.handlers import OMETiffWriter
-
         return OMETiffWriter(path)
 
     # FIXME: ugly hack for the moment to represent a non-existent directory
     # there are many features that ImageSequenceWriter supports, and it's unclear
     # how to infer them all from a single string.
     if not (Path(path).suffix or Path(path).exists()):
-        from pymmcore_plus.mda.handlers import ImageSequenceWriter
-
         return ImageSequenceWriter(path)
 
     raise ValueError(f"Could not infer a writer handler for path: '{path}'")
