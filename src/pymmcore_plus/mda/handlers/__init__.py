@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from pathlib import Path
 
 from ._img_sequence_writer import ImageSequenceWriter
