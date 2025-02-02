@@ -22,6 +22,8 @@ if TYPE_CHECKING:
     import useq
     from typing_extensions import TypeAlias  # py310
 
+    from pymmcore_plus.metadata.schema import FrameMetaV1
+
     ImgWriter: TypeAlias = Callable[[str, npt.NDArray], Any]
 
 FRAME_KEY = "frame"
@@ -118,7 +120,7 @@ class ImageSequenceWriter:
             shutil.rmtree(self._directory)
 
         # ongoing dict of frame meta... stored for easy rewrite without reading
-        self._frame_metadata: dict[str, dict] = {}
+        self._frame_metadata: dict[str, FrameMetaV1] = {}
         self._frame_meta_file = self._directory.joinpath(self.FRAME_META_PATH)
         self._seq_meta_file = self._directory.joinpath(self.SEQ_META_PATH)
 
@@ -186,7 +188,9 @@ class ImageSequenceWriter:
         # write final frame metadata to disk
         self._frame_meta_file.write_bytes(json_dumps(self._frame_metadata, indent=2))
 
-    def frameReady(self, frame: np.ndarray, event: useq.MDAEvent, meta: dict) -> None:
+    def frameReady(
+        self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1, /
+    ) -> None:
         """Write a frame to disk."""
         frame_idx = next(self._counter)
         if self._name_template:
