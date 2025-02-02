@@ -74,7 +74,7 @@ jobs:
 
       - name: Remove Qt
         if: runner.os == 'Linux'
-        run: uv pip uninstall -y pytest-qt qtpy
+        run: uv pip uninstall pytest-qt qtpy
 
       - run: uv run pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
       
