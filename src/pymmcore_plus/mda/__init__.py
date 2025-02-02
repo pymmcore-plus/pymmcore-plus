@@ -1,5 +1,3 @@
-from typing import TYPE_CHECKING
-
 from ._engine import MDAEngine
 from ._protocol import PMDAEngine
 from ._runner import MDARunner, SupportsFrameReady
