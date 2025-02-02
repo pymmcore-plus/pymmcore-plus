@@ -5,7 +5,7 @@ import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
@@ -28,26 +28,26 @@ if TYPE_CHECKING:
     from ._engine import MDAEngine
 
     class FrameReady0(Protocol):
-        """Minimal protocol for a frameReady handler."""
+        """Data handler with a no-argument `frameReady` method."""
 
-        def frameReady(self) -> None: ...
+        def frameReady(self) -> Any: ...
 
     class FrameReady1(Protocol):
-        """Minimal protocol for a frameReady handler."""
+        """Data handler with a `frameReady` method that takes `(image,)` ."""
 
-        def frameReady(self, img: np.ndarray, /) -> None: ...
+        def frameReady(self, img: np.ndarray, /) -> Any: ...
 
     class FrameReady2(Protocol):
-        """Minimal protocol for a frameReady handler."""
+        """Data handler with a `frameReady` method that takes `(image, event)`."""
 
-        def frameReady(self, img: np.ndarray, event: MDAEvent, /) -> None: ...
+        def frameReady(self, img: np.ndarray, event: MDAEvent, /) -> Any: ...
 
     class FrameReady3(Protocol):
-        """Minimal protocol for a frameReady handler."""
+        """Data handler with a `frameReady` method that takes `(image, event, meta)`."""
 
         def frameReady(
             self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1, /
-        ) -> None: ...
+        ) -> Any: ...
 
 
 SupportsFrameReady: TypeAlias = "FrameReady0 | FrameReady1 | FrameReady2 | FrameReady3"
@@ -291,8 +291,6 @@ class MDARunner:
             if isinstance(item, (str, Path)):
                 _handlers.append(self._handler_for_path(item))
             else:
-                # TODO: better check for valid handler protocol
-                # quick hack for now.
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
                         "Output handlers must have a callable frameReady method. "
