@@ -69,7 +69,16 @@ test = [
     "zarr >=2.2,<3",
     "xarray",
 ]
-dev = ["ipython", "mypy", "pdbpp", "pre-commit", "ruff", "tensorstore-stubs"]
+dev = [
+    "pymmcore-plus[test]",
+    "ipython",
+    "mypy",
+    "pdbpp",
+    "pre-commit",
+    "ruff",
+    "tensorstore-stubs",
+    "PyQt6"
+]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material",
@@ -78,6 +87,13 @@ docs = [
     "mkdocs-typer ==0.0.3",
     # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
+
+[dependency-groups]
+# https://github.com/pypa/pip/issues/12963
+# until pip supports dependency groups, we leave dev in optional-dependencies
+# this allows both `uv sync` and `pip install -e .[dev]` to work
+# once support is added, move dev and docs here.
+dev = ["pymmcore-plus[dev]"]
 
 [project.urls]
 Source = "https://github.com/pymmcore-plus/pymmcore-plus"
