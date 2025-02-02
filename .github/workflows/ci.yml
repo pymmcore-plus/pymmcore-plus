@@ -54,7 +54,7 @@ jobs:
         shell: bash
         run: |
           set -e
-          CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
+          CACHE_PATH=$(uv run python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
           echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
 
       - name: Cache Drivers
