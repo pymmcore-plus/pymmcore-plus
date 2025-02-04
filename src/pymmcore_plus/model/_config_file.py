@@ -220,7 +220,11 @@ def run_command(line: str, scope: Microscope) -> None:
     try:
         exec_cmd(scope, args)
     except Exception as exc:
-        raise ValueError(f"Error executing command {line!r}: {exc}") from exc
+        if command in SHOULD_RAISE:
+            raise ValueError(f"Error executing command {line!r}: {exc}") from exc
+        warnings.warn(
+            f"Failed to execute command {line!r}: {exc}", RuntimeWarning, stacklevel=2
+        )
 
 
 def _exec_Device(scope: Microscope, args: Sequence[str]) -> None:
@@ -352,3 +356,6 @@ COMMAND_EXECUTORS: dict[CFGCommand, tuple[Executor, set[int]]] = {
     CFGCommand.ParentID: (_exec_ParentID, {3}),
     CFGCommand.FocusDirection: (_exec_FocusDirection, {3}),
 }
+
+# Commands that should raise when fail
+SHOULD_RAISE = {CFGCommand.Device, CFGCommand.Property}
