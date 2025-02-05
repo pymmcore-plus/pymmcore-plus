@@ -140,46 +140,47 @@ def test_load_errors() -> None:
         model.load_config("Property,A,B,C,D,E")
     with pytest.raises(ValueError, match="not an integer"):
         model.load_config("Property,Core,Initialize,NotAnInt")
-    with pytest.raises(ValueError, match="not an integer"):
+    model.load_config("Device,Dichroic,DemoCamera,DWheel")  # fine
+    with pytest.warns(RuntimeWarning, match="not an integer"):
         model.load_config(
             """
             Device,Dichroic,DemoCamera,DWheel
             Label,Dichroic,NotAnInt,Q505LP
             """
         )
-    with pytest.raises(ValueError, match="'NotAPreset' not found"):
+    with pytest.warns(RuntimeWarning, match="'NotAPreset' not found"):
         model.load_config("PixelSize_um,NotAPreset,0.5")
-    with pytest.raises(ValueError, match="Expected a float"):
+    with pytest.warns(RuntimeWarning, match="Expected a float"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSize_um,Res40x,NotAFloat
             """
         )
-    with pytest.raises(ValueError, match="'Res10x' not found"):
+    with pytest.warns(RuntimeWarning, match="'Res10x' not found"):
         model.load_config("PixelSizeAffine,Res10x,1.0,0.0,0.0,0.0,1.1,0.0")
-    with pytest.raises(ValueError, match="Expected 8 arguments, got 5"):
+    with pytest.warns(RuntimeWarning, match="Expected 8 arguments, got 5"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSizeAffine,Res40x,1.0,0.0,0.0
             """
         )
-    with pytest.raises(ValueError, match="Expected 6 floats"):
+    with pytest.warns(RuntimeWarning, match="Expected 6 floats"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSizeAffine,Res40x,1.0,0.0,0.0,0.0,1.1,NoFloat
             """
         )
-    with pytest.raises(ValueError, match="Expected a float"):
+    with pytest.warns(RuntimeWarning, match="Expected a float"):
         model.load_config(
             """
             Device,Shutter,DemoCamera,DShutter
             Delay,Shutter,NotAFloat
             """
         )
-    with pytest.raises(ValueError, match="not a valid FocusDirection"):
+    with pytest.warns(RuntimeWarning, match="not a valid FocusDirection"):
         model.load_config(
             """
             Device,Z,DemoCamera,DStage
