@@ -1675,6 +1675,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To emit a `startContinuousSequenceAcquisition` event.
         """
+        self.events.continuousSequenceAcquisitionStarting.emit()
         super().startContinuousSequenceAcquisition(intervalMs)
         self.events.continuousSequenceAcquisitionStarted.emit()
 
@@ -1703,12 +1704,16 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To emit a `startSequenceAcquisition` event.
         """
-        super().startSequenceAcquisition(*args, **kwargs)
         if len(args) == 3:
             numImages, intervalMs, stopOnOverflow = args
             cameraLabel = super().getCameraDevice()
         else:
             cameraLabel, numImages, intervalMs, stopOnOverflow = args
+
+        self.events.sequenceAcquisitionStarting.emit(
+            cameraLabel, numImages, intervalMs, stopOnOverflow
+        )
+        super().startSequenceAcquisition(*args, **kwargs)
         self.events.sequenceAcquisitionStarted.emit(
             cameraLabel, numImages, intervalMs, stopOnOverflow
         )

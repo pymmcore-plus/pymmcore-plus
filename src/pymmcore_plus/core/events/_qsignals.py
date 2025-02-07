@@ -29,8 +29,10 @@ class QCoreSignaler(QObject):
     imageSnapped = Signal()  # on snapImage()
     mdaEngineRegistered = Signal(object, object)  # new engine, old engine
     # when continuousSequenceAcquisition is started
+    continuousSequenceAcquisitionStarting = Signal()
     continuousSequenceAcquisitionStarted = Signal()
     # when SequenceAcquisition is started
+    sequenceAcquisitionStarting = Signal(str, int, float, bool)
     sequenceAcquisitionStarted = Signal(str, int, float, bool)
     # when (Continuous)SequenceAcquisition is stopped
     sequenceAcquisitionStopped = Signal(str)
