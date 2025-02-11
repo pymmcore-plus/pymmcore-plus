@@ -490,3 +490,9 @@ def test_get_handlers(core: CMMCorePlus) -> None:
     # but they should have been available during start and finish events
     assert on_start_names == ["TensorStoreHandler"]
     assert on_finish_names == ["TensorStoreHandler"]
+
+
+def test_custom_action(core: CMMCorePlus) -> None:
+    """Make sure we can handle custom actions gracefully"""
+
+    core.mda.run([MDAEvent(action=useq.CustomAction())])
