@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.13.4](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.4) (2025-02-11)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.3...v0.13.4)
+
+**Merged pull requests:**
+
+- chore: support useq 0.7, don't try to exec anything but AcquireImage [\#432](https://github.com/pymmcore-plus/pymmcore-plus/pull/432) ([tlambert03](https://github.com/tlambert03))
+
 ## [v0.13.3](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.3) (2025-02-07)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.2...v0.13.3)
