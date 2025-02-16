@@ -464,3 +464,35 @@ def test_queue_mda(core: CMMCorePlus) -> None:
     # make sure that the engine's iterator was NOT used when running an iter(Queue)
     mock_engine.event_iterator.assert_not_called()
     assert mock_engine.setup_event.call_count == 2
+
+
+def test_get_handlers(core: CMMCorePlus) -> None:
+    """Test that we can get the handlers"""
+    runner = core.mda
+
+    assert not runner.get_output_handlers()
+    on_start_names: list[str] = []
+    on_finish_names: list[str] = []
+
+    @runner.events.sequenceStarted.connect
+    def _on_start() -> None:
+        on_start_names.extend([type(h).__name__ for h in runner.get_output_handlers()])
+
+    @runner.events.sequenceFinished.connect
+    def _on_end() -> None:
+        on_finish_names.extend([type(h).__name__ for h in runner.get_output_handlers()])
+
+    runner.run([MDAEvent()], output="memory://")
+
+    # weakref is used to store the handlers,
+    # handlers should be cleared after the sequence is finished
+    assert not runner.get_output_handlers()
+    # but they should have been available during start and finish events
+    assert on_start_names == ["TensorStoreHandler"]
+    assert on_finish_names == ["TensorStoreHandler"]
+
+
+def test_custom_action(core: CMMCorePlus) -> None:
+    """Make sure we can handle custom actions gracefully"""
+
+    core.mda.run([MDAEvent(action=useq.CustomAction())])

@@ -133,14 +133,26 @@ class PCoreSignaler(Protocol):
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
 
-    continuousSequenceAcquisitionStarted: PSignal
-    """Emits with no arguments when continuous sequence acquisition is started.
+    continuousSequenceAcquisitionStarting: PSignal
+    """Emits with no arguments *before* continuous sequence acquisition is started.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    sequenceAcquisitionStarted: PSignal
-    """Emits `(str, int, float, bool)` when sequence acquisition is started.
+    continuousSequenceAcquisitionStarted: PSignal
+    """Emits with no arguments *after* continuous sequence acquisition has started.
 
+    > :sparkles: This signal is unique to `pymmcore-plus`.
+    """
+    sequenceAcquisitionStarting: PSignal
+    """Emits `(str, int, float, bool)` *before* sequence acquisition is started.
+
+    (cameraLabel, numImages, intervalMs, stopOnOverflow)
+    > :sparkles: This signal is unique to `pymmcore-plus`.
+    """
+    sequenceAcquisitionStarted: PSignal
+    """Emits `(str, int, float, bool)` *after* sequence acquisition has started.
+
+    (cameraLabel, numImages, intervalMs, stopOnOverflow)
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
     sequenceAcquisitionStopped: PSignal

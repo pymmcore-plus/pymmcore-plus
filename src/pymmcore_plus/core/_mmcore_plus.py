@@ -642,10 +642,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = super().getLastImageMD(channel, slice, md)
         else:
             img = super().getLastImageMD(md)
-        return (
-            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
-            md,
-        )
+        return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     @overload
     def popNextImageAndMD(
@@ -687,11 +684,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().popNextImageMD(channel, slice, md)
-        md = Metadata(md)
-        return (
-            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
-            md,
-        )
+        return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
@@ -707,7 +700,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
         img: np.ndarray = super().popNextImage()
-        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
+        return self.fixImage(img) if fix and not pymmcore.NANO else img
 
     def getNBeforeLastImageAndMD(
         self, n: int, *, fix: bool = True
@@ -735,7 +728,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().getNBeforeLastImageMD(n, md)
-        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img, md
+        return self.fixImage(img) if fix and not pymmcore.NANO else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
         """Applies a configuration to a group.
@@ -1668,13 +1661,14 @@ class CMMCorePlus(pymmcore.CMMCore):
             if numChannel is not None
             else super().getImage()
         )
-        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
+        return self.fixImage(img) if fix and not pymmcore.NANO else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition.
 
         **Why Override?** To emit a `startContinuousSequenceAcquisition` event.
         """
+        self.events.continuousSequenceAcquisitionStarting.emit()
         super().startContinuousSequenceAcquisition(intervalMs)
         self.events.continuousSequenceAcquisitionStarted.emit()
 
@@ -1703,12 +1697,16 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To emit a `startSequenceAcquisition` event.
         """
-        super().startSequenceAcquisition(*args, **kwargs)
         if len(args) == 3:
             numImages, intervalMs, stopOnOverflow = args
             cameraLabel = super().getCameraDevice()
         else:
             cameraLabel, numImages, intervalMs, stopOnOverflow = args
+
+        self.events.sequenceAcquisitionStarting.emit(
+            cameraLabel, numImages, intervalMs, stopOnOverflow
+        )
+        super().startSequenceAcquisition(*args, **kwargs)
         self.events.sequenceAcquisitionStarted.emit(
             cameraLabel, numImages, intervalMs, stopOnOverflow
         )

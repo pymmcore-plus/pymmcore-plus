@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
 import numpy as np
 import useq
-from useq import HardwareAutofocus, MDAEvent, MDASequence
+from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
@@ -193,6 +193,13 @@ class MDAEngine(PMDAEngine):
                 self._z_correction[p_idx] = new_correction + self._z_correction.get(
                     p_idx, 0.0
                 )
+            return
+
+        # don't try to execute any other action types. Mostly, this is just
+        # CustomAction, which is a user-defined action that the engine doesn't know how
+        # to handle.  But may include other actions in the future, and this ensures
+        # backwards compatibility.
+        if not isinstance(action, (AcquireImage, type(None))):
             return
 
         # if the autofocus was engaged at the start of the sequence AND autofocus action
