@@ -1,5 +1,6 @@
 import os
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import MagicMock, call, patch
@@ -357,6 +358,10 @@ def test_get_image_and_meta(core: CMMCorePlus) -> None:
     assert isinstance(image, np.ndarray)
     assert isinstance(md, Metadata)
     assert "TimeReceivedByCore" in md
+
+    assert Metadata(md) == md
+    assert isinstance(md, Mapping)
+    assert issubclass(Metadata, Mapping)
 
 
 def test_configuration(core: CMMCorePlus) -> None:
