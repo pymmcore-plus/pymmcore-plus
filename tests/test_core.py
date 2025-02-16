@@ -346,17 +346,17 @@ def test_get_image_and_meta(core: CMMCorePlus) -> None:
     image, md = core.getNBeforeLastImageAndMD(0)
     assert isinstance(image, np.ndarray)
     assert isinstance(md, Metadata)
-    assert bool(dict(md))
+    assert "TimeReceivedByCore" in md
 
     image, md = core.getLastImageAndMD()
     assert isinstance(image, np.ndarray)
     assert isinstance(md, Metadata)
-    assert bool(dict(md))
+    assert "TimeReceivedByCore" in md
 
     image, md = core.popNextImageAndMD()
     assert isinstance(image, np.ndarray)
     assert isinstance(md, Metadata)
-    assert bool(dict(md))
+    assert "TimeReceivedByCore" in md
 
 
 def test_configuration(core: CMMCorePlus) -> None:
