@@ -35,9 +35,10 @@ jobs:
             qt: "PyQt6"
           - platform: ubuntu-latest
             python-version: "3.12"
-          # - platform: windows-latest
-          #   python-version: "3.13"
-          #   qt: "PyQt6"
+          - platform: windows-latest
+            python-version: "3.13"
+            qt: "PyQt6"
+
     env:
       UV_PYTHON: ${{ matrix.python-version }}
       UV_FROZEN: "1"
@@ -76,7 +77,7 @@ jobs:
         if: runner.os == 'Linux'
         run: uv pip uninstall pytest-qt qtpy
 
-      - run: uv run pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
+      - run: uv run --no-sync pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
       
       - name: test lowest-direct deps
         run: |
