@@ -23,6 +23,7 @@ from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from pymmcore_plus.metadata.functions import summary_metadata
 
+from . import _device
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
@@ -34,7 +35,6 @@ from ._constants import (
     PixelType,
     PropertyType,
 )
-from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
@@ -50,6 +50,7 @@ if TYPE_CHECKING:
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
+    _DT = TypeVar("_DT", bound=_device.Device)
     ListOrTuple = list[_T] | tuple[_T, ...]
 
     class PropertySchema(TypedDict, total=False):
@@ -887,7 +888,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             devices = [d for d in devices if ptrn.search(self.getDeviceLibrary(d))]
 
         for dev in devices:
-            yield Device(dev, mmcore=self) if as_object else dev
+            yield _device.Device(dev, mmcore=self) if as_object else dev
 
     @overload
     def iterProperties(
@@ -1068,7 +1069,34 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceAdapter(library_name, mmcore=self)
 
-    def getDeviceObject(self, device_label: str) -> Device:
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Camera]
+    ) -> _DT: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Camera]
+    ) -> _DT: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Camera]
+    ) -> _DT: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Camera]
+    ) -> _DT: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Camera]
+    ) -> _DT: ...
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Any] = ...
+    ) -> Device: ...
+    @overload
+    def getDeviceObject(self, device_label: str, device_type: type[_DT]) -> _DT: ...
+    def getDeviceObject(
+        self, device_label: str, device_type: type[_DT] | DeviceType = DeviceType.Any
+    ) -> _DT:
         """Return a `Device` object bound to device_label on this core.
 
         :sparkles: *This method is new in `CMMCorePlus`.*

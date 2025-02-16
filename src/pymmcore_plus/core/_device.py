@@ -1,12 +1,14 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Self
 
 from ._constants import DeviceType
 from ._property import DeviceProperty
 from .events._device_signal_view import _DevicePropValueSignal
 
 if TYPE_CHECKING:
+    from typing_extensions import Self
+
     from pymmcore_plus.core.events._protocol import PSignalInstance
 
     from ._constants import DeviceDetectionStatus
@@ -46,6 +48,8 @@ class Device:
     UNASSIGNED = "__UNASSIGNED__"
     propertyChanged: PSignalInstance
 
+    @classmethod
+    def create(cls, device_label: str, mmcore: CMMCorePlus) -> Self: ...
     def __init__(
         self,
         device_label: str = UNASSIGNED,
@@ -215,3 +219,48 @@ class Device:
             lib = ""
         core = repr(self._mmc).strip("<>")
         return f"<Device {self.label!r} {lib}on {core}: {props}>"
+
+
+class CameraDevice(Device): ...
+
+
+class ShutterDevice(Device): ...
+
+
+class StateDevice(Device): ...
+
+
+class StageDevice(Device): ...
+
+
+class XYStageDevice(Device): ...
+
+
+class SerialDevice(Device): ...
+
+
+class GenericDevice(Device): ...
+
+
+class AutoFocusDevice(Device): ...
+
+
+class CoreDevice(Device): ...
+
+
+class ImageProcessorDevice(Device): ...
+
+
+class SignalIODevice(Device): ...
+
+
+class MagnifierDevice(Device): ...
+
+
+class SLMDevice(Device): ...
+
+
+class HubDevice(Device): ...
+
+
+class GalvoDevice(Device): ...
