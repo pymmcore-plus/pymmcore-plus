@@ -40,7 +40,7 @@ dependencies = [
     "psygnal >=0.10",
     "pymmcore >=11.2.1.71.0",
     "typing-extensions >=4", # not actually required at runtime
-    "useq-schema >=0.6.2",
+    "useq-schema >=0.7.0",
     "tensorstore >=0.1.67",
     "tensorstore >=0.1.71; python_version >= '3.13'",
     # cli requirements included by default for now

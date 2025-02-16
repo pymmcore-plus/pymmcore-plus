@@ -4,8 +4,6 @@ from pathlib import Path
 
 import pytest
 
-import pymmcore_plus
-import pymmcore_plus._pymmcore
 from pymmcore_plus import CMMCorePlus, DeviceType, find_micromanager
 from pymmcore_plus.metadata import summary_metadata
 from pymmcore_plus.model import CoreDevice, Device, Microscope
@@ -142,46 +140,47 @@ def test_load_errors() -> None:
         model.load_config("Property,A,B,C,D,E")
     with pytest.raises(ValueError, match="not an integer"):
         model.load_config("Property,Core,Initialize,NotAnInt")
-    with pytest.raises(ValueError, match="not an integer"):
+    model.load_config("Device,Dichroic,DemoCamera,DWheel")  # fine
+    with pytest.warns(RuntimeWarning, match="not an integer"):
         model.load_config(
             """
             Device,Dichroic,DemoCamera,DWheel
             Label,Dichroic,NotAnInt,Q505LP
             """
         )
-    with pytest.raises(ValueError, match="'NotAPreset' not found"):
+    with pytest.warns(RuntimeWarning, match="'NotAPreset' not found"):
         model.load_config("PixelSize_um,NotAPreset,0.5")
-    with pytest.raises(ValueError, match="Expected a float"):
+    with pytest.warns(RuntimeWarning, match="Expected a float"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSize_um,Res40x,NotAFloat
             """
         )
-    with pytest.raises(ValueError, match="'Res10x' not found"):
+    with pytest.warns(RuntimeWarning, match="'Res10x' not found"):
         model.load_config("PixelSizeAffine,Res10x,1.0,0.0,0.0,0.0,1.1,0.0")
-    with pytest.raises(ValueError, match="Expected 8 arguments, got 5"):
+    with pytest.warns(RuntimeWarning, match="Expected 8 arguments, got 5"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSizeAffine,Res40x,1.0,0.0,0.0
             """
         )
-    with pytest.raises(ValueError, match="Expected 6 floats"):
+    with pytest.warns(RuntimeWarning, match="Expected 6 floats"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSizeAffine,Res40x,1.0,0.0,0.0,0.0,1.1,NoFloat
             """
         )
-    with pytest.raises(ValueError, match="Expected a float"):
+    with pytest.warns(RuntimeWarning, match="Expected a float"):
         model.load_config(
             """
             Device,Shutter,DemoCamera,DShutter
             Delay,Shutter,NotAFloat
             """
         )
-    with pytest.raises(ValueError, match="not a valid FocusDirection"):
+    with pytest.warns(RuntimeWarning, match="not a valid FocusDirection"):
         model.load_config(
             """
             Device,Z,DemoCamera,DStage
@@ -201,10 +200,6 @@ def test_scope_errs():
         Microscope(devices=[CoreDevice()])
 
 
-@pytest.mark.skipif(
-    pymmcore_plus._pymmcore.BACKEND == "pymmcore-nano",
-    reason="This is still hanging on pymmcore-nano",
-)
 def test_apply():
     core1 = CMMCorePlus()
     core1.loadSystemConfiguration()

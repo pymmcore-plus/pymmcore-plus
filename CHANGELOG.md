@@ -1,5 +1,50 @@
 # Changelog
 
+## [v0.13.5](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.5) (2025-02-16)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.4...v0.13.5)
+
+**Fixed bugs:**
+
+- fix: Fix missing metadata in popNextImageAndMD [\#436](https://github.com/pymmcore-plus/pymmcore-plus/pull/436) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.13.4](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.4) (2025-02-11)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.3...v0.13.4)
+
+**Merged pull requests:**
+
+- chore: support useq 0.7, don't try to exec anything but AcquireImage [\#432](https://github.com/pymmcore-plus/pymmcore-plus/pull/432) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.13.3](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.3) (2025-02-07)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.2...v0.13.3)
+
+**Implemented enhancements:**
+
+- feat: add continuousSequenceAcquisitionStarting and sequenceAcquisitionStarting signals [\#430](https://github.com/pymmcore-plus/pymmcore-plus/pull/430) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.13.2](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.2) (2025-02-05)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.1...v0.13.2)
+
+**Implemented enhancements:**
+
+- feat: add `get_output_handlers` method to `MDARunner` [\#422](https://github.com/pymmcore-plus/pymmcore-plus/pull/422) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix!: fix focus direction enums [\#428](https://github.com/pymmcore-plus/pymmcore-plus/pull/428) ([tlambert03](https://github.com/tlambert03))
+- fix: turn most exceptions to warnings when loading config file into a model [\#426](https://github.com/pymmcore-plus/pymmcore-plus/pull/426) ([tlambert03](https://github.com/tlambert03))
+
+**Tests & CI:**
+
+- test: unskip test on pymmcore-nano [\#423](https://github.com/pymmcore-plus/pymmcore-plus/pull/423) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- ci\(pre-commit.ci\): autoupdate [\#425](https://github.com/pymmcore-plus/pymmcore-plus/pull/425) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+
 ## [v0.13.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.1) (2025-01-21)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.0...v0.13.1)

@@ -110,7 +110,7 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .[test,PyQt6]
           python -m pip uninstall -y pymmcore
-          python -m pip install pymmcore-nano>=11.2.1.71.0.dev2
+          python -m pip install pymmcore-nano>=11.3.0.71.1
 
       - name: Set cache path
         shell: bash
