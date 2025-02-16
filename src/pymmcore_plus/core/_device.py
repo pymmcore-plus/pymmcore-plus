@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any, Literal, Self, overload
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ._constants import DeviceType, FocusDirection, Keyword
 from ._property import DeviceProperty
