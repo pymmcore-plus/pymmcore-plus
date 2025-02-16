@@ -32,6 +32,7 @@ from ._constants import (
     DeviceInitializationState,
     DeviceType,
     FocusDirection,
+    Keyword,
     PixelType,
     PropertyType,
 )
@@ -304,7 +305,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         and the property Value has actually changed.
         """
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
-            super().setStateLabel(stateDeviceLabel, stateLabel)
+            try:
+                super().setStateLabel(stateDeviceLabel, stateLabel)
+            except RuntimeError as e:
+                state_labels = self.getStateLabels(stateDeviceLabel)
+                msg = f"{e}.  Available Labels: {state_labels}"
+                raise RuntimeError(msg) from None
 
     def setDeviceAdapterSearchPaths(self, paths: Sequence[str]) -> None:
         """Set the device adapter search paths.
@@ -347,6 +353,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             recognized by the specific plugin library. See
             [`pymmcore.CMMCore.getAvailableDevices`][] for a list of valid device names.
         """
+        if str(label).lower() == Keyword.CoreDevice.value.lower():
+            raise ValueError(f"Label {label!r} is reserved.")
+
         try:
             super().loadDevice(label, moduleName, deviceName)
         except RuntimeError as e:
@@ -826,7 +835,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
-    ) -> Iterator[Device]: ...
+    ) -> Iterator[_device.Device]: ...
 
     def iterDevices(
         self,
@@ -835,7 +844,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_adapter: str | re.Pattern | None = None,
         *,
         as_object: bool = True,
-    ) -> Iterator[Device] | Iterator[str]:
+    ) -> Iterator[_device.Device] | Iterator[str]:
         """Iterate over currently loaded devices.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -888,7 +897,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             devices = [d for d in devices if ptrn.search(self.getDeviceLibrary(d))]
 
         for dev in devices:
-            yield _device.Device(dev, mmcore=self) if as_object else dev
+            yield _device.Device.create(dev, mmcore=self) if as_object else dev
 
     @overload
     def iterProperties(
@@ -1072,31 +1081,74 @@ class CMMCorePlus(pymmcore.CMMCore):
     @overload
     def getDeviceObject(
         self, device_label: str, device_type: Literal[DeviceType.Camera]
-    ) -> _DT: ...
+    ) -> _device.CameraDevice: ...
     @overload
     def getDeviceObject(
-        self, device_label: str, device_type: Literal[DeviceType.Camera]
-    ) -> _DT: ...
+        self, device_label: str, device_type: Literal[DeviceType.Stage]
+    ) -> _device.StageDevice: ...
     @overload
     def getDeviceObject(
-        self, device_label: str, device_type: Literal[DeviceType.Camera]
-    ) -> _DT: ...
+        self, device_label: str, device_type: Literal[DeviceType.State]
+    ) -> _device.StateDevice: ...
     @overload
     def getDeviceObject(
-        self, device_label: str, device_type: Literal[DeviceType.Camera]
-    ) -> _DT: ...
+        self, device_label: str, device_type: Literal[DeviceType.Shutter]
+    ) -> _device.ShutterDevice: ...
     @overload
     def getDeviceObject(
-        self, device_label: str, device_type: Literal[DeviceType.Camera]
-    ) -> _DT: ...
+        self, device_label: str, device_type: Literal[DeviceType.XYStage]
+    ) -> _device.XYStageDevice: ...
+    @overload
     def getDeviceObject(
-        self, device_label: str, device_type: Literal[DeviceType.Any] = ...
-    ) -> Device: ...
+        self, device_label: str, device_type: Literal[DeviceType.Serial]
+    ) -> _device.SerialDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Generic]
+    ) -> _device.GenericDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.AutoFocus]
+    ) -> _device.AutoFocusDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.ImageProcessor]
+    ) -> _device.ImageProcessorDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.SignalIO]
+    ) -> _device.SignalIODevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Magnifier]
+    ) -> _device.MagnifierDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.SLM]
+    ) -> _device.SLMDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Hub]
+    ) -> _device.HubDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Galvo]
+    ) -> _device.GalvoDevice: ...
+    @overload
+    def getDeviceObject(
+        self,
+        device_label: Literal[Keyword.CoreDevice],
+        device_type: Literal[DeviceType.Core],
+    ) -> _device.CoreDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: DeviceType = ...
+    ) -> _device.Device: ...
     @overload
     def getDeviceObject(self, device_label: str, device_type: type[_DT]) -> _DT: ...
     def getDeviceObject(
         self, device_label: str, device_type: type[_DT] | DeviceType = DeviceType.Any
-    ) -> _DT:
+    ) -> _DT | _device.Device:
         """Return a `Device` object bound to device_label on this core.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -1139,7 +1191,18 @@ class CMMCorePlus(pymmcore.CMMCore):
             }
         }
         """
-        return Device(device_label, mmcore=self)
+        dev = _device.Device.create(device_label, mmcore=self)
+        if (isinstance(device_type, type) and not isinstance(dev, device_type)) or (
+            isinstance(device_type, DeviceType)
+            and device_type not in {DeviceType.Any, DeviceType.Unknown}
+            and dev.type() != device_type
+        ):
+            raise TypeError(
+                f"{device_type!r} requested but device with label "
+                f"{device_label!r} is a {dev.type()}."
+            )
+
+        return dev
 
     def getConfigGroupObject(
         self, group_name: str, allow_missing: bool = False
