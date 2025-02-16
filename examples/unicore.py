@@ -9,14 +9,17 @@ This example demonstrates how to create a custom Python stage device and use it 
 with other C++ devices.
 """
 
-from pymmcore_plus.experimental.unicore import UniMMCore
-from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice
+from pymmcore_plus.experimental.unicore import UniMMCore, XYStageDevice, pymm_property
 
 
 class MyStage(XYStageDevice):
     """Example XY stage device."""
 
-    _pos = (0.0, 0.0)
+    _pos = (0.0, 0.0)  # fake state, just used for this example
+
+    # To know what methods to implement, see the abstractmethods in the base class
+    # you are subclassing. (Note that it may also have unimplemented methods from
+    # its own base classes, such as `stop` and `home` in this case.)
 
     def set_position_um(self, x: float, y: float) -> None:
         """Set the position of the stage."""
@@ -39,6 +42,17 @@ class MyStage(XYStageDevice):
 
     def home(self) -> None:
         print("HOME!")
+
+    # Properties ---------------
+
+    @pymm_property(limits=(0.0, 100.0), sequence_max_length=8)
+    def propB(self) -> float:
+        """Some custom property (Unused here... just an example)."""
+        return 10.0
+
+    @propB.setter
+    def _set_prop_b(self, value: float) -> None:
+        """Set propB."""
 
 
 core = UniMMCore()
