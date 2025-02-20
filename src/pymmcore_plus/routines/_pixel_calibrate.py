@@ -187,7 +187,7 @@ class CameraCalibrator:
             stage_positions, pixel_shifts = zip(*self._pixel_shifts.items())
             A = np.linalg.lstsq(np.array(stage_positions), np.array(pixel_shifts))[0]
 
-            # Construct the full 2D affine transform. A is 2×2
+            # Construct the full 2D affine transform. A is 2 x 2
             affine = np.eye(3, dtype=np.float32)
             affine[0, 0:2] = A[0]
             affine[1, 0:2] = A[1]
