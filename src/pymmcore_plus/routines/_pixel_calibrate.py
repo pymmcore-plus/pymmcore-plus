@@ -3,7 +3,7 @@ from __future__ import annotations
 import contextlib
 import sys
 import warnings
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Iterable, Iterator, Literal
 
 import numpy as np
 from psygnal import Signal
@@ -60,6 +60,7 @@ class AutoCameraCalibrator:
     """
 
     shift_acquired: Signal = Signal()
+    calibration_complete: Signal = Signal()
 
     def __init__(
         self,
@@ -76,18 +77,22 @@ class AutoCameraCalibrator:
         max_shear_tolerance: float = 0.05,
         fft_window: WindowType = "hanning",
         subpixel_method: SubpixelType = "parabolic",
+        maximum_safe_radius: float = 1000,
     ) -> None:
         self.core = core
         self.roi = roi
         self.stage_device = stage_device
         self.camera_device = camera_device
+        self.maximum_safe_radius = maximum_safe_radius
 
         # last correlation matrix acquired, for debugging
         self.last_correlation: np.ndarray | None = None
+        # last fit residuals, for debugging
+        self._residuals: np.ndarray | None = None
 
         # pixel shifts for each stage move, accumulated during calibration
-        # mapping of {(dx_stage, dy_stage): (dx_pixel, dy_pixel)}
-        self._pixel_shifts: dict[tuple[float, float], tuple[float, float]] = {}
+        # mapping of {(dx_stage, dy_stage) -> (dx_pixel, dy_pixel)}
+        self._point_pairs: dict[tuple[float, float], tuple[float, float]] = {}
 
         # cached affine transform that maps pixel shifts to stage shifts
         self._cached_affine: np.ndarray | None = None
@@ -100,6 +105,7 @@ class AutoCameraCalibrator:
         self._max_shear_tolerance = max_shear_tolerance
         self._window = fft_window
         self._subpixel_method = subpixel_method
+        self._max_step = 0.25
 
     def _capture_roi(self) -> np.ndarray:
         """Capture an image and crop to ROI if one was provided."""
@@ -131,16 +137,39 @@ class AutoCameraCalibrator:
             self.core.setXYPosition(x, y)
         self.core.waitForSystem()
 
-    def _default_moves(self) -> list[tuple[float, float]]:
-        dist = self._max_distance / 2
-        # Generate moves along each axis, and along the diagonal.
-        steps = np.linspace(-dist, dist, self._num_steps)
-        x_moves = [(float(i), 0) for i in steps]
-        y_moves = [(0, float(i)) for i in steps]
-        xy_moves = [(float(i), float(i)) for i in steps]
-        return x_moves + y_moves + xy_moves
+    def _iter_positions(self) -> Iterator[tuple[float, float]]:
+        # take a -2 micron initial step in the X direction, to get a pixel estimate
+        yield (-2, 0)
+        # get current pix estimate and step 20 pixels in the other X & Y directions
+        # to form a triangle with the initial point
+        px_estimate = self.pixel_size(from_affine=False)
+        if px_estimate > 2:
+            warnings.warn(
+                "Pixel size estimate is very large. This may indicate a problem with "
+                "the calibration. Please check the calibration images and ROI.",
+                stacklevel=2,
+            )
+            return
+        yield (20 * px_estimate, 20 * px_estimate)
+        # we now have 3 points. Grab the new pixel size estimate and estimate the
+        # field-of-view size
+        px_estimate = self.pixel_size(from_affine=False)
+        half_fov = np.array(self.last_correlation.shape) * px_estimate * 0.5
 
-    def calibrate(self, moves: list[tuple[float, float]] | None = None) -> np.ndarray:
+        # yield stage positions at 3 extreme corners of the field of view
+        max_step = self._max_step
+        yield (half_fov[1] * max_step * 0.5, -half_fov[0] * max_step * 0.5)
+        yield (-half_fov[1] * max_step * 0.5, -half_fov[0] * max_step * 0.5)
+        yield (-half_fov[1] * max_step * 0.5, half_fov[0] * max_step * 0.5)
+        yield (half_fov[1] * max_step * 0.5, half_fov[0] * max_step * 0.5)
+        yield (half_fov[1] * max_step, -half_fov[0] * max_step)
+        yield (-half_fov[1] * max_step, -half_fov[0] * max_step)
+        yield (-half_fov[1] * max_step, half_fov[0] * max_step)
+        yield (half_fov[1] * max_step, half_fov[0] * max_step)
+
+    def calibrate(
+        self, moves: Iterable[tuple[float, float]] | None = None
+    ) -> np.ndarray:
         """Calibrate the pixel size and rotation of the camera.
 
         1. Capture a reference image at the initial stage position.
@@ -174,18 +203,25 @@ class AutoCameraCalibrator:
         ref = self._capture_roi()
 
         if moves is None:
-            moves = self._default_moves()
+            moves = self._iter_positions()
 
         # For each known stage move, capture a new image and measure pixel displacement.
-        self._pixel_shifts.clear()
+        self._point_pairs.clear()
         for dx_stage, dy_stage in moves:
             new_stage = (x_initial + dx_stage, y_initial + dy_stage)
+            # check magnitude of move:
+            if np.linalg.norm((dx_stage, dy_stage)) > self.maximum_safe_radius:
+                raise ValueError(
+                    f"Requested stage move ({dx_stage}, {dy_stage}) is too large. "
+                    f"Maximum safe radius is {self.maximum_safe_radius}."
+                )
+
             self._move_to(*new_stage)
             img = self._capture_roi()
             pixel_shifts, self.last_correlation = measure_image_displacement(
                 ref, img, window=self._window, subpixel_method=self._subpixel_method
             )
-            self._pixel_shifts[(dx_stage, dy_stage)] = pixel_shifts
+            self._point_pairs[(dx_stage, dy_stage)] = pixel_shifts
             self.shift_acquired.emit()
             # clear this on each step in case a callback accesses .affine
             self._cached_affine = None
@@ -199,7 +235,16 @@ class AutoCameraCalibrator:
                 "relationship between stage and pixel shifts.",
                 stacklevel=2,
             )
+        self.calibration_complete.emit()
         return affine
+
+    def pixel_shifts(self) -> Iterable[tuple[tuple[float, float], tuple[float, float]]]:
+        """Returns the pixel shifts acquired during calibration.
+
+        Each item is a 2-tuple with the stage coordinates and the corresponding
+        measured pixel shift: ((dx_stage, dy_stage), (dx_pixel, dy_pixel)).
+        """
+        yield from self._point_pairs.items()
 
     def affine(self) -> np.ndarray:
         """Returns the current affine transform.
@@ -210,12 +255,19 @@ class AutoCameraCalibrator:
         # Solve for the pure linear transformation A (a 2x2 matrix) that maps pixel
         # shifts to stage shifts. That is, we want: stage_shifts @ A = pixel_shifts
         if self._cached_affine is None:
-            if not self._pixel_shifts:  # pragma: no cover
+            if not self._point_pairs:  # pragma: no cover
                 raise RuntimeError(
                     "No pixel shifts have been recorded. Run calibrate() first."
                 )
-            stage_shifts, pixel_shifts = zip(*self._pixel_shifts.items())
-            A = np.linalg.lstsq(np.array(stage_shifts), np.array(pixel_shifts))[0]
+            _stage_shifts, _pixel_shifts = zip(*self._point_pairs.items())
+            # add (0, 0) to each:
+            stage_shifts = np.vstack([(0, 0), _stage_shifts])
+            pixel_shifts = np.vstack([(0, 0), _pixel_shifts])
+            # Computes the vector `x` that approximately solves the equation
+            # ``pixel_shifts @ x = stage_shifts``.
+            # note this is the INVERSE matrix mapping pixel shifts to stage shifts
+            A, res = np.linalg.lstsq(pixel_shifts, stage_shifts)[:2]
+            self._residuals = res
             if np.linalg.det(A) == 0:
                 warnings.warn(
                     "Singular matrix detected. Affine transform may be invalid.",
@@ -228,9 +280,34 @@ class AutoCameraCalibrator:
             self._cached_affine = affine
         return self._cached_affine
 
-    def pixel_size(self) -> float:
-        """Returns the pixel size in microns."""
-        return float(np.linalg.norm(self.affine()[0, 0:2]))
+    def pixel_size(self, from_affine: bool | None = None) -> float:
+        """Returns the pixel size in microns.
+
+        If `from_affine` is True, the pixel size is calculated from the affine matrix.
+        otherwise, it is based on the average ratio of the stage shifts to pixel shifts.
+
+        """
+        if from_affine is None:
+            from_affine = len(self._point_pairs) > 3
+
+        if from_affine:
+            try:
+                return float(np.linalg.norm(self.affine()[0, 0:2]))
+            except Exception as e:
+                warnings.warn(
+                    f"Error calculating pixel size from affine matrix: {e}. "
+                    "Falling back to ratio of stage shifts to pixel shifts.",
+                    stacklevel=2,
+                )
+
+        return self._mean_vectorial_displacement()
+
+    def _mean_vectorial_displacement(self) -> float:
+        """Returns the mean ratio of the magnitude of stage shifts to pixel shifts."""
+        estimates = []
+        for stage_shift, pixel_shift in self._point_pairs.items():
+            estimates.append(np.linalg.norm(stage_shift) / np.linalg.norm(pixel_shift))
+        return float(np.mean(estimates))
 
     def rotation(self) -> float:
         """Returns the rotation in degrees."""
@@ -282,8 +359,14 @@ def measure_image_displacement(
     """
     correlation = phase_correlate(img1, img2, window)
 
+    # mask out DC component
+    correlation[correlation.shape[0] // 2, correlation.shape[1] // 2] = 0
+    # blur slightly to reduce noise
+    correlation = _smooth_image(correlation, kernel_size=3)
+
     # Find the peak location and calculate the shift.
     peak_idx = np.unravel_index(np.argmax(correlation), correlation.shape)
+    print("peak_idx", peak_idx)
     # calculate the shift from the center of the image
     center = np.asarray(correlation.shape) // 2
     shift = np.asarray(peak_idx) - center
@@ -299,7 +382,7 @@ def measure_image_displacement(
         raise ValueError("subpixel_method must be 'parabolic' or 'upsampled' or None.")
 
     # note the swapping of YX -> XY
-    return (shift[1] + sub_x, shift[0] + sub_y), correlation
+    return (float(shift[1] + sub_x), float(shift[0] + sub_y)), correlation
 
 
 def phase_correlate(
@@ -317,6 +400,12 @@ def phase_correlate(
 
     if img1.ndim != 2 or img2.ndim != 2:  # pragma: no cover
         raise ValueError("Input images must be 2D or 3D (RGB).")
+
+    # subtract mean to remove DC component
+    img1 = img1.astype(np.float32)
+    img1 -= np.mean(img1)
+    img2 = img2.astype(np.float32)
+    img2 -= np.mean(img2)
 
     # apply windowing function
     img1 = _window(img1, window)
@@ -442,96 +531,16 @@ def _upsampled_subpixel(
     return sub_y, sub_x
 
 
-def affine(
-    shifts: Mapping[tuple[float, float], tuple[float, float]],
-    robust: bool = False,
-    method: Literal["iterative", "ransac"] = "iterative",
-) -> np.ndarray:
-    stage_shifts, pixel_shifts = zip(*shifts.items())
-    stage_shifts = np.array(stage_shifts)
-    pixel_shifts = np.array(pixel_shifts)
+def _smooth_image(img: np.ndarray, kernel_size: int = 3) -> np.ndarray:
+    from numpy.lib.stride_tricks import sliding_window_view
 
-    if robust:
-        if method == "iterative":
-            A = robust_affine(stage_shifts, pixel_shifts, threshold=1.0)
-        elif method == "ransac":
-            A = ransac_affine(stage_shifts, pixel_shifts, threshold=1.0, iterations=100)
-        else:
-            raise ValueError("Invalid robust method.")
-    else:
-        A = np.linalg.lstsq(stage_shifts, pixel_shifts, rcond=None)[0]
-
-    if np.linalg.det(A) == 0:
-        warnings.warn(
-            "Singular matrix detected. Affine transform may be invalid.", stacklevel=2
-        )
-
-    affine = np.eye(3, dtype=np.float32)
-    affine[:2, :2] = A
-    return affine
-
-
-def robust_affine(
-    stage_shifts: np.ndarray, pixel_shifts: np.ndarray, threshold: float = 1.0
-) -> np.ndarray:
-    # Initial least squares solution
-    A = np.linalg.lstsq(stage_shifts, pixel_shifts, rcond=None)[0]
-
-    # Compute residuals for each correspondence
-    predictions = stage_shifts @ A
-    residuals = np.linalg.norm(predictions - pixel_shifts, axis=1)
-    median_residual = np.median(residuals)
-
-    # Identify inliers
-    inliers = residuals < threshold * median_residual
-    if np.sum(inliers) < 2:
-        raise RuntimeError("Too few inliers for robust estimation.")
-
-    # Recompute using inliers only
-    A_robust = np.linalg.lstsq(
-        stage_shifts[inliers], pixel_shifts[inliers], rcond=None
-    )[0]
-    return A_robust
-
-
-def ransac_affine(
-    stage_shifts: np.ndarray,
-    pixel_shifts: np.ndarray,
-    threshold: float = 1.0,
-    iterations: int = 100,
-) -> np.ndarray:
-    import random
-
-    best_inliers = []
-    best_A = None
-
-    n = stage_shifts.shape[0]
-    for _ in range(iterations):
-        # Randomly sample 2 correspondences (minimal for 2x2)
-        indices = random.sample(range(n), 2)
-        subset_stage = stage_shifts[indices]
-        subset_pixel = pixel_shifts[indices]
-        # Compute affine transform for the subset
-        try:
-            A_candidate = np.linalg.lstsq(subset_stage, subset_pixel, rcond=None)[0]
-        except np.linalg.LinAlgError:
-            continue
-
-        # Compute residuals for all correspondences
-        predictions = stage_shifts @ A_candidate
-        residuals = np.linalg.norm(predictions - pixel_shifts, axis=1)
-        inliers = residuals < threshold
-
-        # If this model has more inliers than previous ones, update best model.
-        if np.sum(inliers) > np.sum(best_inliers):
-            best_inliers = inliers
-            best_A = A_candidate
-
-    if best_A is None or np.sum(best_inliers) < 2:
-        raise RuntimeError("RANSAC failed to find a robust affine transformation.")
-
-    # Recompute the affine transform using all inliers from the best model.
-    A_robust = np.linalg.lstsq(
-        stage_shifts[best_inliers], pixel_shifts[best_inliers], rcond=None
-    )[0]
-    return A_robust
+    # Create a uniform averaging kernel
+    kernel = np.ones((kernel_size, kernel_size)) / (kernel_size**2)
+    pad_size = kernel_size // 2
+    # Reflect padding to avoid boundary artifacts
+    padded = np.pad(img, pad_size, mode="reflect")
+    # Extract sliding windows of shape (kernel_size, kernel_size)
+    windows = sliding_window_view(padded, (kernel_size, kernel_size))
+    # Convolve by taking the sum of elementwise products
+    smoothed = np.sum(windows * kernel, axis=(-1, -2))
+    return smoothed
