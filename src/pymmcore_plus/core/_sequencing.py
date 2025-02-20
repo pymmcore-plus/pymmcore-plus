@@ -328,7 +328,7 @@ class EventCombiner:
         y_seq = tuple(y_positions) if xy_changed else ()
         z_seq = tuple(z_positions) if z_changed else ()
         slm_seq = tuple(slm_images) if slm_changed else ()
-        print("exp_seq", len(self.event_batch))
+
         return SequencedEvent(
             events=tuple(self.event_batch),
             exposure_sequence=exp_seq,
