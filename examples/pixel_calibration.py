@@ -1,14 +1,13 @@
-from matplotlib.colors import PowerNorm
 import numpy as np
 import useq
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
+from matplotlib.colors import PowerNorm
+from matplotlib.figure import Figure
+from pymmcore_widgets import ImagePreview, SnapButton
+from qtpy.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
+
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 from pymmcore_plus.routines import AutoCameraCalibrator
-from pymmcore_widgets import ImagePreview, SnapButton
-
-from qtpy.QtWidgets import QApplication, QPushButton, QVBoxLayout, QWidget
-from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg
-from matplotlib.figure import Figure
-
 from pymmcore_plus.routines._pixel_calibrate import *  # noqa
 from pymmcore_plus.routines._pixel_calibrate import (
     _parabolic_subpixel,  # noqa

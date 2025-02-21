@@ -3,14 +3,15 @@ from __future__ import annotations
 import contextlib
 import sys
 import warnings
-from typing import TYPE_CHECKING, Iterable, Iterator, Literal
+from typing import TYPE_CHECKING, Literal
 
 import numpy as np
-from psygnal import Signal
 import useq
-
+from psygnal import Signal
 
 if TYPE_CHECKING:
+    from collections.abc import Iterable, Iterator
+
     from pymmcore_plus import CMMCorePlus
 
     WindowType = Literal["hanning", "blackman", None]
