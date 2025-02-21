@@ -8,7 +8,7 @@ from ._protocol import PMDASignaler
 from ._psygnal import MDASignaler
 
 if TYPE_CHECKING:
-    from ._qsignals import QMDASignaler  # noqa: TC004
+    from ._qsignals import QMDASignaler
 
 
 __all__ = [
