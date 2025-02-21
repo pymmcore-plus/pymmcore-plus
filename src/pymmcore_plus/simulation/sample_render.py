@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from math import sqrt
+import re
 from typing import TYPE_CHECKING, Callable
 
-from PIL import Image, ImageDraw
 import numpy as np
+from PIL import Image, ImageDraw, ImageFilter
 
 if TYPE_CHECKING:
     from typing import TypeAlias
@@ -24,6 +26,10 @@ class SampleObject:
     def get_bounds(self) -> Bounds:
         """Return bounding box in continuous space as (left, top, right, bottom)."""
         raise NotImplementedError()
+
+    def should_draw(self, fov_rect: Bounds) -> bool:
+        """Check if the object should be drawn within the field of view."""
+        return rects_intersect(fov_rect, self.get_bounds())
 
 
 def rects_intersect(a: Bounds, b: Bounds) -> bool:
@@ -251,21 +257,22 @@ class Bitmap(SampleObject):
     def __init__(
         self,
         top_left: tuple[float, float],
-        bitmap: Image.Image | np.ndarray,
-        fill: tuple[int, int, int] | None = None,
+        bitmap: Bitmap.Image | np.ndarray | str,
     ) -> None:
         self.top_left = top_left
         if isinstance(bitmap, np.ndarray):
             bitmap = Image.fromarray(bitmap)
-        # Convert to 1-bit if no fill is provided.
-        # if fill is None and bitmap.mode != "1":
-            # bitmap = bitmap.convert("1")
+        elif isinstance(bitmap, str):
+            bitmap = Image.open(bitmap)
+        if not isinstance(bitmap, Image.Image):
+            raise TypeError("Invalid bitmap type.")
         self.bitmap = bitmap
-        self.fill = fill
 
     def draw(self, draw_context: ImageDraw.ImageDraw, transform: TransformFn) -> None:
         tl = transform(*self.top_left)
-        draw_context.bitmap(tl, self.bitmap, fill=self.fill)
+        # Get the underlying image from the draw context
+        base_image = draw_context._image  # noqa: SLF001
+        base_image.paste(self.bitmap, tl)
 
     def get_bounds(self) -> Bounds:
         width, height = self.bitmap.size
@@ -282,7 +289,7 @@ class RenderEngine:
     def __init__(self, sample_objects: list[SampleObject]) -> None:
         self.sample_objects = sample_objects
 
-    def render(self, state: SummaryMetaV1) -> Image.Image:
+    def render(self, state: SummaryMetaV1) -> Bitmap.Image:
         """Render the sample objects in the context of the provided state."""
         img_width, img_height = _img_width_height(state)
 
@@ -291,7 +298,7 @@ class RenderEngine:
         pixel_size = _pixel_size(state)
         fov_width = img_width * pixel_size
         fov_height = img_height * pixel_size
-        stage_x, stage_y, _ = _xy_position(state)
+        stage_x, stage_y, stage_z = _xy_position(state)
         left = stage_x - fov_width / 2
         top = stage_y - fov_height / 2
         fov_rect = (left, top, left + fov_width, top + fov_height)
@@ -302,19 +309,68 @@ class RenderEngine:
             pixel_y = (y - top) / pixel_size
             return int(pixel_x), int(pixel_y)
 
-        # Create a blank image (white background)
-        image = Image.new("RGB", (img_width, img_height), "white")
-        draw = ImageDraw.Draw(image)
+        # # Create a blank image (white background)
+        # image = Image.new("L", (img_width, img_height), "black")
+        # draw = ImageDraw.Draw(image)
 
-        # Iterate over sample objects and perform frustum culling.
-        print("---------")
-        for obj in self.sample_objects:
-            obj_bounds = obj.get_bounds()
-            if rects_intersect(fov_rect, obj_bounds):
-                print("drawing", obj)
-                obj.draw(draw, transform)
+        # # Iterate over sample objects and perform frustum culling.
+        # for obj in self.sample_objects:
+        #     if obj.should_draw(fov_rect):
+        #         obj.draw(draw, transform)
 
+        image = additive_render(
+            self.sample_objects, img_width, img_height, transform, fov_rect
+        )
+
+        # blur
+        defocus = abs(stage_z)/8 + 3
+        image = image.filter(ImageFilter.GaussianBlur(radius=defocus))
+        # shot noise
+        np_img = np.array(image).astype(np.float32)
+        shot_noise = np.random.poisson(np_img)
+
+        # gaussian noise
+        std = 3
+        gaus_noise = np.random.normal(0, std, np_img.shape)
+
+        noisy_img = np.clip(np_img + shot_noise + gaus_noise)
+        noisy_img -= np.min(noisy_img)
+        noisy_img = (noisy_img / np.max(noisy_img) * 255).astype(np.uint8)
+        image = Image.fromarray(noisy_img)
         return image
+
+
+from PIL import Image, ImageDraw, ImageChops
+
+
+# Example additive renderer:
+def additive_render(
+    sample_objects: list[SampleObject],
+    chip_width: int,
+    chip_height: int,
+    transform: TransformFn,
+    fov_rect: Bounds,
+) -> Image.Image:
+    """
+    Render sample objects additively into a grayscale ("L") image.
+    Each object's draw method should draw with a fill value of 1
+    so that each drawn pixel adds an intensity of 1.
+    """
+    # Create an accumulator image, initially all black (0 intensity)
+    accumulator = Image.new("L", (chip_width, chip_height), 0)
+
+    for obj in sample_objects:
+        if not obj.should_draw(fov_rect):
+            continue
+        # Create a layer for the individual object
+        layer = Image.new("L", (chip_width, chip_height), 0)
+        draw = ImageDraw.Draw(layer)
+        # Have the object draw using fill value 1 (additive contribution)
+        obj.draw(draw, transform)
+        # Add the layer to the accumulator; overlapping pixels will sum.
+        accumulator = ImageChops.add(accumulator, layer)
+
+    return accumulator
 
 
 # ----------------------
