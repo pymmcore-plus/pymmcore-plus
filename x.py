@@ -2,7 +2,7 @@ import numpy as np
 from PIL import ImageQt
 from pymmcore_widgets import PropertyBrowser, SnapButton, StageWidget
 from qtpy.QtCore import Qt
-from qtpy.QtWidgets import QLabel, QSizePolicy, QVBoxLayout, QHBoxLayout, QWidget
+from qtpy.QtWidgets import QHBoxLayout, QLabel, QSizePolicy, QVBoxLayout, QWidget
 
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 from pymmcore_plus.simulation.sample_render import Line, Point, RenderEngine

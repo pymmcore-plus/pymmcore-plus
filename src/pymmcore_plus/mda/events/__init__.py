@@ -6,10 +6,7 @@ from pymmcore_plus._util import signals_backend
 
 from ._protocol import PMDASignaler
 from ._psygnal import MDASignaler
-
-if TYPE_CHECKING:
-    from ._qsignals import QMDASignaler
-
+from ._qsignals import QMDASignaler
 
 __all__ = [
     "MDASignaler",

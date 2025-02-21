@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from math import sqrt
-import re
 from typing import TYPE_CHECKING, Callable
 
 import numpy as np
@@ -194,7 +192,7 @@ class Polygon(SampleObject):
             draw_context.polygon(transformed, outline=self.outline)
         else:
             draw_context.line(
-                transformed + [transformed[0]], fill=self.outline, width=self.width
+                [*transformed, transformed[0]], fill=self.outline, width=self.width
             )
 
     def get_bounds(self) -> Bounds:
@@ -323,7 +321,7 @@ class RenderEngine:
         )
 
         # blur
-        defocus = abs(stage_z)/8 + 3
+        defocus = abs(stage_z) / 8 + 3
         image = image.filter(ImageFilter.GaussianBlur(radius=defocus))
         # shot noise
         np_img = np.array(image).astype(np.float32)
@@ -340,7 +338,7 @@ class RenderEngine:
         return image
 
 
-from PIL import Image, ImageDraw, ImageChops
+from PIL import ImageChops
 
 
 # Example additive renderer:
