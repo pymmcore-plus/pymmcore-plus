@@ -7,10 +7,10 @@ from typing import TYPE_CHECKING, Iterable, Iterator, Literal
 
 import numpy as np
 from psygnal import Signal
+import useq
+
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
-
     from pymmcore_plus import CMMCorePlus
 
     WindowType = Literal["hanning", "blackman", None]
@@ -59,6 +59,7 @@ class AutoCameraCalibrator:
         debugging or visualization purposes.
     """
 
+    calibration_started: Signal = Signal()
     shift_acquired: Signal = Signal()
     calibration_complete: Signal = Signal()
 
@@ -88,7 +89,7 @@ class AutoCameraCalibrator:
         # last correlation matrix acquired, for debugging
         self.last_correlation: np.ndarray | None = None
         # last fit residuals, for debugging
-        self._residuals: np.ndarray | None = None
+        self._rmse: float | None = None
 
         # pixel shifts for each stage move, accumulated during calibration
         # mapping of {(dx_stage, dy_stage) -> (dx_pixel, dy_pixel)}
@@ -106,6 +107,8 @@ class AutoCameraCalibrator:
         self._window = fft_window
         self._subpixel_method = subpixel_method
         self._max_step = 0.25
+
+        self._cancel_requested = False
 
     def _capture_roi(self) -> np.ndarray:
         """Capture an image and crop to ROI if one was provided."""
@@ -138,6 +141,18 @@ class AutoCameraCalibrator:
         self.core.waitForSystem()
 
     def _iter_positions(self) -> Iterator[tuple[float, float]]:
+        step = 2
+        grid = useq.GridRowsColumns(
+            rows=3,
+            columns=3,
+            relative_to="center",
+            fov_height=step,
+            fov_width=step,
+            mode="spiral",
+        )
+        for p in list(grid)[1:]:
+            yield (p.x, p.y)
+
         # take a -2 micron initial step in the X direction, to get a pixel estimate
         yield (-2, 0)
         # get current pix estimate and step 20 pixels in the other X & Y directions
@@ -167,6 +182,10 @@ class AutoCameraCalibrator:
         yield (-half_fov[1] * max_step, half_fov[0] * max_step)
         yield (half_fov[1] * max_step, half_fov[0] * max_step)
 
+    def cancel(self) -> None:
+        """Cancel the calibration process and clear all recorded pixel shifts."""
+        self._cancel_requested = True
+
     def calibrate(
         self, moves: Iterable[tuple[float, float]] | None = None
     ) -> np.ndarray:
@@ -195,6 +214,8 @@ class AutoCameraCalibrator:
             and the last column is always [0, 0, 1] (no translation).
         """
         # Capture reference image at initial stage position.
+        self._cancel_requested = False
+        self.calibration_started.emit()
         if self.stage_device:
             x_initial, y_initial = self.core.getXYPosition(self.stage_device)
         else:
@@ -207,7 +228,11 @@ class AutoCameraCalibrator:
 
         # For each known stage move, capture a new image and measure pixel displacement.
         self._point_pairs.clear()
+        self._point_pairs[(0, 0)] = (0, 0)
         for dx_stage, dy_stage in moves:
+            if self._cancel_requested:
+                self._cancel_requested = False
+                return
             new_stage = (x_initial + dx_stage, y_initial + dy_stage)
             # check magnitude of move:
             if np.linalg.norm((dx_stage, dy_stage)) > self.maximum_safe_radius:
@@ -246,6 +271,12 @@ class AutoCameraCalibrator:
         """
         yield from self._point_pairs.items()
 
+    @property
+    def rmse(self) -> float | None:
+        """Returns the root mean squared error of the last fit."""
+        self.affine()  # ensure the RMSE is calculated
+        return self._rmse
+
     def affine(self) -> np.ndarray:
         """Returns the current affine transform.
 
@@ -259,15 +290,15 @@ class AutoCameraCalibrator:
                 raise RuntimeError(
                     "No pixel shifts have been recorded. Run calibrate() first."
                 )
-            _stage_shifts, _pixel_shifts = zip(*self._point_pairs.items())
-            # add (0, 0) to each:
-            stage_shifts = np.vstack([(0, 0), _stage_shifts])
-            pixel_shifts = np.vstack([(0, 0), _pixel_shifts])
+            stage_shifts, pixel_shifts = zip(*self._point_pairs.items())
             # Computes the vector `x` that approximately solves the equation
             # ``pixel_shifts @ x = stage_shifts``.
             # note this is the INVERSE matrix mapping pixel shifts to stage shifts
-            A, res = np.linalg.lstsq(pixel_shifts, stage_shifts)[:2]
-            self._residuals = res
+            A, ssr = np.linalg.lstsq(pixel_shifts, stage_shifts)[:2]
+
+            if (n_points := len(stage_shifts)) > 3:
+                self._rmse = float(np.sqrt(np.sum(ssr) / n_points))
+
             if np.linalg.det(A) == 0:
                 warnings.warn(
                     "Singular matrix detected. Affine transform may be invalid.",
@@ -306,7 +337,9 @@ class AutoCameraCalibrator:
         """Returns the mean ratio of the magnitude of stage shifts to pixel shifts."""
         estimates = []
         for stage_shift, pixel_shift in self._point_pairs.items():
-            estimates.append(np.linalg.norm(stage_shift) / np.linalg.norm(pixel_shift))
+            if (denom := np.linalg.norm(pixel_shift)) == 0:
+                continue
+            estimates.append(np.linalg.norm(stage_shift) / denom)
         return float(np.mean(estimates))
 
     def rotation(self) -> float:
@@ -366,7 +399,6 @@ def measure_image_displacement(
 
     # Find the peak location and calculate the shift.
     peak_idx = np.unravel_index(np.argmax(correlation), correlation.shape)
-    print("peak_idx", peak_idx)
     # calculate the shift from the center of the image
     center = np.asarray(correlation.shape) // 2
     shift = np.asarray(peak_idx) - center
