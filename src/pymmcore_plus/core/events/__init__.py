@@ -4,10 +4,7 @@ from pymmcore_plus._util import signals_backend
 
 from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
-
-if TYPE_CHECKING:
-    from ._qsignals import QCoreSignaler  # noqa: TC004
-
+from ._qsignals import QCoreSignaler
 
 __all__ = [
     "CMMCoreSignaler",
