@@ -72,6 +72,7 @@ class MDAEngine(PMDAEngine):
     def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = True) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing: bool = use_hardware_sequencing
+        self.force_set_xy_position: bool = False
 
         # whether to include position metadata when fetching on-frame metadata
         # omitted by default when performing triggered acquisition because it's slow.
@@ -93,6 +94,8 @@ class MDAEngine(PMDAEngine):
         self._autoshutter_was_set: bool = self._mmc.getAutoShutter()
 
         self._last_config: tuple[str, str] = ("", "")
+        self._last_xy_pos: tuple[float | None, float | None] = (None, None)
+
         # -----
         # The following values are stored during setup_sequence simply to speed up
         # retrieval of metadata during each frame.
@@ -240,21 +243,14 @@ class MDAEngine(PMDAEngine):
             ...
 
         if event.x_pos is not None or event.y_pos is not None:
-            self._set_event_position(event)
+            self._set_event_xy_position(event)
         if event.z_pos is not None:
             self._set_event_z(event)
         if event.slm_image is not None:
             self._set_event_slm_image(event)
-        if event.channel is not None:
-            cfg = (event.channel.group, event.channel.config)
-            if cfg != self._last_config:
-                try:
-                    # possible speedup by setting manually.
-                    self._mmc.setConfig(*cfg)
-                    self._last_config = cfg
-                except Exception as e:
-                    logger.warning("Failed to set channel. %s", e)
-                    self._last_config = ("", "")
+
+        self._set_event_channel(event)
+
         if event.exposure is not None:
             try:
                 self._mmc.setExposure(event.exposure)
@@ -418,11 +414,7 @@ class MDAEngine(PMDAEngine):
         # the call below, we won't be able to query `core.getCurrentConfig()`
         # not sure that's necessary; and this is here for tests to pass for now,
         # but this could be removed.
-        if event.channel is not None:
-            try:
-                core.setConfig(event.channel.group, event.channel.config)
-            except Exception as e:
-                logger.warning("Failed to set channel. %s", e)
+        self._set_event_channel(event)
 
         if event.slm_image:
             self._set_event_slm_image(event)
@@ -436,7 +428,7 @@ class MDAEngine(PMDAEngine):
         if event.x_sequence:
             core.startXYStageSequence(core.getXYStageDevice())
         elif event.x_pos is not None or event.y_pos is not None:
-            self._set_event_position(event)
+            self._set_event_xy_position(event)
 
         if event.z_sequence:
             core.startStageSequence(core.getFocusDevice())
@@ -599,15 +591,52 @@ class MDAEngine(PMDAEngine):
 
         return _perform_full_focus(self._mmc.getZPosition())
 
-    def _set_event_position(self, event: MDAEvent) -> None:
+    def _set_event_xy_position(self, event: MDAEvent) -> None:
+        # _last_pos holds the *command* of the last event
+        # (not the actual precise position that the stage landed at)
+        # for ease in comparison without rounding.
+        if (
+            (event_pos := (event.x_pos, event.y_pos)) == self._last_xy_pos
+        ) and not self.force_set_xy_position:
+            return
+
         # skip if no XY stage device is found
         if not self._mmc.getXYStageDevice():
             logger.warning("No XY stage device found. Cannot set XY position.")
             return
 
-        x = event.x_pos if event.x_pos is not None else self._mmc.getXPosition()
-        y = event.y_pos if event.y_pos is not None else self._mmc.getYPosition()
-        self._mmc.setXYPosition(x, y)
+        if event.x_pos is None or event.y_pos is None:
+            x, y = self._mmc.getXYPosition()
+            new_pos = (
+                event.x_pos if event.x_pos is not None else x,
+                event.y_pos if event.y_pos is not None else y,
+            )
+        else:
+            new_pos = cast("tuple[float, float]", event_pos)
+
+        try:
+            self._mmc.setXYPosition(*new_pos)
+            self._last_xy_pos = event_pos
+        except Exception as e:
+            logger.warning("Failed to set XY position. %s", e)
+            self._last_xy_pos = (None, None)
+
+    def _set_event_channel(self, event: MDAEvent) -> None:
+        if (ch := event.channel) is None:
+            return
+
+        # comparison with _last_config is a rough check ...
+        # could also compare to the system state, with:
+        # data = self._mmc.getConfigData(ch.group, ch.config)
+        # if self._mmc.getSystemStateCache().isConfigurationIncluded(data):
+        #     ...
+        if (cfg := (ch.group, ch.config)) != self._last_config:
+            try:
+                self._mmc.setConfig(*cfg)
+                self._last_config = cfg
+            except Exception as e:
+                logger.warning("Failed to set channel. %s", e)
+                self._last_config = ("", "")
 
     def _set_event_z(self, event: MDAEvent) -> None:
         # skip if no Z stage device is found
