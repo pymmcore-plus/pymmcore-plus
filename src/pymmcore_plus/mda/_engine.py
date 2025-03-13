@@ -92,6 +92,7 @@ class MDAEngine(PMDAEngine):
         # Note: getAutoShutter() is True when no config is loaded at all
         self._autoshutter_was_set: bool = self._mmc.getAutoShutter()
 
+        self._last_config: tuple[str, str] = ("", "")
         # -----
         # The following values are stored during setup_sequence simply to speed up
         # retrieval of metadata during each frame.
@@ -245,11 +246,15 @@ class MDAEngine(PMDAEngine):
         if event.slm_image is not None:
             self._set_event_slm_image(event)
         if event.channel is not None:
-            try:
-                # possible speedup by setting manually.
-                self._mmc.setConfig(event.channel.group, event.channel.config)
-            except Exception as e:
-                logger.warning("Failed to set channel. %s", e)
+            cfg = (event.channel.group, event.channel.config)
+            if cfg != self._last_config:
+                try:
+                    # possible speedup by setting manually.
+                    self._mmc.setConfig(*cfg)
+                    self._last_config = cfg
+                except Exception as e:
+                    logger.warning("Failed to set channel. %s", e)
+                    self._last_config = ("", "")
         if event.exposure is not None:
             try:
                 self._mmc.setExposure(event.exposure)
