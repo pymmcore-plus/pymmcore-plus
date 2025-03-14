@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
+# from PIL import Image, ImageDraw, ImageFont
 from pymmcore_plus.metadata.serialize import json_dumps, json_loads
 
 from ._util import position_sizes
@@ -43,7 +44,7 @@ class TensorStoreHandler:
     (nframes, *frame_shape) and a chunk size of (1, *frame_shape), i.e. each frame
     is stored in a separate chunk. To customize shape or chunking, override the
     `get_full_shape`, `get_chunk_layout`, and `get_index_domain` methods (these
-    may change in the future as we learn to use tensorstore better).
+    may change in the future as we learn to use tensorstore better).u
 
     Parameters
     ----------
@@ -128,7 +129,8 @@ class TensorStoreHandler:
         # for non-deterministic experiments, this often won't work...
         # _nd_storage False means we simply store data as a 3D array of shape
         # (nframes, y, x).  `_nd_storage` is set when a new_store is created.
-        self._nd_storage: bool = True
+        self._nd_storage: bool = False
+        self.reshape_on_finished = True
         self._frame_index: int = 0
 
         # the highest index seen for each axis
@@ -206,11 +208,43 @@ class TensorStoreHandler:
         while self._futures:
             self._futures.pop().result()
         if not self._nd_storage:
-            self._store = self._store.resize(
-                exclusive_max=(self._frame_index, *self._store.shape[-2:])
-            ).result()
+            if self.reshape_on_finished:
+                self._reshape_store()
+                shutil.rmtree(self._store.spec().kvstore.path, ignore_errors=True)
+            else:
+                self._store = self._store.resize(
+                    exclusive_max=(self._frame_index, *self._store.shape[-2:])
+                ).result()
+
         if self.frame_metadatas:
             self.finalize_metadata()
+
+    def _reshape_store(self) -> None:
+        if self._store is None:
+            return
+        labels = [*list(self._axis_max.keys()), "y", "x"]
+        chunks = [1] * (len(labels) - 2) + list(self._store.shape[-2:])
+        shape = [x + 1 for x in self._axis_max.values()] + list(self._store.shape[-2:])
+        self._res_store = self._ts.open(
+            self._get_reshape_spec(),
+            create=True,
+            delete_existing=True,
+            dtype=self._ts.dtype(self._store.dtype),
+            shape=shape,
+            chunk_layout=self._ts.ChunkLayout(chunk_shape=chunks),
+            domain=self._ts.IndexDomain(labels=labels),
+        ).result()
+        for index, pos in self._frame_indices.items():
+            keys, values = zip(*dict(index).items())
+            put_index = self._ts.d[keys][values]
+            self._futures.append(self._res_store[put_index].write(self._store[pos]))
+        while self._futures:
+            self._futures.pop().result()
+
+    def _get_reshape_spec(self) -> dict:
+        spec = self.get_spec()
+        spec["kvstore"] = spec["kvstore"].replace("_tmp", "")
+        return spec
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1, /
@@ -227,8 +261,11 @@ class TensorStoreHandler:
                 self._store = self._expand_store(self._store).result()
             ts_index = self._frame_index
             # store reverse lookup of event.index -> frame_index
-            self._frame_indices[frozenset(event.index.items())] = ts_index
-
+            index = dict(event.index)
+            while frozenset(index.items()) in self._frame_indices.keys():
+                index["camera"] = index.get("camera", 0) + 1
+            self._frame_indices[frozenset(index.items())] = ts_index
+        # frame = _write_index_to_image(index, frame)
         # write the new frame asynchronously
         self._futures.append(self._store[ts_index].write(frame))
 
@@ -237,7 +274,7 @@ class TensorStoreHandler:
         # update the frame counter
         self._frame_index += 1
         # remember the highest index seen for each axis
-        for k, v in event.index.items():
+        for k, v in index.items():
             self._axis_max[k] = max(self._axis_max.get(k, 0), v)
 
     def isel(
@@ -258,7 +295,7 @@ class TensorStoreHandler:
         self, frame: np.ndarray, seq: useq.MDASequence | None, meta: FrameMetaV1
     ) -> ts.Future[ts.TensorStore]:
         shape, chunks, labels = self.get_shape_chunks_labels(frame.shape, seq)
-        self._nd_storage = FRAME_DIM not in labels
+        # self._nd_storage = FRAME_DIM not in labels
         return self._ts.open(
             self.get_spec(),
             create=True,
@@ -273,6 +310,12 @@ class TensorStoreHandler:
         self, frame_shape: tuple[int, ...], seq: useq.MDASequence | None
     ) -> tuple[tuple[int, ...], tuple[int, ...], tuple[str, ...]]:
         labels: tuple[str, ...]
+        if not self._nd_storage:
+            return (
+                (self._size_increment, *frame_shape),
+                (1, *frame_shape),
+                (FRAME_DIM, "y", "x"),
+            )
         if seq is not None and seq.sizes:
             # expand the sizes to include the largest size we encounter for each axis
             # in the case of positions with subsequences, we'll still end up with a
@@ -296,10 +339,17 @@ class TensorStoreHandler:
 
     def get_spec(self) -> dict:
         """Construct the tensorstore spec."""
+        if self.reshape_on_finished and isinstance(self.kvstore, str):
+            directory, filename = os.path.split(self.kvstore)
+            base, *ext = filename.split(".")
+            self.kvstore = os.path.join(
+                directory, "".join([f"{base}_tmp"] + [f".{e}" for e in ext])
+            )
+        elif self.reshape_on_finished and not isinstance(self.kvstore, str):
+            raise NotImplementedError("kvstore needs to be str for reshape to work")
         spec = {"driver": self.ts_driver, "kvstore": self.kvstore}
         if self.spec:
             _merge_nested_dicts(spec, self.spec)
-
         # HACK
         if self.ts_driver == "zarr":
             meta = cast("dict", spec.setdefault("metadata", {}))
@@ -349,7 +399,11 @@ class TensorStoreHandler:
             idx: list | int | ts.DimExpression = self._get_frame_indices(index)
         else:
             try:
-                idx = self._frame_indices[frozenset(index.items())]  # type: ignore
+                idx = [self._frame_indices[frozenset(index.items())]]  # type: ignore
+                for i in range(self._axis_max.get("camera", 0)):
+                    index["camera"] = i + 1  # type: ignore
+                    if frozenset(index.items()) in self._frame_indices:
+                        idx.append(self._frame_indices[frozenset(index.items())])  # type: ignore
             except KeyError as e:
                 raise KeyError(f"Index {index} not found in frame_indices.") from e
         return self._ts.d[FRAME_DIM][idx]
@@ -366,9 +420,13 @@ class TensorStoreHandler:
 
         indices: list[int] = []
         for p in product(*axis_indices.values()):
-            key = frozenset(dict(zip(axis_indices.keys(), p)).items())
+            key = dict(zip(axis_indices.keys(), p))
             try:
-                indices.append(self._frame_indices[key])
+                indices.append(self._frame_indices[frozenset(key.items())])
+                # add all cameras for this index
+                for i in range(self._axis_max.get("camera", 0)):
+                    key["camera"] = i + 1
+                    indices.append(self._frame_indices[frozenset(key.items())])
             except KeyError:  # pragma: no cover
                 warnings.warn(
                     f"Index {dict(key)} not found in frame_indices.", stacklevel=2
@@ -386,3 +444,14 @@ def _merge_nested_dicts(dict1: dict, dict2: Mapping) -> None:
             _merge_nested_dicts(dict1[key], value)
         else:
             dict1[key] = value
+
+
+# def _write_index_to_image(index: dict, image: np.ndarray) -> np.ndarray:
+#     text = str([f"{key}: {value}" for key, value in index.items()])
+#     canvas = np.zeros_like(image)
+#     pil_image = Image.fromarray(canvas)
+#     draw = ImageDraw.Draw(pil_image)
+#     # Fallback if font is not found
+#     font = ImageFont.truetype("arial.ttf", 32)
+#     draw.text((0, 0), text, fill="white", font=font)
+#     return np.array(pil_image)
