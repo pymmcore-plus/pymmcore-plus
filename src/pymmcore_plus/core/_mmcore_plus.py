@@ -1359,7 +1359,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         if len(args) == 2:
             label: str | None = None
-            x, y = cast(tuple[float, float], args)
+            x, y = cast("tuple[float, float]", args)
         elif len(args) == 3:
             label, x, y = args  # type: ignore
         else:
