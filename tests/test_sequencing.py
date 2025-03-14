@@ -66,7 +66,7 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     expected_exposure = [call(5), call(10)] * 2
     assert core_mock.setExposure.call_args_list == expected_exposure
 
-    expected_pos = [call(0, 0), call(0, 0), call(1, 1), call(1, 1)]
+    expected_pos = [call(0, 0), call(1, 1)]
     assert core_mock.setXYPosition.call_args_list == expected_pos
 
 
