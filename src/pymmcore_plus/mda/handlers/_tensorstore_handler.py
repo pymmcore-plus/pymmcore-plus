@@ -302,7 +302,7 @@ class TensorStoreHandler:
 
         # HACK
         if self.ts_driver == "zarr":
-            meta = cast(dict, spec.setdefault("metadata", {}))
+            meta = cast("dict", spec.setdefault("metadata", {}))
             if "dimension_separator" not in meta:
                 meta["dimension_separator"] = "/"
         return spec

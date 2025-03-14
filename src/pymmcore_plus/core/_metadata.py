@@ -75,13 +75,13 @@ class Metadata(pymmcore.Metadata):
         return json.dumps(dict(self))
 
     def keys(self) -> KeysView[str]:
-        return cast(KeysView, metadata_keys(self))
+        return cast("KeysView", metadata_keys(self))
 
     def items(self) -> ItemsView[str, str]:
-        return cast(ItemsView, metadata_items(self))
+        return cast("ItemsView", metadata_items(self))
 
     def values(self) -> ValuesView[str]:
-        return cast(ValuesView, metadata_values(self))
+        return cast("ValuesView", metadata_values(self))
 
 
 metadata_keys = new_class("metadata_keys", (KeysView,), {})
