@@ -72,7 +72,10 @@ class MDAEngine(PMDAEngine):
     def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = True) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing: bool = use_hardware_sequencing
-        self.force_set_xy_position: bool = False
+        # if True, always set XY position, even if the commanded position is the same
+        # as the last commanded position (this does *not* query the stage for the
+        # current position).
+        self.force_set_xy_position: bool = True
 
         # whether to include position metadata when fetching on-frame metadata
         # omitted by default when performing triggered acquisition because it's slow.
@@ -605,9 +608,9 @@ class MDAEngine(PMDAEngine):
         # Retrieve the last commanded XY position.
         last_x, last_y = self._mmc._last_xy_position.get(None) or (None, None)  # noqa: SLF001
         if (
-            (event_x is None or event_x == last_x)
+            not self.force_set_xy_position
+            and (event_x is None or event_x == last_x)
             and (event_y is None or event_y == last_y)
-            and not self.force_set_xy_position
         ):
             return
 
