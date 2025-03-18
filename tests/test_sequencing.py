@@ -42,6 +42,7 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     engine = MDAEngine(mmc=core_mock)
 
     engine.use_hardware_sequencing = False
+    engine.force_set_xy_position = False
     assert len(list(engine.event_iterator(mda))) == NLOOPS * 2 * 2
 
     engine.use_hardware_sequencing = True
