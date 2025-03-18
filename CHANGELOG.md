@@ -1,12 +1,18 @@
 # Changelog
 
-## [v0.13.5](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.5) (2025-02-16)
+## [v0.13.5](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.5) (2025-03-18)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.4...v0.13.5)
 
 **Fixed bugs:**
 
 - fix: Fix missing metadata in popNextImageAndMD [\#436](https://github.com/pymmcore-plus/pymmcore-plus/pull/436) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- refactor: call setConfig in MDAEngine only when different from previous call [\#448](https://github.com/pymmcore-plus/pymmcore-plus/pull/448) ([tlambert03](https://github.com/tlambert03))
+- ci\(pre-commit.ci\): autoupdate [\#444](https://github.com/pymmcore-plus/pymmcore-plus/pull/444) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+- fix: pin tensorstore [\#443](https://github.com/pymmcore-plus/pymmcore-plus/pull/443) ([tlambert03](https://github.com/tlambert03))
 
 ## [v0.13.4](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.4) (2025-02-11)
 
