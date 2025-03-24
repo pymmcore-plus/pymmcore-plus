@@ -1,5 +1,6 @@
 import os
 import re
+from collections.abc import Mapping
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import MagicMock, call, patch
@@ -339,18 +340,28 @@ def test_new_metadata():
     assert isinstance(md, pymmcore.Metadata)
 
 
-def test_md_(core: CMMCorePlus) -> None:
+def test_get_image_and_meta(core: CMMCorePlus) -> None:
     core.startContinuousSequenceAcquisition(10)
     core.stopSequenceAcquisition()
 
     image, md = core.getNBeforeLastImageAndMD(0)
-    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
+    assert isinstance(image, np.ndarray)
+    assert isinstance(md, Metadata)
+    assert "TimeReceivedByCore" in md
 
     image, md = core.getLastImageAndMD()
-    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
+    assert isinstance(image, np.ndarray)
+    assert isinstance(md, Metadata)
+    assert "TimeReceivedByCore" in md
 
     image, md = core.popNextImageAndMD()
-    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
+    assert isinstance(image, np.ndarray)
+    assert isinstance(md, Metadata)
+    assert "TimeReceivedByCore" in md
+
+    assert Metadata(md) == md
+    assert isinstance(md, Mapping)
+    assert issubclass(Metadata, Mapping)
 
 
 def test_configuration(core: CMMCorePlus) -> None:

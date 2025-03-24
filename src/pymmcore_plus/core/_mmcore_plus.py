@@ -13,7 +13,7 @@ from pathlib import Path
 from re import Pattern
 from textwrap import dedent
 from threading import Thread
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, overload
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, cast, overload
 
 from psygnal import SignalInstance
 
@@ -221,7 +221,13 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.setPrimaryLogFile(str(logfile))
             logger.debug("Initialized core %s", self)
 
-        self._last_config: str | None = None  # last loaded config file
+        # some internal state, remembering the last arguments passed to various
+        # functions.  These are subject to change: do not depend on externally
+        self._last_sys_config: str | None = None  # last loaded config file
+        self._last_config: tuple[str, str] = ("", "")
+        # last position set by setXYPosition, None means currentXYStageDevice
+        self._last_xy_position: dict[str | None, tuple[float, float]] = {}
+
         self._mm_path = mm_path or find_micromanager()
         if not adapter_paths and self._mm_path:
             adapter_paths = [self._mm_path]
@@ -399,15 +405,15 @@ class CMMCorePlus(pymmcore.CMMCore):
             fpath = Path(self._mm_path) / fileName
         if not fpath.exists():
             raise FileNotFoundError(f"Path does not exist: {fpath}")
-        self._last_config = str(fpath.resolve())
-        super().loadSystemConfiguration(self._last_config)
+        self._last_sys_config = str(fpath.resolve())
+        super().loadSystemConfiguration(self._last_sys_config)
 
     def systemConfigurationFile(self) -> str | None:
         """Return the path to the last loaded system configuration file, or `None`.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
         """
-        return self._last_config
+        return self._last_sys_config
 
     def unloadAllDevices(self) -> None:
         """Unload all devices from the core and reset all configuration data.
@@ -642,10 +648,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             img = super().getLastImageMD(channel, slice, md)
         else:
             img = super().getLastImageMD(md)
-        return (
-            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
-            md,
-        )
+        return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     @overload
     def popNextImageAndMD(
@@ -687,11 +690,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().popNextImageMD(channel, slice, md)
-        md = Metadata(md)
-        return (
-            self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img,
-            md,
-        )
+        return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
         """Gets and removes the next image from the circular buffer.
@@ -707,7 +706,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
         img: np.ndarray = super().popNextImage()
-        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
+        return self.fixImage(img) if fix and not pymmcore.NANO else img
 
     def getNBeforeLastImageAndMD(
         self, n: int, *, fix: bool = True
@@ -735,7 +734,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         img = super().getNBeforeLastImageMD(n, md)
-        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img, md
+        return self.fixImage(img) if fix and not pymmcore.NANO else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
         """Applies a configuration to a group.
@@ -747,6 +746,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         super().setConfig(groupName, configName)
         self.events.configSet.emit(groupName, configName)
+        self._last_config = (groupName, configName)
 
     # NEW methods
 
@@ -1348,6 +1348,25 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.waitForDevice(self.getXYStageDevice())
         self.waitForDevice(self.getFocusDevice())
 
+    @overload
+    def setXYPosition(self, x: float, y: float, /) -> None: ...
+    @overload
+    def setXYPosition(self, xyStageLabel: str, x: float, y: float, /) -> None: ...
+    def setXYPosition(self, *args: str | float) -> None:
+        """Sets the position of the XY stage in microns.
+
+        **Why Override?** to store the last commanded stage position internally.
+        """
+        if len(args) == 2:
+            label: str | None = None
+            x, y = cast("tuple[float, float]", args)
+        elif len(args) == 3:
+            label, x, y = args  # type: ignore
+        else:
+            raise ValueError("Invalid number of arguments. Expected 2 or 3.")
+        super().setXYPosition(*args)  # type: ignore
+        self._last_xy_position[label] = (x, y)
+
     def getZPosition(self) -> float:
         """Obtains the current position of the Z axis of the Z stage in microns.
 
@@ -1668,7 +1687,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             if numChannel is not None
             else super().getImage()
         )
-        return self.fixImage(img) if fix and pymmcore.BACKEND == "pymmcore" else img
+        return self.fixImage(img) if fix and not pymmcore.NANO else img
 
     def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Start a ContinuousSequenceAcquisition.
