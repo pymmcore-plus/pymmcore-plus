@@ -5,8 +5,10 @@ try:
     from pymmcore_nano import __version__
 
     BACKEND = "pymmcore-nano"
+    NANO = True
 except ImportError:
     from pymmcore import *  # noqa F403
     from pymmcore import __version__  # noqa F401
 
     BACKEND = "pymmcore"
+    NANO = False

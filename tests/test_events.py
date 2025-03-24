@@ -171,32 +171,39 @@ def test_device_property_events(core: CMMCorePlus) -> None:
 
 
 def test_sequence_acquisition_events(core: CMMCorePlus) -> None:
-    mock1 = Mock()
-    mock2 = Mock()
+    mock1a = Mock()
+    mock1b = Mock()
+    mock2a = Mock()
+    mock2b = Mock()
     mock3 = Mock()
 
-    core.events.continuousSequenceAcquisitionStarted.connect(mock1)
-    core.events.sequenceAcquisitionStopped.connect(mock2)
-    core.events.sequenceAcquisitionStarted.connect(mock3)
+    core.events.continuousSequenceAcquisitionStarting.connect(mock1a)
+    core.events.continuousSequenceAcquisitionStarted.connect(mock1b)
+    core.events.sequenceAcquisitionStarting.connect(mock2a)
+    core.events.sequenceAcquisitionStarted.connect(mock2b)
+    core.events.sequenceAcquisitionStopped.connect(mock3)
 
     core.startContinuousSequenceAcquisition()
-    mock1.assert_called_once()
+    mock1a.assert_called_once()
+    mock1b.assert_called_once()
 
     core.stopSequenceAcquisition()
-    mock2.assert_any_call(core.getCameraDevice())
+    mock3.assert_any_call(core.getCameraDevice())
 
     # without camera label
     core.startSequenceAcquisition(5, 100.0, True)
-    mock3.assert_any_call(core.getCameraDevice(), 5, 100.0, True)
+    mock2a.assert_any_call(core.getCameraDevice(), 5, 100.0, True)
+    mock2b.assert_any_call(core.getCameraDevice(), 5, 100.0, True)
     core.stopSequenceAcquisition()
-    mock2.assert_any_call(core.getCameraDevice())
+    mock3.assert_any_call(core.getCameraDevice())
 
     # with camera label
     cam = core.getCameraDevice()
     core.startSequenceAcquisition(cam, 5, 100.0, True)
-    mock3.assert_any_call(cam, 5, 100.0, True)
+    mock2a.assert_any_call(cam, 5, 100.0, True)
+    mock2b.assert_any_call(cam, 5, 100.0, True)
     core.stopSequenceAcquisition(cam)
-    mock2.assert_any_call(cam)
+    mock3.assert_any_call(cam)
 
 
 def test_shutter_device_events(core: CMMCorePlus) -> None:

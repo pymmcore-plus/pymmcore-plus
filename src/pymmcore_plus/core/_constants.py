@@ -209,10 +209,15 @@ class PortType(IntEnum):
     HIDPort = pymmcore.HIDPort
 
 
+# NB:
+# do *not* use `pymmcore.FocusDirection...` enums here.
+# the MMCore API does not use the device enums (which is what pymmcore exposes)
+# but instead translates MM::FocusDirectionTowardSample into a different number:
+# https://github.com/micro-manager/mmCoreAndDevices/tree/MMCore/MMCore.cpp#L2063-L2074
 class FocusDirection(IntEnum):
-    Unknown = pymmcore.FocusDirectionUnknown
-    TowardSample = pymmcore.FocusDirectionTowardSample
-    AwayFromSample = pymmcore.FocusDirectionAwayFromSample
+    Unknown = 0
+    TowardSample = 1
+    AwayFromSample = -1
     # aliases
     FocusDirectionUnknown = Unknown
     FocusDirectionTowardSample = TowardSample

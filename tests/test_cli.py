@@ -208,7 +208,7 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
             # otherwise it updates the existing
             else:
                 _data = seq.model_dump() if hasattr(seq, "model_dump") else seq.dict()
-                sub_field = cast(dict, _data[field_name])
+                sub_field = cast("dict", _data[field_name])
                 sub_field.update(**val)
                 newval = getattr(MDASequence(**{field_name: sub_field}), field_name)
                 seq = seq.replace(**{field_name: newval})

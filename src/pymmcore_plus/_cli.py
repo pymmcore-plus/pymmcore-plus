@@ -289,7 +289,7 @@ def run(
         mda.setdefault("channels", []).append(_c)
     if channel_group is not None:
         for c in mda.get("channels", []):
-            cast(dict, c)["group"] = channel_group
+            cast("dict", c)["group"] = channel_group
 
     # this will raise if anything has gone wrong.
     _mda = MDASequence(**mda)
