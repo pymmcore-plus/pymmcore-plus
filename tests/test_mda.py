@@ -49,19 +49,33 @@ def test_mda_waiting(core: CMMCorePlus) -> None:
 
 def test_setting_position(core: CMMCorePlus) -> None:
     core.mda._running = True
-    event1 = MDAEvent(exposure=123, x_pos=123, y_pos=456, z_pos=1)
+    event1 = MDAEvent(
+        exposure=123,
+        x_pos=123,
+        y_pos=456,
+        z_pos=1,
+        properties=[("Camera", "TestProperty1", 0.05)],
+    )
     core.mda.engine.setup_event(event1)
     assert tuple(core.getXYPosition()) == (123, 456)
     assert core.getPosition() == 1
     assert core.getExposure() == 123
+    assert core.getProperty("Camera", "TestProperty1") == "0.0500"
 
     # check that we aren't check things like: if event.x_pos
     # because then we will not set to zero
-    event2 = MDAEvent(exposure=321, x_pos=0, y_pos=0, z_pos=0)
+    event2 = MDAEvent(
+        exposure=321,
+        x_pos=0,
+        y_pos=0,
+        z_pos=0,
+        properties=[("Camera", "TestProperty2", -0.07)],
+    )
     core.mda.engine.setup_event(event2)
     assert tuple(core.getXYPosition()) == (0, 0)
     assert core.getPosition() == 0
     assert core.getExposure() == 321
+    assert core.getProperty("Camera", "TestProperty2") == "-0.0700"
 
 
 class BrokenEngine:
@@ -450,3 +464,35 @@ def test_queue_mda(core: CMMCorePlus) -> None:
     # make sure that the engine's iterator was NOT used when running an iter(Queue)
     mock_engine.event_iterator.assert_not_called()
     assert mock_engine.setup_event.call_count == 2
+
+
+def test_get_handlers(core: CMMCorePlus) -> None:
+    """Test that we can get the handlers"""
+    runner = core.mda
+
+    assert not runner.get_output_handlers()
+    on_start_names: list[str] = []
+    on_finish_names: list[str] = []
+
+    @runner.events.sequenceStarted.connect
+    def _on_start() -> None:
+        on_start_names.extend([type(h).__name__ for h in runner.get_output_handlers()])
+
+    @runner.events.sequenceFinished.connect
+    def _on_end() -> None:
+        on_finish_names.extend([type(h).__name__ for h in runner.get_output_handlers()])
+
+    runner.run([MDAEvent()], output="memory://")
+
+    # weakref is used to store the handlers,
+    # handlers should be cleared after the sequence is finished
+    assert not runner.get_output_handlers()
+    # but they should have been available during start and finish events
+    assert on_start_names == ["TensorStoreHandler"]
+    assert on_finish_names == ["TensorStoreHandler"]
+
+
+def test_custom_action(core: CMMCorePlus) -> None:
+    """Make sure we can handle custom actions gracefully"""
+
+    core.mda.run([MDAEvent(action=useq.CustomAction())])

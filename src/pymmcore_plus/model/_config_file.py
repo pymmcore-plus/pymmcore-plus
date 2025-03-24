@@ -209,18 +209,28 @@ def run_command(line: str, scope: Microscope) -> None:
         return
 
     exec_cmd, expected_n_args = COMMAND_EXECUTORS[command]
+    should_raise = command in SHOULD_RAISE
 
     if (nargs := len(args) + 1) not in expected_n_args:
         exp_str = " or ".join(map(str, expected_n_args))
-        raise ValueError(
+        msg = (
             f"Invalid configuration line encountered for command {cmd_name}. "
             f"Expected {exp_str} arguments, got {nargs}: {line!r}"
         )
+        if should_raise:
+            raise ValueError(msg)
+        else:
+            warnings.warn(msg, RuntimeWarning, stacklevel=2)
+            return
 
     try:
         exec_cmd(scope, args)
     except Exception as exc:
-        raise ValueError(f"Error executing command {line!r}: {exc}") from exc
+        if should_raise:
+            raise ValueError(f"Error executing command {line!r}: {exc}") from exc
+        warnings.warn(
+            f"Failed to execute command {line!r}: {exc}", RuntimeWarning, stacklevel=2
+        )
 
 
 def _exec_Device(scope: Microscope, args: Sequence[str]) -> None:
@@ -352,3 +362,6 @@ COMMAND_EXECUTORS: dict[CFGCommand, tuple[Executor, set[int]]] = {
     CFGCommand.ParentID: (_exec_ParentID, {3}),
     CFGCommand.FocusDirection: (_exec_FocusDirection, {3}),
 }
+
+# Commands that should raise when fail
+SHOULD_RAISE = {CFGCommand.Device, CFGCommand.Property}

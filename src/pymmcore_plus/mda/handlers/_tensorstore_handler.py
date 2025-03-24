@@ -111,6 +111,8 @@ class TensorStoreHandler:
         self.delete_existing = delete_existing
         self.spec = spec
 
+        self._current_sequence: useq.MDASequence | None = None
+
         # storage of individual frame metadata
         # maps position key to list of frame metadata
         self.frame_metadatas: list[tuple[useq.MDAEvent, FrameMetaV1]] = []
@@ -176,13 +178,25 @@ class TensorStoreHandler:
 
         return cls(path=path, **kwargs)
 
-    def sequenceStarted(self, seq: useq.MDASequence, meta: SummaryMetaV1) -> None:
-        """On sequence started, simply store the sequence."""
+    def reset(self, sequence: useq.MDASequence) -> None:
+        """Reset state to prepare for new `sequence`."""
         self._frame_index = 0
         self._store = None
         self._futures.clear()
         self.frame_metadatas.clear()
-        self.current_sequence = seq
+        self._current_sequence = sequence
+
+    @property
+    def current_sequence(self) -> useq.MDASequence | None:
+        """Return current sequence, or none.
+
+        Use `.reset()` to initialize the handler for a new sequence.
+        """
+        return self._current_sequence
+
+    def sequenceStarted(self, seq: useq.MDASequence, meta: SummaryMetaV1) -> None:
+        """On sequence started, simply store the sequence."""
+        self.reset(seq)
 
     def sequenceFinished(self, seq: useq.MDASequence) -> None:
         """On sequence finished, clear the current sequence."""
@@ -199,7 +213,7 @@ class TensorStoreHandler:
             self.finalize_metadata()
 
     def frameReady(
-        self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
+        self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1, /
     ) -> None:
         """Write frame to the zarr array for the appropriate position."""
         if self._store is None:
@@ -288,7 +302,7 @@ class TensorStoreHandler:
 
         # HACK
         if self.ts_driver == "zarr":
-            meta = cast(dict, spec.setdefault("metadata", {}))
+            meta = cast("dict", spec.setdefault("metadata", {}))
             if "dimension_separator" not in meta:
                 meta["dimension_separator"] = "/"
         return spec

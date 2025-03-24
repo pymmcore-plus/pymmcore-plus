@@ -1,5 +1,98 @@
 # Changelog
 
+## [v0.13.5](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.5) (2025-03-18)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.4...v0.13.5)
+
+**Fixed bugs:**
+
+- fix: Fix missing metadata in popNextImageAndMD [\#436](https://github.com/pymmcore-plus/pymmcore-plus/pull/436) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- refactor: call setConfig in MDAEngine only when different from previous call [\#448](https://github.com/pymmcore-plus/pymmcore-plus/pull/448) ([tlambert03](https://github.com/tlambert03))
+- ci\(pre-commit.ci\): autoupdate [\#444](https://github.com/pymmcore-plus/pymmcore-plus/pull/444) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+- fix: pin tensorstore [\#443](https://github.com/pymmcore-plus/pymmcore-plus/pull/443) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.13.4](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.4) (2025-02-11)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.3...v0.13.4)
+
+**Merged pull requests:**
+
+- chore: support useq 0.7, don't try to exec anything but AcquireImage [\#432](https://github.com/pymmcore-plus/pymmcore-plus/pull/432) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.13.3](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.3) (2025-02-07)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.2...v0.13.3)
+
+**Implemented enhancements:**
+
+- feat: add continuousSequenceAcquisitionStarting and sequenceAcquisitionStarting signals [\#430](https://github.com/pymmcore-plus/pymmcore-plus/pull/430) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.13.2](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.2) (2025-02-05)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.1...v0.13.2)
+
+**Implemented enhancements:**
+
+- feat: add `get_output_handlers` method to `MDARunner` [\#422](https://github.com/pymmcore-plus/pymmcore-plus/pull/422) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix!: fix focus direction enums [\#428](https://github.com/pymmcore-plus/pymmcore-plus/pull/428) ([tlambert03](https://github.com/tlambert03))
+- fix: turn most exceptions to warnings when loading config file into a model [\#426](https://github.com/pymmcore-plus/pymmcore-plus/pull/426) ([tlambert03](https://github.com/tlambert03))
+
+**Tests & CI:**
+
+- test: unskip test on pymmcore-nano [\#423](https://github.com/pymmcore-plus/pymmcore-plus/pull/423) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- ci\(pre-commit.ci\): autoupdate [\#425](https://github.com/pymmcore-plus/pymmcore-plus/pull/425) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+
+## [v0.13.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.1) (2025-01-21)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.0...v0.13.1)
+
+**Fixed bugs:**
+
+- Fix Issue with useq MDA Event Properties Not Being Set in MDAEngine [\#421](https://github.com/pymmcore-plus/pymmcore-plus/pull/421) ([alandolt](https://github.com/alandolt))
+
+## [v0.13.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.0) (2025-01-16)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.12.0...v0.13.0)
+
+**Implemented enhancements:**
+
+- feat: Add `mmcore bench` to CLI [\#416](https://github.com/pymmcore-plus/pymmcore-plus/pull/416) ([tlambert03](https://github.com/tlambert03))
+- feat: enhance describe method to include configuration groups and available devices [\#415](https://github.com/pymmcore-plus/pymmcore-plus/pull/415) ([tlambert03](https://github.com/tlambert03))
+- feat: support pymmcore-nano if it's present in the environment [\#413](https://github.com/pymmcore-plus/pymmcore-plus/pull/413) ([tlambert03](https://github.com/tlambert03))
+- feat: add typing to setContext [\#410](https://github.com/pymmcore-plus/pymmcore-plus/pull/410) ([tlambert03](https://github.com/tlambert03))
+- feat: Unicore - a unified core object that manages both C++ devices and python side devices in the same runtime [\#407](https://github.com/pymmcore-plus/pymmcore-plus/pull/407) ([tlambert03](https://github.com/tlambert03))
+- feat: support slm\_image from useq v0.6 [\#406](https://github.com/pymmcore-plus/pymmcore-plus/pull/406) ([hinderling](https://github.com/hinderling))
+- perf: better sequenced event building [\#400](https://github.com/pymmcore-plus/pymmcore-plus/pull/400) ([tlambert03](https://github.com/tlambert03))
+- perf: don't query position on triggered acquisition frames by default, add `include_frame_position_metadata` flag [\#392](https://github.com/pymmcore-plus/pymmcore-plus/pull/392) ([tlambert03](https://github.com/tlambert03))
+- feat: use rich for logging if available [\#388](https://github.com/pymmcore-plus/pymmcore-plus/pull/388) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix: Don't use `Engine.event_iterator` when an Iterable is directly passed to `MDARunner.run` [\#419](https://github.com/pymmcore-plus/pymmcore-plus/pull/419) ([tlambert03](https://github.com/tlambert03))
+
+**Tests & CI:**
+
+- test: fix file descriptor leaks, and other misc things [\#401](https://github.com/pymmcore-plus/pymmcore-plus/pull/401) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- ci: don't test py3.13 for now [\#411](https://github.com/pymmcore-plus/pymmcore-plus/pull/411) ([tlambert03](https://github.com/tlambert03))
+- refactor: remove wrapt synchronized [\#408](https://github.com/pymmcore-plus/pymmcore-plus/pull/408) ([tlambert03](https://github.com/tlambert03))
+- ci\(dependabot\): bump codecov/codecov-action from 4 to 5 [\#402](https://github.com/pymmcore-plus/pymmcore-plus/pull/402) ([dependabot[bot]](https://github.com/apps/dependabot))
+- docs: add documentation on profiling with py-spy [\#393](https://github.com/pymmcore-plus/pymmcore-plus/pull/393) ([tlambert03](https://github.com/tlambert03))
+- test: fix tests by pinning pyside\<6.8 [\#389](https://github.com/pymmcore-plus/pymmcore-plus/pull/389) ([tlambert03](https://github.com/tlambert03))
+- docs: Add a hint about the mmcore build-dev command [\#386](https://github.com/pymmcore-plus/pymmcore-plus/pull/386) ([ctrueden](https://github.com/ctrueden))
+- ci: support python 3.13 [\#382](https://github.com/pymmcore-plus/pymmcore-plus/pull/382) ([tlambert03](https://github.com/tlambert03))
+
 ## [v0.12.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.12.0) (2024-10-05)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.11.1...v0.12.0)
