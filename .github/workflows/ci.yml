@@ -64,7 +64,8 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ${{ runner.os }}-mmbuild-${{ hashFiles('src/pymmcore_plus/_build.py') }}
+          # 73 is the device interface
+          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
 
       - name: Build Micro-Manager
         if: runner.os == 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
