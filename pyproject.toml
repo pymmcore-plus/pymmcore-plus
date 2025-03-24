@@ -41,8 +41,7 @@ dependencies = [
     "pymmcore >=11.2.1.71.0",
     "typing-extensions >=4", # not actually required at runtime
     "useq-schema >=0.7.0",
-    "tensorstore >=0.1.67",
-    "tensorstore >=0.1.71; python_version >= '3.13'",
+    "tensorstore >=0.1.67,!=0.1.72",
     # cli requirements included by default for now
     "typer >=0.4.2",
     "rich >=10.2.0",
