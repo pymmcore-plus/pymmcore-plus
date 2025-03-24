@@ -59,7 +59,8 @@ pure python/C environments**.
     If you are looking to control a microscope via python without any need for Java
     or interprocess communication, `pymmcore(-plus)` may help. Note however, that
     you will be sacrificing the MMStudio GUI! See `pymmcore-widgets` and
-    `napari-micromanager` for ongoing efforts to re-implement GUI components in python.
+    `napari-micromanager`, and `pymmcore-gui` for ongoing efforts to implement a
+    complete python-based GUI for Micro-manager.
 
     ![micro-manager ecosystem components](images/components.png){ loading=lazy }
 

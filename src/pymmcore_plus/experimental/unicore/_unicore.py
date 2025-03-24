@@ -654,7 +654,7 @@ def _ensure_label(
     if len(args) < min_args:
         # we didn't get the label
         return getter(), args
-    return cast(str, args[0]), args[1:]
+    return cast("str", args[0]), args[1:]
 
 
 class PropertyStateCache(MutableMapping[tuple[str, str], Any]):

@@ -1,15 +1,5 @@
 # The Acquisition Engine
 
-!!! note "Shoulders of giants..."
-
-    The patterns in the acquisition engine are heavily inspired by the previous
-    micro-manager engines.  The [first
-    engine](https://github.com/micro-manager/micro-manager/blob/088a581123b76528218af8651eda23b0ebe2c105/acqEngine/src/main/clj/org/micromanager/acq_engine.clj)
-    was written in clojure
-    by Arthur Edelstein, Nenad Amodaj, and Nico Stuurman. The second engine
-    ([AcqEngJ](https://github.com/micro-manager/AcqEngJ)) was written in Java by
-    Henry Pinkard. Thanks to all of them for their fantastic work!
-
 One of the key features of pymmcore-plus is the acquisition engine. This allows
 you to define and execute a sequence of events. The sequence may be a typical
 multi-dimensional acquisition (MDA), such as a z-stack across multiple channels,

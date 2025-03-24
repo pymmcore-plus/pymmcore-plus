@@ -173,7 +173,7 @@ class PropertyController(Generic[TDev, TProp]):
                     f"of property {self.property.name!r}: {self.property.limits}."
                 ) from e
             min_, max_ = self.property.limits
-            if not min_ <= cast(float, value) <= max_:
+            if not min_ <= cast("float", value) <= max_:
                 raise ValueError(
                     f"Value {value!r} is not within the allowed range of property "
                     f"{self.property.name!r}: {self.property.limits}."

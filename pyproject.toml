@@ -39,9 +39,10 @@ dependencies = [
     "numpy >=1.17.3",
     "psygnal >=0.7",
     "pymmcore >=10.7.0.71.0",
-    "typing-extensions",                    # not actually required at runtime
+    "typing-extensions",      # not actually required at runtime
     "useq-schema >=0.7.0",
-    "tensorstore; python_version < '3.13'",
+    # until https://github.com/google/tensorstore/issues/217 is resolved
+    "tensorstore <= 0.1.71",
     # cli requirements included by default for now
     "typer >=0.4.2",
     "rich >=10.2.0",
