@@ -377,7 +377,7 @@ name = "importlib-metadata"
 version = "8.6.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.13'" },
+    { name = "zipp", marker = "python_full_version < '3.10'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/33/08/c1395a292bb23fd03bdf572a1357c5a733d3eecbab877641ceacab23db6e/importlib_metadata-8.6.1.tar.gz", hash = "sha256:310b41d755445d74569f993ccfc22838295d9fe005425094fad953d7f15c8580", size = 55767 }
 wheels = [
@@ -655,16 +655,16 @@ wheels = [
 
 [[package]]
 name = "mkdocs-autorefs"
-version = "1.4.1"
+version = "1.3.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markdown" },
     { name = "markupsafe" },
     { name = "mkdocs" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c2/44/140469d87379c02f1e1870315f3143718036a983dd0416650827b8883192/mkdocs_autorefs-1.4.1.tar.gz", hash = "sha256:4b5b6235a4becb2b10425c2fa191737e415b37aa3418919db33e5d774c9db079", size = 4131355 }
+sdist = { url = "https://files.pythonhosted.org/packages/52/f4/77e3cf5e7ba54dca168bc718688127844721982ae88b08684669c5b5752d/mkdocs_autorefs-1.3.1.tar.gz", hash = "sha256:a6d30cbcccae336d622a66c2418a3c92a8196b69782774529ad441abb23c0902", size = 2056416 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/29/1125f7b11db63e8e32bcfa0752a4eea30abff3ebd0796f808e14571ddaa2/mkdocs_autorefs-1.4.1-py3-none-any.whl", hash = "sha256:9793c5ac06a6ebbe52ec0f8439256e66187badf4b5334b5fde0b128ec134df4f", size = 5782047 },
+    { url = "https://files.pythonhosted.org/packages/db/19/f20edc082c1de2987dbaf30fcc514ed7a908d465a15aba7cba595c3b245a/mkdocs_autorefs-1.3.1-py3-none-any.whl", hash = "sha256:18c504ae4d3ee7f344369bb26cb31d4105569ee252aab7d75ec2734c2c8b0474", size = 2837887 },
 ]
 
 [[package]]
@@ -1586,6 +1586,7 @@ dev = [
     { name = "pdbpp", marker = "sys_platform != 'win32'" },
     { name = "pre-commit" },
     { name = "pydantic", marker = "python_full_version >= '3.13'" },
+    { name = "pymmcore" },
     { name = "pyqt6" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -1602,6 +1603,7 @@ dev = [
 ]
 docs = [
     { name = "mkdocs" },
+    { name = "mkdocs-autorefs" },
     { name = "mkdocs-material" },
     { name = "mkdocs-typer" },
     { name = "mkdocstrings" },
@@ -1629,6 +1631,7 @@ pyside6 = [
 test = [
     { name = "msgpack" },
     { name = "msgspec" },
+    { name = "pymmcore" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "pytest-qt" },
@@ -1651,6 +1654,7 @@ dev = [
 requires-dist = [
     { name = "ipython", marker = "extra == 'dev'", specifier = ">=8.18.1" },
     { name = "mkdocs", marker = "extra == 'docs'", specifier = ">=1.4" },
+    { name = "mkdocs-autorefs", marker = "extra == 'docs'", specifier = "==1.3.1" },
     { name = "mkdocs-material", marker = "extra == 'docs'", specifier = ">=9.5" },
     { name = "mkdocs-typer", marker = "extra == 'docs'", specifier = "==0.0.3" },
     { name = "mkdocstrings", marker = "extra == 'docs'", specifier = "==0.22.0" },
@@ -1667,6 +1671,8 @@ requires-dist = [
     { name = "psygnal", specifier = ">=0.10" },
     { name = "pydantic", marker = "python_full_version >= '3.13' and extra == 'dev'", specifier = ">2.7.4" },
     { name = "pymmcore", specifier = ">=11.2.1.71.0" },
+    { name = "pymmcore", marker = "extra == 'dev'", specifier = ">=11.5.0.73" },
+    { name = "pymmcore", marker = "extra == 'test'", specifier = ">=11.5.0.73" },
     { name = "pyqt5", marker = "extra == 'pyqt5'", specifier = ">=5.15.4" },
     { name = "pyqt6", marker = "extra == 'dev'", specifier = ">=6.4.2,<6.8" },
     { name = "pyqt6", marker = "extra == 'pyqt6'", specifier = ">=6.4.2,<6.8" },
