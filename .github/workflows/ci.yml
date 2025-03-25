@@ -126,7 +126,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ${{ env.CACHE_PATH }}
-          key: ${{ runner.os }}-mmbuild-${{ hashFiles('src/pymmcore_plus/_build.py') }}
+          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
 
       - name: Install Micro-Manager
         if: steps.cache-mm-build.outputs.cache-hit != 'true'
@@ -172,7 +172,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/share/pymmcore-plus/
-          key: ${{ runner.os }}-mmbuild-${{ hashFiles('src/pymmcore_plus/_build.py') }}
+          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
 
       - name: Build Micro-Manager
         if: steps.cache-mm-build.outputs.cache-hit != 'true'
