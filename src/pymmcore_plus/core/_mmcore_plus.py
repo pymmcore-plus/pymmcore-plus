@@ -379,7 +379,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         try:
             super().loadDevice(label, moduleName, deviceName)
-        except RuntimeError as e:
+        except (RuntimeError, ValueError) as e:
             if exc := self._load_error_with_info(label, moduleName, deviceName, str(e)):
                 raise exc from e
 
@@ -2026,9 +2026,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To also save pixel size configurations.
         """
         super().saveSystemConfiguration(filename)
-        # saveSystemConfiguration does not save the pixel size config so here
-        # we add to the saved file also any pixel size config.
-        self._save_pixel_configurations(filename)
+        if pymmcore.version_info < (11, 5):
+            # saveSystemConfiguration does not save the pixel size config so hereq
+            # we add to the saved file also any pixel size config.
+            self._save_pixel_configurations(filename)
 
     def _save_pixel_configurations(self, filename: str) -> None:
         px_configs = self.getAvailablePixelSizeConfigs()
