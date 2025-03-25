@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any, Callable
 
-from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword
+from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword, _pymmcore
 from pymmcore_plus._util import timestamp
 
 from ._config_group import ConfigGroup, ConfigPreset, Setting
@@ -186,9 +186,16 @@ CONFIG_SECTIONS: dict[str, Callable[[Microscope], Iterable[str]]] = {
     "Camera-synchronized devices": lambda _: [],
     "Labels": iter_labels,
     "Configuration presets": iter_config_presets,
-    "PixelSize settings": iter_pixel_size_presets,
-    "Roles": iter_roles,  # MMStudio puts this above Cam-Synched devices, MMCore here.
 }
+
+
+if _pymmcore.version_info >= (11, 5):
+    CONFIG_SECTIONS["PixelSize settings"] = iter_pixel_size_presets
+    CONFIG_SECTIONS["Roles"] = iter_roles
+else:
+    CONFIG_SECTIONS["Roles"] = iter_roles
+    CONFIG_SECTIONS["PixelSize settings"] = iter_pixel_size_presets
+
 
 # ------------------ Deserialization ------------------
 
