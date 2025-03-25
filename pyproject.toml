@@ -58,7 +58,7 @@ PyQt5 = ["PyQt5 >=5.15.4"]
 PyQt6 = ["PyQt6 >=6.4.2,<6.8"]
 test = [
     "pymmcore-plus[io]",
-    "msgspec >= 0.18",
+    "msgspec >= 0.19",
     "msgpack >=1",
     "pytest-cov >=5",
     "pytest-qt >=4.4",
@@ -163,7 +163,11 @@ docstring-code-format = true
 [tool.pytest.ini_options]
 minversion = "6.0"
 testpaths = ["tests"]
-filterwarnings = ["error", "ignore:Failed to disconnect::pytestqt"]
+filterwarnings = [
+    "error",
+    "ignore:Failed to disconnect::pytestqt",
+    "ignore:numpy.core.multiarray is deprecated",
+]
 markers = ["run_last: mark a test to run last"]
 
 # https://mypy.readthedocs.io/en/stable/config_file.html

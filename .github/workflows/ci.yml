@@ -83,7 +83,7 @@ jobs:
       - name: test lowest-direct deps
         run: |
           uv pip install -e '.[test]' --resolution lowest-direct -U --no-build
-          uv run pytest
+          uv run pytest -v --color=yes
 
       - name: Coverage
         uses: codecov/codecov-action@v5
