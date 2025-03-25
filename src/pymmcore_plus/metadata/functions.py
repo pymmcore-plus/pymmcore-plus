@@ -289,6 +289,15 @@ def pixel_size_config(core: CMMCorePlus, *, config_name: str) -> PixelSizeConfig
     affine = core.getPixelSizeAffineByID(config_name)
     if affine != (1.0, 0.0, 0.0, 0.0, 1.0, 0.0):
         info["pixel_size_affine"] = affine
+    # added in v11.5
+    if hasattr(core, "getPixelSizedxdz") and (px := core.getPixelSizedxdz(config_name)):
+        info["pixel_size_dxdz"] = px
+    if hasattr(core, "getPixelSizedydz") and (px := core.getPixelSizedydz(config_name)):
+        info["pixel_size_dydz"] = px
+    if hasattr(core, "getPixelSizeOptimalZUm") and (
+        z := core.getPixelSizeOptimalZUm(config_name)
+    ):
+        info["pixel_size_optimal_z_um"] = z
     return info
 
 

@@ -153,7 +153,7 @@ def test_device_load_from_module():
 
     # If we gave a proper library name, but a bad device name...
     # it should raise the usual error
-    with pytest.raises(RuntimeError, match="Failed to load device"):
+    with pytest.raises(RuntimeError, match="failed to instantiate device"):
         core.loadDevice("newdev", "DemoCamera", "NoSuchDevice")
 
     # Then we fallback to checking python modules

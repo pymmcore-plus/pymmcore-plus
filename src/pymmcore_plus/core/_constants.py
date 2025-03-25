@@ -94,6 +94,14 @@ class CFGCommand(str, Enum):
     PixelSizeAffine = pymmcore.g_CFGCommand_PixelSizeAffine
     ParentID = pymmcore.g_CFGCommand_ParentID
     FocusDirection = pymmcore.g_CFGCommand_FocusDirection
+
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizedxdz"):
+        PixelSize_dxdz = pymmcore.g_CFGCommand_PixelSizedxdz
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizedydz"):
+        PixelSize_dydz = pymmcore.g_CFGCommand_PixelSizedydz
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizeOptimalZUm"):
+        PixelSize_OptimalZUm = pymmcore.g_CFGCommand_PixelSizeOptimalZUm
+
     #
     FieldDelimiters = pymmcore.g_FieldDelimiters
 

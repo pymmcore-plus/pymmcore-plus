@@ -162,6 +162,12 @@ def iter_pixel_size_presets(scope: Microscope) -> Iterable[str]:
         yield _serialize(CFGCommand.PixelSize_um, p.name, p.pixel_size_um)
         if p.affine != DEFAULT_AFFINE:
             yield _serialize(CFGCommand.PixelSizeAffine, p.name, *p.affine)
+        if p.angle_dxdz and (cmd := getattr(CFGCommand, "PixelSizeAngleDxdz", None)):
+            yield _serialize(cmd, p.name, p.angle_dxdz)
+        if p.angle_dydz and (cmd := getattr(CFGCommand, "PixelSizeAngleDydz", None)):
+            yield _serialize(cmd, p.name, p.angle_dydz)
+        if p.optimalz_um and (cmd := getattr(CFGCommand, "PixelSize_OptimalZUm", None)):
+            yield _serialize(cmd, p.name, p.optimalz_um)
 
 
 # Order will determine the order of the sections in the file
@@ -180,8 +186,8 @@ CONFIG_SECTIONS: dict[str, Callable[[Microscope], Iterable[str]]] = {
     "Camera-synchronized devices": lambda _: [],
     "Labels": iter_labels,
     "Configuration presets": iter_config_presets,
-    "Roles": iter_roles,  # MMStudio puts this above Cam-Synched devices, MMCore here.
     "PixelSize settings": iter_pixel_size_presets,
+    "Roles": iter_roles,  # MMStudio puts this above Cam-Synched devices, MMCore here.
 }
 
 # ------------------ Deserialization ------------------
