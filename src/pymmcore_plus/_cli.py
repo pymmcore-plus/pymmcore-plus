@@ -157,7 +157,7 @@ def install(
         help="Installation directory.",
     ),
     release: str = typer.Option(
-        "latest", "-r", "--release", help="Release date. e.g. 20210201"
+        "latest-compatible", "-r", "--release", help="Release date. e.g. 20210201"
     ),
     plain_output: bool = typer.Option(
         False,
