@@ -70,7 +70,14 @@ test = [
     "zarr >=2.2,<3",
     "xarray",
 ]
-dev = ["ipython", "mypy", "pdbpp", "pre-commit", "ruff", "tensorstore-stubs"]
+dev = [
+    "ipython",
+    "mypy",
+    "pdbpp; sys_platform != 'win32'",
+    "pre-commit",
+    "ruff",
+    "tensorstore-stubs",
+]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material",
@@ -195,4 +202,4 @@ ignore = [
 ]
 
 [tool.typos.default]
-extend-ignore-identifiers-re = ["(?i)nd2?.*", "(?i)ome", "anager"]
+extend-ignore-identifiers-re = ["(?i)nd2?.*", "(?i)ome", "anager", "ba"]
