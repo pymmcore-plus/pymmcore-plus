@@ -620,7 +620,7 @@ def timestamp() -> str:
     return now.isoformat()
 
 
-def get_device_interface_version(lib_path: str) -> int:
+def get_device_interface_version(lib_path: str | Path) -> int:
     """Return the device interface version from the given library path."""
     import ctypes
 

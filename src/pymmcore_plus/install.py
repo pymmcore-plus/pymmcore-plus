@@ -60,7 +60,7 @@ except ImportError:  # pragma: no cover
 PLATFORM = system()
 MACH = machine()
 BASE_URL = "https://download.micro-manager.org"
-plat = {"Darwin": "Mac", "Windows": "Windows"}[PLATFORM]
+plat = {"Darwin": "Mac", "Windows": "Windows", "Linux": "Linux"}.get(PLATFORM)
 DOWNLOADS_URL = f"{BASE_URL}/nightly/2.0/{plat}/"
 
 

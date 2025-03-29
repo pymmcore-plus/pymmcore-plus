@@ -8,6 +8,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Optional, Union, cast
 
+from pymmcore_plus._util import get_device_interface_version
 from pymmcore_plus.core._device import Device
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
@@ -114,9 +115,15 @@ def _list() -> None:
         for parent, items in found.items():
             print(f":file_folder:[bold green] {parent}")
             for item in items:
+                version = ""
+                for _lib in (parent / item).glob("*_dal_*"):
+                    with suppress(Exception):
+                        div = get_device_interface_version(_lib)
+                        version = f" (Dev. Interface {div})"
+                        break
                 bullet = "   [bold yellow]*" if first else "   •"
                 using = " [bold blue](active)" if first else ""
-                print(f"{bullet} [cyan]{item}{using}")
+                print(f"{bullet} [cyan]{item}{version}{using}")
                 first = False
     else:
         print(":x: [bold red]There are no pymmcore-plus Micro-Manager files.")
