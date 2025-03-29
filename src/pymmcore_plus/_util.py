@@ -618,3 +618,24 @@ def timestamp() -> str:
     with suppress(Exception):
         now = now.astimezone()
     return now.isoformat()
+
+
+def get_device_interface_version(lib_path: str | Path) -> int:
+    """Return the device interface version from the given library path."""
+    import ctypes
+
+    if sys.platform.startswith("win"):
+        lib = ctypes.WinDLL(lib_path)
+    else:
+        lib = ctypes.CDLL(lib_path)
+
+    try:
+        func = lib.GetDeviceInterfaceVersion
+    except AttributeError:
+        raise RuntimeError(
+            f"Function 'GetDeviceInterfaceVersion' not found in {lib_path}"
+        ) from None
+
+    func.restype = ctypes.c_long
+    func.argtypes = []
+    return func()  # type: ignore[no-any-return]

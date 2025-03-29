@@ -15,3 +15,5 @@ well as executing an experiment and/or showing log files.
 ::: mkdocs-typer
     :module: pymmcore_plus._cli
     :command: app
+    :prog_name: mmcore
+    :depth: 1
