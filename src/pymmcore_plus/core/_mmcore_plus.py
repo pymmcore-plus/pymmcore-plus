@@ -224,7 +224,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if _instance is None:
             _instance = self
 
-        if hasattr("self", "enableFeature"):
+        if hasattr(self, "enableFeature"):
             strict = True
             if env_strict := os.getenv("PYMM_STRICT_INIT_CHECKS", "").lower():
                 if env_strict in ("1", "true"):
