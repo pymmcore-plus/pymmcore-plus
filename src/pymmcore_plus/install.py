@@ -10,7 +10,7 @@ import tempfile
 from contextlib import contextmanager, nullcontext
 from functools import cache
 from pathlib import Path
-from platform import system
+from platform import machine, system
 from typing import TYPE_CHECKING, Callable, Protocol
 from urllib.request import urlopen, urlretrieve
 
@@ -58,6 +58,7 @@ except ImportError:  # pragma: no cover
 
 
 PLATFORM = system()
+MACH = machine()
 BASE_URL = "https://download.micro-manager.org"
 plat = {"Darwin": "Mac", "Windows": "Windows"}[PLATFORM]
 DOWNLOADS_URL = f"{BASE_URL}/nightly/2.0/{plat}/"
@@ -235,8 +236,12 @@ def install(
         `def logger(text: str, color: str = "", emoji: str = ""): ...`
         May ignore color and emoji.
     """
-    if PLATFORM not in ("Darwin", "Windows"):  # pragma: no cover
-        log_msg(f"Unsupported platform: {PLATFORM!r}", "bold red", ":x:")
+    if PLATFORM not in ("Darwin", "Windows") or (
+        PLATFORM == "Darwin" and MACH == "arm64"
+    ):  # pragma: no cover
+        log_msg(
+            f"Unsupported platform/architecture: {PLATFORM}/{MACH}", "bold red", ":x:"
+        )
         log_msg(
             "Consider building from source (mmcore build-dev).",
             "bold yellow",
