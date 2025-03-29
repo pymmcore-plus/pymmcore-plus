@@ -229,15 +229,15 @@ def _qt_app_is_running() -> bool:
     return False  # pragma: no cover
 
 
-MMCORE_PLUS_SIGNALS_BACKEND = "MMCORE_PLUS_SIGNALS_BACKEND"
+PYMM_SIGNALS_BACKEND = "PYMM_SIGNALS_BACKEND"
 
 
 def signals_backend() -> Literal["qt", "psygnal"]:
     """Return the name of the event backend to use."""
-    env_var = os.environ.get(MMCORE_PLUS_SIGNALS_BACKEND, "auto").lower()
+    env_var = os.environ.get(PYMM_SIGNALS_BACKEND, "auto").lower()
     if env_var not in {"qt", "psygnal", "auto"}:
         warnings.warn(
-            f"{MMCORE_PLUS_SIGNALS_BACKEND} must be one of ['qt', 'psygnal', 'auto']. "
+            f"{PYMM_SIGNALS_BACKEND} must be one of ['qt', 'psygnal', 'auto']. "
             f"not: {env_var!r}. Using 'auto'.",
             stacklevel=1,
         )
@@ -250,7 +250,7 @@ def signals_backend() -> Literal["qt", "psygnal"]:
         if qt_app_running or list(_imported_qt_modules()):
             return "qt"
         warnings.warn(
-            f"{MMCORE_PLUS_SIGNALS_BACKEND} set to 'qt', but no Qt app is running. "
+            f"{PYMM_SIGNALS_BACKEND} set to 'qt', but no Qt app is running. "
             "Falling back to 'psygnal'.",
             stacklevel=1,
         )

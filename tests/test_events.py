@@ -7,7 +7,7 @@ from unittest.mock import Mock, call
 import pytest
 
 from pymmcore_plus import CMMCorePlus, Keyword
-from pymmcore_plus._util import MMCORE_PLUS_SIGNALS_BACKEND
+from pymmcore_plus._util import PYMM_SIGNALS_BACKEND
 from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler
 
 Signalers = [CMMCoreSignaler]
@@ -38,7 +38,7 @@ def test_signal_backend_selection(
 
         _ = QApplication.instance() or QApplication([])
 
-    monkeypatch.setenv(MMCORE_PLUS_SIGNALS_BACKEND, env_var)
+    monkeypatch.setenv(PYMM_SIGNALS_BACKEND, env_var)
     ctx = (
         pytest.warns(UserWarning)
         if (env_var == "nonsense" or (env_var == "qt" and QCoreSignaler is None))

@@ -607,3 +607,44 @@ def test_snap_rgb(core: CMMCorePlus) -> None:
         dtype="uint8",
     )
     np.testing.assert_equal(img[::64, -1], expect)
+
+
+def test_env_vars(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    core = CMMCorePlus()
+    assert not core.debugLogEnabled()
+    assert not core.stderrLogEnabled()
+    assert core.getCircularBufferMemoryFootprint() != 64
+    assert core.isFeatureEnabled("ParallelDeviceInitialization")
+    assert core.isFeatureEnabled("StrictInitializationChecks")
+
+    with monkeypatch.context() as m:
+        m.setenv("PYMM_DEBUG_LOG", "1")
+        core = CMMCorePlus()
+        assert core.debugLogEnabled()
+
+    with monkeypatch.context() as m:
+        m.setenv("PYMM_STDERR_LOG", "1")
+        core = CMMCorePlus()
+        assert core.stderrLogEnabled()
+
+    with monkeypatch.context() as m:
+        m.setenv("PYMM_BUFFER_SIZE_MB", "64")
+        core = CMMCorePlus()
+        assert core.getCircularBufferMemoryFootprint() == 64
+
+    with monkeypatch.context() as m:
+        m.setenv("PYMM_STRICT_INIT_CHECKS", "0")
+        core = CMMCorePlus()
+        assert not core.isFeatureEnabled("StrictInitializationChecks")
+
+    with monkeypatch.context() as m:
+        # test with an invalid value
+        m.setenv("PYMM_PARALLEL_INIT", "0")
+        core = CMMCorePlus()
+        assert not core.isFeatureEnabled("ParallelDeviceInitialization")
+
+    with monkeypatch.context() as m:
+        m.setenv("MICROMANAGER_PATH", str(tmp_path))
+        core = CMMCorePlus()
+        paths = core.getDeviceAdapterSearchPaths()
+        assert str(tmp_path) in paths
