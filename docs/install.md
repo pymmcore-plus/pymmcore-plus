@@ -139,15 +139,35 @@ in the micro-manager repo.
 
 ## Understanding Device Interface Versions
 
-|VERSION|DATE|COMMIT|
-|-------|----|------|
-|73|20250318|[55863b2d8](https://github.com/micro-manager/mmCoreAndDevices/commit/55863b2d8)|
-|72|20250318|[b8de737b2](https://github.com/micro-manager/mmCoreAndDevices/commit/b8de737b2)|
-|71|20221031|[7ba63fb8f](https://github.com/micro-manager/mmCoreAndDevices/commit/7ba63fb8f)|
-|70|20210219|[8687ddb51](https://github.com/micro-manager/mmCoreAndDevices/commit/8687ddb51)|
-|69|20180712|[1a9938168](https://github.com/micro-manager/mmCoreAndDevices/commit/1a9938168)|
-|68|20171107|[285a9fbb2](https://github.com/micro-manager/mmCoreAndDevices/commit/285a9fbb2)|
-|67|20160609|[2cafb3481](https://github.com/micro-manager/mmCoreAndDevices/commit/2cafb3481)|
+Micro-Manager's C++ layer (called MMCore) controls devices via adapters that are
+compiled into platform-specific shared libraries.  These libraries are always
+compiled to work with a *specific* "device interface version" expected by the
+MMCore object itself.  If you try to load a device adapter with a device
+interface version that does not match the version expected by the core, then you
+will get an error.
+
+[pymmcore](https://github.com/micro-manager/pymmcore) is the library that wraps
+the C++ code and makes it available to python.  It has a 5-number version string
+that looks something like `11.1.1.71.2`.  The first three parts (here: `11.1.1`)
+represent the version of the MMCore library.  The next number (here: `71`) *is
+the device interface version that pymmcore expects*.  (The last number is a
+pymmcore-specific build number).  
+
+Here is a list of the latest device interface numbers, the date of the first
+nightly build where they were available, the last nightly build date to support
+that version, and the commit in
+[mmCoreAndDevices](https://github.com/micro-manager/mmCoreAndDevices) that
+bumped the version.
+
+|Version|Released|Last Release|Commit|
+|-------|----|-----|------|
+|73|20250318||[55863b2d8](https://github.com/micro-manager/mmCoreAndDevices/commit/55863b2d8)|
+|72|20250318|20250318|[b8de737b2](https://github.com/micro-manager/mmCoreAndDevices/commit/b8de737b2)|
+|71|20221031|20250310|[7ba63fb8f](https://github.com/micro-manager/mmCoreAndDevices/commit/7ba63fb8f)|
+|70|20210219|20221030|[8687ddb51](https://github.com/micro-manager/mmCoreAndDevices/commit/8687ddb51)|
+|69|20180712||[1a9938168](https://github.com/micro-manager/mmCoreAndDevices/commit/1a9938168)|
+|68|20171107||[285a9fbb2](https://github.com/micro-manager/mmCoreAndDevices/commit/285a9fbb2)|
+|67|20160609||[2cafb3481](https://github.com/micro-manager/mmCoreAndDevices/commit/2cafb3481)|
 
 <details>
 
@@ -198,3 +218,20 @@ in the micro-manager repo.
 |14|20070227|[3b69e7670](https://github.com/micro-manager/mmCoreAndDevices/commit/3b69e7670)|
 
 </details>
+
+!!! important
+    **You *must* use device adapter libraries that were compiled for the same device
+    interface version as your version of pymmcore.**
+
+    By default, when you run `mmcore install`, it will pick the latest compatible
+    version to install. However, you can also do this explicitly.  For the example
+    above, for a device interface version of `71`, you could explicitly install the
+    last compatible device adapters listed on the table above with `mmcore install`
+    as follows:
+
+    ```sh
+    mmcore install -r 20250310
+    ```
+
+
+    

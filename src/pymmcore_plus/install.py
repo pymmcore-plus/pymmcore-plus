@@ -59,6 +59,10 @@ except ImportError:  # pragma: no cover
 
 PLATFORM = system()
 BASE_URL = "https://download.micro-manager.org"
+plat = {"Darwin": "Mac", "Windows": "Windows"}[PLATFORM]
+DOWNLOADS_URL = f"{BASE_URL}/nightly/2.0/{plat}/"
+
+
 # Dates of release for each interface version.
 # generally running `mmcore install -r <some_date>` will bring in devices with
 # the NEW interface.
@@ -168,8 +172,7 @@ def _mac_install(dmg: Path, dest: Path, log_msg: _MsgLogger) -> None:
 @cache
 def available_versions() -> dict[str, str]:
     """Return a map of version -> url available for download."""
-    plat = {"Darwin": "Mac", "Windows": "Windows"}[PLATFORM]
-    with urlopen(f"{BASE_URL}/nightly/2.0/{plat}/") as resp:
+    with urlopen(DOWNLOADS_URL) as resp:
         html = resp.read().decode("utf-8")
 
     all_links = re.findall(r"href=\"([^\"]+)\"", html)
@@ -258,8 +261,14 @@ def install(
             available = available_versions()
             release = max(
                 (date for date in available if date < next_div_date),
-                default="latest",
+                default="unavailable",
             )
+            if release == "unavailable":
+                # fallback to latest if no compatible versions found
+                raise ValueError(
+                    "Unable to find a compatible release for device interface"
+                    f"{div} at {DOWNLOADS_URL} "
+                )
 
     if release == "latest":
         plat = {
