@@ -229,15 +229,15 @@ def _qt_app_is_running() -> bool:
     return False  # pragma: no cover
 
 
-MMCORE_PLUS_SIGNALS_BACKEND = "MMCORE_PLUS_SIGNALS_BACKEND"
+PYMM_SIGNALS_BACKEND = "PYMM_SIGNALS_BACKEND"
 
 
 def signals_backend() -> Literal["qt", "psygnal"]:
     """Return the name of the event backend to use."""
-    env_var = os.environ.get(MMCORE_PLUS_SIGNALS_BACKEND, "auto").lower()
+    env_var = os.environ.get(PYMM_SIGNALS_BACKEND, "auto").lower()
     if env_var not in {"qt", "psygnal", "auto"}:
         warnings.warn(
-            f"{MMCORE_PLUS_SIGNALS_BACKEND} must be one of ['qt', 'psygnal', 'auto']. "
+            f"{PYMM_SIGNALS_BACKEND} must be one of ['qt', 'psygnal', 'auto']. "
             f"not: {env_var!r}. Using 'auto'.",
             stacklevel=1,
         )
@@ -250,7 +250,7 @@ def signals_backend() -> Literal["qt", "psygnal"]:
         if qt_app_running or list(_imported_qt_modules()):
             return "qt"
         warnings.warn(
-            f"{MMCORE_PLUS_SIGNALS_BACKEND} set to 'qt', but no Qt app is running. "
+            f"{PYMM_SIGNALS_BACKEND} set to 'qt', but no Qt app is running. "
             "Falling back to 'psygnal'.",
             stacklevel=1,
         )
@@ -618,3 +618,24 @@ def timestamp() -> str:
     with suppress(Exception):
         now = now.astimezone()
     return now.isoformat()
+
+
+def get_device_interface_version(lib_path: str | Path) -> int:
+    """Return the device interface version from the given library path."""
+    import ctypes
+
+    if sys.platform.startswith("win"):
+        lib = ctypes.WinDLL(lib_path)
+    else:
+        lib = ctypes.CDLL(lib_path)
+
+    try:
+        func = lib.GetDeviceInterfaceVersion
+    except AttributeError:
+        raise RuntimeError(
+            f"Function 'GetDeviceInterfaceVersion' not found in {lib_path}"
+        ) from None
+
+    func.restype = ctypes.c_long
+    func.argtypes = []
+    return func()  # type: ignore[no-any-return]
