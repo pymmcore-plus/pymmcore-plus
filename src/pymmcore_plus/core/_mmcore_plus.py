@@ -207,14 +207,39 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__()
+        if os.getenv("PYMM_DEBUG_LOG", "0").lower() in ("1", "true"):
+            self.enableDebugLog(True)
+        if os.getenv("PYMM_STDERR_LOG", "0").lower() in ("1", "true"):
+            self.enableStderrLog(True)
+        if buf_size := os.getenv("PYMM_BUFFER_SIZE_MB", ""):
+            try:
+                buf_size_int = int(buf_size)
+                if buf_size_int:
+                    self.setCircularBufferMemoryFootprint(buf_size_int)
+            except (ValueError, TypeError):
+                warnings.warn("PYMM_BUFFER_SIZE_MB must be an integer", stacklevel=2)
 
         # Set the first instance of this class as the global singleton
         global _instance
         if _instance is None:
             _instance = self
 
-        if hasattr("self", "enableFeature"):
-            self.enableFeature("StrictInitializationChecks", True)
+        if hasattr(self, "enableFeature"):
+            strict = True
+            if env_strict := os.getenv("PYMM_STRICT_INIT_CHECKS", "").lower():
+                if env_strict in ("1", "true"):
+                    strict = True
+                elif env_strict in ("0", "false"):
+                    strict = False
+            self.enableFeature("StrictInitializationChecks", strict)
+
+            parallel = True
+            if env_parallel := os.getenv("PYMM_PARALLEL_INIT", "").lower():
+                if env_parallel in ("1", "true"):
+                    parallel = True
+                elif env_parallel in ("0", "false"):
+                    parallel = False
+            self.enableFeature("ParallelDeviceInitialization", parallel)
 
         # TODO: test this on windows ... writing to the same file may be an issue there
         if logfile := current_logfile(logger):

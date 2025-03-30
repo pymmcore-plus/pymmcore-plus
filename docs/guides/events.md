@@ -28,30 +28,30 @@ as the state of the microscope changes, or as an acquisition sequences progresse
 instance has been created in the main process, and `psygnal` otherwise.**
 
 If you would like to force a specific event backend, you can do so by
-setting the `MMCORE_PLUS_SIGNALS_BACKEND` environment variable to `qt`,
+setting the `PYMM_SIGNALS_BACKEND` environment variable to `qt`,
 `psygnal`, or `auto` (for the default behavior).
 
 === "bash/zsh"
 
     ```bash
-    export MMCORE_PLUS_SIGNALS_BACKEND=psygnal
+    export PYMM_SIGNALS_BACKEND=psygnal
     ```
 
 === "cmd"
     ```cmd
-    set MMCORE_PLUS_SIGNALS_BACKEND=psygnal
+    set PYMM_SIGNALS_BACKEND=psygnal
     ```
 
 === "python"
     ```python
     # before instantiating CMMCorePlus
     import os
-    os.environ["MMCORE_PLUS_SIGNALS_BACKEND"] = "psygnal"
+    os.environ["PYMM_SIGNALS_BACKEND"] = "psygnal"
     ```
 
 === "powershell"
     ```powershell
-    $env:MMCORE_PLUS_SIGNALS_BACKEND = "psygnal"
+    $env:PYMM_SIGNALS_BACKEND = "psygnal"
     ```
 
 ## Connecting callbacks to events
