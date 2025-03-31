@@ -58,7 +58,7 @@ PySide6 = ["PySide6 >=6.4.0,<6.8"]
 PyQt5 = ["PyQt5 >=5.15.4"]
 PyQt6 = ["PyQt6 >=6.4.2,<6.8"]
 test = [
-    "msgspec; python_version < '3.13'",
+    "msgspec",
     "msgpack",
     "pytest-cov >=4",
     "pytest-qt >=4",

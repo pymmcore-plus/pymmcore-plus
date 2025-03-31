@@ -35,9 +35,9 @@ jobs:
             qt: "PyQt6"
           - platform: ubuntu-latest
             python-version: "3.12"
-          # - platform: windows-latest
-          #   python-version: "3.13"
-          #   qt: "PyQt6"
+          - platform: windows-latest
+            python-version: "3.13"
+            qt: "PyQt6"
 
     steps:
       - uses: actions/checkout@v4
@@ -109,24 +109,6 @@ jobs:
           python -m pip install -e .[test,PyQt6]
           python -m pip uninstall -y pymmcore
           python -m pip install pymmcore-nano>=11.3.0.71.1
-
-      - name: Set cache path
-        shell: bash
-        run: |
-          set -e
-          CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
-          echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
-
-      - name: Cache Drivers
-        id: cache-mm-build
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
-
-      - name: Install Micro-Manager
-        if: steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: mmcore install
 
       - name: Test
         run: pytest -v --color=yes
