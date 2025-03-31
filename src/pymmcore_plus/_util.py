@@ -163,7 +163,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
             first := next(
                 (x for x in local_install if _mm_path_has_compatible_div(x)), None
             )
-        ):
+        ):  # pragma: no cover
             logger.debug("using MM path from local install: %s", first)
             return str(first)
         for x in local_install:
@@ -186,7 +186,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
                 "could not find micromanager directory. Please run 'mmcore install'"
             )
             return None
-        if _mm_path_has_compatible_div(pth):
+        if _mm_path_has_compatible_div(pth):  # pragma: no cover
             logger.debug("using MM path found in applications: %s", pth)
             return str(pth)
     if pth is not None:
@@ -682,4 +682,4 @@ def _mm_path_has_compatible_div(folder: Path | str) -> bool:
     for lib_path in Path(folder).glob("*mmgr_dal*"):
         with suppress(Exception):
             return get_device_interface_version(lib_path) == div
-    return False
+    return False  # pragma: no cover
