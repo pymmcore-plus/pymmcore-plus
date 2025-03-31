@@ -74,10 +74,6 @@ jobs:
         if: runner.os == 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
         run: mmcore build-dev
 
-      - name: Install Micro-Manager
-        if: runner.os != 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: mmcore install
-
       - name: Remove Qt
         if: runner.os == 'Linux'
         run: pip uninstall -y pytest-qt qtpy
