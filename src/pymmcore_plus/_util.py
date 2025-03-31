@@ -114,6 +114,14 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
                 return path
             full_list[path] = None
 
+    # then look for mm-device-adapters
+    try:
+        import mm_device_adapters
+
+        return mm_device_adapters.device_adapter_path()  # type: ignore
+    except ImportError:
+        pass
+
     # then look in user_data_dir
     _folders = (p for p in USER_DATA_MM_PATH.glob("Micro-Manager*") if p.is_dir())
     user_install = sorted(_folders, reverse=True)
