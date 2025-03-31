@@ -94,7 +94,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     """
     from ._logger import logger
 
-    # we use a dict here to avoid duplicates
+    # we use a dict here to avoid duplicates, while retaining order
     full_list: dict[str, None] = {}
 
     # environment variable takes precedence
@@ -114,13 +114,42 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
                 return path
             full_list[path] = None
 
+    # then look for mm-device-adapters
+    with suppress(ImportError):
+        import mm_device_adapters
+
+        from . import _pymmcore
+
+        mm_dev_div = mm_device_adapters.__version__.split(".")[0]
+        pymm_div = str(_pymmcore.version_info.device_interface)
+
+        if pymm_div != mm_dev_div:  # pragma: no cover
+            warnings.warn(
+                "mm-device-adapters installed, but its device interface "
+                f"version ({mm_dev_div}) "
+                f"does not match the device interface version of {_pymmcore.BACKEND}"
+                f"({pymm_div}). You may wish to run"
+                f" `pip install --force-reinstall mm-device-adapters=={pymm_div}`. "
+                "mm-device-adapters will be ignored.",
+                stacklevel=2,
+            )
+        else:
+            path = mm_device_adapters.device_adapter_path()
+            if return_first:
+                logger.debug("using MM path from mm-device-adapters: %s", path)
+                return str(path)
+            full_list[path] = None
+
     # then look in user_data_dir
     _folders = (p for p in USER_DATA_MM_PATH.glob("Micro-Manager*") if p.is_dir())
-    user_install = sorted(_folders, reverse=True)
-    if user_install:
-        if return_first:
-            logger.debug("using MM path from user install: %s", user_install[0])
-            return str(user_install[0])
+    if user_install := sorted(_folders, reverse=True):
+        if return_first and (
+            first := next(
+                (x for x in user_install if _mm_path_has_compatible_div(x)), None
+            )
+        ):
+            logger.debug("using MM path from user install: %s", first)
+            return str(first)
         for x in user_install:
             full_list[str(x)] = None
 
@@ -130,9 +159,13 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         p for p in PYMMCORE_PLUS_PATH.glob(f"**/Micro-Manager*{sfx}") if p.is_dir()
     ]
     if local_install:
-        if return_first:
-            logger.debug("using MM path from local install: %s", local_install[0])
-            return str(local_install[0])
+        if return_first and (
+            first := next(
+                (x for x in local_install if _mm_path_has_compatible_div(x)), None
+            )
+        ):  # pragma: no cover
+            logger.debug("using MM path from local install: %s", first)
+            return str(first)
         for x in local_install:
             full_list[str(x)] = None
 
@@ -153,8 +186,9 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
                 "could not find micromanager directory. Please run 'mmcore install'"
             )
             return None
-        logger.debug("using MM path found in applications: %s", pth)
-        return str(pth)
+        if _mm_path_has_compatible_div(pth):  # pragma: no cover
+            logger.debug("using MM path found in applications: %s", pth)
+            return str(pth)
     if pth is not None:
         full_list[str(pth)] = None
     return list(full_list)
@@ -639,3 +673,13 @@ def get_device_interface_version(lib_path: str | Path) -> int:
     func.restype = ctypes.c_long
     func.argtypes = []
     return func()  # type: ignore[no-any-return]
+
+
+def _mm_path_has_compatible_div(folder: Path | str) -> bool:
+    from . import _pymmcore
+
+    div = _pymmcore.version_info.device_interface
+    for lib_path in Path(folder).glob("*mmgr_dal*"):
+        with suppress(Exception):
+            return get_device_interface_version(lib_path) == div
+    return False  # pragma: no cover
