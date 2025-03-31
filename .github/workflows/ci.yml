@@ -64,6 +64,7 @@ jobs:
           echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
 
       - name: Cache Drivers
+        if: runner.os == 'Linux'
         id: cache-mm-build
         uses: actions/cache@v4
         with:
