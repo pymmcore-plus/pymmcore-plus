@@ -114,6 +114,32 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
                 return path
             full_list[path] = None
 
+    # then look for mm-device-adapters
+    with suppress(ImportError):
+        import mm_device_adapters
+
+        from . import _pymmcore
+
+        mm_dev_div = mm_device_adapters.__version__.split(".")[0]
+        pymm_div = str(_pymmcore.version_info.device_interface)
+
+        if pymm_div != mm_dev_div:  # pragma: no cover
+            warnings.warn(
+                "mm-device-adapters installed, but its device interface "
+                f"version ({mm_dev_div}) "
+                f"does not match the device interface version of {_pymmcore.BACKEND}"
+                f"({pymm_div}). You may wish to run"
+                f" `pip install --force-reinstall mm-device-adapters=={pymm_div}`. "
+                "mm-device-adapters will be ignored.",
+                stacklevel=2,
+            )
+        else:
+            path = mm_device_adapters.device_adapter_path()
+            if return_first:
+                logger.debug("using MM path from mm-device-adapters: %s", path)
+                return str(path)
+            full_list[path] = None
+
     # then look in user_data_dir
     _folders = (p for p in USER_DATA_MM_PATH.glob("Micro-Manager*") if p.is_dir())
     if user_install := sorted(_folders, reverse=True):
