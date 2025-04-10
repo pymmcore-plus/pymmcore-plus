@@ -57,14 +57,13 @@ jobs:
         run: pip install -e .[${{ matrix.qt }}]
 
       - name: Set cache path
-        if: runner.os == 'Linux'
+        shell: bash
         run: |
           set -e
           CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
           echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
 
       - name: Cache Drivers
-        if: runner.os == 'Linux'
         id: cache-mm-build
         uses: actions/cache@v4
         with:
@@ -74,6 +73,10 @@ jobs:
       - name: Build Micro-Manager
         if: runner.os == 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
         run: mmcore build-dev
+
+      - name: Install Micro-Manager
+        if: runner.os != 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
+        run: mmcore install
 
       - name: Remove Qt
         if: runner.os == 'Linux'
@@ -110,6 +113,24 @@ jobs:
           python -m pip install -e .[test,PyQt6]
           python -m pip uninstall -y pymmcore
           python -m pip install pymmcore-nano>=11.3.0.71.1
+
+      - name: Set cache path
+        shell: bash
+        run: |
+          set -e
+          CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
+          echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
+
+      - name: Cache Drivers
+        id: cache-mm-build
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.CACHE_PATH }}
+          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
+
+      - name: Install Micro-Manager
+        if: steps.cache-mm-build.outputs.cache-hit != 'true'
+        run: mmcore install
 
       - name: Test
         run: pytest -v --color=yes
