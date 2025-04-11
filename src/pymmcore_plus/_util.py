@@ -181,14 +181,17 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     app_path = applications[sys.platform]
     pth = next(app_path.glob("[m,M]icro-[m,M]anager*"), None)
     if return_first:
-        if pth is None:
-            logger.error(
-                "could not find micromanager directory. Please run 'mmcore install'"
-            )
-            return None
-        if _mm_path_has_compatible_div(pth):  # pragma: no cover
+        if pth and _mm_path_has_compatible_div(pth):  # pragma: no cover
             logger.debug("using MM path found in applications: %s", pth)
             return str(pth)
+        from . import _pymmcore
+
+        div = _pymmcore.version_info.device_interface
+        logger.error(
+            f"could not find micromanager directory for device interface {div}. "
+            "Please run 'mmcore install'"
+        )
+        return None
     if pth is not None:
         full_list[str(pth)] = None
     return list(full_list)
@@ -659,9 +662,9 @@ def get_device_interface_version(lib_path: str | Path) -> int:
     import ctypes
 
     if sys.platform.startswith("win"):
-        lib = ctypes.WinDLL(lib_path)
+        lib = ctypes.WinDLL(str(lib_path))
     else:
-        lib = ctypes.CDLL(lib_path)
+        lib = ctypes.CDLL(str(lib_path))
 
     try:
         func = lib.GetDeviceInterfaceVersion
