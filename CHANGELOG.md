@@ -1,5 +1,18 @@
 # Changelog
 
+## [v0.13.7](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.7) (2025-04-11)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.6...v0.13.7)
+
+**Fixed bugs:**
+
+- chore: revert mm-device-adapters usage in tests [\#460](https://github.com/pymmcore-plus/pymmcore-plus/pull/460) ([tlambert03](https://github.com/tlambert03))
+- fix: Change to MM directory for `mmcore mmstudio` [\#459](https://github.com/pymmcore-plus/pymmcore-plus/pull/459) ([marktsuchida](https://github.com/marktsuchida))
+
+**Merged pull requests:**
+
+- ci\(pre-commit.ci\): autoupdate [\#458](https://github.com/pymmcore-plus/pymmcore-plus/pull/458) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+
 ## [v0.13.6](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.6) (2025-03-31)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.5...v0.13.6)
