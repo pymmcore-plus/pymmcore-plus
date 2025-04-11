@@ -184,8 +184,12 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         if pth and _mm_path_has_compatible_div(pth):  # pragma: no cover
             logger.debug("using MM path found in applications: %s", pth)
             return str(pth)
+        from . import _pymmcore
+
+        div = _pymmcore.version_info.device_interface
         logger.error(
-            "could not find micromanager directory. Please run 'mmcore install'"
+            f"could not find micromanager directory for device interface {div}. "
+            "Please run 'mmcore install'"
         )
         return None
     if pth is not None:
