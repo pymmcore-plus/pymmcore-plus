@@ -658,9 +658,9 @@ def get_device_interface_version(lib_path: str | Path) -> int:
     import ctypes
 
     if sys.platform.startswith("win"):
-        lib = ctypes.WinDLL(lib_path)
+        lib = ctypes.WinDLL(str(lib_path))
     else:
-        lib = ctypes.CDLL(lib_path)
+        lib = ctypes.CDLL(str(lib_path))
 
     try:
         func = lib.GetDeviceInterfaceVersion
