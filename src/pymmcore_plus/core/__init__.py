@@ -1,10 +1,14 @@
 __all__ = [
     "ActionType",
+    "AutoFocusDevice",
     "CFGCommand",
     "CFGGroup",
     "CMMCorePlus",
+    "CameraDevice",
     "ConfigGroup",
     "Configuration",
+    "CoreDevice",
+    "Device",
     "Device",
     "DeviceAdapter",
     "DeviceDetectionStatus",
@@ -13,12 +17,24 @@ __all__ = [
     "DeviceProperty",
     "DeviceType",
     "FocusDirection",
+    "GalvoDevice",
+    "GenericDevice",
+    "HubDevice",
+    "ImageProcessorDevice",
     "Keyword",
+    "MagnifierDevice",
     "Metadata",
     "PixelFormat",
     "PortType",
     "PropertyType",
+    "SLMDevice",
     "SequencedEvent",
+    "SerialDevice",
+    "ShutterDevice",
+    "SignalIODevice",
+    "StageDevice",
+    "StateDevice",
+    "XYStageDevice",
     "iter_sequenced_events",
 ]
 
@@ -39,7 +55,24 @@ from ._constants import (
     PortType,
     PropertyType,
 )
-from ._device import Device
+from ._device import (
+    AutoFocusDevice,
+    CameraDevice,
+    CoreDevice,
+    Device,
+    GalvoDevice,
+    GenericDevice,
+    HubDevice,
+    ImageProcessorDevice,
+    MagnifierDevice,
+    SerialDevice,
+    ShutterDevice,
+    SignalIODevice,
+    SLMDevice,
+    StageDevice,
+    StateDevice,
+    XYStageDevice,
+)
 from ._metadata import Metadata
 from ._mmcore_plus import CMMCorePlus
 from ._property import DeviceProperty
