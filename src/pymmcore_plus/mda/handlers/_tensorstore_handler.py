@@ -306,7 +306,9 @@ class TensorStoreHandler:
             ]
 
         if self.ts_driver.startswith("zarr"):
-            store.kvstore.write(".zattrs", json_dumps(metadata).decode("utf-8"))
+            store.kvstore.write(
+                ".zattrs", json_dumps(metadata).decode("utf-8")
+            ).result()
         elif self.ts_driver == "n5":  # pragma: no cover
             attrs = json_loads(store.kvstore.read("attributes.json").result().value)
             attrs.update(metadata)
