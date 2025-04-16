@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import dataclasses
 from contextlib import suppress
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
 from typing import TYPE_CHECKING
 
 from pymmcore_plus import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus._util import no_stdout
+from pymmcore_plus.core._constants import DeviceInitializationState
 
 from ._core_link import CoreObject
 from ._property import Property
@@ -193,17 +194,28 @@ class Device(CoreObject):
             raise RuntimeError(f"Device {self.name} is not loaded in the core.")
 
         self.device_type = core.getDeviceType(self.name)
-        self.CORE_GETTERS = {
-            DeviceType.StateDevice: STATE_DEVICE_GETTERS,
-            DeviceType.StageDevice: STAGE_DEVICE_GETTERS,
-            DeviceType.Hub: HUB_DEVICE_GETTERS,
-        }.get(self.device_type, DEVICE_GETTERS)
+        self._update_core_getters()
 
         super().update_from_core(core, exclude=exclude, on_err=on_err)
         self.properties = [
             Property.create_from_core(core, device_name=self.name, name=prop_name)
             for prop_name in core.getDevicePropertyNames(self.name)
         ]
+
+    # pulled out for the sake of picklability
+    def _update_core_getters(self) -> None:
+        self.CORE_GETTERS = {
+            DeviceType.StateDevice: STATE_DEVICE_GETTERS,
+            DeviceType.StageDevice: STAGE_DEVICE_GETTERS,
+            DeviceType.Hub: HUB_DEVICE_GETTERS,
+        }.get(self.device_type, DEVICE_GETTERS)
+
+    def __reduce__(self) -> str | tuple[Any, ...]:
+        return self.__class__, (), asdict(self)
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        self.__dict__.update(state)
+        self._update_core_getters()
 
     def load(self, core: CMMCorePlus, *, reload: bool = False) -> None:
         """Load device properties from the core."""
@@ -399,6 +411,11 @@ def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:
     for hub in core.getLoadedDevicesOfType(DeviceType.Hub):
         lib_name = core.getDeviceLibrary(hub)
         hub_dev = library_to_hub.get((lib_name, hub))
+        if (
+            core.getDeviceInitializationState(hub)
+            != DeviceInitializationState.InitializedSuccessfully
+        ):
+            continue
         for child in core.getInstalledDevices(hub):
             dev = AvailableDevice(
                 library=lib_name, adapter_name=child, library_hub=hub_dev

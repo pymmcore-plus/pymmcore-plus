@@ -4,6 +4,7 @@ import os
 from unittest.mock import patch
 
 os.environ["PYTEST_RUNNING"] = "1"
+from typing import TYPE_CHECKING, Any
 
 import pytest
 
@@ -11,6 +12,9 @@ import pymmcore_plus
 from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator
 
 try:
     from pymmcore_plus.core.events import QCoreSignaler
@@ -20,9 +24,11 @@ try:
 except ImportError:
     PARAMS = ["psygnal"]
 
+logger.setLevel("CRITICAL")
+
 
 @pytest.fixture(params=PARAMS, scope="function")
-def core(request):
+def core(request: Any) -> Iterator[pymmcore_plus.CMMCorePlus]:
     core = pymmcore_plus.CMMCorePlus()
     core.mda.engine.use_hardware_sequencing = False
     if request.param == "psygnal":
@@ -36,11 +42,12 @@ def core(request):
     if not core.getDeviceAdapterSearchPaths():
         pytest.fail("To run tests, please install MM with `mmcore install`")
     core.loadSystemConfiguration()
-    return core
+    yield core
+    core.__del__()
 
 
 @pytest.fixture
-def mock_fullfocus(core: pymmcore_plus.CMMCorePlus):
+def mock_fullfocus(core: pymmcore_plus.CMMCorePlus) -> Iterator[None]:
     def _fullfocus():
         core.setZPosition(core.getZPosition() + 50)
 
@@ -49,7 +56,7 @@ def mock_fullfocus(core: pymmcore_plus.CMMCorePlus):
 
 
 @pytest.fixture
-def mock_fullfocus_failure(core: pymmcore_plus.CMMCorePlus):
+def mock_fullfocus_failure(core: pymmcore_plus.CMMCorePlus) -> Iterator[None]:
     def _fullfocus():
         raise RuntimeError()
 
@@ -58,7 +65,7 @@ def mock_fullfocus_failure(core: pymmcore_plus.CMMCorePlus):
 
 
 @pytest.fixture
-def caplog(caplog: pytest.LogCaptureFixture):
+def caplog(caplog: pytest.LogCaptureFixture) -> Iterator[pytest.LogCaptureFixture]:
     logger.addHandler(caplog.handler)
     try:
         yield caplog
@@ -66,7 +73,34 @@ def caplog(caplog: pytest.LogCaptureFixture):
         logger.removeHandler(caplog.handler)
 
 
-def pytest_collection_modifyitems(session, config, items: list[pytest.Function]):
-    # putting test_cli_logs first, because I can't figure out how to mock the log
-    # file after the core fixture has been created :/
-    items.sort(key=lambda item: item.name != "test_cli_logs")
+def pytest_collection_modifyitems(session, config, items):
+    last_items = []
+    first_items = []
+    other_items = []
+    for item in items:
+        if "run_last" in item.keywords:
+            last_items.append(item)
+        elif "run_first" in item.keywords:
+            first_items.append(item)
+        else:
+            other_items.append(item)
+    items[:] = first_items + other_items + last_items
+
+
+# requires psutil
+# @pytest.fixture(autouse=True)
+# def monitor_file_descriptors():
+#     import psutil
+
+#     process = psutil.Process(os.getpid())
+#     before_fds = process.num_fds()
+
+#     yield
+
+#     if _mmcore_plus._instance:
+#         _mmcore_plus._instance.__del__()
+#         _mmcore_plus._instance = None
+
+#     after_fds = process.num_fds()
+#     if after_fds > before_fds:
+#         print(f"File descriptors leaked: {after_fds} > {before_fds}")

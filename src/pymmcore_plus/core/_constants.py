@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from enum import Enum, IntEnum
-from typing import Literal
+from enum import Enum, IntEnum, auto
+from typing import Any, Literal
 
-import pymmcore
+import pymmcore_plus._pymmcore as pymmcore
 
 # NOTE: by using pymmcore.attributes, we guarantee that the values are the same
 # however, we also risk AttributeErrors in the future.
@@ -94,6 +94,14 @@ class CFGCommand(str, Enum):
     PixelSizeAffine = pymmcore.g_CFGCommand_PixelSizeAffine
     ParentID = pymmcore.g_CFGCommand_ParentID
     FocusDirection = pymmcore.g_CFGCommand_FocusDirection
+
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizedxdz"):
+        PixelSize_dxdz = pymmcore.g_CFGCommand_PixelSizedxdz
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizedydz"):
+        PixelSize_dydz = pymmcore.g_CFGCommand_PixelSizedydz
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizeOptimalZUm"):
+        PixelSize_OptimalZUm = pymmcore.g_CFGCommand_PixelSizeOptimalZUm
+
     #
     FieldDelimiters = pymmcore.g_FieldDelimiters
 
@@ -157,6 +165,7 @@ class PropertyType(IntEnum):
     String = pymmcore.String
     Float = pymmcore.Float
     Integer = pymmcore.Integer
+    Boolean = auto()  # not supported in pymmcore
 
     def to_python(self) -> type | None:
         return {0: None, 1: str, 2: float, 3: int}[self]
@@ -166,6 +175,29 @@ class PropertyType(IntEnum):
 
     def __repr__(self) -> Literal["undefined", "float", "int", "str"]:
         return getattr(self.to_python(), "__name__", "undefined")
+
+    @classmethod
+    def create(cls, value: Any) -> PropertyType:
+        if isinstance(value, PropertyType):
+            return value
+        if value is None:
+            return PropertyType.Undef
+        if isinstance(value, str):
+            return PropertyType[value.lower().capitalize()]
+        if isinstance(value, type):
+            if value is float:
+                return PropertyType.Float
+            elif value is int:
+                return PropertyType.Integer
+            elif value is str:
+                return PropertyType.String
+            elif value is bool:
+                return PropertyType.Boolean
+
+        raise TypeError(
+            f"Property type must be a PropertyType enum member, "
+            f"a string, or a type. Got: {type(value)}"
+        )
 
 
 class ActionType(IntEnum):
@@ -185,10 +217,15 @@ class PortType(IntEnum):
     HIDPort = pymmcore.HIDPort
 
 
+# NB:
+# do *not* use `pymmcore.FocusDirection...` enums here.
+# the MMCore API does not use the device enums (which is what pymmcore exposes)
+# but instead translates MM::FocusDirectionTowardSample into a different number:
+# https://github.com/micro-manager/mmCoreAndDevices/tree/MMCore/MMCore.cpp#L2063-L2074
 class FocusDirection(IntEnum):
-    Unknown = pymmcore.FocusDirectionUnknown
-    TowardSample = pymmcore.FocusDirectionTowardSample
-    AwayFromSample = pymmcore.FocusDirectionAwayFromSample
+    Unknown = 0
+    TowardSample = 1
+    AwayFromSample = -1
     # aliases
     FocusDirectionUnknown = Unknown
     FocusDirectionTowardSample = TowardSample

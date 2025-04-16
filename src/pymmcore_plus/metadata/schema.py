@@ -4,16 +4,16 @@ import useq
 from typing_extensions import NotRequired
 
 __all__ = [
-    "FrameMetaV1",
-    "SummaryMetaV1",
     "ConfigGroup",
     "ConfigPreset",
     "DeviceInfo",
+    "FrameMetaV1",
     "ImageInfo",
     "PixelSizeConfigPreset",
     "Position",
     "PropertyInfo",
     "PropertyValue",
+    "SummaryMetaV1",
     "SystemInfo",
 ]
 
@@ -331,10 +331,29 @@ class PixelSizeConfigPreset(ConfigPreset):
         corrected for binning and known magnification devices. The affine transform
         consists of the first two rows of a 3x3 matrix, the third row is always assumed
         to be 0.0 0.0 1.0.
+
+    pixel_size_dxdz : float
+        *Not Required*. The angle between the camera's x axis and the axis (direction)
+        of the z drive for the given pixel size configuration. This angle is
+        dimensionless (i.e. the ratio of the translation in x caused by a translation
+        in z, i.e. dx / dz). If missing, assume 0.0.
+    pixel_size_dydz : float
+        *Not Required*. The angle between the camera's y axis and the axis (direction)
+        of the z drive for the given pixel size configuration. This angle is
+        dimensionless (i.e. the ratio of the translation in y caused by a translation
+        in z, i.e. dy / dz). If missing, assume 0.0.
+    pixel_size_optimal_z_um : float
+        *Not Required*. User-defined optimal Z step size is for this pixel size config.
+        If missing, assume 0.0.
     """
 
     pixel_size_um: float
     pixel_size_affine: NotRequired[AffineTuple]
+
+    # added in MMCore v 11.5
+    pixel_size_dxdz: NotRequired[float]  # default 0.0
+    pixel_size_dydz: NotRequired[float]  # default 0.0
+    pixel_size_optimal_z_um: NotRequired[float]  # default 0.0
 
 
 class ConfigGroup(TypedDict):
@@ -430,14 +449,15 @@ class FrameMetaV1(TypedDict):
         The label of the camera device used to acquire the image.
     exposure_ms: float
         The exposure time in milliseconds.
-    position: Position
-        The current stage position(s) in 3D space.
     property_values: tuple[PropertyValue, ...]
         Device property settings.  This is not a comprehensive list of all device
         properties, but only those that may have changed for this frame (such as
         properties in the channel config or light path config).
     runner_time_ms: float
         Elapsed time in milliseconds since the beginning of the MDA sequence.
+    position: Position
+        *NotRequired*. The current stage position(s) in 3D space.  This is often slow
+        to retrieve, so its inclusion is optional and left to the implementer.
     mda_event: useq.MDAEvent
         *NotRequired*. The MDA event object that commanded the acquisition of this
         frame.
@@ -461,9 +481,9 @@ class FrameMetaV1(TypedDict):
     pixel_size_um: float
     camera_device: Optional[str]
     exposure_ms: float
-    position: Position
     property_values: tuple[PropertyValue, ...]
     runner_time_ms: float
+    position: NotRequired[Position]
     mda_event: NotRequired[useq.MDAEvent]
     hardware_triggered: NotRequired[bool]
     images_remaining_in_buffer: NotRequired[int]

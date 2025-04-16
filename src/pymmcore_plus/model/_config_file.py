@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any, Callable
 
-from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword
+from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword, _pymmcore
 from pymmcore_plus._util import timestamp
 
 from ._config_group import ConfigGroup, ConfigPreset, Setting
@@ -20,7 +20,7 @@ if TYPE_CHECKING:
 
     Executor: TypeAlias = Callable[[Microscope, Sequence[str]], None]
 
-__all__ = ["load_from_string", "dump"]
+__all__ = ["dump", "load_from_string"]
 
 
 def load_from_string(text: str, scope: Microscope | None = None) -> Microscope:
@@ -162,6 +162,12 @@ def iter_pixel_size_presets(scope: Microscope) -> Iterable[str]:
         yield _serialize(CFGCommand.PixelSize_um, p.name, p.pixel_size_um)
         if p.affine != DEFAULT_AFFINE:
             yield _serialize(CFGCommand.PixelSizeAffine, p.name, *p.affine)
+        if p.angle_dxdz and (cmd := getattr(CFGCommand, "PixelSizeAngleDxdz", None)):
+            yield _serialize(cmd, p.name, p.angle_dxdz)
+        if p.angle_dydz and (cmd := getattr(CFGCommand, "PixelSizeAngleDydz", None)):
+            yield _serialize(cmd, p.name, p.angle_dydz)
+        if p.optimalz_um and (cmd := getattr(CFGCommand, "PixelSize_OptimalZUm", None)):
+            yield _serialize(cmd, p.name, p.optimalz_um)
 
 
 # Order will determine the order of the sections in the file
@@ -180,9 +186,16 @@ CONFIG_SECTIONS: dict[str, Callable[[Microscope], Iterable[str]]] = {
     "Camera-synchronized devices": lambda _: [],
     "Labels": iter_labels,
     "Configuration presets": iter_config_presets,
-    "Roles": iter_roles,  # MMStudio puts this above Cam-Synched devices, MMCore here.
-    "PixelSize settings": iter_pixel_size_presets,
 }
+
+
+if _pymmcore.version_info >= (11, 5):
+    CONFIG_SECTIONS["PixelSize settings"] = iter_pixel_size_presets
+    CONFIG_SECTIONS["Roles"] = iter_roles
+else:
+    CONFIG_SECTIONS["Roles"] = iter_roles
+    CONFIG_SECTIONS["PixelSize settings"] = iter_pixel_size_presets
+
 
 # ------------------ Deserialization ------------------
 
@@ -209,18 +222,28 @@ def run_command(line: str, scope: Microscope) -> None:
         return
 
     exec_cmd, expected_n_args = COMMAND_EXECUTORS[command]
+    should_raise = command in SHOULD_RAISE
 
     if (nargs := len(args) + 1) not in expected_n_args:
         exp_str = " or ".join(map(str, expected_n_args))
-        raise ValueError(
+        msg = (
             f"Invalid configuration line encountered for command {cmd_name}. "
             f"Expected {exp_str} arguments, got {nargs}: {line!r}"
         )
+        if should_raise:
+            raise ValueError(msg)
+        else:
+            warnings.warn(msg, RuntimeWarning, stacklevel=2)
+            return
 
     try:
         exec_cmd(scope, args)
     except Exception as exc:
-        raise ValueError(f"Error executing command {line!r}: {exc}") from exc
+        if should_raise:
+            raise ValueError(f"Error executing command {line!r}: {exc}") from exc
+        warnings.warn(
+            f"Failed to execute command {line!r}: {exc}", RuntimeWarning, stacklevel=2
+        )
 
 
 def _exec_Device(scope: Microscope, args: Sequence[str]) -> None:
@@ -352,3 +375,6 @@ COMMAND_EXECUTORS: dict[CFGCommand, tuple[Executor, set[int]]] = {
     CFGCommand.ParentID: (_exec_ParentID, {3}),
     CFGCommand.FocusDirection: (_exec_FocusDirection, {3}),
 }
+
+# Commands that should raise when fail
+SHOULD_RAISE = {CFGCommand.Device, CFGCommand.Property}

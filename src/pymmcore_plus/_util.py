@@ -39,7 +39,7 @@ except ImportError:
     from contextlib import nullcontext as no_stdout
 
 
-__all__ = ["find_micromanager", "retry", "no_stdout", "signals_backend"]
+__all__ = ["find_micromanager", "no_stdout", "retry", "signals_backend"]
 
 APP_NAME = "pymmcore-plus"
 USER_DATA_DIR = Path(user_data_dir(appname=APP_NAME))
@@ -94,7 +94,7 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     """
     from ._logger import logger
 
-    # we use a dict here to avoid duplicates
+    # we use a dict here to avoid duplicates, while retaining order
     full_list: dict[str, None] = {}
 
     # environment variable takes precedence
@@ -114,13 +114,42 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
                 return path
             full_list[path] = None
 
+    # then look for mm-device-adapters
+    with suppress(ImportError):
+        import mm_device_adapters
+
+        from . import _pymmcore
+
+        mm_dev_div = mm_device_adapters.__version__.split(".")[0]
+        pymm_div = str(_pymmcore.version_info.device_interface)
+
+        if pymm_div != mm_dev_div:  # pragma: no cover
+            warnings.warn(
+                "mm-device-adapters installed, but its device interface "
+                f"version ({mm_dev_div}) "
+                f"does not match the device interface version of {_pymmcore.BACKEND}"
+                f"({pymm_div}). You may wish to run"
+                f" `pip install --force-reinstall mm-device-adapters=={pymm_div}`. "
+                "mm-device-adapters will be ignored.",
+                stacklevel=2,
+            )
+        else:
+            path = mm_device_adapters.device_adapter_path()
+            if return_first:
+                logger.debug("using MM path from mm-device-adapters: %s", path)
+                return str(path)
+            full_list[path] = None
+
     # then look in user_data_dir
     _folders = (p for p in USER_DATA_MM_PATH.glob("Micro-Manager*") if p.is_dir())
-    user_install = sorted(_folders, reverse=True)
-    if user_install:
-        if return_first:
-            logger.debug("using MM path from user install: %s", user_install[0])
-            return str(user_install[0])
+    if user_install := sorted(_folders, reverse=True):
+        if return_first and (
+            first := next(
+                (x for x in user_install if _mm_path_has_compatible_div(x)), None
+            )
+        ):
+            logger.debug("using MM path from user install: %s", first)
+            return str(first)
         for x in user_install:
             full_list[str(x)] = None
 
@@ -130,9 +159,13 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
         p for p in PYMMCORE_PLUS_PATH.glob(f"**/Micro-Manager*{sfx}") if p.is_dir()
     ]
     if local_install:
-        if return_first:
-            logger.debug("using MM path from local install: %s", local_install[0])
-            return str(local_install[0])
+        if return_first and (
+            first := next(
+                (x for x in local_install if _mm_path_has_compatible_div(x)), None
+            )
+        ):  # pragma: no cover
+            logger.debug("using MM path from local install: %s", first)
+            return str(first)
         for x in local_install:
             full_list[str(x)] = None
 
@@ -148,13 +181,17 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
     app_path = applications[sys.platform]
     pth = next(app_path.glob("[m,M]icro-[m,M]anager*"), None)
     if return_first:
-        if pth is None:
-            logger.error(
-                "could not find micromanager directory. Please run 'mmcore install'"
-            )
-            return None
-        logger.debug("using MM path found in applications: %s", pth)
-        return str(pth)
+        if pth and _mm_path_has_compatible_div(pth):  # pragma: no cover
+            logger.debug("using MM path found in applications: %s", pth)
+            return str(pth)
+        from . import _pymmcore
+
+        div = _pymmcore.version_info.device_interface
+        logger.error(
+            f"could not find micromanager directory for device interface {div}. "
+            "Please run 'mmcore install'"
+        )
+        return None
     if pth is not None:
         full_list[str(pth)] = None
     return list(full_list)
@@ -229,15 +266,15 @@ def _qt_app_is_running() -> bool:
     return False  # pragma: no cover
 
 
-MMCORE_PLUS_SIGNALS_BACKEND = "MMCORE_PLUS_SIGNALS_BACKEND"
+PYMM_SIGNALS_BACKEND = "PYMM_SIGNALS_BACKEND"
 
 
 def signals_backend() -> Literal["qt", "psygnal"]:
     """Return the name of the event backend to use."""
-    env_var = os.environ.get(MMCORE_PLUS_SIGNALS_BACKEND, "auto").lower()
+    env_var = os.environ.get(PYMM_SIGNALS_BACKEND, "auto").lower()
     if env_var not in {"qt", "psygnal", "auto"}:
         warnings.warn(
-            f"{MMCORE_PLUS_SIGNALS_BACKEND} must be one of ['qt', 'psygnal', 'auto']. "
+            f"{PYMM_SIGNALS_BACKEND} must be one of ['qt', 'psygnal', 'auto']. "
             f"not: {env_var!r}. Using 'auto'.",
             stacklevel=1,
         )
@@ -250,7 +287,7 @@ def signals_backend() -> Literal["qt", "psygnal"]:
         if qt_app_running or list(_imported_qt_modules()):
             return "qt"
         warnings.warn(
-            f"{MMCORE_PLUS_SIGNALS_BACKEND} set to 'qt', but no Qt app is running. "
+            f"{PYMM_SIGNALS_BACKEND} set to 'qt', but no Qt app is running. "
             "Falling back to 'psygnal'.",
             stacklevel=1,
         )
@@ -418,13 +455,10 @@ def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
     """Return a list of rows, sorted by the given column name."""
     rows = list(zip(*data.values()))
     if sort is not None:
-        try:
+        with suppress(ValueError):
+            # silently ignore if the sort column is not found
             sort_idx = [x.lower() for x in data].index(sort.lower())
-        except ValueError:  # pragma: no cover
-            raise ValueError(
-                f"invalid sort column: {sort!r}. Must be one of {list(data)}"
-            ) from None
-        rows.sort(key=lambda x: x[sort_idx])
+            rows.sort(key=lambda x: x[sort_idx])
     return rows
 
 
@@ -550,16 +584,25 @@ def system_info() -> dict[str, str]:
 
     This backs the `mmcore info` command in the CLI.
     """
-    import pymmcore
-
     import pymmcore_plus
 
     info = {
         "python": sys.version,
         "platform": platform.platform(),
         "pymmcore-plus": getattr(pymmcore_plus, "__version__", "err"),
-        "pymmcore": getattr(pymmcore, "__version__", "err"),
     }
+    try:
+        import pymmcore
+
+        info["pymmcore"] = getattr(pymmcore, "__version__", "err")
+    except ImportError:
+        info["pymmcore"] = ""
+    try:
+        import pymmcore_nano
+
+        info["pymmcore-nano"] = getattr(pymmcore_nano, "__version__", "err")
+    except ImportError:
+        info["pymmcore-nano"] = ""
 
     with suppress(Exception):
         core = pymmcore_plus.CMMCorePlus.instance()
@@ -612,3 +655,34 @@ def timestamp() -> str:
     with suppress(Exception):
         now = now.astimezone()
     return now.isoformat()
+
+
+def get_device_interface_version(lib_path: str | Path) -> int:
+    """Return the device interface version from the given library path."""
+    import ctypes
+
+    if sys.platform.startswith("win"):
+        lib = ctypes.WinDLL(str(lib_path))
+    else:
+        lib = ctypes.CDLL(str(lib_path))
+
+    try:
+        func = lib.GetDeviceInterfaceVersion
+    except AttributeError:
+        raise RuntimeError(
+            f"Function 'GetDeviceInterfaceVersion' not found in {lib_path}"
+        ) from None
+
+    func.restype = ctypes.c_long
+    func.argtypes = []
+    return func()  # type: ignore[no-any-return]
+
+
+def _mm_path_has_compatible_div(folder: Path | str) -> bool:
+    from . import _pymmcore
+
+    div = _pymmcore.version_info.device_interface
+    for lib_path in Path(folder).glob("*mmgr_dal*"):
+        with suppress(Exception):
+            return get_device_interface_version(lib_path) == div
+    return False  # pragma: no cover

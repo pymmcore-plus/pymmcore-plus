@@ -1,17 +1,16 @@
 import os
 import re
+from collections.abc import Mapping
 from pathlib import Path
-from threading import Thread
 from typing import TYPE_CHECKING, Any, Callable
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 import psygnal
-import pymmcore
 import pytest
-from pymmcore import CMMCore, PropertySetting
 from useq import MDASequence
 
+import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus import (
     CMMCorePlus,
     Configuration,
@@ -34,9 +33,9 @@ except ImportError:
     QSignalInstance = None
 
 
-def test_core(core: CMMCorePlus):
+def test_core(core: CMMCorePlus) -> None:
     assert isinstance(core, CMMCorePlus)
-    assert isinstance(core, CMMCore)
+    assert isinstance(core, pymmcore.CMMCore)
     # because the fixture tries to find micromanager, this should be populated
     assert core.getDeviceAdapterSearchPaths()
     assert isinstance(
@@ -54,7 +53,7 @@ def test_core(core: CMMCorePlus):
     assert "CMMCorePlus" in repr(core)
 
 
-def test_search_paths(core: CMMCorePlus):
+def test_search_paths(core: CMMCorePlus) -> None:
     """Make sure search paths get added to path"""
     core.setDeviceAdapterSearchPaths(["test_path"])
     assert "test_path" in os.getenv("PATH")
@@ -63,14 +62,14 @@ def test_search_paths(core: CMMCorePlus):
         core.setDeviceAdapterSearchPaths("test_path")
 
 
-def test_load_system_config(core: CMMCorePlus):
+def test_load_system_config(core: CMMCorePlus) -> None:
     with pytest.raises(FileNotFoundError):
         core.loadSystemConfiguration("nonexistent")
 
     config_path = Path(__file__).parent / "local_config.cfg"
     core.loadSystemConfiguration(str(config_path))
     assert core.systemConfigurationFile() == str(config_path)
-    assert core.getLoadedDevices() == (
+    assert tuple(core.getLoadedDevices()) == (
         "DHub",
         "Camera",
         "Dichroic",
@@ -87,7 +86,7 @@ def test_load_system_config(core: CMMCorePlus):
 
 
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot: "QtBot"):
+def test_cb_exceptions(core: CMMCorePlus, caplog: Any, qtbot: "QtBot") -> None:
     if not isinstance(core.events, QObject):
         pytest.skip(reason="Skip cb exceptions on psygnal.")
 
@@ -111,7 +110,7 @@ def test_cb_exceptions(core: CMMCorePlus, caplog, qtbot: "QtBot"):
         assert str(exceptions[0][1]) == "Boom"
 
 
-def test_new_position_methods(core: CMMCorePlus):
+def test_new_position_methods(core: CMMCorePlus) -> None:
     x1, y1 = core.getXYPosition()
     z1 = core.getZPosition()
 
@@ -188,8 +187,11 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
 
 
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
+def test_mda_pause_cancel(qtbot: "QtBot") -> None:
     """Test signal emission during MDA with cancelation"""
+    core = CMMCorePlus.instance()
+    core.loadSystemConfiguration()
+
     mda = MDASequence(
         time_plan={"interval": 0.25, "loops": 10},
         stage_positions=[(1, 1, 1)],
@@ -232,7 +234,7 @@ def test_mda_pause_cancel(core: CMMCorePlus, qtbot: "QtBot"):
 
 
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
+def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot") -> None:
     orig_engine = core.mda.engine
     assert orig_engine and orig_engine.mmcore is core
 
@@ -263,7 +265,7 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot"):
 
 
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_not_concurrent_mdas(core, qtbot: "QtBot"):
+def test_not_concurrent_mdas(core: CMMCorePlus, qtbot: "QtBot") -> None:
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
         stage_positions=[(1, 1, 1)],
@@ -273,13 +275,15 @@ def test_not_concurrent_mdas(core, qtbot: "QtBot"):
     core.mda._running = True
     assert core.mda.is_running()
     with pytest.raises(ValueError):
-        core.run_mda(mda)
+        thread = core.run_mda(mda)
+        thread.join()
     core.mda._running = False
-    core.run_mda(mda)
+    thread = core.run_mda(mda)
     core.mda.cancel()
+    thread.join()
 
 
-def test_device_type_overrides(core: CMMCorePlus):
+def test_device_type_overrides(core: CMMCorePlus) -> None:
     dt = core.getDeviceType("Camera")
     assert isinstance(dt, DeviceType)
     assert str(dt) == "Camera"
@@ -289,7 +293,7 @@ def test_device_type_overrides(core: CMMCorePlus):
     assert dt == DeviceType(2)
 
 
-def test_property_type_overrides(core: CMMCorePlus):
+def test_property_type_overrides(core: CMMCorePlus) -> None:
     pt = core.getPropertyType("Camera", "Binning")
     assert isinstance(pt, PropertyType)
     assert pt.to_python() is int
@@ -301,7 +305,7 @@ def test_detect_device(core: CMMCorePlus):
     assert dds == -2 == DeviceDetectionStatus.Unimplemented
 
 
-def test_metadata(core: CMMCorePlus):
+def test_metadata(core: CMMCorePlus) -> None:
     core.startContinuousSequenceAcquisition(10)
     core.stopSequenceAcquisition()
     image, md = core.getLastImageAndMD()
@@ -336,21 +340,31 @@ def test_new_metadata():
     assert isinstance(md, pymmcore.Metadata)
 
 
-def test_md_(core: CMMCorePlus):
+def test_get_image_and_meta(core: CMMCorePlus) -> None:
     core.startContinuousSequenceAcquisition(10)
     core.stopSequenceAcquisition()
 
     image, md = core.getNBeforeLastImageAndMD(0)
-    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
+    assert isinstance(image, np.ndarray)
+    assert isinstance(md, Metadata)
+    assert "TimeReceivedByCore" in md
 
     image, md = core.getLastImageAndMD()
-    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
+    assert isinstance(image, np.ndarray)
+    assert isinstance(md, Metadata)
+    assert "TimeReceivedByCore" in md
 
     image, md = core.popNextImageAndMD()
-    assert isinstance(image, np.ndarray) and isinstance(md, Metadata)
+    assert isinstance(image, np.ndarray)
+    assert isinstance(md, Metadata)
+    assert "TimeReceivedByCore" in md
+
+    assert Metadata(md) == md
+    assert isinstance(md, Mapping)
+    assert issubclass(Metadata, Mapping)
 
 
-def test_configuration(core: CMMCorePlus):
+def test_configuration(core: CMMCorePlus) -> None:
     state = core.getSystemState()
     assert isinstance(state, Configuration)
     assert not isinstance(core.getSystemState(native=True), Configuration)
@@ -367,7 +381,7 @@ def test_configuration(core: CMMCorePlus):
         assert "Camera" in state
 
     assert state["Camera", "Binning"] == "1"
-    assert PropertySetting("Camera", "Binning", "1") in state
+    assert pymmcore.PropertySetting("Camera", "Binning", "1") in state
     assert state in state
 
     assert ("Camera", "Binning") in state
@@ -386,14 +400,14 @@ def test_config_create():
     assert cfg1.html()
 
 
-def test_property_schema(core: CMMCorePlus):
+def test_property_schema(core: CMMCorePlus) -> None:
     schema = core.getDeviceSchema("Camera")
     assert isinstance(schema, dict)
     assert schema["title"] == "DCam"
     assert schema["properties"]["AllowMultiROI"] == {"type": "boolean"}
 
 
-def test_get_objectives(core: CMMCorePlus):
+def test_get_objectives(core: CMMCorePlus) -> None:
     devices = core.guessObjectiveDevices()
     assert len(devices) == 1
     assert devices[0] == "Objective"
@@ -412,7 +426,7 @@ def test_get_objectives(core: CMMCorePlus):
     assert devices[0] == "Objective"
 
 
-def test_guess_channel_group(core: CMMCorePlus):
+def test_guess_channel_group(core: CMMCorePlus) -> None:
     chan_group = core.getChannelGroup()
     assert chan_group == "Channel"
 
@@ -441,74 +455,25 @@ def test_guess_channel_group(core: CMMCorePlus):
         assert chan_group == ["Channel", "Channel-Multiband"]
 
 
-@pytest.mark.skipif(
-    os.getenv("CI", None) is not None and os.name == "nt",
-    reason="CI on windows is broken",
-)
-@pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_lock_and_callbacks(core: CMMCorePlus, qtbot: "QtBot") -> None:
-    if not isinstance(core.events, QObject):
-        pytest.skip(reason="Skip lock tests on psygnal until we can remove qtbot.")
-
-    # when a function with a lock triggers a callback
-    # that callback should be able to call locked functions
-    # without hanging.
-
-    # do some threading silliness here so we don't accidentally hang our
-    # test if things go wrong have to use *got_lock* to check because we
-    # can't assert in the function as threads don't throw their exceptions
-    # back into the calling thread.
-    got_lock = False
-
-    def cb(*args, **kwargs):
-        nonlocal got_lock
-        got_lock = core._lock.acquire(timeout=0.1)
-        if got_lock:
-            core._lock.release()
-
-    core.events.XYStagePositionChanged.connect(cb)
-
-    def trigger_cb():
-        core.setXYPosition(4, 5)
-
-    th = Thread(target=trigger_cb)
-    with qtbot.waitSignal(core.events.XYStagePositionChanged):
-        th.start()
-    assert got_lock
-    got_lock = False
-
-    core.mda._signals.frameReady.connect(cb)
-    mda = MDASequence(
-        time_plan={"interval": 0.1, "loops": 2},
-        stage_positions=[(1, 1, 1)],
-        z_plan={"range": 3, "step": 1},
-        channels=[{"config": "DAPI", "exposure": 1}],
-    )
-
-    with qtbot.waitSignal(core.mda._signals.sequenceFinished):
-        core.run_mda(mda)
-    assert got_lock
-
-
 def test_single_instance():
     core1 = CMMCorePlus.instance()
     core2 = CMMCorePlus.instance()
     assert core1 is core2
 
 
-def test_setPosition_overload(core: CMMCorePlus):
+def test_setPosition_overload(core: CMMCorePlus) -> None:
     core.setPosition(5)
     dev = core.getFocusDevice()
     core.setPosition(dev, 4)
 
 
-def test_unload_devices(core: CMMCorePlus):
+def test_unload_devices(core: CMMCorePlus) -> None:
     assert len(core.getLoadedDevices()) > 2
     core.unloadAllDevices()
     assert len(core.getLoadedDevices()) == 1
 
 
-def test_setContext(core: CMMCorePlus):
+def test_setContext(core: CMMCorePlus) -> None:
     # should work with either leading capitalization
     with core.setContext(shutterOpen=False):
         assert not core.getShutterOpen()
@@ -589,7 +554,7 @@ def test_describe(
 
         monkeypatch.setattr(builtins, "__import__", no_rich)
 
-    core.describe(sort="Type")
+    core.describe(sort="Type", show_available=True, show_config_groups=True)
     assert "Core" in capsys.readouterr().out
 
 
@@ -641,4 +606,45 @@ def test_snap_rgb(core: CMMCorePlus) -> None:
         ],
         dtype="uint8",
     )
-    assert np.array_equal(img[::64, -1], expect)
+    np.testing.assert_equal(img[::64, -1], expect)
+
+
+def test_env_vars(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    core = CMMCorePlus()
+    assert not core.debugLogEnabled()
+    assert not core.stderrLogEnabled()
+    assert core.getCircularBufferMemoryFootprint() != 64
+    assert core.isFeatureEnabled("ParallelDeviceInitialization")
+    assert core.isFeatureEnabled("StrictInitializationChecks")
+
+    with monkeypatch.context() as m:
+        m.setenv("PYMM_DEBUG_LOG", "1")
+        core = CMMCorePlus()
+        assert core.debugLogEnabled()
+
+    with monkeypatch.context() as m:
+        m.setenv("PYMM_STDERR_LOG", "1")
+        core = CMMCorePlus()
+        assert core.stderrLogEnabled()
+
+    with monkeypatch.context() as m:
+        m.setenv("PYMM_BUFFER_SIZE_MB", "64")
+        core = CMMCorePlus()
+        assert core.getCircularBufferMemoryFootprint() == 64
+
+    with monkeypatch.context() as m:
+        m.setenv("PYMM_STRICT_INIT_CHECKS", "0")
+        core = CMMCorePlus()
+        assert not core.isFeatureEnabled("StrictInitializationChecks")
+
+    with monkeypatch.context() as m:
+        # test with an invalid value
+        m.setenv("PYMM_PARALLEL_INIT", "0")
+        core = CMMCorePlus()
+        assert not core.isFeatureEnabled("ParallelDeviceInitialization")
+
+    with monkeypatch.context() as m:
+        m.setenv("MICROMANAGER_PATH", str(tmp_path))
+        core = CMMCorePlus()
+        paths = core.getDeviceAdapterSearchPaths()
+        assert str(tmp_path) in paths

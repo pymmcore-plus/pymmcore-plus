@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -56,7 +57,7 @@ def test_model_from_summary_metadata(tmp_path: Path) -> None:
 
 def non_empty_lines(path: Path) -> list[str]:
     return [
-        ln
+        ln.replace("1.0", "1").replace("0.0", "0")  # normalize floats
         for line in path.read_text().splitlines()
         if (ln := line.strip()) and not ln.startswith("#")
     ]
@@ -95,15 +96,19 @@ def _assert_cfg_matches_core_save(
     model.save(model_out)
     core.saveSystemConfiguration(str(core_out))
 
-    # MMCore DOES write out default affine transforms... MMStudio doesn't and we don't
-    core_lines = [
-        x for x in non_empty_lines(core_out) if "1.0,0.0,0.0,0.0,1.0,0.0" not in x
-    ]
-    # MMCore doesn't write out AutoShutter prefs
+    # MMCore DOES write out default affine transforms and angles...
+    # MMStudio doesn't and we don't
+    pattern = re.compile(
+        r"(PixelSizeAffine,.+,1(?:\.0)?,0(?:\.0)?,0(?:\.0)?,0(?:\.0)?,1(?:\.0)?,0(?:\.0)?"
+        r"|PixelSizeAngle_dxdz,.+,0|"
+        r"PixelSizeAngle_dydz,.+,0|PixelSizeOptimalZ_Um,.+,0)"
+    )
+    core_lines = [x for x in non_empty_lines(core_out) if not pattern.match(x)]
+    # MMCore doesn't write out AutoShutter prefs, but we do
     model_lines = [
         x
         for x in non_empty_lines(model_out)
-        if not x.startswith("Property,Core,AutoShutter")
+        if not x.startswith("Property,Core,AutoShutter") and "1,0,0,0,1,0" not in x
     ]
     assert core_lines == model_lines
 
@@ -139,46 +144,47 @@ def test_load_errors() -> None:
         model.load_config("Property,A,B,C,D,E")
     with pytest.raises(ValueError, match="not an integer"):
         model.load_config("Property,Core,Initialize,NotAnInt")
-    with pytest.raises(ValueError, match="not an integer"):
+    model.load_config("Device,Dichroic,DemoCamera,DWheel")  # fine
+    with pytest.warns(RuntimeWarning, match="not an integer"):
         model.load_config(
             """
             Device,Dichroic,DemoCamera,DWheel
             Label,Dichroic,NotAnInt,Q505LP
             """
         )
-    with pytest.raises(ValueError, match="'NotAPreset' not found"):
+    with pytest.warns(RuntimeWarning, match="'NotAPreset' not found"):
         model.load_config("PixelSize_um,NotAPreset,0.5")
-    with pytest.raises(ValueError, match="Expected a float"):
+    with pytest.warns(RuntimeWarning, match="Expected a float"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSize_um,Res40x,NotAFloat
             """
         )
-    with pytest.raises(ValueError, match="'Res10x' not found"):
+    with pytest.warns(RuntimeWarning, match="'Res10x' not found"):
         model.load_config("PixelSizeAffine,Res10x,1.0,0.0,0.0,0.0,1.1,0.0")
-    with pytest.raises(ValueError, match="Expected 8 arguments, got 5"):
+    with pytest.warns(RuntimeWarning, match="Expected 8 arguments, got 5"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSizeAffine,Res40x,1.0,0.0,0.0
             """
         )
-    with pytest.raises(ValueError, match="Expected 6 floats"):
+    with pytest.warns(RuntimeWarning, match="Expected 6 floats"):
         model.load_config(
             """
             ConfigPixelSize,Res40x,Objective,Label,Nikon 40X Plan Flueor ELWD
             PixelSizeAffine,Res40x,1.0,0.0,0.0,0.0,1.1,NoFloat
             """
         )
-    with pytest.raises(ValueError, match="Expected a float"):
+    with pytest.warns(RuntimeWarning, match="Expected a float"):
         model.load_config(
             """
             Device,Shutter,DemoCamera,DShutter
             Delay,Shutter,NotAFloat
             """
         )
-    with pytest.raises(ValueError, match="not a valid FocusDirection"):
+    with pytest.warns(RuntimeWarning, match="not a valid FocusDirection"):
         model.load_config(
             """
             Device,Z,DemoCamera,DStage
@@ -209,9 +215,10 @@ def test_apply():
     core2 = CMMCorePlus()
     model.apply_to_core(core2)
     state2 = core2.getSystemState()
+
     assert core2.getProperty("LED Shutter", "State Device") == "LED"
     assert core2.getProperty("Core", "XYStage") == "XY"
-    assert list(state1) == list(state2)
+    assert list(state1) == list(state2)  # type: ignore
 
     core3 = CMMCorePlus()
     model.initialize(core3)

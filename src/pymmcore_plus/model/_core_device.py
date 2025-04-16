@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pymmcore_plus import CMMCorePlus, DeviceType, Keyword
 
@@ -49,6 +49,15 @@ class CoreDevice(Device):
 
     def __post_init__(self) -> None:
         self.CORE_GETTERS = {}
+
+    def __setstate__(self, state: dict[str, Any]) -> None:
+        super().__setstate__(state)
+        prop_objects = []
+        for prop in self.properties:
+            if isinstance(prop, dict):
+                prop = Property(**prop)
+            prop_objects.append(prop)
+        self.properties = prop_objects
 
     def __hash__(self) -> int:
         return super().__hash__()

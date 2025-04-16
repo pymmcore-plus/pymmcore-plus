@@ -6,15 +6,15 @@ from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
 
 if TYPE_CHECKING:
-    from ._qsignals import QCoreSignaler  # noqa: TCH004
+    from ._qsignals import QCoreSignaler
 
 
 __all__ = [
     "CMMCoreSignaler",
-    "QCoreSignaler",
     "PCoreSignaler",
-    "_get_auto_core_callback_class",
+    "QCoreSignaler",
     "_denormalize_slot",
+    "_get_auto_core_callback_class",
 ]
 
 

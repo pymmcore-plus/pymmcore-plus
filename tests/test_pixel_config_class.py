@@ -20,4 +20,4 @@ def test_pixel_config_class():
     assert len(core.getAvailablePixelSizeConfigs()) == 4
     assert "test" in core.getAvailablePixelSizeConfigs()
     assert core.getPixelSizeUmByID("test") == 0.1
-    assert core.getPixelSizeAffineByID("test") == (1, 0, 0, 0, 1, 0)
+    assert tuple(core.getPixelSizeAffineByID("test")) == (1, 0, 0, 0, 1, 0)

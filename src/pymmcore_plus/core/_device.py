@@ -43,12 +43,12 @@ class Device:
     >>> device.schema()  # JSON schema of device properties
     """
 
-    UNASIGNED = "__UNASIGNED__"
+    UNASSIGNED = "__UNASSIGNED__"
     propertyChanged: PSignalInstance
 
     def __init__(
         self,
-        device_label: str = UNASIGNED,
+        device_label: str = UNASSIGNED,
         mmcore: CMMCorePlus | None = None,
         adapter_name: str = "",
         device_name: str = "",
@@ -162,7 +162,7 @@ class Device:
             raise TypeError("Must specify device_name")
         if device_label:
             self.label = device_label
-        elif self.label == self.UNASIGNED:
+        elif self.label == self.UNASSIGNED:
             self.label = f"{adapter_name}-{device_name}"
 
         self._mmc.loadDevice(self.label, adapter_name, device_name)
@@ -208,7 +208,7 @@ class Device:
     def __repr__(self) -> str:
         if self.isLoaded():
             n = len(self.propertyNames())
-            props = f'{n} {"properties" if n>1 else "property"}'
+            props = f"{n} {'properties' if n > 1 else 'property'}"
             lib = f"({self.library()}::{self.name()}) "
         else:
             props = "NOT LOADED"

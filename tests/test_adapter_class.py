@@ -11,7 +11,7 @@ def test_adapter_object(core: CMMCorePlus) -> None:
         for ad in adapter.available_devices:
             assert isinstance(ad, Device)
             assert ad.type() is not DeviceType.Unknown
-            assert ad.label == Device.UNASIGNED
+            assert ad.label == Device.UNASSIGNED
             assert ad.description()
             assert ad.library() == adapter.name
             assert ad.core == core

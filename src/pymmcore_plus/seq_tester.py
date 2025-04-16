@@ -41,7 +41,7 @@ if TYPE_CHECKING:
     import numpy as np
     from typing_extensions import Self  # py311
 
-__all__ = ["CameraInfo", "Setting", "SettingEvent", "InfoPacket", "decode_image"]
+__all__ = ["CameraInfo", "InfoPacket", "Setting", "SettingEvent", "decode_image"]
 
 
 @dataclass
@@ -88,8 +88,8 @@ class Setting:
 
     @classmethod
     def _from_list(cls, val: list) -> Self:
-        (dev, prop), (typ, val) = val
-        return cls(dev, prop, typ, val)
+        (dev, prop), (type_, val) = val
+        return cls(dev, prop, type_, val)
 
 
 @dataclass
@@ -100,8 +100,8 @@ class SettingEvent(Setting):
 
     @classmethod
     def _from_list(cls, val: list) -> Self:
-        (dev, prop), (typ, val), count = val
-        return cls(dev, prop, typ, val, count)
+        (dev, prop), (type_, val), count = val
+        return cls(dev, prop, type_, val, count)
 
 
 @dataclass
