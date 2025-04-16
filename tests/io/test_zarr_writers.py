@@ -225,9 +225,9 @@ def test_tensorstore_writes_metadata(
 
     zarr_store = zarr.open(str(tmp_path / "test.zarr"))
     assert hasattr(zarr_store, "attrs")
-    assert (
-        "frame_metadatas" in zarr_store.attrs
-    ), "Missing frame_metadatas in zarr attributes"
+    assert "frame_metadatas" in zarr_store.attrs, (
+        "Missing frame_metadatas in zarr attributes"
+    )
 
 
 @requires_tensorstore
