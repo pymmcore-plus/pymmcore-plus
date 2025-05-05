@@ -1785,7 +1785,7 @@ dev = [
     { name = "pre-commit", specifier = ">=4.1.0" },
     { name = "pydantic", marker = "python_full_version >= '3.13'", specifier = ">2.7.4" },
     { name = "pymmcore", specifier = ">=11.5.0.73" },
-    { name = "pymmcore-plus", extras = ["io"] },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
     { name = "pyqt6", specifier = ">=6.4.2" },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },
@@ -1801,22 +1801,22 @@ docs = [
     { name = "mkdocstrings-python", specifier = "==1.1.2" },
 ]
 pyqt5 = [
-    { name = "pymmcore-plus", extras = ["pyqt5"] },
+    { name = "pymmcore-plus", extras = ["pyqt5"], editable = "." },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
 ]
 pyqt6 = [
-    { name = "pymmcore-plus", extras = ["pyqt6"] },
+    { name = "pymmcore-plus", extras = ["pyqt6"], editable = "." },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
 ]
 pyside2 = [
-    { name = "pymmcore-plus", extras = ["pyside2"] },
+    { name = "pymmcore-plus", extras = ["pyside2"], editable = "." },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
 ]
 pyside6 = [
-    { name = "pymmcore-plus", extras = ["pyside6"] },
+    { name = "pymmcore-plus", extras = ["pyside6"], editable = "." },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
 ]
@@ -1824,7 +1824,7 @@ test = [
     { name = "msgpack", specifier = ">=1" },
     { name = "msgspec", specifier = ">=0.19" },
     { name = "pymmcore", specifier = ">=11.5.0.73" },
-    { name = "pymmcore-plus", extras = ["io"] },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-cov", specifier = ">=5" },
     { name = "xarray", specifier = ">=2024.1" },
@@ -1833,7 +1833,7 @@ test-codspeed = [
     { name = "msgpack", specifier = ">=1" },
     { name = "msgspec", specifier = ">=0.19" },
     { name = "pymmcore", specifier = ">=11.5.0.73" },
-    { name = "pymmcore-plus", extras = ["io"] },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
     { name = "pytest", specifier = ">=8" },
     { name = "pytest-codspeed", specifier = ">=3.2.0" },
     { name = "pytest-cov", specifier = ">=5" },
