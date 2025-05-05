@@ -41,16 +41,28 @@ from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_clas
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
-    from typing import Literal, TypedDict, Unpack
+    from typing import Literal, TypeAlias, TypedDict, Union, Unpack
 
     import numpy as np
+    from pymmcore import DeviceLabel
     from useq import MDAEvent
 
+    from pymmcore_plus._batcher import DeviceBatcher
     from pymmcore_plus.mda._runner import SingleOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
     ListOrTuple = list[_T] | tuple[_T, ...]
+    DeviceTypesWithCurrent: TypeAlias = Union[
+        Literal[DeviceType.CameraDevice]
+        | Literal[DeviceType.ShutterDevice]
+        | Literal[DeviceType.StageDevice]
+        | Literal[DeviceType.XYStageDevice]
+        | Literal[DeviceType.AutoFocusDevice]
+        | Literal[DeviceType.SLMDevice]
+        | Literal[DeviceType.GalvoDevice]
+        | Literal[DeviceType.ImageProcessorDevice]
+    ]
 
     class PropertySchema(TypedDict, total=False):
         """JSON schema `dict` describing a device property."""
@@ -1093,6 +1105,38 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceAdapter(library_name, mmcore=self)
 
+    def getDeviceBatcher(self, device_label: str) -> DeviceBatcher:
+        """Get a value batcher for the given device.
+
+        A ValueBatcher is a class that batches a series of setX calls to a device,
+        retaining an internal target value, and emitting a signal when the device has
+        reached its target and is idle. It can be shared by multiple players (e.g.
+        widgets, or other classes) that want to control the same device, and allows them
+        all to issue relative/absolute moves, and be notified when the device is idle.
+
+        A common use case is to batch setPosition calls to a stage device, where you
+        might want to accumulate a series of relative moves (e.g. clicks on a move stage
+        button), and snap an image only when the stage is idle.
+
+        The main API of a [`ValueBatcher`][pymmcore_plus._batcher.AbstractValueBatcher]:
+            - `finished`: signal emitted when the device has reached its target.
+            - `set_relative`: set the target position of the device relative to its
+               current target.
+            - `set_absolute`: set the target position of the device.  Calling
+              `set_absolute` overrides any previous relative or absolute target.
+            - `poll_done`:  This method must be called by some event loop or timer to
+               poll the device and emit the `finished` signal when the device is idle.
+               The event loop is NOT handled in this library.
+
+        Parameters
+        ----------
+        device_label : str
+            The device label to batch.
+        """
+        from pymmcore_plus._batcher import get_device_batcher
+
+        return get_device_batcher(device_label, mmcore=self)
+
     def getDeviceObject(self, device_label: str) -> Device:
         """Return a `Device` object bound to device_label on this core.
 
@@ -1188,6 +1232,61 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         for group in self.getAvailableConfigGroups():
             yield ConfigGroup(group, mmcore=self)
+
+    def getCurrentDeviceOfType(
+        self, device_type: DeviceTypesWithCurrent
+    ) -> DeviceLabel | Literal[""]:
+        """Return the current device of type `device_type`.
+
+        Only the following device types have a "current" device:
+            - CameraDevice
+            - ShutterDevice
+            - StageDevice
+            - XYStageDevice
+            - AutoFocusDevice
+            - SLMDevice
+            - GalvoDevice
+            - ImageProcessorDevice
+
+        Calling this method with any other device type will raise a `ValueError`.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        Parameters
+        ----------
+        device_type : DeviceType
+            The type of device to get the current device for.
+            See [`DeviceType`][pymmcore_plus.DeviceType] for a list of device types.
+
+        Returns
+        -------
+        str
+            The label of the current device of type `device_type`.
+            If no device of that type is currently set, an empty string is returned.
+
+        Raises
+        ------
+        ValueError
+            If the core does not have the concept of a "current" device of the provided
+            `device_type`.
+        """
+        if device_type == DeviceType.CameraDevice:
+            return self.getCameraDevice()
+        if device_type == DeviceType.ShutterDevice:
+            return self.getShutterDevice()
+        if device_type == DeviceType.StageDevice:
+            return self.getFocusDevice()
+        if device_type == DeviceType.XYStageDevice:
+            return self.getXYStageDevice()
+        if device_type == DeviceType.AutoFocusDevice:
+            return self.getAutoFocusDevice()
+        if device_type == DeviceType.SLMDevice:
+            return self.getSLMDevice()
+        if device_type == DeviceType.GalvoDevice:
+            return self.getGalvoDevice()
+        if device_type == DeviceType.ImageProcessorDevice:
+            return self.getImageProcessorDevice()
+        raise ValueError(f"'Current' {device_type.name} is undefined. ")
 
     def getDeviceSchema(self, device_label: str) -> DeviceSchema:
         """Return JSON-schema describing device `device_label` and its properties.
