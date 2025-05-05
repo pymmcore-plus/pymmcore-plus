@@ -208,7 +208,7 @@ class XYStageBatcher(
         self._mmcore.setXYPosition(self._device, *value)
 
 
-DeviceBatcher: TypeAlias = XYStageBatcher | StageBatcher
+DeviceBatcher: TypeAlias = "XYStageBatcher | StageBatcher"
 _CACHED_BATCHERS: dict[tuple[int, str], DeviceBatcher] = {}
 
 
