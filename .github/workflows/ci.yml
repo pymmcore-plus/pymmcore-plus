@@ -129,17 +129,17 @@ jobs:
 
   benchmarks:
     runs-on: ubuntu-latest
+    env:
+      UV_NO_SYNC: "1"
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
+          enable-cache: true
 
       - name: install
-        run: |
-          python -m pip install -e .[test]
-          python -m pip install pytest-codspeed
-          python -m pip uninstall -y pytest-qt qtpy
+        run: uv sync --no-dev --group test-codspeed
 
       - name: Cache Linux Build
         id: cache-mm-build
@@ -150,12 +150,12 @@ jobs:
 
       - name: Build Micro-Manager
         if: steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: mmcore build-dev
+        run: uv run mmcore build-dev
 
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v3
         with:
-          run: pytest -W ignore --codspeed -v --color=yes
+          run: uv run pytest -W ignore --codspeed -v --color=yes
 
   deploy:
     needs: test

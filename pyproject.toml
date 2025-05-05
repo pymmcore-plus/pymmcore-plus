@@ -78,6 +78,7 @@ test = [
     "xarray >=2024.1",
     "pymmcore >=11.5.0.73",
 ]
+test-codspeed = [{ include-group = "test" }, "pytest-codspeed >=3.2.0"]
 test-qt = ["pytest-qt >=4.4", "qtpy >=2"]
 PyQt6 = [{ include-group = 'test-qt' }, "pymmcore-plus[PyQt6]"]
 PySide6 = [{ include-group = 'test-qt' }, "pymmcore-plus[PySide6]"]
