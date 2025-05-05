@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from pymmcore_plus import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus._util import no_stdout
+from pymmcore_plus.core._constants import DeviceInitializationState
 
 from ._core_link import CoreObject
 from ._property import Property
@@ -410,6 +411,11 @@ def get_available_devices(core: CMMCorePlus) -> list[AvailableDevice]:
     for hub in core.getLoadedDevicesOfType(DeviceType.Hub):
         lib_name = core.getDeviceLibrary(hub)
         hub_dev = library_to_hub.get((lib_name, hub))
+        if (
+            core.getDeviceInitializationState(hub)
+            != DeviceInitializationState.InitializedSuccessfully
+        ):
+            continue
         for child in core.getInstalledDevices(hub):
             dev = AvailableDevice(
                 library=lib_name, adapter_name=child, library_hub=hub_dev

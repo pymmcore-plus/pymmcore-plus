@@ -1,4 +1,5 @@
 # do NOT use __future__.annotations here. It breaks typer.
+import contextlib
 import os
 import shutil
 import subprocess
@@ -8,6 +9,7 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Optional, Union, cast
 
+from pymmcore_plus._util import get_device_interface_version
 from pymmcore_plus.core._device import Device
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
@@ -114,9 +116,15 @@ def _list() -> None:
         for parent, items in found.items():
             print(f":file_folder:[bold green] {parent}")
             for item in items:
+                version = ""
+                for _lib in (parent / item).glob("*_dal_*"):
+                    with suppress(Exception):
+                        div = get_device_interface_version(_lib)
+                        version = f" (Dev. Interface {div})"
+                        break
                 bullet = "   [bold yellow]*" if first else "   •"
                 using = " [bold blue](active)" if first else ""
-                print(f"{bullet} [cyan]{item}{using}")
+                print(f"{bullet} [cyan]{item}{version}{using}")
                 first = False
     else:
         print(":x: [bold red]There are no pymmcore-plus Micro-Manager files.")
@@ -136,12 +144,13 @@ def mmstudio() -> None:  # pragma: no cover
         if mm
         else None
     )
-    if not app:  # pragma: no cover
+    if not mm or not app:  # pragma: no cover
         print(f":x: [bold red]No MMStudio application found in {mm!r}")
         print("[magenta]run `mmcore install` to install a version of Micro-Manager")
         raise typer.Exit(1)
     cmd = ["open", "-a", str(app)] if PLATFORM == "Darwin" else [str(app)]
-    raise typer.Exit(subprocess.run(cmd).returncode)
+    with contextlib.chdir(mm):
+        raise typer.Exit(subprocess.run(cmd).returncode)
 
 
 @app.command()
@@ -157,7 +166,7 @@ def install(
         help="Installation directory.",
     ),
     release: str = typer.Option(
-        "latest", "-r", "--release", help="Release date. e.g. 20210201"
+        "latest-compatible", "-r", "--release", help="Release date. e.g. 20210201"
     ),
     plain_output: bool = typer.Option(
         False,
