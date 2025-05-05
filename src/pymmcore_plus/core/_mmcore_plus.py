@@ -47,7 +47,7 @@ if TYPE_CHECKING:
     from pymmcore import DeviceLabel
     from useq import MDAEvent
 
-    from pymmcore_plus._batcher import DeviceBatcher
+    from pymmcore_plus._accumulator import ChangeAccumulator
     from pymmcore_plus.mda._runner import SingleOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
@@ -1105,7 +1105,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceAdapter(library_name, mmcore=self)
 
-    def getDeviceBatcher(self, device_label: str) -> DeviceBatcher:
+    def getChangeAccumulator(self, device_label: str) -> ChangeAccumulator:
         """Get a value batcher for the given device.
 
         A ValueBatcher is a class that batches a series of setX calls to a device,
@@ -1133,9 +1133,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_label : str
             The device label to batch.
         """
-        from pymmcore_plus._batcher import get_device_batcher
+        from pymmcore_plus._accumulator import get_device_accumulator
 
-        return get_device_batcher(device_label, mmcore=self)
+        return get_device_accumulator(device_label, mmcore=self)
 
     def getDeviceObject(self, device_label: str) -> Device:
         """Return a `Device` object bound to device_label on this core.

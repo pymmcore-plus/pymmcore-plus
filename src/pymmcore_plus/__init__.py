@@ -8,7 +8,7 @@ except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
 
-from ._batcher import AbstractValueBatcher, get_device_batcher
+from ._accumulator import AbstractChangeAccumulator, get_device_accumulator
 from ._logger import configure_logging
 from ._util import find_micromanager, use_micromanager
 from .core import (
@@ -35,7 +35,7 @@ from .core.events import CMMCoreSignaler, PCoreSignaler
 from .mda._runner import GeneratorMDASequence
 
 __all__ = [
-    "AbstractValueBatcher",
+    "AbstractChangeAccumulator",
     "ActionType",
     "CFGCommand",
     "CFGGroup",
@@ -61,6 +61,6 @@ __all__ = [
     "__version__",
     "configure_logging",
     "find_micromanager",
-    "get_device_batcher",
+    "get_device_accumulator",
     "use_micromanager",
 ]

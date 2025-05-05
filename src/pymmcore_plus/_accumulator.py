@@ -1,4 +1,4 @@
-"""Batch setX calls to a device."""
+"""Accumulate `setX` calls to a device value or property."""
 
 from __future__ import annotations
 
@@ -18,18 +18,18 @@ T = TypeVar("T")
 DT = TypeVar("DT", bound=DeviceType)
 
 
-class AbstractValueBatcher(ABC, Generic[T]):
-    """Abstract base class for batching a series of setX calls to a device.
+class AbstractChangeAccumulator(ABC, Generic[T]):
+    """Abstract base class for accumulating a series of `setX` calls to a device.
 
-    A ValueBatcher is a class that batches a series of setX calls to a device, retaining
-    an internal target value, and emitting a signal when the device has reached its
-    target and is idle. It can be shared by multiple players (e.g. widgets, or other
-    classes) that want to control the same device, and allows them all to issue
-    relative/absolute moves, and be notified when the device is idle.
+    A `ChangeAccumulator`` is a class that accumulates a series of `setX` calls to a
+    device, retaining an internal target value, and emitting a signal when the device
+    has reached its target and is idle. It can be shared by multiple players (e.g.
+    widgets, or other classes) that want to control the same device, and allows them all
+    to issue relative/absolute moves, and be notified when the device is idle.
 
-    A common use case is to batch setPosition calls to a stage device, where you might
-    want to accumulate a series of relative moves, and snap an image only when the stage
-    is idle.
+    A common use case is to accumulate setPosition calls made to a stage device, where
+    you might want to accumulate a series of relative moves, and snap an image only when
+    the stage is idle after reaching its target position.
     """
 
     finished = psygnal.Signal()
@@ -46,9 +46,8 @@ class AbstractValueBatcher(ABC, Generic[T]):
     # ------------------------ Public API ------------------------
 
     def add_relative(self, delta: T) -> None:
-        """Add a relative value to the batch."""
+        """Add a relative value to the target."""
         if self._delta is None:
-            # start new batch
             self._base = self._get_value()
             self._delta = delta
         else:
@@ -56,9 +55,9 @@ class AbstractValueBatcher(ABC, Generic[T]):
         self._issue_move()
 
     def set_absolute(self, target: T) -> None:
-        """Assign an absolute target position to the batch.
+        """Assign an absolute value to the target.
 
-        This will reset the batch state and issue a move to the target position.
+        This will reset the accumulated state and issue a move to the target position.
         After the move finishes, new `move_relative()` calls are interpreted
         relative to *target*.
         """
@@ -114,7 +113,7 @@ class AbstractValueBatcher(ABC, Generic[T]):
         except Exception:  # pragma: no cover
             from pymmcore_plus._logger import logger
 
-            logger.exception(f"Error setting ValueBatcher to {target}")
+            logger.exception(f"Error setting {type(self)} to {target}")
 
     # ------------------------ Abstract methods ------------------------
 
@@ -138,7 +137,7 @@ class AbstractValueBatcher(ABC, Generic[T]):
         """Return True if the device is busy."""
 
 
-class FloatValueBatcher(AbstractValueBatcher[float]):
+class FloatChangeAccumulator(AbstractChangeAccumulator[float]):
     def __init__(self) -> None:
         super().__init__(zero=0.0)
 
@@ -149,7 +148,7 @@ class FloatValueBatcher(AbstractValueBatcher[float]):
 ZIP_STRICT = {"strict": True} if sys.version_info >= (3, 10) else {}
 
 
-class SequenceValueBatcher(AbstractValueBatcher[Sequence[float]]):
+class SequenceChangeAccumulator(AbstractChangeAccumulator[Sequence[float]]):
     def __init__(self, sequence_length: int) -> None:
         self.sequence_length = sequence_length
         super().__init__(zero=[0.0] * sequence_length)
@@ -179,8 +178,10 @@ class DeviceTypeMixin(abc.ABC, Generic[DT]):
         return self._mmcore.deviceBusy(self._device)
 
 
-class StageBatcher(DeviceTypeMixin[Literal[DeviceType.StageDevice]], FloatValueBatcher):
-    """Batcher for single axis stage devices."""
+class PositionAccumulator(
+    DeviceTypeMixin[Literal[DeviceType.StageDevice]], FloatChangeAccumulator
+):
+    """Accumulator for single axis stage devices."""
 
     def __init__(self, device: str, mmcore: CMMCorePlus | None = None) -> None:
         super().__init__(DeviceType.StageDevice, device=device, mmcore=mmcore)
@@ -192,10 +193,10 @@ class StageBatcher(DeviceTypeMixin[Literal[DeviceType.StageDevice]], FloatValueB
         self._mmcore.setPosition(self._device, value)
 
 
-class XYStageBatcher(
-    DeviceTypeMixin[Literal[DeviceType.XYStageDevice]], SequenceValueBatcher
+class XYPositionAccumulator(
+    DeviceTypeMixin[Literal[DeviceType.XYStageDevice]], SequenceChangeAccumulator
 ):
-    """Batcher for XY stage devices."""
+    """Accumulator for XY stage devices."""
 
     def __init__(self, device: str, mmcore: CMMCorePlus | None = None) -> None:
         super().__init__(
@@ -212,24 +213,24 @@ class XYStageBatcher(
         self._mmcore.setXYPosition(self._device, *value)
 
 
-DeviceBatcher: TypeAlias = "XYStageBatcher | StageBatcher"
-_CACHED_BATCHERS: dict[tuple[int, str], DeviceBatcher] = {}
+ChangeAccumulator: TypeAlias = "XYPositionAccumulator | PositionAccumulator"
+_CACHED_ACCUMULATORS: dict[tuple[int, str], ChangeAccumulator] = {}
 
 
-def get_device_batcher(
+def get_device_accumulator(
     device_label: str, mmcore: CMMCorePlus | None = None
-) -> DeviceBatcher:
-    """Get a value batcher for the given device.
+) -> ChangeAccumulator:
+    """Get a value Accumulator for the given device.
 
-    Stage devices are batched using a StageBatcher, and XYStage devices are batched
-    using a XYStageBatcher.  Each controls the position of the device using methods
-    `add_relative()` and `set_absolute()`, and emits a signal `finished` when the device
-    is idle.
+    Single axis position changed are accumulated using a PositionAccumulator, and
+    XYStage devices are accumulated using a XYPositionAccumulator.  Each controls the
+    position of the device using methods `add_relative()` and `set_absolute()`, and
+    emits a `finished` signal when the device is idle.
 
     Parameters
     ----------
     device_label : str
-        The device label to get the batcher for.
+        The device label to get the Accumulator for.
     mmcore : CMMCorePlus, optional
         The CMMCorePlus instance to use. If not provided, the default instance is used.
     """
@@ -237,21 +238,17 @@ def get_device_batcher(
 
     cache_key = (id(mmcore), device_label)
 
-    if cache_key not in _CACHED_BATCHERS:
+    if cache_key not in _CACHED_ACCUMULATORS:
         device_type = mmcore.getDeviceType(device_label)
         if device_type == DeviceType.XYStageDevice:
-            _CACHED_BATCHERS[cache_key] = XYStageBatcher(device_label, mmcore)
+            _CACHED_ACCUMULATORS[cache_key] = XYPositionAccumulator(
+                device_label, mmcore
+            )
         elif device_type == DeviceType.StageDevice:
-            _CACHED_BATCHERS[cache_key] = StageBatcher(device_label, mmcore)
+            _CACHED_ACCUMULATORS[cache_key] = PositionAccumulator(device_label, mmcore)
         else:  # pragma: no cover
             raise ValueError(
-                f"Unsupported device type for value batching: {device_type.name}"
+                f"Unsupported device type for change accumulating: {device_type.name}"
             )
 
-        # pop the key on mmcore.events.systemConfigurationLoaded?
-        # @mmcore.events.systemConfigurationLoaded.connect
-        # def _on_system_configuration_loaded() -> None:
-        #     # remove the batcher from the cache
-        #     _CACHED_BATCHERS.pop(cache_key, None)
-
-    return _CACHED_BATCHERS[cache_key]
+    return _CACHED_ACCUMULATORS[cache_key]

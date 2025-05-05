@@ -8,10 +8,14 @@ from unittest.mock import Mock
 import pytest
 
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus._batcher import AbstractValueBatcher, StageBatcher, XYStageBatcher
+from pymmcore_plus._accumulator import (
+    AbstractChangeAccumulator,
+    PositionAccumulator,
+    XYPositionAccumulator,
+)
 
 
-def _await_batcher(batcher: AbstractValueBatcher) -> None:
+def _await_batcher(batcher: AbstractChangeAccumulator) -> None:
     """Wait for the batcher to finish."""
     while True:
         if batcher.poll_done():
@@ -26,11 +30,11 @@ def test_stage_batcher(device: str) -> None:
     core.loadSystemConfiguration()
     with suppress(RuntimeError):
         core.setProperty(device, "Velocity", 1)
-    batcher = core.getDeviceBatcher(device)
+    batcher = core.getChangeAccumulator(device)
     if device == "XY":
-        assert isinstance(batcher, XYStageBatcher)
+        assert isinstance(batcher, XYPositionAccumulator)
     else:
-        assert isinstance(batcher, StageBatcher)
+        assert isinstance(batcher, PositionAccumulator)
     mock = Mock()
     batcher.finished.connect(mock)
 
