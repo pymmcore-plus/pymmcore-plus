@@ -68,7 +68,6 @@ docs = [
     "mkdocs-autorefs ==1.3.1",
     "mkdocstrings-python ==1.1.2",
     "mkdocs-typer ==0.0.3",
-    # "griffe @ git+https://github.com/tlambert03/griffe@recursion"
 ]
 test = [
     "pymmcore-plus[io]",
@@ -85,8 +84,8 @@ PySide6 = [{ include-group = 'test-qt' }, "pymmcore-plus[PySide6]"]
 PyQt5 = [{ include-group = 'test-qt' }, "pymmcore-plus[PyQt5]"]
 PySide2 = [{ include-group = 'test-qt' }, "pymmcore-plus[PySide2]"]
 dev = [
+    # { include-group = "docs" },
     { include-group = "test" },
-    { include-group = "docs" },
     "PyQt6 >=6.4.2",
     "ipython>=8.18.1",
     "pdbpp>=0.11.6 ; sys_platform != 'win32'",
@@ -96,8 +95,11 @@ dev = [
     "pydantic >2.7.4; python_version >= '3.13'",
 ]
 
-[tool.uv.sources]
-pymmcore-plus = { workspace = true }
+
+[tool.uv]
+override-dependencies = [
+    "griffe @ git+https://github.com/tlambert03/griffe@recursion#egg=griffe",
+]
 
 [project.urls]
 Source = "https://github.com/pymmcore-plus/pymmcore-plus"
