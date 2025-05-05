@@ -15,14 +15,13 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }}
+    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }} ${{ matrix.nano }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-13]
         python-version: ["3.9", "3.11", "3.13"]
-        add-group: [""]
         include:
           - os: windows-latest
             python-version: "3.9"
@@ -41,10 +40,10 @@ jobs:
           # test pymmcore-nano
           - os: windows-latest
             python-version: "3.12"
-            nano: true
+            nano: "nano"
           - os: macos-13
             python-version: "3.12"
-            nano: true
+            nano: "nano"
 
     env:
       UV_NO_SYNC: "1"
@@ -58,10 +57,10 @@ jobs:
 
       - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }}
 
-      - if: matrix.nano == true
+      - if: matrix.nano != ''
         run: |
-          uv pip uninstall pymmcore
           uv pip install pymmcore-nano
+          uv pip uninstall pymmcore
 
       - name: Set cache path
         shell: bash
@@ -95,7 +94,7 @@ jobs:
           include-hidden-files: true
 
       - name: test lowest-direct deps
-        if: matrix.nano != true
+        if: matrix.nano == ''
         run: |
           uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution lowest-direct
           uv run pytest -v --color=yes
