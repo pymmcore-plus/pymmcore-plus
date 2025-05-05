@@ -61,6 +61,7 @@ PyQt5 = ["PyQt5 >=5.15.4"]
 PyQt6 = ["PyQt6 >=6.4.2"]
 
 [dependency-groups]
+nano = ["pymmcore-nano >=0.1.0", "pymmcore ;  sys_platform == 'never'"]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material>=9.5",

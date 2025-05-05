@@ -15,29 +15,36 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.platform }} py${{ matrix.python-version }} ${{ matrix.add-group }}
-    runs-on: ${{ matrix.platform }}
+    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }}
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        platform: [windows-latest, macos-13]
+        os: [windows-latest, macos-13]
         python-version: ["3.9", "3.11", "3.13"]
         add-group: [""]
         include:
-          - platform: windows-latest
+          - os: windows-latest
             python-version: "3.9"
             add-group: "PySide2"
-          - platform: windows-latest
+          - os: windows-latest
             python-version: "3.10"
             add-group: "PySide6"
-          - platform: macos-13
+          - os: macos-13
             python-version: "3.11"
             add-group: "PyQt6"
-          - platform: windows-latest
+          - os: windows-latest
             python-version: "3.13"
             add-group: "PyQt6"
-          - platform: ubuntu-latest
+          - os: ubuntu-latest
             python-version: "3.12"
+          # test pymmcore-nano
+          - os: windows-latest
+            python-version: "3.12"
+            nano: true
+          - os: macos-13
+            python-version: "3.12"
+            nano: true
 
     env:
       UV_FROZEN: "1"
@@ -51,6 +58,11 @@ jobs:
           enable-cache: true
 
       - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }}
+
+      - if: matrix.nano == true
+        run: |
+          uv pip uninstall pymmcore
+          uv pip install pymmcore-nano
 
       - name: Set cache path
         shell: bash
@@ -74,62 +86,27 @@ jobs:
         if: runner.os != 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
         run: uv run mmcore install
 
-      - run: uv run pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
-      
+      - run: uv run coverage run -p -m pytest -v --color=yes
+
+      - name: Upload coverage
+        uses: actions/upload-artifact@v4
+        with:
+          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}
+          path: ./.coverage*
+          include-hidden-files: true
+
       - name: test lowest-direct deps
+        if: matrix.nano != true
         run: |
           uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution lowest-direct
           uv run pytest -v --color=yes
 
-      - name: Coverage
-        uses: codecov/codecov-action@v5
-        with:
-          token: ${{ secrets.CODECOV_TOKEN }}
-
-  test-nano:
-    name: test with pymmcore-nano
-    runs-on: ${{ matrix.platform }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform: [windows-latest, macos-13]
-        python-version: ["3.12"]
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install -e .[test,PyQt6]
-          python -m pip uninstall -y pymmcore
-          python -m pip install pymmcore-nano>=11.3.0.71.1
-
-      - name: Set cache path
-        shell: bash
-        run: |
-          set -e
-          CACHE_PATH=$(python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
-          echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
-
-      - name: Cache Drivers
-        id: cache-mm-build
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
-
-      - name: Install Micro-Manager
-        if: steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: mmcore install
-
-      - name: Test
-        run: pytest -v --color=yes
+  upload_coverage:
+    if: always()
+    needs: [test]
+    uses: pyapp-kit/workflows/.github/workflows/upload-coverage.yml@v2
+    secrets:
+      codecov_token: ${{ secrets.CODECOV_TOKEN }}
 
   test-dependents:
     uses: pyapp-kit/workflows/.github/workflows/test-dependents.yml@main
