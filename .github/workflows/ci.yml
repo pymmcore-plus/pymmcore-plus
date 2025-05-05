@@ -94,8 +94,10 @@ jobs:
           include-hidden-files: true
 
       - name: test lowest-direct deps
+        shell: bash
         if: matrix.nano == ''
         run: |
+          rm -rf .venv
           uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution lowest-direct
           uv run pytest -v --color=yes
 
