@@ -145,14 +145,6 @@ class FloatValueBatcher(AbstractValueBatcher[float]):
         return a + b
 
 
-class IntValueBatcher(AbstractValueBatcher[int]):
-    def __init__(self) -> None:
-        super().__init__(zero=0)
-
-    def _add(self, a: int, b: int) -> int:
-        return a + b
-
-
 class SequenceValueBatcher(AbstractValueBatcher[Sequence[float]]):
     def __init__(self, sequence_length: int) -> None:
         self.sequence_length = sequence_length
@@ -167,18 +159,12 @@ class DeviceTypeMixin(abc.ABC, Generic[DT]):
         self,
         device_type: DT,
         *,
-        device: str | None = None,
+        device: str,
         mmcore: CMMCorePlus | None = None,
         **kwargs: Any,
     ) -> None:
         self._mmcore = mmcore or CMMCorePlus.instance()
-
-        if device is None:
-            device = self._current_device_label()
-            if not device:
-                raise ValueError(f"No {device_type.name} found.")
-
-        if not self._mmcore.getDeviceType(device) == device_type:
+        if not self._mmcore.getDeviceType(device) == device_type:  # pragma: no cover
             raise ValueError(f"Device {device!r} is not a {device_type.name}.")
 
         self._device = device
@@ -188,22 +174,12 @@ class DeviceTypeMixin(abc.ABC, Generic[DT]):
     def _is_busy(self) -> bool:
         return self._mmcore.deviceBusy(self._device)
 
-    @abstractmethod
-    def _current_device_label(self) -> str:
-        """Return the current device of the given type."""
-        ...
-
 
 class StageBatcher(DeviceTypeMixin[Literal[DeviceType.StageDevice]], FloatValueBatcher):
     """Batcher for single axis stage devices."""
 
-    def __init__(
-        self, device: str | None = None, mmcore: CMMCorePlus | None = None
-    ) -> None:
+    def __init__(self, device: str, mmcore: CMMCorePlus | None = None) -> None:
         super().__init__(DeviceType.StageDevice, device=device, mmcore=mmcore)
-
-    def _current_device_label(self) -> str:
-        return self._mmcore.getFocusDevice()
 
     def _get_value(self) -> float:
         return self._mmcore.getPosition(self._device)
@@ -217,18 +193,13 @@ class XYStageBatcher(
 ):
     """Batcher for XY stage devices."""
 
-    def __init__(
-        self, device: str | None = None, mmcore: CMMCorePlus | None = None
-    ) -> None:
+    def __init__(self, device: str, mmcore: CMMCorePlus | None = None) -> None:
         super().__init__(
             DeviceType.XYStageDevice,
             device=device,
             mmcore=mmcore,
             sequence_length=2,
         )
-
-    def _current_device_label(self) -> str:
-        return self._mmcore.getXYStageDevice()
 
     def _get_value(self) -> Sequence[float]:
         return self._mmcore.getXYPosition(self._device)
@@ -268,7 +239,7 @@ def get_device_batcher(
             _CACHED_BATCHERS[cache_key] = XYStageBatcher(device_label, mmcore)
         elif device_type == DeviceType.StageDevice:
             _CACHED_BATCHERS[cache_key] = StageBatcher(device_label, mmcore)
-        else:
+        else:  # pragma: no cover
             raise ValueError(
                 f"Unsupported device type for value batching: {device_type.name}"
             )
