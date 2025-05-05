@@ -1,5 +1,23 @@
 # Changelog
 
+## [v0.14.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.14.0) (2025-05-05)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.7...v0.14.0)
+
+**Implemented enhancements:**
+
+- feat: add ChangeAccumulator pattern, for sharing control of a slow target value [\#462](https://github.com/pymmcore-plus/pymmcore-plus/pull/462) ([tlambert03](https://github.com/tlambert03))
+- feat: extend object-oriented device API [\#437](https://github.com/pymmcore-plus/pymmcore-plus/pull/437) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix: tensorstore - make sure metadata written [\#461](https://github.com/pymmcore-plus/pymmcore-plus/pull/461) ([wl-stepp](https://github.com/wl-stepp))
+
+**Merged pull requests:**
+
+- ci\(pre-commit.ci\): autoupdate [\#463](https://github.com/pymmcore-plus/pymmcore-plus/pull/463) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+- test: add uv lockfile and test with uv \(including minimum deps\) [\#424](https://github.com/pymmcore-plus/pymmcore-plus/pull/424) ([tlambert03](https://github.com/tlambert03))
+
 ## [v0.13.7](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.7) (2025-04-11)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.6...v0.13.7)
