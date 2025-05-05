@@ -15,32 +15,31 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.platform }} py${{ matrix.python-version }} ${{ matrix.qt }}
+    name: ${{ matrix.platform }} py${{ matrix.python-version }} ${{ matrix.add-group }}
     runs-on: ${{ matrix.platform }}
     strategy:
       fail-fast: false
       matrix:
         platform: [windows-latest, macos-13]
-        python-version: ["3.9", "3.10", "3.11", "3.12"]
-        qt: ["PySide6"]
+        python-version: ["3.9", "3.11", "3.13"]
+        add-group: [""]
         include:
           - platform: windows-latest
             python-version: "3.9"
-            qt: "PySide2"
+            add-group: "PySide2"
+          - platform: windows-latest
+            python-version: "3.10"
+            add-group: "PySide6"
           - platform: macos-13
             python-version: "3.11"
-            qt: "PyQt6"
-          - platform: windows-latest
-            python-version: "3.12"
-            qt: "PyQt6"
-          - platform: ubuntu-latest
-            python-version: "3.12"
+            add-group: "PyQt6"
           - platform: windows-latest
             python-version: "3.13"
-            qt: "PyQt6"
+            add-group: "PyQt6"
+          - platform: ubuntu-latest
+            python-version: "3.12"
 
     env:
-      UV_PYTHON: ${{ matrix.python-version }}
       UV_FROZEN: "1"
       UV_NO_SYNC: "1"
     steps:
@@ -48,9 +47,10 @@ jobs:
 
       - uses: astral-sh/setup-uv@v6
         with:
+          python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      - run: uv sync
+      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }}
 
       - name: Set cache path
         shell: bash
@@ -74,15 +74,11 @@ jobs:
         if: runner.os != 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
         run: uv run mmcore install
 
-      - name: Remove Qt
-        if: runner.os == 'Linux'
-        run: uv pip uninstall pytest-qt qtpy
-
       - run: uv run pytest -v --color=yes --cov=pymmcore_plus --cov-report=xml
       
       - name: test lowest-direct deps
         run: |
-          uv pip install -e '.[test]' --resolution lowest-direct -U --no-build
+          uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution lowest-direct
           uv run pytest -v --color=yes
 
       - name: Coverage
