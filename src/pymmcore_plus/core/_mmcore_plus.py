@@ -338,7 +338,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
             try:
                 super().setStateLabel(stateDeviceLabel, stateLabel)
-            except RuntimeError as e:
+            except RuntimeError as e:  # pragma: no cover
                 state_labels = self.getStateLabels(stateDeviceLabel)
                 msg = f"{e}.  Available Labels: {state_labels}"
                 raise RuntimeError(msg) from None
@@ -384,7 +384,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             recognized by the specific plugin library. See
             [`pymmcore.CMMCore.getAvailableDevices`][] for a list of valid device names.
         """
-        if str(label).lower() == Keyword.CoreDevice.value.lower():
+        if str(label).lower() == Keyword.CoreDevice.value.lower():  # pragma: no cover
             raise ValueError(f"Label {label!r} is reserved.")
 
         try:

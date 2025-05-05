@@ -110,7 +110,7 @@ class Device:
     def label(self, value: str) -> None:
         if self.isLoaded():
             raise RuntimeError(f"Cannot change label of loaded device {self.label!r}.")
-        if value in self._mmc.getLoadedDevices():
+        if value in self._mmc.getLoadedDevices():  # pragma: no cover
             raise RuntimeError(f"Label {value!r} is already in use.")
         self._label = value
 

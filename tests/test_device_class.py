@@ -62,6 +62,11 @@ def test_device_load_errors(core: CMMCorePlus) -> None:
         dev.getPropertyObject("NotAProperty")
 
 
+def test_device_object_wrong_type(core: CMMCorePlus) -> None:
+    with pytest.raises(TypeError, match="requested but device"):
+        core.getDeviceObject("Camera", DeviceType.XYStage)
+
+
 def test_device_callbacks(core: CMMCorePlus) -> None:
     dev = Device("Camera", core)
     mock = Mock()
