@@ -3,9 +3,12 @@ from __future__ import annotations
 import time
 from unittest.mock import Mock
 
+import pytest
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus._accumulator import (
     AbstractChangeAccumulator,
+    DeviceAccumulator,
     PositionChangeAccumulator,
     XYPositionChangeAccumulator,
 )
@@ -80,3 +83,25 @@ def test_xystage_position_accumulator() -> None:
     mock.assert_called_once()
     assert [round(x, 2) for x in device_obj.position] == [10, 10]
     assert accum.target is None
+
+
+def test_invalid_type():
+    core = CMMCorePlus()
+    core.loadSystemConfiguration()
+    obj1 = DeviceAccumulator.get_cached("XY", core)  # type: ignore
+    assert isinstance(obj1, XYPositionChangeAccumulator)
+    assert XYPositionChangeAccumulator.get_cached("XY", core) is obj1
+
+    with pytest.raises(
+        TypeError, match="Cannot create PositionChangeAccumulator for 'XY'"
+    ):
+        PositionChangeAccumulator.get_cached("XY", core)
+
+    with pytest.raises(ValueError, match="No matching DeviceTypeMixin subclass found"):
+        DeviceAccumulator.get_cached("Camera", core)
+
+    core2 = CMMCorePlus()
+    core2.loadSystemConfiguration()
+    obj2 = DeviceAccumulator.get_cached("XY", core2)  # type: ignore
+    assert isinstance(obj2, XYPositionChangeAccumulator)
+    assert obj1 is not obj2

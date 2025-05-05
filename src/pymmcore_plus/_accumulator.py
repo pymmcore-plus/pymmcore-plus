@@ -158,7 +158,7 @@ class SequenceChangeAccumulator(AbstractChangeAccumulator[Sequence[float]]):
         return [x + y for x, y in zip(a, b, **ZIP_STRICT)]
 
 
-class DeviceTypeMixin(abc.ABC, Generic[DT]):
+class DeviceAccumulator(abc.ABC, Generic[DT]):
     def __init__(
         self,
         *,
@@ -185,7 +185,7 @@ class DeviceTypeMixin(abc.ABC, Generic[DT]):
     def _device_type(cls) -> DT:
         """Return the device type for this class."""
 
-    _CACHE: ClassVar[dict[tuple[int, str], DeviceTypeMixin]] = {}
+    _CACHE: ClassVar[dict[tuple[int, str], DeviceAccumulator]] = {}
 
     @classmethod
     def get_cached(cls, device: str, mmcore: CMMCorePlus | None = None) -> Self:
@@ -202,7 +202,7 @@ class DeviceTypeMixin(abc.ABC, Generic[DT]):
         mmcore = mmcore or CMMCorePlus.instance()
         cache_key = (id(mmcore), device)
         device_type = mmcore.getDeviceType(device)
-        if cache_key not in DeviceTypeMixin._CACHE:
+        if cache_key not in DeviceAccumulator._CACHE:
             if device_type == cls._device_type():
                 cls._CACHE[cache_key] = cls(device_label=device, mmcore=mmcore)
             else:
@@ -224,7 +224,7 @@ class DeviceTypeMixin(abc.ABC, Generic[DT]):
         return obj
 
 
-class PositionChangeAccumulator(DeviceTypeMixin, FloatChangeAccumulator):
+class PositionChangeAccumulator(DeviceAccumulator, FloatChangeAccumulator):
     """Accumulator for single axis stage devices."""
 
     def __init__(self, device_label: str, mmcore: CMMCorePlus | None = None) -> None:
@@ -241,7 +241,7 @@ class PositionChangeAccumulator(DeviceTypeMixin, FloatChangeAccumulator):
         self._mmcore.setPosition(self._device_label, value)
 
 
-class XYPositionChangeAccumulator(DeviceTypeMixin, SequenceChangeAccumulator):
+class XYPositionChangeAccumulator(DeviceAccumulator, SequenceChangeAccumulator):
     """Accumulator for XY stage devices."""
 
     def __init__(self, device_label: str, mmcore: CMMCorePlus | None = None) -> None:
