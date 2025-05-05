@@ -225,6 +225,12 @@ def test_tensorstore_writes_metadata(
     writer = TensorStoreHandler(path=tmp_path / "test.zarr")
     core.mda.run(SIMPLE_MDA, output=writer)
 
+    zarr_store = zarr.open(str(tmp_path / "test.zarr"))
+    assert hasattr(zarr_store, "attrs")
+    assert "frame_metadatas" in zarr_store.attrs, (
+        "Missing frame_metadatas in zarr attributes"
+    )
+
 
 @requires_tensorstore
 def test_tensorstore_writer_indeterminate(tmp_path: Path, core: CMMCorePlus) -> None:
