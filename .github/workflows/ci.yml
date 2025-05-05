@@ -27,19 +27,19 @@ jobs:
             python-version: "3.9"
             add-group: "PySide2"
           - os: windows-latest
-            python-version: "3.11"
+            python-version: "3.10"
             add-group: "PySide6"
           - os: macos-13
             python-version: "3.11"
             add-group: "PyQt6"
           - os: windows-latest
-            python-version: "3.13"
+            python-version: "3.12"
             add-group: "PyQt6"
           - os: ubuntu-latest
             python-version: "3.12"
           # test pymmcore-nano
           - os: windows-latest
-            python-version: "3.12"
+            python-version: "3.13"
             nano: "nano"
           - os: macos-13
             python-version: "3.12"
