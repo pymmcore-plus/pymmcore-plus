@@ -169,7 +169,8 @@ class Device:
     def setProperty(self, property_name: str, value: bool | float | int | str) -> None:
         """Set a device property value.
 
-        See also: [`Device.getPropertyObject`][].
+        See also,
+        [`Device.getPropertyObject`][pymmcore_plus.core.Device.getPropertyObject].
 
         Examples
         --------
