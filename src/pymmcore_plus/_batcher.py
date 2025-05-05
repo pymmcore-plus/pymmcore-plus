@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import abc
+import sys
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import Any, Generic, Literal, TypeVar
@@ -145,13 +146,16 @@ class FloatValueBatcher(AbstractValueBatcher[float]):
         return a + b
 
 
+ZIP_STRICT = {"strict": True} if sys.version_info >= (3, 10) else {}
+
+
 class SequenceValueBatcher(AbstractValueBatcher[Sequence[float]]):
     def __init__(self, sequence_length: int) -> None:
         self.sequence_length = sequence_length
         super().__init__(zero=[0.0] * sequence_length)
 
     def _add(self, a: Sequence[float], b: Sequence[float]) -> Sequence[float]:
-        return [x + y for x, y in zip(a, b, strict=True)]
+        return [x + y for x, y in zip(a, b, **ZIP_STRICT)]
 
 
 class DeviceTypeMixin(abc.ABC, Generic[DT]):
