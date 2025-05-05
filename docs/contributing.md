@@ -51,7 +51,7 @@ in the `docs` folder.  To build docs locally:
 
 ```shell
 # build docs and serve locally
-uv run mkdocs serve
+uv run --group docs mkdocs serve
 ```
 
 The docs should be live at <http://127.0.0.1:8000> and will update automatically
