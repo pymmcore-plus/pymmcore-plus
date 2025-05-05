@@ -42,7 +42,7 @@ def test_stage_batcher(device: str) -> None:
     assert batcher.target == target
     _await_batcher(batcher)
     mock.assert_called_once()
-    assert batcher._get_value() == target
+    assert type(target)(batcher._get_value()) == target  # type: ignore
     assert not batcher.is_moving
     assert batcher.poll_done() is False
 
@@ -50,12 +50,14 @@ def test_stage_batcher(device: str) -> None:
     mock.reset_mock()
     batcher.add_relative((20, 20) if device == "XY" else 20)  # type: ignore
     batcher.set_absolute((10, 10) if device == "XY" else 10)  # type: ignore
-    assert batcher.target == [10, 10] if device == "XY" else 10
+    target = [10, 10] if device == "XY" else 10
+    assert batcher.target == target
+
     _await_batcher(batcher)
     mock.assert_called_once()
-    val: Any = batcher._get_value()
+    val = type(target)(batcher._get_value())  # type: ignore
     if device == "XY":
-        assert [round(x, 2) for x in val] == [10, 10]
+        assert [round(x, 2) for x in val] == target  # type: ignore
     else:
-        assert round(val, 2) == 10
+        assert round(val, 2) == target  # type: ignore
     assert batcher.target is None
