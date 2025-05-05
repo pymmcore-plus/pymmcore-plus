@@ -6,14 +6,15 @@ import abc
 import sys
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
-from typing import Any, Generic, Literal, TypeVar
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar
 
 import psygnal
-from typing_extensions import TypeAlias
 
 from pymmcore_plus.core._constants import DeviceType
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
+if TYPE_CHECKING:
+    from typing_extensions import Self
 T = TypeVar("T")
 DT = TypeVar("DT", bound=DeviceType)
 
@@ -160,95 +161,98 @@ class SequenceChangeAccumulator(AbstractChangeAccumulator[Sequence[float]]):
 class DeviceTypeMixin(abc.ABC, Generic[DT]):
     def __init__(
         self,
-        device_type: DT,
         *,
-        device: str,
+        device_label: str,
         mmcore: CMMCorePlus | None = None,
         **kwargs: Any,
     ) -> None:
         self._mmcore = mmcore or CMMCorePlus.instance()
-        if not self._mmcore.getDeviceType(device) == device_type:  # pragma: no cover
-            raise ValueError(f"Device {device!r} is not a {device_type.name}.")
+        dev_type = self._device_type()
+        if not self._mmcore.getDeviceType(device_label) == dev_type:  # pragma: no cover
+            raise ValueError(
+                f"Cannot create {self.__class__.__name__}. "
+                f"Device {device_label!r} is not a {dev_type.name}. "
+            )
 
-        self._device = device
-        self._device_type = device_type
+        self._device_label = device_label
         super().__init__(**kwargs)
 
     def _is_busy(self) -> bool:
-        return self._mmcore.deviceBusy(self._device)
+        return self._mmcore.deviceBusy(self._device_label)
+
+    @classmethod
+    @abstractmethod
+    def _device_type(cls) -> DT:
+        """Return the device type for this class."""
+
+    _CACHE: ClassVar[dict[tuple[int, str], DeviceTypeMixin]] = {}
+
+    @classmethod
+    def get_cached(cls, device: str, mmcore: CMMCorePlus | None = None) -> Self:
+        """Get a cached instance of the class for the given (device, core) pair.
+
+        This is intended to be called on the subclass for the device type you want to
+        create. For example, if you want to create a `PositionChangeAccumulator` for a
+        `StageDevice`, you would call: `PositionChangeAccumulator.get_cached(device)`.
+
+        But it may also be called on the base class, in which case it will still return
+        the correct subclass instance, but you will not have type safety on the return
+        type.
+        """
+        mmcore = mmcore or CMMCorePlus.instance()
+        cache_key = (id(mmcore), device)
+        device_type = mmcore.getDeviceType(device)
+        if cache_key not in DeviceTypeMixin._CACHE:
+            if device_type == cls._device_type():
+                cls._CACHE[cache_key] = cls(device_label=device, mmcore=mmcore)
+            else:
+                for sub in cls.__subclasses__():
+                    if sub._device_type() == device_type:  # noqa: SLF001
+                        cls._CACHE[cache_key] = sub(device_label=device, mmcore=mmcore)
+                        break
+                else:
+                    raise ValueError(
+                        "No matching DeviceTypeMixin subclass found for device type "
+                        f"{device_type.name} (for device {device!r})."
+                    )
+        obj = cls._CACHE[cache_key]
+        if not isinstance(obj, cls):
+            raise TypeError(
+                f"Cannot create {cls.__name__} for {device!r}. "
+                f"Device is a {device_type!r}, not a {cls._device_type().name}. "
+            )
+        return obj
 
 
-class PositionAccumulator(
-    DeviceTypeMixin[Literal[DeviceType.StageDevice]], FloatChangeAccumulator
-):
+class PositionChangeAccumulator(DeviceTypeMixin, FloatChangeAccumulator):
     """Accumulator for single axis stage devices."""
 
-    def __init__(self, device: str, mmcore: CMMCorePlus | None = None) -> None:
-        super().__init__(DeviceType.StageDevice, device=device, mmcore=mmcore)
+    def __init__(self, device_label: str, mmcore: CMMCorePlus | None = None) -> None:
+        super().__init__(device_label=device_label, mmcore=mmcore)
+
+    @classmethod
+    def _device_type(cls) -> Literal[DeviceType.StageDevice]:
+        return DeviceType.StageDevice
 
     def _get_value(self) -> float:
-        return self._mmcore.getPosition(self._device)
+        return self._mmcore.getPosition(self._device_label)
 
     def _set_value(self, value: float) -> None:
-        self._mmcore.setPosition(self._device, value)
+        self._mmcore.setPosition(self._device_label, value)
 
 
-class XYPositionAccumulator(
-    DeviceTypeMixin[Literal[DeviceType.XYStageDevice]], SequenceChangeAccumulator
-):
+class XYPositionChangeAccumulator(DeviceTypeMixin, SequenceChangeAccumulator):
     """Accumulator for XY stage devices."""
 
-    def __init__(self, device: str, mmcore: CMMCorePlus | None = None) -> None:
-        super().__init__(
-            DeviceType.XYStageDevice,
-            device=device,
-            mmcore=mmcore,
-            sequence_length=2,
-        )
+    def __init__(self, device_label: str, mmcore: CMMCorePlus | None = None) -> None:
+        super().__init__(device_label=device_label, mmcore=mmcore, sequence_length=2)
+
+    @classmethod
+    def _device_type(cls) -> Literal[DeviceType.XYStageDevice]:
+        return DeviceType.XYStageDevice
 
     def _get_value(self) -> Sequence[float]:
-        return self._mmcore.getXYPosition(self._device)
+        return self._mmcore.getXYPosition(self._device_label)
 
     def _set_value(self, value: Sequence[float]) -> None:
-        self._mmcore.setXYPosition(self._device, *value)
-
-
-ChangeAccumulator: TypeAlias = "XYPositionAccumulator | PositionAccumulator"
-_CACHED_ACCUMULATORS: dict[tuple[int, str], ChangeAccumulator] = {}
-
-
-def get_device_accumulator(
-    device_label: str, mmcore: CMMCorePlus | None = None
-) -> ChangeAccumulator:
-    """Get a value Accumulator for the given device.
-
-    Single axis position changed are accumulated using a PositionAccumulator, and
-    XYStage devices are accumulated using a XYPositionAccumulator.  Each controls the
-    position of the device using methods `add_relative()` and `set_absolute()`, and
-    emits a `finished` signal when the device is idle.
-
-    Parameters
-    ----------
-    device_label : str
-        The device label to get the Accumulator for.
-    mmcore : CMMCorePlus, optional
-        The CMMCorePlus instance to use. If not provided, the default instance is used.
-    """
-    mmcore = mmcore or CMMCorePlus.instance()
-
-    cache_key = (id(mmcore), device_label)
-
-    if cache_key not in _CACHED_ACCUMULATORS:
-        device_type = mmcore.getDeviceType(device_label)
-        if device_type == DeviceType.XYStageDevice:
-            _CACHED_ACCUMULATORS[cache_key] = XYPositionAccumulator(
-                device_label, mmcore
-            )
-        elif device_type == DeviceType.StageDevice:
-            _CACHED_ACCUMULATORS[cache_key] = PositionAccumulator(device_label, mmcore)
-        else:  # pragma: no cover
-            raise ValueError(
-                f"Unsupported device type for change accumulating: {device_type.name}"
-            )
-
-    return _CACHED_ACCUMULATORS[cache_key]
+        self._mmcore.setXYPosition(self._device_label, *value)

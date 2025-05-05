@@ -8,7 +8,7 @@ except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
 
-from ._accumulator import AbstractChangeAccumulator, get_device_accumulator
+from ._accumulator import AbstractChangeAccumulator
 from ._logger import configure_logging
 from ._util import find_micromanager, use_micromanager
 from .core import (
@@ -61,6 +61,5 @@ __all__ = [
     "__version__",
     "configure_logging",
     "find_micromanager",
-    "get_device_accumulator",
     "use_micromanager",
 ]
