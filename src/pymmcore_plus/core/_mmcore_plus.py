@@ -23,6 +23,7 @@ from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from pymmcore_plus.metadata.functions import summary_metadata
 
+from . import _device
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
@@ -31,10 +32,10 @@ from ._constants import (
     DeviceInitializationState,
     DeviceType,
     FocusDirection,
+    Keyword,
     PixelType,
     PropertyType,
 )
-from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
@@ -47,11 +48,11 @@ if TYPE_CHECKING:
     from pymmcore import DeviceLabel
     from useq import MDAEvent
 
-    from pymmcore_plus._accumulator import ChangeAccumulator
     from pymmcore_plus.mda._runner import SingleOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
+    _DT = TypeVar("_DT", bound=_device.Device)
     ListOrTuple = list[_T] | tuple[_T, ...]
     DeviceTypesWithCurrent: TypeAlias = Union[
         Literal[DeviceType.CameraDevice]
@@ -346,7 +347,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         and the property Value has actually changed.
         """
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
-            super().setStateLabel(stateDeviceLabel, stateLabel)
+            try:
+                super().setStateLabel(stateDeviceLabel, stateLabel)
+            except RuntimeError as e:  # pragma: no cover
+                state_labels = self.getStateLabels(stateDeviceLabel)
+                msg = f"{e}.  Available Labels: {state_labels}"
+                raise RuntimeError(msg) from None
 
     def setDeviceAdapterSearchPaths(self, paths: Sequence[str]) -> None:
         """Set the device adapter search paths.
@@ -389,6 +395,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             recognized by the specific plugin library. See
             [`pymmcore.CMMCore.getAvailableDevices`][] for a list of valid device names.
         """
+        if str(label).lower() == Keyword.CoreDevice.value.lower():  # pragma: no cover
+            raise ValueError(f"Label {label!r} is reserved.")
+
         try:
             super().loadDevice(label, moduleName, deviceName)
         except (RuntimeError, ValueError) as e:
@@ -862,7 +871,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
-    ) -> Iterator[Device]: ...
+    ) -> Iterator[_device.Device]: ...
 
     def iterDevices(
         self,
@@ -871,7 +880,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_adapter: str | re.Pattern | None = None,
         *,
         as_object: bool = True,
-    ) -> Iterator[Device] | Iterator[str]:
+    ) -> Iterator[_device.Device] | Iterator[str]:
         """Iterate over currently loaded devices.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -924,7 +933,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             devices = [d for d in devices if ptrn.search(self.getDeviceLibrary(d))]
 
         for dev in devices:
-            yield Device(dev, mmcore=self) if as_object else dev
+            yield _device.Device.create(dev, mmcore=self) if as_object else dev
 
     @overload
     def iterProperties(
@@ -1105,39 +1114,77 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceAdapter(library_name, mmcore=self)
 
-    def getChangeAccumulator(self, device_label: str) -> ChangeAccumulator:
-        """Get a value batcher for the given device.
-
-        A ValueBatcher is a class that batches a series of setX calls to a device,
-        retaining an internal target value, and emitting a signal when the device has
-        reached its target and is idle. It can be shared by multiple players (e.g.
-        widgets, or other classes) that want to control the same device, and allows them
-        all to issue relative/absolute moves, and be notified when the device is idle.
-
-        A common use case is to batch setPosition calls to a stage device, where you
-        might want to accumulate a series of relative moves (e.g. clicks on a move stage
-        button), and snap an image only when the stage is idle.
-
-        The main API of a [`ValueBatcher`][pymmcore_plus._batcher.AbstractValueBatcher]:
-            - `finished`: signal emitted when the device has reached its target.
-            - `set_relative`: set the target position of the device relative to its
-               current target.
-            - `set_absolute`: set the target position of the device.  Calling
-              `set_absolute` overrides any previous relative or absolute target.
-            - `poll_done`:  This method must be called by some event loop or timer to
-               poll the device and emit the `finished` signal when the device is idle.
-               The event loop is NOT handled in this library.
-
-        Parameters
-        ----------
-        device_label : str
-            The device label to batch.
-        """
-        from pymmcore_plus._accumulator import get_device_accumulator
-
-        return get_device_accumulator(device_label, mmcore=self)
-
-    def getDeviceObject(self, device_label: str) -> Device:
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Camera]
+    ) -> _device.CameraDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Stage]
+    ) -> _device.StageDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.State]
+    ) -> _device.StateDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Shutter]
+    ) -> _device.ShutterDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.XYStage]
+    ) -> _device.XYStageDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Serial]
+    ) -> _device.SerialDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Generic]
+    ) -> _device.GenericDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.AutoFocus]
+    ) -> _device.AutoFocusDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.ImageProcessor]
+    ) -> _device.ImageProcessorDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.SignalIO]
+    ) -> _device.SignalIODevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Magnifier]
+    ) -> _device.MagnifierDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.SLM]
+    ) -> _device.SLMDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Hub]
+    ) -> _device.HubDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Galvo]
+    ) -> _device.GalvoDevice: ...
+    @overload
+    def getDeviceObject(
+        self,
+        device_label: Literal[Keyword.CoreDevice],
+        device_type: Literal[DeviceType.Core],
+    ) -> _device.CoreDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: DeviceType = ...
+    ) -> _device.Device: ...
+    @overload
+    def getDeviceObject(self, device_label: str, device_type: type[_DT]) -> _DT: ...
+    def getDeviceObject(
+        self, device_label: str, device_type: type[_DT] | DeviceType = DeviceType.Any
+    ) -> _DT | _device.Device:
         """Return a `Device` object bound to device_label on this core.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -1180,7 +1227,18 @@ class CMMCorePlus(pymmcore.CMMCore):
             }
         }
         """
-        return Device(device_label, mmcore=self)
+        dev = _device.Device.create(device_label, mmcore=self)
+        if (isinstance(device_type, type) and not isinstance(dev, device_type)) or (
+            isinstance(device_type, DeviceType)
+            and device_type not in {DeviceType.Any, DeviceType.Unknown}
+            and dev.type() != device_type
+        ):
+            raise TypeError(
+                f"{device_type!r} requested but device with label "
+                f"{device_label!r} is a {dev.type()}."
+            )
+
+        return dev
 
     def getConfigGroupObject(
         self, group_name: str, allow_missing: bool = False
