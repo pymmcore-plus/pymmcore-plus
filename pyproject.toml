@@ -96,6 +96,8 @@ dev = [
     "pydantic >2.7.4; python_version >= '3.13'",
 ]
 
+[tool.uv.sources]
+pymmcore-plus = { workspace = true }
 
 [tool.uv]
 override-dependencies = [
