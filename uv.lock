@@ -1665,7 +1665,7 @@ requires-dist = [
     { name = "typer", specifier = ">=0.4.2" },
     { name = "typer", marker = "extra == 'cli'", specifier = ">=0.4.2" },
     { name = "typing-extensions", specifier = ">=4" },
-    { name = "useq-schema", specifier = ">=0.7.0" },
+    { name = "useq-schema", specifier = ">=0.7.2" },
     { name = "zarr", marker = "extra == 'io'", specifier = ">=2.15,<3" },
 ]
 provides-extras = ["cli", "io", "pyqt5", "pyqt6", "pyside2", "pyside6"]
