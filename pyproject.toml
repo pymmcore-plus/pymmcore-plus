@@ -131,6 +131,8 @@ sources = ["src"]
 [tool.ruff]
 line-length = 88
 target-version = "py39"
+fix = true
+unsafe-fixes = true
 
 [tool.ruff.lint]
 pydocstyle = { convention = "numpy" }

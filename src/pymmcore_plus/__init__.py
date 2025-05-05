@@ -8,6 +8,7 @@ except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
 
+from ._accumulator import AbstractChangeAccumulator
 from ._logger import configure_logging
 from ._util import find_micromanager, use_micromanager
 from .core import (
@@ -34,6 +35,7 @@ from .core.events import CMMCoreSignaler, PCoreSignaler
 from .mda._runner import GeneratorMDASequence
 
 __all__ = [
+    "AbstractChangeAccumulator",
     "ActionType",
     "CFGCommand",
     "CFGGroup",

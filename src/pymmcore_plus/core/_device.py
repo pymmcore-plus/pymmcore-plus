@@ -12,6 +12,10 @@ if TYPE_CHECKING:
     from pymmcore import StateLabel
     from typing_extensions import Self
 
+    from pymmcore_plus._accumulator import (
+        PositionChangeAccumulator,
+        XYPositionChangeAccumulator,
+    )
     from pymmcore_plus.core.events._protocol import PSignalInstance
 
     from ._constants import DeviceDetectionStatus
@@ -165,7 +169,8 @@ class Device:
     def setProperty(self, property_name: str, value: bool | float | int | str) -> None:
         """Set a device property value.
 
-        See also: [`Device.getPropertyObject`][].
+        See also,
+        [`Device.getPropertyObject`][pymmcore_plus.core.Device.getPropertyObject].
 
         Examples
         --------
@@ -469,6 +474,11 @@ class StageDevice(_StageBase):
     def setRelativePosition(self, offset: float) -> None:
         self._mmc.setRelativePosition(self.label, offset)
 
+    def getPositionAccumulator(self) -> PositionChangeAccumulator:
+        from pymmcore_plus._accumulator import PositionChangeAccumulator
+
+        return PositionChangeAccumulator.get_cached(self.label, self._mmc)
+
     def setOrigin(self) -> None:
         self._mmc.setOrigin(self.label)
 
@@ -545,6 +555,11 @@ class XYStageDevice(_StageBase):
     def setRelativeXYPosition(self, dx: float, dy: float) -> None:
         """Set the relative position of the XY stage in microns."""
         self._mmc.setRelativeXYPosition(self.label, dx, dy)
+
+    def getPositionAccumulator(self) -> XYPositionChangeAccumulator:
+        from pymmcore_plus._accumulator import XYPositionChangeAccumulator
+
+        return XYPositionChangeAccumulator.get_cached(self.label, self._mmc)
 
     def getXPosition(self) -> float:
         """Return the X position of the XY stage in microns."""
