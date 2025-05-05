@@ -12,40 +12,37 @@ all super valuable contributions.
 All development for this library happens in the
 [pymmcore-plus/pymmcore-plus
 ](https://github.com/pymmcore-plus/pymmcore-plus) repo on GitHub. We recommend you work
-with a [Conda](https://www.anaconda.com/products/individual) environment (or an
-alternative virtual environment like
-[`venv`](https://docs.python.org/3/library/venv.html)).
+with [uv](https://docs.astral.sh/uv/getting-started/installation/), but any virtual
+environment manager should work.
 
-The below instructions also use
-[Mamba](https://github.com/mamba-org/mamba#the-fast-cross-platform-package-manager)
-which is a very fast implementation of `conda`.
+Using `uv`:
 
 ```bash
 git clone <your fork>
 cd pymmcore-plus
-mamba create -n pymm-dev -c conda-forge python
-conda activate pymm-dev
-pip install -e ".[test,docs]"
-pip install pre-commit
+uv sync
 pre-commit install
 ```
 
-The `-e .` flag installs `pymmcore_plus`in ["editable"
-mode](https://pip.pypa.io/en/stable/cli/pip_install/#editable-installs) and
-`[test,docs]` installs the optional dependencies you need for developing
-`pymmcore-plus`.
+```sh
+uv run pytest 
+```
 
-!!! note
+or activate the virtual environment (`source .venv/bin/activate` on
+Linux/macOS, `.venv\Scripts\activate` on Windows) and run:
 
-    `pymmcore-plus` is developed using the [github
-    flow](https://docs.github.com/en/get-started/quickstart/github-flow). Using
-    Git/GitHub can [confusing](https://xkcd.com/1597) :thinking_face:, so if you're new to Git, you
-    may find it helpful to use a program like [GitHub
-    Desktop](https://desktop.github.com) and to follow a
-    [guide](https://github.com/firstcontributions/first-contributions#first-contributions).
+```bash
+pytest
+```
 
-    Also feel free to ask for help/advice on the relevant GitHub
-    [issue](https://github.com/pymmcore-plus/pymmcore-plus/issues).
+If using a different virtual environment manager (like conda) instead of uv,
+you can install the dependencies with:
+
+```bash
+pip install -e . --group dev
+```
+
+> This requires a newer version of `pip` (>= 25.1) to work.
 
 ## Contributing Documentation
 
@@ -53,11 +50,8 @@ Our documentation is built with [mkdocs](https://www.mkdocs.org/) from the files
 in the `docs` folder.  To build docs locally:
 
 ```shell
-# install docs dependencies
-pip install -e ".[docs]"
-
 # build docs and serve locally
-mkdocs serve
+uv run mkdocs serve
 ```
 
 The docs should be live at <http://127.0.0.1:8000> and will update automatically
@@ -69,7 +63,7 @@ To build a native version of the DemoCamera for local testing on apple silicon, 
 can run the following command (you must have [homebrew](https://brew.sh) installed)
 
 ```shell
-mmcore build-dev
+uv run mmcore build-dev
 ```
 
 This will download the micro-manager repo, build it, and drop the DemoCamera and
