@@ -39,7 +39,7 @@ jobs:
             python-version: "3.12"
           # test pymmcore-nano
           - os: windows-latest
-            python-version: "3.13"
+            python-version: "3.10"
             nano: "nano"
           - os: macos-13
             python-version: "3.12"
