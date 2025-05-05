@@ -76,8 +76,6 @@ test = [
     "pytest >=8",
     "qtpy >=2",
     "xarray >=2024.1",
-    # we pin this for testing on CI so that we don't have to reinstall different
-    # device interface version
     "pymmcore >=11.5.0.73",
 ]
 dev = [
