@@ -55,34 +55,14 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
+      - uses: pymmcore-plus/setup-mm-test-adapters@main
+
       - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }}
 
       - if: matrix.nano != ''
         run: |
           uv pip install pymmcore-nano
           uv pip uninstall pymmcore
-
-      - name: Set cache path
-        shell: bash
-        run: |
-          set -e
-          CACHE_PATH=$(uv run python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
-          echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
-
-      - name: Cache Drivers
-        id: cache-mm-build
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
-
-      - name: Build Micro-Manager
-        if: runner.os == 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: uv run mmcore build-dev
-
-      - name: Install Micro-Manager
-        if: runner.os != 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: uv run mmcore install
 
       - run: uv run coverage run -p -m pytest -v --color=yes
 
