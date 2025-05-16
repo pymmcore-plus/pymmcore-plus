@@ -13,16 +13,7 @@ from pathlib import Path
 from re import Pattern
 from textwrap import dedent
 from threading import Thread
-from typing import (
-    TYPE_CHECKING,
-    Any,
-    Callable,
-    NamedTuple,
-    Never,
-    TypeVar,
-    cast,
-    overload,
-)
+from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, cast, overload
 
 from psygnal import SignalInstance
 from typing_extensions import deprecated
@@ -52,7 +43,7 @@ from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_clas
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
-    from typing import Literal, TypeAlias, TypedDict, Union, Unpack
+    from typing import Literal, Never, TypeAlias, TypedDict, Union, Unpack
 
     import numpy as np
     from pymmcore import DeviceLabel
