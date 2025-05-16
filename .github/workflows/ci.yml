@@ -37,6 +37,7 @@ jobs:
             add-group: "PyQt6"
           - os: ubuntu-latest
             python-version: "3.12"
+
           # test pymmcore-nano
           - os: windows-latest
             python-version: "3.10"
@@ -44,6 +45,15 @@ jobs:
           - os: macos-13
             python-version: "3.12"
             nano: "nano"
+
+          - os: windows-latest
+            python-version: "3.13"
+            resolution: "lowest-direct"
+            add-group: "PySide6"
+          - os: macos-latest
+            python-version: "3.9"
+            resolution: "lowest-direct"
+            add-group: "PyQt6"
 
     env:
       UV_NO_SYNC: "1"
@@ -57,30 +67,21 @@ jobs:
 
       - uses: pymmcore-plus/setup-mm-test-adapters@main
 
-      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }}
+      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution ${{ matrix.resolution || 'highest'}}
 
       - if: matrix.nano != ''
         run: |
           uv pip install pymmcore-nano
           uv pip uninstall pymmcore
 
-      - run: uv run coverage run -p -m pytest -v --color=yes
+      - run: uv run coverage run -p -m pytest -v --color=yes ${{ matrix.resolution == 'lowest-direct' && '-W ignore' || '' }}
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
-          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}
+          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}-${{ matrix.resolution }}
           path: ./.coverage*
           include-hidden-files: true
-
-      - name: test lowest-direct deps
-        shell: bash
-        # on windows pyqt6, still getting DLL load failed while importing QtCore
-        if: matrix.nano == '' && !(matrix.os == 'windows-latest' && matrix.add-group == 'PyQt6')
-        run: |
-          rm -rf .venv
-          uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution lowest-direct
-          uv run pytest -v --color=yes -W ignore
 
   upload_coverage:
     if: always()
