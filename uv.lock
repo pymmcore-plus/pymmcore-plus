@@ -436,7 +436,7 @@ name = "importlib-metadata"
 version = "8.7.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "zipp", marker = "python_full_version < '3.12'" },
+    { name = "zipp", marker = "python_full_version < '3.10'" },
 ]
 sdist = { url = "https://files.pythonhosted.org/packages/76/66/650a33bd90f786193e4de4b3ad86ea60b53c89b669a5c7be931fac31cdb0/importlib_metadata-8.7.0.tar.gz", hash = "sha256:d13b81ad223b890aa16c5471f2ac3056cf76c5f10f82d6f9292f0b415f389000", size = 56641 }
 wheels = [
@@ -1767,8 +1767,8 @@ requires-dist = [
     { name = "tensorstore", specifier = ">=0.1.67,!=0.1.72" },
     { name = "tensorstore", marker = "python_full_version >= '3.13'", specifier = ">=0.1.71,!=0.1.72" },
     { name = "tifffile", marker = "extra == 'io'", specifier = ">=2021.6.14" },
-    { name = "typer", specifier = ">=0.4.2" },
-    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.4.2" },
+    { name = "typer", specifier = ">=0.10.0" },
+    { name = "typer", marker = "extra == 'cli'", specifier = ">=0.10.0" },
     { name = "typing-extensions", specifier = ">=4" },
     { name = "useq-schema", specifier = ">=0.7.2" },
     { name = "zarr", marker = "extra == 'io'", specifier = ">=2.15,<3" },

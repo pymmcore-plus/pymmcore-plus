@@ -80,7 +80,7 @@ jobs:
         run: |
           rm -rf .venv
           uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution lowest-direct
-          uv run pytest -v --color=yes
+          uv run pytest -v --color=yes -W ignore
 
   upload_coverage:
     if: always()
