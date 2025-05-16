@@ -326,10 +326,13 @@ class CMMCorePlus(pymmcore.CMMCore):
     def __del__(self) -> None:
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
-        super().registerCallback(None)  # type: ignore
-        self.reset()
-        # clean up logging
-        self.setPrimaryLogFile("")
+        try:
+            super().registerCallback(None)  # type: ignore
+            self.reset()
+            # clean up logging
+            self.setPrimaryLogFile("")
+        except Exception as e:
+            logger.exception("Error during CMMCorePlus.__del__(): %s", e)
 
     # Re-implemented methods from the CMMCore API
 
