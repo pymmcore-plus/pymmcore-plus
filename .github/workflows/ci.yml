@@ -15,7 +15,7 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }} ${{ matrix.nano }}
+    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }} ${{ matrix.nano }}${{ matrix.resolution }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -37,13 +37,22 @@ jobs:
             add-group: "PyQt6"
           - os: ubuntu-latest
             python-version: "3.12"
-          # test pymmcore-nano
+
           - os: windows-latest
             python-version: "3.10"
             nano: "nano"
           - os: macos-13
             python-version: "3.12"
             nano: "nano"
+
+          - os: windows-latest
+            python-version: "3.13"
+            resolution: "lowest-direct"
+            add-group: "PySide6"
+          - os: macos-latest
+            python-version: "3.9"
+            resolution: "lowest-direct"
+            add-group: "PyQt6"
 
     env:
       UV_NO_SYNC: "1"
@@ -55,7 +64,7 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }}
+      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution ${{ matrix.resolution || 'highest'}}
 
       - if: matrix.nano != ''
         run: |
@@ -89,18 +98,10 @@ jobs:
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
-          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}
+          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}-${{ matrix.resolution }}
           path: ./.coverage*
           include-hidden-files: true
 
-      - name: test lowest-direct deps
-        shell: bash
-        # on windows pyqt6, still getting DLL load failed while importing QtCore
-        if: matrix.nano == '' && !(matrix.os == 'windows-latest' && matrix.add-group == 'PyQt6')
-        run: |
-          rm -rf .venv
-          uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution lowest-direct
-          uv run pytest -v --color=yes -W ignore
 
   upload_coverage:
     if: always()
