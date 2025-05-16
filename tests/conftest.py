@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
+import pymmcore_plus._pymmcore
+
 os.environ["PYTEST_RUNNING"] = "1"
 from typing import TYPE_CHECKING, Any
 
@@ -38,7 +40,7 @@ def core(request: Any) -> Iterator[pymmcore_plus.CMMCorePlus]:
         core._events = QCoreSignaler()
         core.mda._signals = QMDASignaler()
     core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(core.events)
-    core.registerCallback(core._callback_relay)
+    pymmcore_plus._pymmcore.CMMCore.registerCallback(core, core._callback_relay)
     if not core.getDeviceAdapterSearchPaths():
         pytest.fail("To run tests, please install MM with `mmcore install`")
     core.loadSystemConfiguration()

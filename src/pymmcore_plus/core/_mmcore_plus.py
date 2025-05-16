@@ -13,9 +13,19 @@ from pathlib import Path
 from re import Pattern
 from textwrap import dedent
 from threading import Thread
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    NamedTuple,
+    Never,
+    TypeVar,
+    cast,
+    overload,
+)
 
 from psygnal import SignalInstance
+from typing_extensions import deprecated
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus._logger import current_logfile, logger
@@ -274,7 +284,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
-        self.registerCallback(self._callback_relay)
+        super().registerCallback(self._callback_relay)
 
         self._mda_runner = MDARunner()
         self._mda_runner.set_engine(MDAEngine(self))
@@ -286,6 +296,24 @@ class CMMCorePlus(pymmcore.CMMCore):
         # garbage collected
         self._weak_clean = weakref.WeakMethod(self.unloadAllDevices)
         atexit.register(self._weak_clean)
+
+    @deprecated(
+        "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
+    )
+    def registerCallback(self, *_: Never) -> Never:  # type: ignore[override]
+        """*registerCallback is disallowed in pymmcore-plus!*
+
+        If you want to connect callbacks to events, use the
+        [`CMMCorePlus.events`][pymmcore_plus.CMMCorePlus.events] property instead.
+        """  # noqa
+        raise RuntimeError(
+            dedent("""
+            This method is disallowed in pymmcore-plus.
+
+            If you want to connect callbacks to events, use the
+            `CMMCorePlus.events` property instead.
+            """)
+        )
 
     @property
     def events(self) -> PCoreSignaler:
@@ -300,12 +328,15 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self._events
 
     def __repr__(self) -> str:
-        return f"<{type(self).__name__} at {hex(id(self))}>"
+        """Return a string representation of the core object."""
+        ndevices = len(self.getLoadedDevices()) - 1
+        return f"<{type(self).__name__} at {hex(id(self))} with {ndevices} devices>"
 
     def __del__(self) -> None:
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
-        self.unloadAllDevices()
+        super().registerCallback(None)  # type: ignore
+        self.reset()
         # clean up logging
         self.setPrimaryLogFile("")
 
