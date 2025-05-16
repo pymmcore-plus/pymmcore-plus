@@ -93,7 +93,7 @@ jobs:
         if: runner.os != 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
         run: uv run mmcore install
 
-      - run: uv run coverage run -p -m pytest -v --color=yes
+      - run: uv run coverage run -p -m pytest -v --color=yes ${{ matrix.resolution == 'lowest-direct' && '-W ignore' || '' }}
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
@@ -101,7 +101,6 @@ jobs:
           name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}-${{ matrix.resolution }}
           path: ./.coverage*
           include-hidden-files: true
-
 
   upload_coverage:
     if: always()
