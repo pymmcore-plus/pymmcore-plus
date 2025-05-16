@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 from unittest.mock import patch
 
+import pymmcore_plus._pymmcore
+
 os.environ["PYTEST_RUNNING"] = "1"
 from typing import TYPE_CHECKING, Any
 
@@ -20,7 +22,7 @@ try:
     from pymmcore_plus.core.events import QCoreSignaler
     from pymmcore_plus.mda.events import QMDASignaler
 
-    PARAMS = ["QSignal", "psygnal"]
+    PARAMS = ["qt", "psygnal"]
 except ImportError:
     PARAMS = ["psygnal"]
 
@@ -28,17 +30,18 @@ logger.setLevel("CRITICAL")
 
 
 @pytest.fixture(params=PARAMS, scope="function")
-def core(request: Any) -> Iterator[pymmcore_plus.CMMCorePlus]:
+def core(
+    request: Any, monkeypatch: pytest.MonkeyPatch
+) -> Iterator[pymmcore_plus.CMMCorePlus]:
+    monkeypatch.setenv("PYMM_SIGNALS_BACKEND", request.param)
     core = pymmcore_plus.CMMCorePlus()
     core.mda.engine.use_hardware_sequencing = False
     if request.param == "psygnal":
-        core._events = CMMCoreSignaler()
-        core.mda._signals = MDASignaler()
+        assert isinstance(core._events, CMMCoreSignaler)
+        assert isinstance(core.mda._signals, MDASignaler)
     else:
-        core._events = QCoreSignaler()
-        core.mda._signals = QMDASignaler()
-    core._callback_relay = pymmcore_plus.core._mmcore_plus.MMCallbackRelay(core.events)
-    core.registerCallback(core._callback_relay)
+        assert isinstance(core._events, QCoreSignaler)
+        assert isinstance(core.mda._signals, QMDASignaler)
     if not core.getDeviceAdapterSearchPaths():
         pytest.fail("To run tests, please install MM with `mmcore install`")
     core.loadSystemConfiguration()
