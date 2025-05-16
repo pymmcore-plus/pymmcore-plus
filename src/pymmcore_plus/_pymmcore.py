@@ -24,7 +24,9 @@ class VersionInfo(NamedTuple):
     minor: int
     micro: int
     device_interface: int
-    build: int
+    build: int = 0
 
 
-version_info = VersionInfo(*(int(x) for x in re.findall(r"\d+", __version__)))
+# pass no more than 5 parts to VersionInfo
+numbers = re.findall(r"\d+", __version__)[:5]
+version_info = VersionInfo(*(int(i) for i in numbers))
