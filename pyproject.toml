@@ -175,6 +175,7 @@ filterwarnings = [
     "error",
     "ignore:Failed to disconnect::pytestqt",
     "ignore:numpy.core.multiarray is deprecated",
+    "ignore:'BaseCommand' is deprecated::typer",
 ]
 markers = ["run_last: mark a test to run last"]
 
