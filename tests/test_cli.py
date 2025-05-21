@@ -289,6 +289,7 @@ def _background_tail(q: Queue, runner: Any, logfile: Path) -> None:
 # by pretty much every test that creates a core after it.
 @pytest.mark.skipif(bool(not os.getenv("CI")), reason="this is a crappy test")
 @pytest.mark.run_last
+@pytest.mark.filterwarnings("ignore:unclosed file:ResourceWarning")
 def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # create mock log file
     TEST_LOG = tmp_path / "test.log"
