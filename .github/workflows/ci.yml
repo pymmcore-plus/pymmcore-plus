@@ -128,7 +128,7 @@ jobs:
           uv pip install ./pymmcore-plus
           uv pip list
 
-      - run: uv --no-sync run pytest -v --color=yes -W ignore
+      - run: uv run --no-sync pytest -v --color=yes -W ignore
 
   benchmarks:
     runs-on: ubuntu-latest
