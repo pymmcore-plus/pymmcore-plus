@@ -2,31 +2,25 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, cast, overload
+from typing import TYPE_CHECKING, Any, cast
 
 from pymmcore_plus.core import CMMCorePlus, DeviceType
-from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.core._base_mixin import UniCoreBase
+from pymmcore_plus.experimental.unicore.core._stage_mixin import PyStageMixin
 from pymmcore_plus.experimental.unicore.devices._device import Device
-from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
 
 from ._camera_mixin import PyCameraMixin
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
-    from typing import Callable, Literal, NewType, TypeVar
 
     from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
-    PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
 
-    _T = TypeVar("_T")
-
-
-class UniMMCore(PyCameraMixin, UniCoreBase):
+class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
     """Unified Core object that first checks for python, then C++ devices."""
 
     # -----------------------------------------------------------------------
@@ -163,6 +157,60 @@ class UniMMCore(PyCameraMixin, UniCoreBase):
         if label not in self._pydevices:  # pragma: no cover
             return super().getDeviceDescription(label)
         return self._pydevices[label].description()
+
+    # ------------------------------ Ready State ----------------------------
+
+    def deviceBusy(self, label: DeviceLabel | str) -> bool:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().deviceBusy(label)
+        with self._pydevices[label] as dev:
+            return dev.busy()
+
+    def waitForDevice(self, label: DeviceLabel | str) -> None:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().waitForDevice(label)
+        self._pydevices.wait_for(label, self.getTimeoutMs())
+
+    # def waitForConfig
+
+    # probably only needed because C++ method is not virtual
+    def systemBusy(self) -> bool:
+        return self.deviceTypeBusy(DeviceType.AnyType)
+
+    # probably only needed because C++ method is not virtual
+    def waitForSystem(self) -> None:
+        self.waitForDeviceType(DeviceType.AnyType)
+
+    def waitForDeviceType(self, devType: int) -> None:
+        super().waitForDeviceType(devType)
+        self._pydevices.wait_for_device_type(devType, self.getTimeoutMs())
+
+    def deviceTypeBusy(self, devType: int) -> bool:
+        if super().deviceTypeBusy(devType):
+            return True
+
+        for label in self._pydevices.get_labels_of_type(devType):
+            with self._pydevices[label] as dev:
+                if dev.busy():
+                    return True
+        return False
+
+    def getDeviceDelayMs(self, label: DeviceLabel | str) -> float:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().getDeviceDelayMs(label)
+        return 0  # pydevices don't yet support delays
+
+    def setDeviceDelayMs(self, label: DeviceLabel | str, delayMs: float) -> None:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setDeviceDelayMs(label, delayMs)
+        if delayMs != 0:
+            raise NotImplementedError("Python devices do not support delays")
+        return
+
+    def usesDeviceDelay(self, label: DeviceLabel | str) -> bool:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().usesDeviceDelay(label)
+        return False
 
     # ---------------------------- Properties ---------------------------
 
@@ -306,293 +354,3 @@ class UniMMCore(PyCameraMixin, UniCoreBase):
             return super().stopPropertySequence(label, propName)
         with self._pydevices[label] as dev:
             dev.stop_property_sequence(propName)
-
-    # ------------------------------ Ready State ----------------------------
-
-    def deviceBusy(self, label: DeviceLabel | str) -> bool:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().deviceBusy(label)
-        with self._pydevices[label] as dev:
-            return dev.busy()
-
-    def waitForDevice(self, label: DeviceLabel | str) -> None:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().waitForDevice(label)
-        self._pydevices.wait_for(label, self.getTimeoutMs())
-
-    # def waitForConfig
-
-    # probably only needed because C++ method is not virtual
-    def systemBusy(self) -> bool:
-        return self.deviceTypeBusy(DeviceType.AnyType)
-
-    # probably only needed because C++ method is not virtual
-    def waitForSystem(self) -> None:
-        self.waitForDeviceType(DeviceType.AnyType)
-
-    def waitForDeviceType(self, devType: int) -> None:
-        super().waitForDeviceType(devType)
-        self._pydevices.wait_for_device_type(devType, self.getTimeoutMs())
-
-    def deviceTypeBusy(self, devType: int) -> bool:
-        if super().deviceTypeBusy(devType):
-            return True
-
-        for label in self._pydevices.get_labels_of_type(devType):
-            with self._pydevices[label] as dev:
-                if dev.busy():
-                    return True
-        return False
-
-    def getDeviceDelayMs(self, label: DeviceLabel | str) -> float:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().getDeviceDelayMs(label)
-        return 0  # pydevices don't yet support delays
-
-    def setDeviceDelayMs(self, label: DeviceLabel | str, delayMs: float) -> None:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().setDeviceDelayMs(label, delayMs)
-        if delayMs != 0:
-            raise NotImplementedError("Python devices do not support delays")
-        return
-
-    def usesDeviceDelay(self, label: DeviceLabel | str) -> bool:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().usesDeviceDelay(label)
-        return False
-
-    # -----------------------------------------------------------------------
-    # ---------------------------- XYStageDevice ----------------------------
-    # -----------------------------------------------------------------------
-
-    def setXYStageDevice(self, xyStageLabel: DeviceLabel | str) -> None:
-        label = self._set_current_if_pydevice(KW.CoreXYStage, xyStageLabel)
-        super().setXYStageDevice(label)
-
-    def getXYStageDevice(self) -> DeviceLabel | Literal[""]:
-        """Returns the label of the currently selected XYStage device.
-
-        Returns empty string if no XYStage device is selected.
-        """
-        return self._pycore.current(KW.CoreXYStage) or super().getXYStageDevice()
-
-    @overload
-    def setXYPosition(self, x: float, y: float, /) -> None: ...
-    @overload
-    def setXYPosition(
-        self, xyStageLabel: DeviceLabel | str, x: float, y: float, /
-    ) -> None: ...
-    def setXYPosition(self, *args: Any) -> None:
-        """Sets the position of the XY stage in microns."""
-        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
-        if label not in self._pydevices:  # pragma: no cover
-            return super().setXYPosition(label, *args)
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            dev.set_position_um(*args)
-
-    @overload
-    def getXYPosition(self) -> tuple[float, float]: ...
-    @overload
-    def getXYPosition(self, xyStageLabel: DeviceLabel | str) -> tuple[float, float]: ...
-    def getXYPosition(
-        self, xyStageLabel: DeviceLabel | str = ""
-    ) -> tuple[float, float]:
-        """Obtains the current position of the XY stage in microns."""
-        label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:  # pragma: no cover
-            return tuple(super().getXYPosition(label))  # type: ignore
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            return dev.get_position_um()
-
-    # reimplementation needed because the C++ method are not virtual
-    @overload
-    def getXPosition(self) -> float: ...
-    @overload
-    def getXPosition(self, xyStageLabel: DeviceLabel | str) -> float: ...
-    def getXPosition(self, xyStageLabel: DeviceLabel | str = "") -> float:
-        """Obtains the current position of the X axis of the XY stage in microns."""
-        return self.getXYPosition(xyStageLabel)[0]
-
-    # reimplementation needed because the C++ method are not virtual
-    @overload
-    def getYPosition(self) -> float: ...
-    @overload
-    def getYPosition(self, xyStageLabel: DeviceLabel | str) -> float: ...
-    def getYPosition(self, xyStageLabel: DeviceLabel | str = "") -> float:
-        """Obtains the current position of the Y axis of the XY stage in microns."""
-        return self.getXYPosition(xyStageLabel)[1]
-
-    def getXYStageSequenceMaxLength(self, xyStageLabel: DeviceLabel | str) -> int:
-        """Gets the maximum length of an XY stage's position sequence."""
-        if xyStageLabel not in self._pydevices:  # pragma: no cover
-            return super().getXYStageSequenceMaxLength(xyStageLabel)
-        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
-        return dev.get_sequence_max_length()
-
-    def isXYStageSequenceable(self, xyStageLabel: DeviceLabel | str) -> bool:
-        """Queries XY stage if it can be used in a sequence."""
-        if xyStageLabel not in self._pydevices:  # pragma: no cover
-            return super().isXYStageSequenceable(xyStageLabel)
-        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
-        return dev.is_sequenceable()
-
-    def loadXYStageSequence(
-        self,
-        xyStageLabel: DeviceLabel | str,
-        xSequence: Sequence[float],
-        ySequence: Sequence[float],
-        /,
-    ) -> None:
-        """Transfer a sequence of stage positions to the xy stage.
-
-        xSequence and ySequence must have the same length. This should only be called
-        for XY stages that are sequenceable
-        """
-        if xyStageLabel not in self._pydevices:  # pragma: no cover
-            return super().loadXYStageSequence(xyStageLabel, xSequence, ySequence)
-        if len(xSequence) != len(ySequence):
-            raise ValueError("xSequence and ySequence must have the same length")
-        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
-        seq = tuple(zip(xSequence, ySequence))
-        if len(seq) > dev.get_sequence_max_length():
-            raise ValueError(
-                f"Sequence is too long. Max length is {dev.get_sequence_max_length()}"
-            )
-        dev.send_sequence(seq)
-
-    @overload
-    def setOriginX(self) -> None: ...
-    @overload
-    def setOriginX(self, xyStageLabel: DeviceLabel | str) -> None: ...
-    def setOriginX(self, xyStageLabel: DeviceLabel | str = "") -> None:
-        """Zero the given XY stage's X coordinate at the current position."""
-        label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:  # pragma: no cover
-            return super().setOriginX(label)
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            dev.set_origin_x()
-
-    @overload
-    def setOriginY(self) -> None: ...
-    @overload
-    def setOriginY(self, xyStageLabel: DeviceLabel | str) -> None: ...
-    def setOriginY(self, xyStageLabel: DeviceLabel | str = "") -> None:
-        """Zero the given XY stage's Y coordinate at the current position."""
-        label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:  # pragma: no cover
-            return super().setOriginY(label)
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            dev.set_origin_y()
-
-    @overload
-    def setOriginXY(self) -> None: ...
-    @overload
-    def setOriginXY(self, xyStageLabel: DeviceLabel | str) -> None: ...
-    def setOriginXY(self, xyStageLabel: DeviceLabel | str = "") -> None:
-        """Zero the given XY stage's coordinates at the current position."""
-        label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:  # pragma: no cover
-            return super().setOriginXY(label)
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            dev.set_origin()
-
-    @overload
-    def setAdapterOriginXY(self, newXUm: float, newYUm: float, /) -> None: ...
-    @overload
-    def setAdapterOriginXY(
-        self, xyStageLabel: DeviceLabel | str, newXUm: float, newYUm: float, /
-    ) -> None: ...
-    def setAdapterOriginXY(self, *args: Any) -> None:
-        """Enable software translation of coordinates for the current XY stage.
-
-        The current position of the stage becomes (newXUm, newYUm). It is recommended
-        that setOriginXY() be used instead where available.
-        """
-        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
-        if label not in self._pydevices:  # pragma: no cover
-            return super().setAdapterOriginXY(label, *args)
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            dev.set_adapter_origin_um(*args)
-
-    @overload
-    def setRelativeXYPosition(self, dx: float, dy: float, /) -> None: ...
-    @overload
-    def setRelativeXYPosition(
-        self, xyStageLabel: DeviceLabel | str, dx: float, dy: float, /
-    ) -> None: ...
-    def setRelativeXYPosition(self, *args: Any) -> None:
-        """Sets the relative position of the XY stage in microns."""
-        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
-        if label not in self._pydevices:  # pragma: no cover
-            return super().setRelativeXYPosition(label, *args)
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            dev.set_relative_position_um(*args)
-
-    def startXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
-        """Starts an ongoing sequence of triggered events in an XY stage.
-
-        This should only be called for stages that are sequenceable
-        """
-        label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:  # pragma: no cover
-            return super().startXYStageSequence(label)
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            dev.start_sequence()
-
-    def stopXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
-        """Stops an ongoing sequence of triggered events in an XY stage.
-
-        This should only be called for stages that are sequenceable
-        """
-        label = xyStageLabel or self.getXYStageDevice()
-        if label not in self._pydevices:  # pragma: no cover
-            return super().stopXYStageSequence(label)
-
-        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
-            dev.stop_sequence()
-
-    # -----------------------------------------------------------------------
-    # ---------------------------- Any Stage --------------------------------
-    # -----------------------------------------------------------------------
-
-    def home(self, xyOrZStageLabel: DeviceLabel | str) -> None:
-        """Perform a hardware homing operation for an XY or focus/Z stage."""
-        if xyOrZStageLabel not in self._pydevices:
-            return super().home(xyOrZStageLabel)
-
-        dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
-        dev.home()
-
-    def stop(self, xyOrZStageLabel: DeviceLabel | str) -> None:
-        """Stop the XY or focus/Z stage."""
-        if xyOrZStageLabel not in self._pydevices:
-            return super().stop(xyOrZStageLabel)
-
-        dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
-        dev.stop()
-
-
-def _ensure_label(
-    args: tuple[_T, ...], min_args: int, getter: Callable[[], str]
-) -> tuple[str, tuple[_T, ...]]:
-    """Ensure we have a device label.
-
-    Designed to be used with overloaded methods that MAY take a device label as the
-    first argument.
-
-    If the number of arguments is less than `min_args`, the label is obtained from the
-    getter function. If the number of arguments is greater than or equal to `min_args`,
-    the label is the first argument and the remaining arguments are returned as a tuple
-    """
-    if len(args) < min_args:
-        # we didn't get the label
-        return getter(), args
-    return cast("str", args[0]), args[1:]

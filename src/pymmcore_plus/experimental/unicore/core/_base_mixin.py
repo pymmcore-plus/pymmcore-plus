@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 from collections.abc import Iterator, MutableMapping
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Callable, TypeVar, cast
 
 from pymmcore_plus.core import Keyword
 from pymmcore_plus.core import Keyword as KW
@@ -16,6 +16,7 @@ if TYPE_CHECKING:
 
     PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
 
+    _T = TypeVar("_T")
 
 CURRENT = {
     KW.CoreCamera: None,
@@ -119,3 +120,21 @@ class UniCoreBase(CMMCorePlus):
         elif not label:
             self._pycore.set_current(keyword, None)
         return label
+
+    def _ensure_label(
+        self, args: tuple[_T, ...], min_args: int, getter: Callable[[], str]
+    ) -> tuple[str, tuple[_T, ...]]:
+        """Ensure we have a device label.
+
+        Designed to be used with overloaded methods that MAY take a device label as the
+        first argument.
+
+        If the number of arguments is less than `min_args`, the label is obtained from
+        the getter function. If the number of arguments is greater than or equal to
+        `min_args`, the label is the first argument and the remaining arguments are
+        returned as a tuple
+        """
+        if len(args) < min_args:
+            # we didn't get the label
+            return getter(), args
+        return cast("str", args[0]), args[1:]

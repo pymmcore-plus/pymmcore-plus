@@ -7,7 +7,6 @@ from typing import (
     Any,
     Literal,
     Protocol,
-    cast,
     overload,
 )
 
@@ -16,6 +15,7 @@ from numpy.typing import DTypeLike
 
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._metadata import Metadata
+from pymmcore_plus.experimental.unicore.devices._camera import Camera
 
 from ._base_mixin import UniCoreBase
 
@@ -24,8 +24,6 @@ if TYPE_CHECKING:
 
     from numpy.typing import DTypeLike
     from pymmcore import DeviceLabel
-
-    from pymmcore_plus.experimental.unicore.devices._camera import Camera
 
 
 class SequenceBuffer(Protocol):
@@ -314,7 +312,7 @@ class PyCameraMixin(UniCoreBase):
         """Return the *Python* Camera for ``label`` (or current), else ``None``."""
         label = cameraLabel or self.getCameraDevice()
         if label in self._pydevices:
-            return cast("Camera", self._pydevices[label])
+            return self._pydevices.get_device_of_type(label, Camera)
         return None
 
     def setCameraDevice(self, cameraLabel: DeviceLabel | str) -> None:
