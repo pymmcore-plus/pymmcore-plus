@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.14.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.14.1) (2025-05-30)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.14.0...v0.14.1)
+
+**Fixed bugs:**
+
+- fix: dangling callback during core deletion, and disallow `registerCallback` [\#467](https://github.com/pymmcore-plus/pymmcore-plus/pull/467) ([tlambert03](https://github.com/tlambert03))
+
 ## [v0.14.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.14.0) (2025-05-05)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.7...v0.14.0)
@@ -15,7 +23,6 @@
 
 **Merged pull requests:**
 
-- ci\(pre-commit.ci\): autoupdate [\#463](https://github.com/pymmcore-plus/pymmcore-plus/pull/463) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
 - test: add uv lockfile and test with uv \(including minimum deps\) [\#424](https://github.com/pymmcore-plus/pymmcore-plus/pull/424) ([tlambert03](https://github.com/tlambert03))
 
 ## [v0.13.7](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.7) (2025-04-11)
