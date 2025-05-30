@@ -21,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Callable, Literal, NewType, TypeVar
 
+    import numpy as np
     from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
@@ -637,6 +638,83 @@ class UniMMCore(CMMCorePlus):
 
         dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
         dev.stop()
+
+    # -----------------------------------------------------------------------
+    # ---------------------------- CameraDevice -----------------------------
+    # -----------------------------------------------------------------------
+
+    def snapImage(self) -> None: ...
+    @overload
+    def getImage(self) -> np.ndarray: ...
+    @overload
+    def getImage(self, numChannel: int) -> np.ndarray: ...
+    @overload
+    def startSequenceAcquisition(
+        self, numImages: int, intervalMs: float, stopOnOverflow: bool
+    ) -> None: ...
+    @overload
+    def startSequenceAcquisition(
+        self,
+        cameraLabel: DeviceLabel | str,
+        numImages: int,
+        intervalMs: float,
+        stopOnOverflow: bool,
+    ) -> None:
+        """Starts the camera sequence acquisition."""
+
+    def startContinuousSequenceAcquisition(self, intervalMs: float) -> None:
+        """Starts the continuous camera sequence acquisition."""
+
+    @overload
+    def stopSequenceAcquisition(self) -> None: ...
+    @overload
+    def stopSequenceAcquisition(self, cameraLabel: DeviceLabel | str = ...) -> None: ...
+    def stopSequenceAcquisition(self, cameraLabel: DeviceLabel | str = ...) -> None: ...
+    @overload
+    def getImage(self) -> np.ndarray:
+        """Exposes the internal image buffer."""
+
+    @overload
+    def getImage(self, numChannel: int) -> np.ndarray:
+        """Returns the internal image buffer for a given Camera Channel."""
+
+    def getImageBitDepth(self) -> int:
+        """How many bits of dynamic range are to be expected from the camera."""
+
+    def getImageBufferSize(self) -> int:
+        """Returns the size of the internal image buffer."""
+
+    def getImageHeight(self) -> int:
+        """Vertical dimension of the image buffer in pixels."""
+
+    def getImageProcessorDevice(self) -> DeviceLabel | Literal[""]:
+        """Returns the label of the currently selected image processor device.
+
+        Returns empty string if no image processor device is selected.
+        """
+
+    def getImageWidth(self) -> int:
+        """Horizontal dimension of the image buffer in pixels."""
+
+    def getNumberOfComponents(self) -> int: ...
+    def getNumberOfCameraChannels(self) -> int: ...
+    def getCameraChannelName(self, channelNr: int) -> str: ...
+    @overload
+    def isSequenceRunning(self) -> bool:
+        """Check if the current camera is acquiring the sequence.
+
+        Returns false when the sequence is done
+        """
+
+    @overload
+    def isSequenceRunning(self, cameraLabel: DeviceLabel | str) -> bool:
+        """Check if the specified camera is acquiring the sequence.
+
+        Returns false when the sequence is done
+        """
+
+    def getRemainingImageCount(self) -> int:
+        """Returns number ofimages available in the Circular Buffer."""
 
 
 def _ensure_label(
