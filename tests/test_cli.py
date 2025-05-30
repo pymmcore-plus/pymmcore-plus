@@ -102,8 +102,9 @@ def test_available_versions() -> None:
     """installing with an erroneous version should fail and show available versions."""
     result = runner.invoke(app, ["install", "-r", "xxxx"])
     assert result.exit_code > 0
-    assert "Release 'xxxx' not found" in result.stdout
-    assert "Last 15 releases:" in result.stdout
+    msg = result.stdout or result.stderr
+    assert "Release 'xxxx' not found" in msg
+    assert "Last 15 releases:" in msg
 
 
 def test_show_version() -> None:
