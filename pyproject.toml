@@ -158,7 +158,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*.py" = ["D", "SLF"]
+"tests/**/*.py" = ["D", "SLF"]
 "examples/*.py" = ["D"]
 "_cli.py" = ["B008"]
 "docs/*.py" = ["A", "D"]

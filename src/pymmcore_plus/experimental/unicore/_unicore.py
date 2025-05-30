@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import threading
-from collections.abc import Iterator, MutableMapping, Sequence
+from collections.abc import Iterator, Mapping, MutableMapping, Sequence
 from contextlib import suppress
 from typing import TYPE_CHECKING, Any, cast, overload
+
+import numpy as np
 
 from pymmcore_plus.core import (
     CMMCorePlus,
@@ -21,10 +23,11 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
     from typing import Callable, Literal, NewType, TypeVar
 
-    import numpy as np
     from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
+
+    from .devices._camera import Camera
 
     PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
 
@@ -74,6 +77,11 @@ class UniMMCore(CMMCorePlus):
         self._pydevices = PyDeviceManager()  # manager for python devices
         self._state_cache = PropertyStateCache()  # threadsafe cache for property states
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
+
+        # Camera-related instance variables
+        self._current_image_buffer: np.ndarray | None = None
+        self._sequence_buffers: list[np.ndarray] = []
+        self._sequence_running: bool = False
 
     def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
         """Helper function to set the current core device if it is a python device.
@@ -643,11 +651,72 @@ class UniMMCore(CMMCorePlus):
     # ---------------------------- CameraDevice -----------------------------
     # -----------------------------------------------------------------------
 
-    def snapImage(self) -> None: ...
+    def setCameraDevice(self, cameraLabel: DeviceLabel | str) -> None:
+        """Set the camera device."""
+        label = self._set_current_if_pydevice(KW.CoreCamera, cameraLabel)
+        super().setCameraDevice(label)
+
+    def getCameraDevice(self) -> DeviceLabel | Literal[""]:
+        """Returns the label of the currently selected camera device.
+
+        Returns empty string if no camera device is selected.
+        """
+        return self._pycore.current(KW.CoreCamera) or super().getCameraDevice()
+
+    def snapImage(self) -> None:
+        """Acquires a single image with current settings."""
+        # Use current camera device if it's a Python device
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().snapImage()
+
+        # For Python cameras, perform single image acquisition
+        camera = cast("Camera", self._pydevices[label])
+
+        # Create a buffer for the image
+        shape = camera.shape()
+        dtype = camera.dtype()
+        buffer = np.zeros(shape, dtype=dtype)
+
+        # Store the buffer for getImage() retrieval
+        self._current_image_buffer = buffer
+
+        # Use the camera's start_sequence method to acquire a single image
+        def get_buffer() -> np.ndarray:
+            return buffer
+
+        def notify(metadata: Mapping) -> None:
+            # Single image acquisition completed
+            pass
+
+        # Start single image acquisition (n=1)
+        camera.start_sequence(1, get_buffer, notify)
+
     @overload
-    def getImage(self) -> np.ndarray: ...
+    def getImage(self, *, fix: bool = True) -> np.ndarray: ...
     @overload
-    def getImage(self, numChannel: int) -> np.ndarray: ...
+    def getImage(self, numChannel: int, *, fix: bool = True) -> np.ndarray: ...
+
+    def getImage(
+        self, numChannel: int | None = None, *, fix: bool = True
+    ) -> np.ndarray:
+        """Return the internal image buffer."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            if numChannel is not None:
+                return super().getImage(numChannel)
+            return super().getImage()
+
+        # For Python cameras, return the current buffer
+        if self._current_image_buffer is not None:
+            return self._current_image_buffer
+        else:
+            # No image has been snapped yet, create empty buffer
+            camera = cast("Camera", self._pydevices[label])
+            shape = camera.shape()
+            dtype = camera.dtype()
+            return np.zeros(shape, dtype=dtype)
+
     @overload
     def startSequenceAcquisition(
         self, numImages: int, intervalMs: float, stopOnOverflow: bool
@@ -659,62 +728,242 @@ class UniMMCore(CMMCorePlus):
         numImages: int,
         intervalMs: float,
         stopOnOverflow: bool,
-    ) -> None:
+    ) -> None: ...
+
+    def startSequenceAcquisition(self, *args: Any, **kwargs: Any) -> None:
         """Starts the camera sequence acquisition."""
+        if len(args) == 3:
+            # (numImages, intervalMs, stopOnOverflow)
+            numImages, intervalMs, stopOnOverflow = args
+            label = self.getCameraDevice()
+            if label not in self._pydevices:
+                return super().startSequenceAcquisition(*args, **kwargs)
 
-    def startContinuousSequenceAcquisition(self, intervalMs: float) -> None:
+            # For Python cameras, use the Camera.start_sequence method
+            camera = cast("Camera", self._pydevices[label])
+
+            # Create buffer management system
+            self._sequence_buffers = []
+            self._sequence_running = True
+
+            def get_buffer() -> np.ndarray:
+                """Create and return a new buffer for the camera to fill."""
+                shape = camera.shape()
+                dtype = camera.dtype()
+                buffer = np.zeros(shape, dtype=dtype)
+                self._sequence_buffers.append(buffer)
+                return buffer
+
+            def notify(metadata: Mapping) -> None:
+                """Callback when image is ready."""
+                # In a real implementation, this would notify the engine
+                # For now, we just store that an image is ready
+                pass
+
+            # Start the sequence with the Camera device
+            camera.start_sequence(numImages, get_buffer, notify)
+
+        elif len(args) == 4:
+            # (cameraLabel, numImages, intervalMs, stopOnOverflow)
+            cameraLabel, numImages, intervalMs, stopOnOverflow = args
+            if cameraLabel not in self._pydevices:
+                return super().startSequenceAcquisition(*args, **kwargs)
+
+            # Set the camera device first if it's a Python device
+            self.setCameraDevice(cameraLabel)
+            # Recursively call with 3 args
+            return self.startSequenceAcquisition(numImages, intervalMs, stopOnOverflow)
+        else:
+            return super().startSequenceAcquisition(*args, **kwargs)
+
+    def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
         """Starts the continuous camera sequence acquisition."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().startContinuousSequenceAcquisition(intervalMs)
 
-    @overload
-    def stopSequenceAcquisition(self) -> None: ...
-    @overload
-    def stopSequenceAcquisition(self, cameraLabel: DeviceLabel | str = ...) -> None: ...
-    def stopSequenceAcquisition(self, cameraLabel: DeviceLabel | str = ...) -> None: ...
-    @overload
-    def getImage(self) -> np.ndarray:
-        """Exposes the internal image buffer."""
+        # For Python cameras, start continuous acquisition using start_sequence
+        # with a very large number (continuous until stopped)
+        camera = cast("Camera", self._pydevices[label])
 
-    @overload
-    def getImage(self, numChannel: int) -> np.ndarray:
-        """Returns the internal image buffer for a given Camera Channel."""
+        # Create buffer management system
+        self._sequence_buffers = []
+        self._sequence_running = True
+
+        def get_buffer() -> np.ndarray:
+            """Create and return a new buffer for the camera to fill."""
+            shape = camera.shape()
+            dtype = camera.dtype()
+            buffer = np.zeros(shape, dtype=dtype)
+            self._sequence_buffers.append(buffer)
+            return buffer
+
+        def notify(metadata: Mapping) -> None:
+            """Callback when image is ready."""
+            # In a real implementation, this would notify the engine
+            # For continuous acquisition, we just store that an image is ready
+            pass
+
+        # Start continuous sequence with a very large number
+        # In practice, this would run until stopSequenceAcquisition is called
+        large_num = 999999999  # Effectively infinite for continuous acquisition
+        camera.start_sequence(large_num, get_buffer, notify)
+
+    def stopSequenceAcquisition(self, cameraLabel: str | None = None) -> None:
+        """Stops the camera sequence acquisition."""
+        if cameraLabel is not None:
+            if cameraLabel not in self._pydevices:
+                return super().stopSequenceAcquisition(cameraLabel)
+            # For Python cameras, stop the sequence
+            self._sequence_running = False
+            return  # Don't call super() for Python cameras
+        else:
+            label = self.getCameraDevice()
+            if label not in self._pydevices:
+                return super().stopSequenceAcquisition()
+            # Stop current Python camera sequence
+            self._sequence_running = False
+            return  # Don't call super() for Python cameras
 
     def getImageBitDepth(self) -> int:
         """How many bits of dynamic range are to be expected from the camera."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().getImageBitDepth()
+
+        # For Python cameras, get bit depth from device dtype
+        camera = cast("Camera", self._pydevices[label])
+        dtype = camera.dtype()
+
+        # Convert numpy dtype to bit depth by creating a temp array
+        try:
+            temp_array = np.zeros(1, dtype=dtype)
+            return temp_array.dtype.itemsize * 8
+        except Exception:
+            # Fallback based on string representation
+            dtype_str = str(dtype)
+            if "uint8" in dtype_str or "int8" in dtype_str:
+                return 8
+            elif "uint16" in dtype_str or "int16" in dtype_str:
+                return 16
+            elif (
+                "uint32" in dtype_str or "int32" in dtype_str or "float32" in dtype_str
+            ):
+                return 32
+            elif (
+                "uint64" in dtype_str or "int64" in dtype_str or "float64" in dtype_str
+            ):
+                return 64
+            else:
+                return 8  # Default fallback
 
     def getImageBufferSize(self) -> int:
         """Returns the size of the internal image buffer."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().getImageBufferSize()
+
+        # For Python cameras, calculate buffer size from shape and dtype
+        camera = cast("Camera", self._pydevices[label])
+        shape = camera.shape()
+        dtype = camera.dtype()
+
+        # Calculate total size in bytes
+        temp_array = np.zeros(shape, dtype=dtype)
+        return temp_array.nbytes
 
     def getImageHeight(self) -> int:
         """Vertical dimension of the image buffer in pixels."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().getImageHeight()
+
+        # For Python cameras, get height from shape (first dimension)
+        camera = cast("Camera", self._pydevices[label])
+        shape = camera.shape()
+        return shape[0]  # Height is first dimension
 
     def getImageProcessorDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected image processor device.
 
         Returns empty string if no image processor device is selected.
         """
+        return super().getImageProcessorDevice()
 
     def getImageWidth(self) -> int:
         """Horizontal dimension of the image buffer in pixels."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().getImageWidth()
 
-    def getNumberOfComponents(self) -> int: ...
-    def getNumberOfCameraChannels(self) -> int: ...
-    def getCameraChannelName(self, channelNr: int) -> str: ...
+        # For Python cameras, get width from shape (second dimension)
+        camera = cast("Camera", self._pydevices[label])
+        shape = camera.shape()
+        return shape[1]  # Width is second dimension
+
+    def getNumberOfComponents(self) -> int:
+        """Returns the number of components in the image."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().getNumberOfComponents()
+
+        # For Python cameras, get components from shape
+        camera = cast("Camera", self._pydevices[label])
+        shape = camera.shape()
+
+        # If shape is (H, W), it's grayscale (1 component)
+        # If shape is (H, W, C), it has C components
+        if len(shape) == 2:
+            return 1
+        elif len(shape) == 3:
+            return shape[2]
+        else:
+            return 1  # Default fallback
+
+    def getNumberOfCameraChannels(self) -> int:
+        """Returns the number of camera channels."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().getNumberOfCameraChannels()
+
+        # For Python cameras, return number of channels
+        # For now, fall back to C++ implementation
+        return super().getNumberOfCameraChannels()
+
+    def getCameraChannelName(self, channelNr: int) -> str:
+        """Returns the name of the camera channel."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().getCameraChannelName(channelNr)
+
+        # For Python cameras, return channel name
+        # For now, fall back to C++ implementation
+        return super().getCameraChannelName(channelNr)
+
     @overload
-    def isSequenceRunning(self) -> bool:
-        """Check if the current camera is acquiring the sequence.
-
-        Returns false when the sequence is done
-        """
-
+    def isSequenceRunning(self) -> bool: ...
     @overload
-    def isSequenceRunning(self, cameraLabel: DeviceLabel | str) -> bool:
-        """Check if the specified camera is acquiring the sequence.
+    def isSequenceRunning(self, cameraLabel: DeviceLabel | str) -> bool: ...
 
-        Returns false when the sequence is done
-        """
+    def isSequenceRunning(self, cameraLabel: DeviceLabel | str = "") -> bool:
+        """Check if the camera is acquiring the sequence."""
+        label = cameraLabel or self.getCameraDevice()
+        if label not in self._pydevices:
+            if cameraLabel:
+                return super().isSequenceRunning(cameraLabel)
+            return super().isSequenceRunning()
+
+        # For Python cameras, check the sequence running status
+        return self._sequence_running
 
     def getRemainingImageCount(self) -> int:
-        """Returns number ofimages available in the Circular Buffer."""
+        """Returns number of images available in the Circular Buffer."""
+        label = self.getCameraDevice()
+        if label not in self._pydevices:
+            return super().getRemainingImageCount()
+
+        # For Python cameras, return the number of buffered images
+        return len(self._sequence_buffers)
 
 
 def _ensure_label(

@@ -24,6 +24,7 @@ class Camera(Device):
     def dtype(self) -> DTypeLike:
         """Return the data type of the image buffer."""
 
+    @abstractmethod
     def start_sequence(
         self,
         n: int,
