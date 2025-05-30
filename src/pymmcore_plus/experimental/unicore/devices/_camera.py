@@ -11,9 +11,6 @@ if TYPE_CHECKING:
     import numpy as np
     from numpy.typing import DTypeLike
 
-# array should be (M, N) or (M, N, 3)
-# Core does *not* copy the buffer.
-
 
 class Camera(Device):
     @abstractmethod
@@ -50,6 +47,7 @@ class Camera(Device):
             A callable that should be called with a mapping of metadata
             after the buffer has been filled with image data.
         """
+        # EXAMPLE USAGE:
         for _ in range(n):
             image = get_buffer()
 
@@ -70,3 +68,7 @@ class Camera(Device):
             # Calling `notify` more times than `get_buffer` results in a RuntimeError.
             notify({})
             # notify({})
+
+    @abstractmethod
+    def stop_sequence(self) -> None:
+        """Stop and wait for the Sequence thread finished."""

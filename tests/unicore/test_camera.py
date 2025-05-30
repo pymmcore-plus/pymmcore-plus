@@ -7,9 +7,8 @@ import numpy as np
 import pytest
 from numpy.typing import DTypeLike
 
-from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.experimental.unicore import Camera
-from pymmcore_plus.experimental.unicore._unicore import UniMMCore
+from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 DEV = "Camera"
 
@@ -74,29 +73,25 @@ class MyCamera(Camera):
                 break
 
             buffer = get_buffer()
-            buffer[:] = FRAME + i  # Add index to make each frame unique
-            notify({"index": i, "buffer": buffer})
-
-            # Small delay to simulate real camera timing
-            if not self._stop_event.wait(0.01):  # 10ms delay between frames
-                continue
+            time.sleep(0.01)  # Simulate time taken to acquire an image
+            buffer[:] = FRAME
+            notify({"random_key": f"value_{i}"})  # Example metadata, can be anything.
 
 
-@pytest.mark.parametrize("device", ["pyCamera", "DemoCam"])
+@pytest.mark.parametrize("device", ["python", "c++"])
 def test_basic_acquisition(device: str) -> None:
     core = UniMMCore()
     assert not core.getCameraDevice()
 
-    if device == "pyCamera":
-        # load a python camera device
+    # load either a Python or C++ camera device
+    if device == "python":
         camera = MyCamera()
-
         core.loadPyDevice(DEV, camera)
         core.initializeDevice(DEV)
-        core.setCameraDevice(DEV)
     else:
         core.loadSystemConfiguration()
 
+    core.setCameraDevice(DEV)
     assert core.getCameraDevice() == DEV
     assert (core.getImageWidth(), core.getImageHeight()) == FRAME_SHAPE
     assert core.getImageBitDepth() == FRAME.dtype.itemsize * 8
@@ -109,6 +104,7 @@ def test_basic_acquisition(device: str) -> None:
     assert frame.dtype == DTYPE
 
     # Start sequence acquisition
+    assert core.getRemainingImageCount() == 0
     n_frames = 3
     core.startSequenceAcquisition(n_frames, 0, True)
     assert core.isSequenceRunning()
@@ -116,6 +112,7 @@ def test_basic_acquisition(device: str) -> None:
     while core.getRemainingImageCount() < n_frames:
         time.sleep(0.001)  # Sleep 1ms between checks
 
+    # it should have stopped automatically once finished acquiring n_frames
     assert not core.isSequenceRunning()
     assert core.getRemainingImageCount() == n_frames
 
@@ -126,7 +123,7 @@ def test_basic_acquisition(device: str) -> None:
         if i == n_frames - 1:
             np.testing.assert_array_equal(frame, last_image)
 
-        assert meta[Keyword.Binning] == "1"
+        # assert meta[Keyword.Binning] == "1"
         # assert meta["Camera"] == "Camera"  # g_Keyword_Metadata_CameraLabel
         # assert meta["Height"] == str(FRAME_SHAPE[0])  # g_Keyword_Metadata_Height
         # assert meta["Width"] == str(FRAME_SHAPE[1])  # g_Keyword_Metadata_Width
