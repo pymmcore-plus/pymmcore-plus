@@ -15,12 +15,12 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }} ${{ matrix.nano }}
+    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }} ${{ matrix.nano }} ${{ matrix.resolution }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, macos-13]
+        os: [windows-latest, macos-latest]
         python-version: ["3.9", "3.11", "3.13"]
         include:
           - os: windows-latest
@@ -37,6 +37,7 @@ jobs:
             add-group: "PyQt6"
           - os: ubuntu-latest
             python-version: "3.12"
+
           # test pymmcore-nano
           - os: windows-latest
             python-version: "3.10"
@@ -44,6 +45,15 @@ jobs:
           - os: macos-13
             python-version: "3.12"
             nano: "nano"
+
+          - os: windows-latest
+            python-version: "3.13"
+            resolution: "lowest-direct"
+            add-group: "PySide6"
+          - os: macos-latest
+            python-version: "3.9"
+            resolution: "lowest-direct"
+            add-group: "PyQt6"
 
     env:
       UV_NO_SYNC: "1"
@@ -55,52 +65,23 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }}
+      - uses: pymmcore-plus/setup-mm-test-adapters@main
+
+      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution ${{ matrix.resolution || 'highest'}}
 
       - if: matrix.nano != ''
         run: |
           uv pip install pymmcore-nano
           uv pip uninstall pymmcore
 
-      - name: Set cache path
-        shell: bash
-        run: |
-          set -e
-          CACHE_PATH=$(uv run python -c 'from pymmcore_plus import install; print(install.USER_DATA_MM_PATH)')
-          echo "CACHE_PATH=$CACHE_PATH" >> $GITHUB_ENV
-
-      - name: Cache Drivers
-        id: cache-mm-build
-        uses: actions/cache@v4
-        with:
-          path: ${{ env.CACHE_PATH }}
-          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
-
-      - name: Build Micro-Manager
-        if: runner.os == 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: uv run mmcore build-dev
-
-      - name: Install Micro-Manager
-        if: runner.os != 'Linux' && steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: uv run mmcore install
-
-      - run: uv run coverage run -p -m pytest -v --color=yes
+      - run: uv run coverage run -p -m pytest -v --color=yes ${{ matrix.resolution == 'lowest-direct' && '-W ignore' || '' }}
 
       - name: Upload coverage
         uses: actions/upload-artifact@v4
         with:
-          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}
+          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}-${{ matrix.resolution }}
           path: ./.coverage*
           include-hidden-files: true
-
-      - name: test lowest-direct deps
-        shell: bash
-        # on windows pyqt6, still getting DLL load failed while importing QtCore
-        if: matrix.nano == '' && !(matrix.os == 'windows-latest' && matrix.add-group == 'PyQt6')
-        run: |
-          rm -rf .venv
-          uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution lowest-direct
-          uv run pytest -v --color=yes
 
   upload_coverage:
     if: always()
@@ -110,22 +91,44 @@ jobs:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
 
   test-dependents:
-    uses: pyapp-kit/workflows/.github/workflows/test-dependents.yml@main
-    with:
-      os: windows-latest
-      python-version: "3.12"
-      dependency-repo: ${{ matrix.repo }}
-      dependency-extras: "test"
-      post-install-cmd: "mmcore install"
-      qt: ${{ matrix.qt }}
+    name: ${{ matrix.repo }}
+    runs-on: macos-13
+    env:
+      UV_MANAGED_PYTHON: "1"
+      UV_NO_SYNC: "1"
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - repo: pymmcore-plus/pymmcore-widgets
-            qt: "pyqt6"
-          - repo: pymmcore-plus/napari-micromanager
-            qt: "pyqt6"
+        # note: hard-coding pymmcore-plus/ org for now
+        repo: ["pymmcore-widgets", "pymmcore-gui"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: pymmcore-plus/${{ matrix.repo }}
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          path: pymmcore-plus
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - uses: pyvista/setup-headless-display-action@v3
+        with:
+          qt: true
+
+      - name: Setup MM test adapters
+        uses: pymmcore-plus/setup-mm-test-adapters@main
+
+      - name: Install dependencies
+        run: |
+          uv sync --no-dev --group test
+          uv pip install PyQt6
+          uv pip install ./pymmcore-plus
+          uv pip list
+
+      - run: uv run --no-sync pytest -v --color=yes -W ignore
 
   benchmarks:
     runs-on: ubuntu-latest

@@ -102,8 +102,9 @@ def test_available_versions() -> None:
     """installing with an erroneous version should fail and show available versions."""
     result = runner.invoke(app, ["install", "-r", "xxxx"])
     assert result.exit_code > 0
-    assert "Release 'xxxx' not found" in result.stdout
-    assert "Last 15 releases:" in result.stdout
+    msg = result.stdout or result.stderr
+    assert "Release 'xxxx' not found" in msg
+    assert "Last 15 releases:" in msg
 
 
 def test_show_version() -> None:
@@ -289,6 +290,7 @@ def _background_tail(q: Queue, runner: Any, logfile: Path) -> None:
 # by pretty much every test that creates a core after it.
 @pytest.mark.skipif(bool(not os.getenv("CI")), reason="this is a crappy test")
 @pytest.mark.run_last
+@pytest.mark.filterwarnings("ignore:unclosed file:ResourceWarning")
 def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # create mock log file
     TEST_LOG = tmp_path / "test.log"
