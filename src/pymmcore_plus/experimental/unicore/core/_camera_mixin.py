@@ -1,10 +1,13 @@
 from __future__ import annotations
 
+from datetime import datetime
+from time import perf_counter_ns
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 import numpy as np
 
 from pymmcore_plus.core import Keyword as KW
+from pymmcore_plus.core._constants import PixelType
 from pymmcore_plus.core._metadata import Metadata
 from pymmcore_plus.experimental.unicore.devices._camera import Camera
 
@@ -12,6 +15,8 @@ from ._base_mixin import UniCoreBase
 from ._sequence_buffers import SeqState, SequenceBuffer
 
 if TYPE_CHECKING:
+    from collections.abc import Mapping
+
     from pymmcore import DeviceLabel
 
 
@@ -21,6 +26,9 @@ class PyCameraMixin(UniCoreBase):
     # attributes created on-demand
     _current_image_buffer: np.ndarray | None = None
     _seq: SequenceBuffer | None = None
+
+    # metadata tracking attributes
+    _acquisition_start_time: int | None = None
 
     # --------------------------------------------------------------------- utils
 
@@ -86,9 +94,44 @@ class PyCameraMixin(UniCoreBase):
 
     def _start_sequence(self, cam: Camera, n_images: int | None) -> None:
         """Initialise _seq state and call cam.start_sequence."""
-        self._seq = _seq = SeqState(cam.shape(), cam.dtype(), n_images)
-        # TODO: should we use None or a large number
-        cam.start_sequence_thread(n_images or 2**63 - 1, _seq.get_buffer, _seq.notify)
+        shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        camera_label = cam.get_label()
+
+        self._seq = _seq = SeqState(shape, dtype, n_images)
+        # Set acquisition start time for elapsed time calculation
+
+        n_components = shape[2] if len(shape) > 2 else 1
+        base_meta: dict[str, Any] = {
+            KW.Binning: "1",  # TODO
+            KW.Metadata_CameraLabel: camera_label,
+            KW.Metadata_Height: str(shape[0]),
+            KW.Metadata_Width: str(shape[1]),
+            KW.Metadata_ROI_X: "0",
+            KW.Metadata_ROI_Y: "0",
+            KW.PixelType: PixelType.for_bytes(dtype.itemsize, n_components),
+        }
+
+        # Create metadata-injecting wrapper for notify callback
+        # TODO: decide if metadata goes on SeqState or stays here.
+        def notify_with_metadata(cam_meta: Mapping) -> None:
+            elapsed_ms = (perf_counter_ns() - start_time) / 1e6
+            received = datetime.now().isoformat(sep=" ")
+            base_meta.update(
+                {
+                    **cam_meta,
+                    KW.Metadata_TimeInCore: received,
+                    KW.Metadata_ImageNumber: str(_seq.acquired),
+                    KW.Elapsed_Time_ms: f"{elapsed_ms:.2f}",
+                }
+            )
+            _seq.notify(base_meta)
+
+        # TODO: should we use None or a large number.  Large number is more consistent
+        # for Camera Device Adapters, but hides details from the adapter.
+        self._acquisition_start_time = start_time = perf_counter_ns()
+        cam.start_sequence_thread(
+            n_images or 2**63 - 1, _seq.get_buffer, notify_with_metadata
+        )
 
     # ------------------------------------------------------- startSequenceAcquisition
 

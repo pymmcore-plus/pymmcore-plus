@@ -4,12 +4,9 @@ from collections import deque
 from typing import TYPE_CHECKING, Protocol
 
 import numpy as np
-from numpy.typing import DTypeLike
 
 if TYPE_CHECKING:
     from collections.abc import Mapping
-
-    from numpy.typing import DTypeLike
 
 
 class SequenceBuffer(Protocol):
@@ -17,7 +14,7 @@ class SequenceBuffer(Protocol):
     buffers: deque[np.ndarray]
 
     def __init__(
-        self, shape: tuple[int, ...], dtype: DTypeLike, expected: int | None
+        self, shape: tuple[int, ...], dtype: np.dtype, expected: int | None
     ) -> None: ...
 
     # ---------- required call-backs for the Camera ---------------------
@@ -70,10 +67,10 @@ class SeqState(SequenceBuffer):
     )
 
     def __init__(
-        self, shape: tuple[int, ...], dtype: DTypeLike, expected: int | None
+        self, shape: tuple[int, ...], dtype: np.dtype, expected: int | None
     ) -> None:
         self.shape = shape
-        self.dtype = np.dtype(dtype)
+        self.dtype = dtype
         self.buffers: deque[np.ndarray] = deque()
         self.metadata: deque[Mapping] = deque()
         self.pending: deque[np.ndarray] = deque()
@@ -144,13 +141,13 @@ class SeqStateContiguous(SequenceBuffer):
     )
 
     def __init__(
-        self, shape: tuple[int, ...], dtype: DTypeLike, expected: int | None
+        self, shape: tuple[int, ...], dtype: np.dtype, expected: int | None
     ) -> None:
         if expected is None:
             raise ValueError("Contiguous-array strategy needs a finite *expected*")
 
         self.shape = shape
-        self.dtype = np.dtype(dtype)
+        self.dtype = dtype
         self.expected = expected
 
         # allocate (N, H, W[, C])
@@ -229,7 +226,7 @@ class SeqStateRingPool(SequenceBuffer):
     def __init__(
         self,
         shape: tuple[int, ...],
-        dtype: DTypeLike,
+        dtype: np.dtype,
         expected: int | None,
         *,
         pool: int = 16,  # tune to match your pipeline depth
@@ -238,7 +235,7 @@ class SeqStateRingPool(SequenceBuffer):
             raise ValueError("pool size must be >= 2")
 
         self.shape = shape
-        self.dtype = np.dtype(dtype)
+        self.dtype = dtype
         self.expected = expected  # may be None for continuous acquisition
 
         # pre-allocate pool

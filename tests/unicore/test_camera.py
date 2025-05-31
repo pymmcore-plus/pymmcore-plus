@@ -85,7 +85,6 @@ def test_basic_acquisition(device: str) -> None:
     assert core.getRemainingImageCount() == n_frames
 
     last_image = core.getLastImage()
-
     for i in range(n_frames):
         frame, meta = core.popNextImageAndMD()
         if i == n_frames - 1:
@@ -99,6 +98,8 @@ def test_basic_acquisition(device: str) -> None:
         assert meta[Keyword.Metadata_ImageNumber] == str(i)
         assert Keyword.Elapsed_Time_ms in meta
         assert Keyword.Metadata_TimeInCore in meta
+        if device == "python":
+            assert meta["random_key"] == f"value_{i}"
 
         assert frame.shape == FRAME_SHAPE
         assert frame.dtype == DTYPE
