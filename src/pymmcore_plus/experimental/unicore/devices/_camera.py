@@ -10,7 +10,7 @@ from pymmcore_plus.core._constants import Keyword, PixelFormat
 from ._device import Device
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Iterator, Mapping
 
     import numpy as np
     from numpy.typing import DTypeLike
@@ -47,14 +47,17 @@ class Camera(Device):
         self,
         n: int,
         get_buffer: Callable[[], np.ndarray],
-        notify: Callable[[Mapping], None],
-    ) -> None:
+    ) -> Iterator[Mapping]:
         """Start a sequence acquisition.
 
-        This method should be implemented by the camera device adapter. It needn't worry
-        about threading or synchronization; it may block and the core will handle
-        threading and synchronization, though you may reimplement
-        `start_sequence_thread` if you'd like to handle threading yourself.
+        This method should be implemented by the camera device adapter and should
+        yield metadata for each acquired image. The implementation should call
+        get_buffer() to get a buffer, fill it with image data, then yield the
+        metadata for that image.
+
+        The core will handle threading and synchronization, though you may
+        reimplement `start_sequence_thread` if you'd like to handle threading yourself.
+
 
         Parameters
         ----------
@@ -66,9 +69,12 @@ class Camera(Device):
             returned by `shape()` and `dtype()`.
             The point here is that the core creates the buffer, and the device adapter
             should just mutate it in place with the image data.
-        notify : Callable[[Mapping], None]
-            A callable that should be called with a mapping of metadata
-            after the buffer has been filled with image data.
+
+        Yields
+        ------
+        Mapping
+            Metadata for each acquired image. This should be yielded after the
+            corresponding buffer has been filled with image data.
         """
         # EXAMPLE USAGE:
         for _ in range(n):
@@ -86,11 +92,7 @@ class Camera(Device):
             # image2[:] = ...
 
             # notify the core that the buffer is ready
-            # the number of times you call notify must match the number of
-            # times you call get_buffer ... and order must be the same
-            # Calling `notify` more times than `get_buffer` results in a RuntimeError.
-            notify({})
-            # notify({})
+            yield {}
 
             # TODO:
             # Open question: who is responsible for key pieces of metadata?
@@ -140,6 +142,8 @@ class Camera(Device):
             "PixelFormat": ("pixel_format", PixelFormat),
             Keyword.ReadoutMode: ("readout_mode", str),
             Keyword.ReadoutTime: ("readout_time", float),
+            Keyword.Metadata_ROI_X: ("roi_x", int),
+            Keyword.Metadata_ROI_Y: ("roi_y", int),
         }
     )
 
@@ -215,10 +219,21 @@ class Camera(Device):
         # Reset stop event for new acquisition
         self._stop_event.clear()
 
+        def _run_sequence() -> None:
+            """Run the sequence and handle the generator pattern."""
+            try:
+                for metadata in self.start_sequence(n, get_buffer):
+                    notify(metadata)
+                    if self._stop_event.is_set():
+                        break
+            except Exception as e:
+                raise RuntimeError(
+                    f"Error in device {self.get_label()!r} during sequence acquisition:"
+                    f" {e}"
+                ) from e
+
         # Start acquisition in background thread
-        self._acquisition_thread = threading.Thread(
-            target=self.start_sequence, args=(n, get_buffer, notify), daemon=True
-        )
+        self._acquisition_thread = threading.Thread(target=_run_sequence, daemon=True)
         self._acquisition_thread.start()
 
     def stop_sequence(self) -> None:

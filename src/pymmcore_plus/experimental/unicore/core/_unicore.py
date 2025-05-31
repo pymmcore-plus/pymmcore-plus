@@ -227,7 +227,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
     ) -> bool:
         if label not in self._pydevices:  # pragma: no cover
             return super().hasProperty(label, propName)
-        return propName in self._pydevices[label].get_property_names()
+        return self._pydevices[label].has_property(propName)
 
     def getProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str

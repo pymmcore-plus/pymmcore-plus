@@ -1,5 +1,5 @@
 import time
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from typing import Callable
 
 import numpy as np
@@ -48,20 +48,14 @@ class MyCamera(Camera):
         return DTYPE
 
     def start_sequence(
-        self,
-        n: int,
-        get_buffer: Callable[[], np.ndarray],
-        notify: Callable[[Mapping], None],
-    ) -> None:
-        """Background thread method to acquire images."""
+        self, n: int, get_buffer: Callable[[], np.ndarray]
+    ) -> Iterator[Mapping]:
+        """Start a sequence acquisition."""
         for i in range(n):
-            if self._stop_event.is_set():
-                break
-
             buffer = get_buffer()
             time.sleep(0.01)  # Simulate time taken to acquire an image
             buffer[:] = FRAME
-            notify({"random_key": f"value_{i}"})  # Example metadata, can be anything.
+            yield {"random_key": f"value_{i}"}  # Example metadata, can be anything.
 
 
 @pytest.mark.parametrize("device", ["python", "c++"])

@@ -102,10 +102,10 @@ class _CoreDevice:
 
 class UniCoreBase(CMMCorePlus):
     def __init__(self, *args: Any, **kwargs: Any) -> None:
-        super().__init__(*args, **kwargs)
         self._pydevices = PyDeviceManager()  # manager for python devices
         self._state_cache = PropertyStateCache()  # threadsafe cache for property states
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
+        super().__init__(*args, **kwargs)
 
     def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
         """Helper function to set the current core device if it is a python device.

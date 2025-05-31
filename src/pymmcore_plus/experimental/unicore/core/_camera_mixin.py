@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal, overload
 
 import numpy as np
 
+import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._constants import PixelType
 from pymmcore_plus.core._metadata import Metadata
@@ -50,19 +51,15 @@ class PyCameraMixin(UniCoreBase):
 
     # --------------------------------------------------------------------- snap
 
-    def snapImage(self) -> None:
-        if (cam := self._py_camera()) is None:  # fall back to C++
-            return super().snapImage()
+    def _do_snap_image(self) -> None:
+        if (cam := self._py_camera()) is None:
+            return pymmcore.CMMCore.snapImage(self)
 
-        shape, dtype = cam.shape(), cam.dtype()
-        buf = np.empty(shape, dtype=dtype)
-        self._current_image_buffer = buf
-
-        cam.start_sequence(
-            1,
-            get_buffer=lambda: buf,
-            notify=lambda _meta: None,
-        )
+        buf = np.empty(cam.shape(), dtype=cam.dtype())
+        # synchronous call - consume one item from the generator
+        for _ in cam.start_sequence(1, get_buffer=lambda: buf):
+            self._current_image_buffer = buf
+            return
 
     # --------------------------------------------------------------------- getImage
 
@@ -74,16 +71,15 @@ class PyCameraMixin(UniCoreBase):
     def getImage(
         self, numChannel: int | None = None, *, fix: bool = True
     ) -> np.ndarray:
-        if (cam := self._py_camera()) is None:
-            return (
-                super().getImage(numChannel)
-                if numChannel is not None
-                else super().getImage()
-            )
+        if self._py_camera() is None:
+            if numChannel is not None:
+                return super().getImage(numChannel, fix=fix)
+            return super().getImage(fix=fix)
 
         if self._current_image_buffer is None:
-            shape, dtype = cam.shape(), cam.dtype()
-            self._current_image_buffer = np.zeros(shape, dtype=dtype)
+            raise RuntimeError(
+                "No image buffer available. Call snapImage() before calling getImage()."
+            )
 
         return self._current_image_buffer
 
@@ -132,51 +128,29 @@ class PyCameraMixin(UniCoreBase):
 
     # ------------------------------------------------------- startSequenceAcquisition
 
-    @overload
-    def startSequenceAcquisition(
-        self, numImages: int, intervalMs: float, stopOnOverflow: bool
-    ) -> None: ...
+    def _do_start_sequence_acquisition(
+        self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
+    ) -> None:
+        if (cam := self._py_camera(cameraLabel)) is None:
+            return pymmcore.CMMCore.startSequenceAcquisition(
+                self, cameraLabel, numImages, intervalMs, stopOnOverflow
+            )
 
-    @overload
-    def startSequenceAcquisition(
-        self,
-        cameraLabel: DeviceLabel | str,
-        numImages: int,
-        intervalMs: float,
-        stopOnOverflow: bool,
-    ) -> None: ...
-
-    def startSequenceAcquisition(self, *args: Any, **kw: Any) -> None:
-        if len(args) == 3:  # current camera
-            n, _interval, _stop = args
-            if (cam := self._py_camera()) is None:
-                return super().startSequenceAcquisition(*args, **kw)
-
-            self._start_sequence(cam, n)
-
-        elif len(args) == 4:  # explicit camera label
-            label, n, _interval, _stop = args
-            if (cam := self._py_camera(label)) is None:
-                return super().startSequenceAcquisition(*args, **kw)
-
-            self.setCameraDevice(label)
-            self._start_sequence(cam, n)
-        else:
-            return super().startSequenceAcquisition(*args, **kw)
+        self._start_sequence(cam, numImages)
 
     # ------------------------------------------------------ continuous acquisition
 
-    def startContinuousSequenceAcquisition(self, intervalMs: float = 0) -> None:
+    def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
         if (cam := self._py_camera()) is None:
-            return super().startContinuousSequenceAcquisition(intervalMs)
+            return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)
 
         self._start_sequence(cam, None)
 
     # ---------------------------------------------------------------- stopSequence
 
-    def stopSequenceAcquisition(self, cameraLabel: str | None = None) -> None:
+    def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
         if (cam := self._py_camera(cameraLabel)) is None:
-            return super().stopSequenceAcquisition()
+            return pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
 
         cam.stop_sequence()
         if self._seq:
@@ -351,10 +325,12 @@ class PyCameraMixin(UniCoreBase):
             return super().stopExposureSequence(cameraLabel)
         cam.stop_property_sequence(KW.Exposure)
 
+    def prepareSequenceAcquisition(self, cameraLabel: DeviceLabel | str) -> None:
+        """Prepare the camera for sequence acquisition."""
+        if self._py_camera(cameraLabel) is None:
+            return super().prepareSequenceAcquisition(cameraLabel)
+        pass  # TODO: Implement prepareSequenceAcquisition for Python cameras?
 
-# 	prepareSequenceAcquisition
-#   assignDefaultRole
-# 	saveSystemConfiguration
 
 # 	clearROI
 # 	getROI

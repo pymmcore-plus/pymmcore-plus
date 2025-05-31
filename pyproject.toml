@@ -86,8 +86,7 @@ PyQt5 = [{ include-group = 'test-qt' }, "pymmcore-plus[PyQt5]"]
 PySide2 = [{ include-group = 'test-qt' }, "pymmcore-plus[PySide2]"]
 dev = [
     # { include-group = "docs" },
-    { include-group = "test" },
-    "PyQt6 >=6.4.2",
+    { include-group = "PyQt6" },
     "ipython>=8.18.1",
     "pdbpp>=0.11.6 ; sys_platform != 'win32'",
     "mypy>=1.14.1",
