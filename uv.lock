@@ -1684,14 +1684,21 @@ dev = [
     { name = "ipython", version = "8.18.1", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
     { name = "ipython", version = "8.36.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version == '3.10.*'" },
     { name = "ipython", version = "9.2.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.11'" },
+    { name = "msgpack" },
+    { name = "msgspec" },
     { name = "mypy" },
     { name = "pdbpp", marker = "sys_platform != 'win32'" },
     { name = "pre-commit" },
     { name = "pydantic", marker = "python_full_version >= '3.13'" },
-    { name = "pymmcore-plus", extra = ["pyqt6"] },
+    { name = "pymmcore" },
+    { name = "pymmcore-plus", extra = ["io", "pyqt6"] },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "pytest-qt" },
     { name = "qtpy" },
     { name = "ruff" },
+    { name = "xarray", version = "2024.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "xarray", version = "2025.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 docs = [
     { name = "mkdocs" },
@@ -1702,24 +1709,52 @@ docs = [
     { name = "mkdocstrings-python" },
 ]
 pyqt5 = [
-    { name = "pymmcore-plus", extra = ["pyqt5"] },
+    { name = "msgpack" },
+    { name = "msgspec" },
+    { name = "pymmcore" },
+    { name = "pymmcore-plus", extra = ["io", "pyqt5"] },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "pytest-qt" },
     { name = "qtpy" },
+    { name = "xarray", version = "2024.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "xarray", version = "2025.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 pyqt6 = [
-    { name = "pymmcore-plus", extra = ["pyqt6"] },
+    { name = "msgpack" },
+    { name = "msgspec" },
+    { name = "pymmcore" },
+    { name = "pymmcore-plus", extra = ["io", "pyqt6"] },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "pytest-qt" },
     { name = "qtpy" },
+    { name = "xarray", version = "2024.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "xarray", version = "2025.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 pyside2 = [
-    { name = "pymmcore-plus", extra = ["pyside2"] },
+    { name = "msgpack" },
+    { name = "msgspec" },
+    { name = "pymmcore" },
+    { name = "pymmcore-plus", extra = ["io", "pyside2"] },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "pytest-qt" },
     { name = "qtpy" },
+    { name = "xarray", version = "2024.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "xarray", version = "2025.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 pyside6 = [
-    { name = "pymmcore-plus", extra = ["pyside6"] },
+    { name = "msgpack" },
+    { name = "msgspec" },
+    { name = "pymmcore" },
+    { name = "pymmcore-plus", extra = ["io", "pyside6"] },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "pytest-qt" },
     { name = "qtpy" },
+    { name = "xarray", version = "2024.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "xarray", version = "2025.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 test = [
     { name = "msgpack" },
@@ -1743,8 +1778,16 @@ test-codspeed = [
     { name = "xarray", version = "2025.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 test-qt = [
+    { name = "msgpack" },
+    { name = "msgspec" },
+    { name = "pymmcore" },
+    { name = "pymmcore-plus", extra = ["io"] },
+    { name = "pytest" },
+    { name = "pytest-cov" },
     { name = "pytest-qt" },
     { name = "qtpy" },
+    { name = "xarray", version = "2024.7.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version < '3.10'" },
+    { name = "xarray", version = "2025.4.0", source = { registry = "https://pypi.org/simple" }, marker = "python_full_version >= '3.10'" },
 ]
 
 [package.metadata]
@@ -1775,14 +1818,21 @@ provides-extras = ["cli", "io", "pyqt5", "pyqt6", "pyside2", "pyside6"]
 [package.metadata.requires-dev]
 dev = [
     { name = "ipython", specifier = ">=8.18.1" },
+    { name = "msgpack", specifier = ">=1" },
+    { name = "msgspec", specifier = ">=0.19" },
     { name = "mypy", specifier = ">=1.14.1" },
     { name = "pdbpp", marker = "sys_platform != 'win32'", specifier = ">=0.11.6" },
     { name = "pre-commit", specifier = ">=4.1.0" },
     { name = "pydantic", marker = "python_full_version >= '3.13'", specifier = ">2.7.4" },
+    { name = "pymmcore", specifier = ">=11.5.0.73" },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
     { name = "pymmcore-plus", extras = ["pyqt6"], editable = "." },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
     { name = "ruff", specifier = ">=0.9.4" },
+    { name = "xarray", specifier = ">=2024.1" },
 ]
 docs = [
     { name = "mkdocs", specifier = ">=1.4" },
@@ -1793,24 +1843,52 @@ docs = [
     { name = "mkdocstrings-python", specifier = "==1.1.2" },
 ]
 pyqt5 = [
+    { name = "msgpack", specifier = ">=1" },
+    { name = "msgspec", specifier = ">=0.19" },
+    { name = "pymmcore", specifier = ">=11.5.0.73" },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
     { name = "pymmcore-plus", extras = ["pyqt5"], editable = "." },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
+    { name = "xarray", specifier = ">=2024.1" },
 ]
 pyqt6 = [
+    { name = "msgpack", specifier = ">=1" },
+    { name = "msgspec", specifier = ">=0.19" },
+    { name = "pymmcore", specifier = ">=11.5.0.73" },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
     { name = "pymmcore-plus", extras = ["pyqt6"], editable = "." },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
+    { name = "xarray", specifier = ">=2024.1" },
 ]
 pyside2 = [
+    { name = "msgpack", specifier = ">=1" },
+    { name = "msgspec", specifier = ">=0.19" },
+    { name = "pymmcore", specifier = ">=11.5.0.73" },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
     { name = "pymmcore-plus", extras = ["pyside2"], editable = "." },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
+    { name = "xarray", specifier = ">=2024.1" },
 ]
 pyside6 = [
+    { name = "msgpack", specifier = ">=1" },
+    { name = "msgspec", specifier = ">=0.19" },
+    { name = "pymmcore", specifier = ">=11.5.0.73" },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
     { name = "pymmcore-plus", extras = ["pyside6"], editable = "." },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
+    { name = "xarray", specifier = ">=2024.1" },
 ]
 test = [
     { name = "msgpack", specifier = ">=1" },
@@ -1832,8 +1910,15 @@ test-codspeed = [
     { name = "xarray", specifier = ">=2024.1" },
 ]
 test-qt = [
+    { name = "msgpack", specifier = ">=1" },
+    { name = "msgspec", specifier = ">=0.19" },
+    { name = "pymmcore", specifier = ">=11.5.0.73" },
+    { name = "pymmcore-plus", extras = ["io"], editable = "." },
+    { name = "pytest", specifier = ">=8" },
+    { name = "pytest-cov", specifier = ">=5" },
     { name = "pytest-qt", specifier = ">=4.4" },
     { name = "qtpy", specifier = ">=2" },
+    { name = "xarray", specifier = ">=2024.1" },
 ]
 
 [[package]]
