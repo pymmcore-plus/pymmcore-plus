@@ -1,27 +1,160 @@
 from __future__ import annotations
 
-from collections.abc import Sequence
+import threading
+from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, cast
+from datetime import datetime
+from time import perf_counter_ns
+from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar, cast, overload
 
-from pymmcore_plus.core import CMMCorePlus, DeviceType
+import numpy as np
+
+import pymmcore_plus._pymmcore as pymmcore
+from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
+from pymmcore_plus.core import Keyword as KW
+from pymmcore_plus.core._constants import PixelType
+from pymmcore_plus.core._metadata import Metadata
+from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
-from pymmcore_plus.experimental.unicore.core._base_mixin import UniCoreBase
-from pymmcore_plus.experimental.unicore.core._stage_mixin import PyStageMixin
+from pymmcore_plus.experimental.unicore.devices._camera import Camera
 from pymmcore_plus.experimental.unicore.devices._device import Device
+from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
 
-from ._camera_mixin import PyCameraMixin
+from ._sequence_buffers import SeqState, SequenceBuffer
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Mapping, Sequence
+    from typing import Literal, NewType
 
-    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
+    from pymmcore import AdapterName, AffineTuple, DeviceLabel, DeviceName, PropertyName
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
+    PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
+    _T = TypeVar("_T")
 
-class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
+CURRENT = {
+    KW.CoreCamera: None,
+    KW.CoreShutter: None,
+    KW.CoreFocus: None,
+    KW.CoreXYStage: None,
+    KW.CoreAutoFocus: None,
+    KW.CoreSLM: None,
+    KW.CoreGalvo: None,
+}
+
+
+class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
+    """A thread-safe cache for property states.
+
+    Keys are tuples of (device_label, property_name), and values are the last known
+    value of that property.
+    """
+
+    def __init__(self) -> None:
+        self._store: dict[tuple[str, str], Any] = {}
+        self._lock = threading.Lock()
+
+    def __getitem__(self, key: tuple[str, str]) -> Any:
+        with self._lock:
+            try:
+                return self._store[key]
+            except KeyError:  # pragma: no cover
+                prop, dev = key
+                raise KeyError(
+                    f"Property {prop!r} of device {dev!r} not found in cache"
+                ) from None
+
+    def __setitem__(self, key: tuple[str, str], value: Any) -> None:
+        with self._lock:
+            self._store[key] = value
+
+    def __delitem__(self, key: tuple[str, str]) -> None:
+        with self._lock:
+            del self._store[key]
+
+    def __contains__(self, key: object) -> bool:
+        with self._lock:
+            return key in self._store
+
+    def __iter__(self) -> Iterator[tuple[str, str]]:
+        with self._lock:
+            return iter(self._store.copy())  # Prevent modifications during iteration
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._store)
+
+    def __repr__(self) -> str:
+        with self._lock:
+            return f"{self.__class__.__name__}({self._store!r})"
+
+
+class _CoreDevice:
+    """A virtual core device.
+
+    This mirrors the pattern used in CMMCore, where there is a virtual "core" device
+    that maintains state about various "current" (real) devices.  When a call is made to
+    `setSomeThing()` without specifying a device label, the CoreDevice is used to
+    determine which real device to use.
+    """
+
+    def __init__(self, state_cache: PropertyStateCache) -> None:
+        self._state_cache = state_cache
+        self._pycurrent: dict[Keyword, PyDeviceLabel | None] = {}
+        self.reset_current()
+
+    def reset_current(self) -> None:
+        self._pycurrent.update(CURRENT)
+
+    def current(self, keyword: Keyword) -> PyDeviceLabel | None:
+        return self._pycurrent[keyword]
+
+    def set_current(self, keyword: Keyword, label: str | None) -> None:
+        self._pycurrent[keyword] = cast("PyDeviceLabel", label)
+        self._state_cache[(KW.CoreDevice, keyword)] = label
+
+
+class UniMMCore(CMMCorePlus):
     """Unified Core object that first checks for python, then C++ devices."""
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        self._pydevices = PyDeviceManager()  # manager for python devices
+        self._state_cache = PropertyStateCache()  # threadsafe cache for property states
+        self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
+        super().__init__(*args, **kwargs)
+
+    def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
+        """Helper function to set the current core device if it is a python device.
+
+        If the label is a python device, the current device is set and the label is
+        cleared (in preparation for calling `super().setDevice()`), otherwise the
+        label is returned unchanged.
+        """
+        if label in self._pydevices:
+            self._pycore.set_current(keyword, label)
+            label = ""
+        elif not label:
+            self._pycore.set_current(keyword, None)
+        return label
+
+    def _ensure_label(
+        self, args: tuple[_T, ...], min_args: int, getter: Callable[[], str]
+    ) -> tuple[str, tuple[_T, ...]]:
+        """Ensure we have a device label.
+
+        Designed to be used with overloaded methods that MAY take a device label as the
+        first argument.
+
+        If the number of arguments is less than `min_args`, the label is obtained from
+        the getter function. If the number of arguments is greater than or equal to
+        `min_args`, the label is the first argument and the remaining arguments are
+        returned as a tuple
+        """
+        if len(args) < min_args:
+            # we didn't get the label
+            return getter(), args
+        return cast("str", args[0]), args[1:]
 
     # -----------------------------------------------------------------------
     # ------------------------ General Core methods  ------------------------
@@ -34,9 +167,9 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
         self._pycore.reset_current()
         super().reset()
 
-    # -----------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     # ----------------- Functionality for All Devices ------------------------
-    # -----------------------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def loadDevice(
         self, label: str, moduleName: AdapterName | str, deviceName: DeviceName | str
@@ -353,3 +486,564 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
             return super().stopPropertySequence(label, propName)
         with self._pydevices[label] as dev:
             dev.stop_property_sequence(propName)
+
+    ##########################################################################
+    # ------------------------ Stage Device Methods -------------------------#
+    ##########################################################################
+
+    def _py_xy_stage(self, xyStageLabel: str | None = None) -> XYStageDevice | None:
+        """Return the *Python* XYStage for ``label`` (or current), else ``None``."""
+        label = xyStageLabel or self.getXYStageDevice()
+        if label in self._pydevices:
+            return self._pydevices.get_device_of_type(label, XYStageDevice)
+        return None
+
+    def setXYStageDevice(self, xyStageLabel: DeviceLabel | str) -> None:
+        label = self._set_current_if_pydevice(KW.CoreXYStage, xyStageLabel)
+        super().setXYStageDevice(label)
+
+    def getXYStageDevice(self) -> DeviceLabel | Literal[""]:
+        """Returns the label of the currently selected XYStage device.
+
+        Returns empty string if no XYStage device is selected.
+        """
+        return self._pycore.current(KW.CoreXYStage) or super().getXYStageDevice()
+
+    @overload
+    def setXYPosition(self, x: float, y: float, /) -> None: ...
+    @overload
+    def setXYPosition(
+        self, xyStageLabel: DeviceLabel | str, x: float, y: float, /
+    ) -> None: ...
+    def setXYPosition(self, *args: Any) -> None:
+        """Sets the position of the XY stage in microns."""
+        label, args = self._ensure_label(args, min_args=3, getter=self.getXYStageDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setXYPosition(label, *args)
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            dev.set_position_um(*args)
+
+    @overload
+    def getXYPosition(self) -> tuple[float, float]: ...
+    @overload
+    def getXYPosition(self, xyStageLabel: DeviceLabel | str) -> tuple[float, float]: ...
+    def getXYPosition(
+        self, xyStageLabel: DeviceLabel | str = ""
+    ) -> tuple[float, float]:
+        """Obtains the current position of the XY stage in microns."""
+        label = xyStageLabel or self.getXYStageDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return tuple(super().getXYPosition(label))  # type: ignore
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            return dev.get_position_um()
+
+    # reimplementation needed because the C++ method are not virtual
+    @overload
+    def getXPosition(self) -> float: ...
+    @overload
+    def getXPosition(self, xyStageLabel: DeviceLabel | str) -> float: ...
+    def getXPosition(self, xyStageLabel: DeviceLabel | str = "") -> float:
+        """Obtains the current position of the X axis of the XY stage in microns."""
+        return self.getXYPosition(xyStageLabel)[0]
+
+    # reimplementation needed because the C++ method are not virtual
+    @overload
+    def getYPosition(self) -> float: ...
+    @overload
+    def getYPosition(self, xyStageLabel: DeviceLabel | str) -> float: ...
+    def getYPosition(self, xyStageLabel: DeviceLabel | str = "") -> float:
+        """Obtains the current position of the Y axis of the XY stage in microns."""
+        return self.getXYPosition(xyStageLabel)[1]
+
+    def getXYStageSequenceMaxLength(self, xyStageLabel: DeviceLabel | str) -> int:
+        """Gets the maximum length of an XY stage's position sequence."""
+        if xyStageLabel not in self._pydevices:  # pragma: no cover
+            return super().getXYStageSequenceMaxLength(xyStageLabel)
+        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
+        return dev.get_sequence_max_length()
+
+    def isXYStageSequenceable(self, xyStageLabel: DeviceLabel | str) -> bool:
+        """Queries XY stage if it can be used in a sequence."""
+        if xyStageLabel not in self._pydevices:  # pragma: no cover
+            return super().isXYStageSequenceable(xyStageLabel)
+        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
+        return dev.is_sequenceable()
+
+    def loadXYStageSequence(
+        self,
+        xyStageLabel: DeviceLabel | str,
+        xSequence: Sequence[float],
+        ySequence: Sequence[float],
+        /,
+    ) -> None:
+        """Transfer a sequence of stage positions to the xy stage.
+
+        xSequence and ySequence must have the same length. This should only be called
+        for XY stages that are sequenceable
+        """
+        if xyStageLabel not in self._pydevices:  # pragma: no cover
+            return super().loadXYStageSequence(xyStageLabel, xSequence, ySequence)
+        if len(xSequence) != len(ySequence):
+            raise ValueError("xSequence and ySequence must have the same length")
+        dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
+        seq = tuple(zip(xSequence, ySequence))
+        if len(seq) > dev.get_sequence_max_length():
+            raise ValueError(
+                f"Sequence is too long. Max length is {dev.get_sequence_max_length()}"
+            )
+        dev.send_sequence(seq)
+
+    @overload
+    def setOriginX(self) -> None: ...
+    @overload
+    def setOriginX(self, xyStageLabel: DeviceLabel | str) -> None: ...
+    def setOriginX(self, xyStageLabel: DeviceLabel | str = "") -> None:
+        """Zero the given XY stage's X coordinate at the current position."""
+        label = xyStageLabel or self.getXYStageDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setOriginX(label)
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            dev.set_origin_x()
+
+    @overload
+    def setOriginY(self) -> None: ...
+    @overload
+    def setOriginY(self, xyStageLabel: DeviceLabel | str) -> None: ...
+    def setOriginY(self, xyStageLabel: DeviceLabel | str = "") -> None:
+        """Zero the given XY stage's Y coordinate at the current position."""
+        label = xyStageLabel or self.getXYStageDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setOriginY(label)
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            dev.set_origin_y()
+
+    @overload
+    def setOriginXY(self) -> None: ...
+    @overload
+    def setOriginXY(self, xyStageLabel: DeviceLabel | str) -> None: ...
+    def setOriginXY(self, xyStageLabel: DeviceLabel | str = "") -> None:
+        """Zero the given XY stage's coordinates at the current position."""
+        label = xyStageLabel or self.getXYStageDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setOriginXY(label)
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            dev.set_origin()
+
+    @overload
+    def setAdapterOriginXY(self, newXUm: float, newYUm: float, /) -> None: ...
+    @overload
+    def setAdapterOriginXY(
+        self, xyStageLabel: DeviceLabel | str, newXUm: float, newYUm: float, /
+    ) -> None: ...
+    def setAdapterOriginXY(self, *args: Any) -> None:
+        """Enable software translation of coordinates for the current XY stage.
+
+        The current position of the stage becomes (newXUm, newYUm). It is recommended
+        that setOriginXY() be used instead where available.
+        """
+        label, args = self._ensure_label(args, min_args=3, getter=self.getXYStageDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setAdapterOriginXY(label, *args)
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            dev.set_adapter_origin_um(*args)
+
+    @overload
+    def setRelativeXYPosition(self, dx: float, dy: float, /) -> None: ...
+    @overload
+    def setRelativeXYPosition(
+        self, xyStageLabel: DeviceLabel | str, dx: float, dy: float, /
+    ) -> None: ...
+    def setRelativeXYPosition(self, *args: Any) -> None:
+        """Sets the relative position of the XY stage in microns."""
+        label, args = self._ensure_label(args, min_args=3, getter=self.getXYStageDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setRelativeXYPosition(label, *args)
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            dev.set_relative_position_um(*args)
+
+    def startXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
+        """Starts an ongoing sequence of triggered events in an XY stage.
+
+        This should only be called for stages that are sequenceable
+        """
+        label = xyStageLabel or self.getXYStageDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return super().startXYStageSequence(label)
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            dev.start_sequence()
+
+    def stopXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
+        """Stops an ongoing sequence of triggered events in an XY stage.
+
+        This should only be called for stages that are sequenceable
+        """
+        label = xyStageLabel or self.getXYStageDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return super().stopXYStageSequence(label)
+
+        with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
+            dev.stop_sequence()
+
+    # -----------------------------------------------------------------------
+    # ---------------------------- Any Stage --------------------------------
+    # -----------------------------------------------------------------------
+
+    def home(self, xyOrZStageLabel: DeviceLabel | str) -> None:
+        """Perform a hardware homing operation for an XY or focus/Z stage."""
+        if xyOrZStageLabel not in self._pydevices:
+            return super().home(xyOrZStageLabel)
+
+        dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
+        dev.home()
+
+    def stop(self, xyOrZStageLabel: DeviceLabel | str) -> None:
+        """Stop the XY or focus/Z stage."""
+        if xyOrZStageLabel not in self._pydevices:
+            return super().stop(xyOrZStageLabel)
+
+        dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
+        dev.stop()
+
+    ##########################################################################
+    # ------------------------ Camera Device Methods ------------------------#
+    ##########################################################################
+
+    # attributes created on-demand
+    _current_image_buffer: np.ndarray | None = None
+    _seq: SequenceBuffer | None = None
+
+    # --------------------------------------------------------------------- utils
+
+    def _py_camera(self, cameraLabel: str | None = None) -> Camera | None:
+        """Return the *Python* Camera for ``label`` (or current), else ``None``."""
+        label = cameraLabel or self.getCameraDevice()
+        if label in self._pydevices:
+            return self._pydevices.get_device_of_type(label, Camera)
+        return None
+
+    def setCameraDevice(self, cameraLabel: DeviceLabel | str) -> None:
+        """Set the camera device."""
+        label = self._set_current_if_pydevice(KW.CoreCamera, cameraLabel)
+        super().setCameraDevice(label)
+
+    def getCameraDevice(self) -> DeviceLabel | Literal[""]:
+        """Returns the label of the currently selected camera device.
+
+        Returns empty string if no camera device is selected.
+        """
+        return self._pycore.current(KW.CoreCamera) or super().getCameraDevice()
+
+    # --------------------------------------------------------------------- snap
+
+    def _do_snap_image(self) -> None:
+        if (cam := self._py_camera()) is None:
+            return pymmcore.CMMCore.snapImage(self)
+
+        buf = np.empty(cam.shape(), dtype=cam.dtype())
+        # synchronous call - consume one item from the generator
+        for _ in cam.start_sequence(1, get_buffer=lambda: buf):
+            self._current_image_buffer = buf
+            return
+
+    # --------------------------------------------------------------------- getImage
+
+    @overload
+    def getImage(self, *, fix: bool = True) -> np.ndarray: ...
+    @overload
+    def getImage(self, numChannel: int, *, fix: bool = True) -> np.ndarray: ...
+
+    def getImage(
+        self, numChannel: int | None = None, *, fix: bool = True
+    ) -> np.ndarray:
+        if self._py_camera() is None:  # pragma: no cover
+            if numChannel is not None:
+                return super().getImage(numChannel, fix=fix)
+            return super().getImage(fix=fix)
+
+        if self._current_image_buffer is None:
+            raise RuntimeError(
+                "No image buffer available. Call snapImage() before calling getImage()."
+            )
+
+        return self._current_image_buffer
+
+    # ---------------------------------------------------------------- sequence common
+
+    def _start_sequence(self, cam: Camera, n_images: int | None) -> None:
+        """Initialise _seq state and call cam.start_sequence."""
+        shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        camera_label = cam.get_label()
+
+        self._seq = _seq = SeqState(shape, dtype, n_images)
+        # Set acquisition start time for elapsed time calculation
+
+        n_components = shape[2] if len(shape) > 2 else 1
+        base_meta: dict[str, Any] = {
+            KW.Binning: cam.get_property_value(KW.Binning),
+            KW.Metadata_CameraLabel: camera_label,
+            KW.Metadata_Height: str(shape[0]),
+            KW.Metadata_Width: str(shape[1]),
+            KW.Metadata_ROI_X: "0",
+            KW.Metadata_ROI_Y: "0",
+            KW.PixelType: PixelType.for_bytes(dtype.itemsize, n_components),
+        }
+
+        # Create metadata-injecting wrapper for notify callback
+        # TODO: decide if metadata goes on SeqState or stays here.
+        def notify_with_metadata(cam_meta: Mapping) -> None:
+            elapsed_ms = (perf_counter_ns() - start_time) / 1e6
+            received = datetime.now().isoformat(sep=" ")
+            base_meta.update(
+                {
+                    **cam_meta,
+                    KW.Metadata_TimeInCore: received,
+                    KW.Metadata_ImageNumber: str(_seq.acquired),
+                    KW.Elapsed_Time_ms: f"{elapsed_ms:.2f}",
+                }
+            )
+            _seq.notify(base_meta)
+
+        start_time = perf_counter_ns()
+        # TODO: should we use None or a large number.  Large number is more consistent
+        # for Camera Device Adapters, but hides details from the adapter.
+        cam.start_sequence_thread(
+            n_images or 2**63 - 1, _seq.get_buffer, notify_with_metadata
+        )
+
+    # ------------------------------------------------------- startSequenceAcquisition
+
+    def _do_start_sequence_acquisition(
+        self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
+    ) -> None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return pymmcore.CMMCore.startSequenceAcquisition(
+                self, cameraLabel, numImages, intervalMs, stopOnOverflow
+            )
+
+        self._start_sequence(cam, numImages)
+
+    # ------------------------------------------------------ continuous acquisition
+
+    def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)
+
+        self._start_sequence(cam, None)
+
+    # ---------------------------------------------------------------- stopSequence
+
+    def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
+
+        cam.stop_sequence()
+        if self._seq:
+            self._seq.running = False
+
+    # ------------------------------------------------------------------ queries
+    @overload
+    def isSequenceRunning(self) -> bool: ...
+    @overload
+    def isSequenceRunning(self, cameraLabel: DeviceLabel | str) -> bool: ...
+    def isSequenceRunning(self, cameraLabel: DeviceLabel | str | None = None) -> bool:
+        if self._py_camera(cameraLabel) is None:
+            return super().isSequenceRunning()
+
+        return bool(self._seq is not None and self._seq.running)
+
+    def getRemainingImageCount(self) -> int:
+        if self._py_camera() is None:
+            return super().getRemainingImageCount()
+        return len(self._seq) if self._seq is not None else 0
+
+    def getLastImage(self) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().getLastImage()
+        if not (self._seq):
+            raise IndexError("Circular buffer is empty.")
+        return self._seq.buffers[-1]
+
+    # ---------------------------------------------------- popNext
+
+    def _pop_or_raise(self) -> tuple[np.ndarray, Mapping]:
+        if not self._seq or (data := self._seq.pop_left()) is None:
+            raise IndexError("Circular buffer is empty.")
+        return data
+
+    def popNextImage(self, *, fix: bool = True) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().popNextImage(fix=fix)
+        return self._pop_or_raise()[0]
+
+    def popNextImageAndMD(
+        self, channel: int = 0, slice: int = 0, *, fix: bool = True
+    ) -> tuple[np.ndarray, Metadata]:
+        if self._py_camera() is None:
+            return super().popNextImageAndMD(channel, slice, fix=fix)
+        img, md = self._pop_or_raise()
+        return (img, Metadata(md))
+
+    # ----------------------------------------------------------------- image info
+
+    def getImageBitDepth(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getImageBitDepth()
+        dtype = np.dtype(cam.dtype())
+        return dtype.itemsize * 8
+
+    def getBytesPerPixel(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getBytesPerPixel()
+        dtype = np.dtype(cam.dtype())
+        return dtype.itemsize
+
+    def getImageBufferSize(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getImageBufferSize()
+        shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        return int(np.prod(shape) * dtype.itemsize)
+
+    def getImageHeight(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getImageHeight()
+        return cam.shape()[0]
+
+    def getImageWidth(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getImageWidth()
+        return cam.shape()[1]
+
+    def getNumberOfComponents(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getNumberOfComponents()
+        shape = cam.shape()
+        return 1 if len(shape) == 2 else shape[2]
+
+    def getNumberOfCameraChannels(self) -> int:
+        if self._py_camera() is None:  # pragma: no cover
+            return super().getNumberOfCameraChannels()
+        raise NotImplementedError(
+            "getNumberOfCameraChannels is not implemented for Python cameras."
+        )
+
+    def getCameraChannelName(self, channelNr: int) -> str:
+        """Get the name of the camera channel."""
+        if self._py_camera() is None:  # pragma: no cover
+            return super().getCameraChannelName(channelNr)
+        raise NotImplementedError(
+            "getCameraChannelName is not implemented for Python cameras."
+        )
+
+    @overload
+    def getExposure(self) -> float: ...
+    @overload
+    def getExposure(self, cameraLabel: DeviceLabel | str, /) -> float: ...
+    def getExposure(self, cameraLabel: DeviceLabel | str | None = None) -> float:
+        """Get the exposure time in milliseconds."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            if cameraLabel is None:
+                return super().getExposure()
+            return super().getExposure(cameraLabel)
+
+        with cam:
+            return cam.get_exposure()
+
+    @overload
+    def setExposure(self, exp: float, /) -> None: ...
+    @overload
+    def setExposure(self, cameraLabel: DeviceLabel | str, dExp: float, /) -> None: ...
+    def setExposure(self, *args: Any) -> None:
+        """Set the exposure time in milliseconds."""
+        label, args = self._ensure_label(args, min_args=2, getter=self.getCameraDevice)
+        if (cam := self._py_camera(label)) is None:  # pragma: no cover
+            return super().setExposure(label, *args)
+        with cam:
+            cam.set_exposure(*args)
+
+    def isExposureSequenceable(self, cameraLabel: DeviceLabel | str) -> bool:
+        """Check if the camera supports exposure sequences."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().isExposureSequenceable(cameraLabel)
+        with cam:
+            return cam.is_property_sequenceable(KW.Exposure)
+
+    def loadExposureSequence(
+        self, cameraLabel: DeviceLabel | str, exposureSequence_ms: Sequence[float]
+    ) -> None:
+        """Transfer a sequence of exposure times to the camera."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().loadExposureSequence(cameraLabel, exposureSequence_ms)
+        with cam:
+            cam.load_property_sequence(KW.Exposure, exposureSequence_ms)
+
+    def getExposureSequenceMaxLength(self, cameraLabel: DeviceLabel | str) -> int:
+        """Get the maximum length of the exposure sequence."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().getExposureSequenceMaxLength(cameraLabel)
+        with cam:
+            return cam.get_property_info(KW.Exposure).sequence_max_length
+
+    def startExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
+        """Start a sequence of exposures."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().startExposureSequence(cameraLabel)
+        with cam:
+            cam.start_property_sequence(KW.Exposure)
+
+    def stopExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
+        """Stop a sequence of exposures."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().stopExposureSequence(cameraLabel)
+        with cam:
+            cam.stop_property_sequence(KW.Exposure)
+
+    def prepareSequenceAcquisition(self, cameraLabel: DeviceLabel | str) -> None:
+        """Prepare the camera for sequence acquisition."""
+        if self._py_camera(cameraLabel) is None:  # pragma: no cover
+            return super().prepareSequenceAcquisition(cameraLabel)
+        # TODO: Implement prepareSequenceAcquisition for Python cameras?
+
+    @overload
+    def getPixelSizeAffine(self) -> AffineTuple: ...
+    @overload
+    def getPixelSizeAffine(self, cached: bool, /) -> AffineTuple: ...
+    def getPixelSizeAffine(self, cached: bool = False) -> AffineTuple:
+        """Get the pixel size affine transformation matrix."""
+        if not (res_id := self.getCurrentPixelSizeConfig(cached)):  # pragma: no cover
+            return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)  # null affine
+
+        cam = self._py_camera()
+        if cam is None or (binning := float(cam.get_property_value(KW.Binning))) == 1:
+            return tuple(super().getPixelSizeAffine(cached))  # type: ignore
+
+        # in CMMCore, they scale the pixel size affine by the binning factor and mag
+        # but they won't pay attention to our camera so we have to reimplement it here
+        af = self.getPixelSizeAffineByID(res_id)
+        if (factor := binning / self.getMagnificationFactor()) != 1.0:
+            af = cast("AffineTuple", tuple(v * factor for v in af))
+        return af
+
+    @overload
+    def getPixelSizeUm(self) -> float: ...
+    @overload
+    def getPixelSizeUm(self, cached: bool) -> float: ...
+    def getPixelSizeUm(self, cached: bool = False) -> float:
+        """Get the pixel size in micrometers."""
+        if not (res_id := self.getCurrentPixelSizeConfig(cached)):  # pragma: no cover
+            return 0.0
+
+        # in CMMCore, they scale the pixel size by the binning factor and mag
+        # but they won't pay attention to our camera so we have to reimplement it here
+        cam = self._py_camera()
+        if cam is None or (binning := float(cam.get_property_value(KW.Binning))) == 1:
+            return super().getPixelSizeUm(cached)
+
+        return self.getPixelSizeUmByID(res_id) * binning / self.getMagnificationFactor()

@@ -6,6 +6,7 @@ import numpy as np
 import pytest
 from numpy.typing import DTypeLike
 
+import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.experimental.unicore import Camera
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
@@ -185,9 +186,12 @@ def test_sequence_acquisition(device: str) -> None:
         assert core.getRemainingImageCount() == n_frames - i - 1
 
     assert core.getRemainingImageCount() == 0
-    with pytest.raises(IndexError):
+
+    # TODO: fix in pymmcore-nano the fact that it raises a different type of exception
+    etype = Exception if pymmcore.NANO else IndexError
+    with pytest.raises(etype, match="Circular buffer"):
         core.getLastImage()
-    with pytest.raises(IndexError):
+    with pytest.raises(etype, match="Circular buffer"):
         core.popNextImage()
 
 
