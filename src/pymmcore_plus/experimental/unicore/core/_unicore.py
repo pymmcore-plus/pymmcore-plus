@@ -44,52 +44,6 @@ CURRENT = {
 }
 
 
-class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
-    """A thread-safe cache for property states.
-
-    Keys are tuples of (device_label, property_name), and values are the last known
-    value of that property.
-    """
-
-    def __init__(self) -> None:
-        self._store: dict[tuple[str, str], Any] = {}
-        self._lock = threading.Lock()
-
-    def __getitem__(self, key: tuple[str, str]) -> Any:
-        with self._lock:
-            try:
-                return self._store[key]
-            except KeyError:  # pragma: no cover
-                prop, dev = key
-                raise KeyError(
-                    f"Property {prop!r} of device {dev!r} not found in cache"
-                ) from None
-
-    def __setitem__(self, key: tuple[str, str], value: Any) -> None:
-        with self._lock:
-            self._store[key] = value
-
-    def __delitem__(self, key: tuple[str, str]) -> None:
-        with self._lock:
-            del self._store[key]
-
-    def __contains__(self, key: object) -> bool:
-        with self._lock:
-            return key in self._store
-
-    def __iter__(self) -> Iterator[tuple[str, str]]:
-        with self._lock:
-            return iter(self._store.copy())  # Prevent modifications during iteration
-
-    def __len__(self) -> int:
-        with self._lock:
-            return len(self._store)
-
-    def __repr__(self) -> str:
-        with self._lock:
-            return f"{self.__class__.__name__}({self._store!r})"
-
-
 class _CoreDevice:
     """A virtual core device.
 
@@ -137,24 +91,6 @@ class UniMMCore(CMMCorePlus):
         elif not label:
             self._pycore.set_current(keyword, None)
         return label
-
-    def _ensure_label(
-        self, args: tuple[_T, ...], min_args: int, getter: Callable[[], str]
-    ) -> tuple[str, tuple[_T, ...]]:
-        """Ensure we have a device label.
-
-        Designed to be used with overloaded methods that MAY take a device label as the
-        first argument.
-
-        If the number of arguments is less than `min_args`, the label is obtained from
-        the getter function. If the number of arguments is greater than or equal to
-        `min_args`, the label is the first argument and the remaining arguments are
-        returned as a tuple
-        """
-        if len(args) < min_args:
-            # we didn't get the label
-            return getter(), args
-        return cast("str", args[0]), args[1:]
 
     # -----------------------------------------------------------------------
     # ------------------------ General Core methods  ------------------------
@@ -517,7 +453,7 @@ class UniMMCore(CMMCorePlus):
     ) -> None: ...
     def setXYPosition(self, *args: Any) -> None:
         """Sets the position of the XY stage in microns."""
-        label, args = self._ensure_label(args, min_args=3, getter=self.getXYStageDevice)
+        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
         if label not in self._pydevices:  # pragma: no cover
             return super().setXYPosition(label, *args)
 
@@ -646,7 +582,7 @@ class UniMMCore(CMMCorePlus):
         The current position of the stage becomes (newXUm, newYUm). It is recommended
         that setOriginXY() be used instead where available.
         """
-        label, args = self._ensure_label(args, min_args=3, getter=self.getXYStageDevice)
+        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
         if label not in self._pydevices:  # pragma: no cover
             return super().setAdapterOriginXY(label, *args)
 
@@ -661,7 +597,7 @@ class UniMMCore(CMMCorePlus):
     ) -> None: ...
     def setRelativeXYPosition(self, *args: Any) -> None:
         """Sets the relative position of the XY stage in microns."""
-        label, args = self._ensure_label(args, min_args=3, getter=self.getXYStageDevice)
+        label, args = _ensure_label(args, min_args=3, getter=self.getXYStageDevice)
         if label not in self._pydevices:  # pragma: no cover
             return super().setRelativeXYPosition(label, *args)
 
@@ -962,7 +898,7 @@ class UniMMCore(CMMCorePlus):
     def setExposure(self, cameraLabel: DeviceLabel | str, dExp: float, /) -> None: ...
     def setExposure(self, *args: Any) -> None:
         """Set the exposure time in milliseconds."""
-        label, args = self._ensure_label(args, min_args=2, getter=self.getCameraDevice)
+        label, args = _ensure_label(args, min_args=2, getter=self.getCameraDevice)
         if (cam := self._py_camera(label)) is None:  # pragma: no cover
             return super().setExposure(label, *args)
         with cam:
@@ -1047,3 +983,67 @@ class UniMMCore(CMMCorePlus):
             return super().getPixelSizeUm(cached)
 
         return self.getPixelSizeUmByID(res_id) * binning / self.getMagnificationFactor()
+
+
+def _ensure_label(
+    args: tuple[_T, ...], min_args: int, getter: Callable[[], str]
+) -> tuple[str, tuple[_T, ...]]:
+    """Ensure we have a device label.
+
+    Designed to be used with overloaded methods that MAY take a device label as the
+    first argument.
+
+    If the number of arguments is less than `min_args`, the label is obtained from the
+    getter function. If the number of arguments is greater than or equal to `min_args`,
+    the label is the first argument and the remaining arguments are returned as a tuple
+    """
+    if len(args) < min_args:
+        # we didn't get the label
+        return getter(), args
+    return cast("str", args[0]), args[1:]
+
+
+class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
+    """A thread-safe cache for property states.
+
+    Keys are tuples of (device_label, property_name), and values are the last known
+    value of that property.
+    """
+
+    def __init__(self) -> None:
+        self._store: dict[tuple[str, str], Any] = {}
+        self._lock = threading.Lock()
+
+    def __getitem__(self, key: tuple[str, str]) -> Any:
+        with self._lock:
+            try:
+                return self._store[key]
+            except KeyError:  # pragma: no cover
+                prop, dev = key
+                raise KeyError(
+                    f"Property {prop!r} of device {dev!r} not found in cache"
+                ) from None
+
+    def __setitem__(self, key: tuple[str, str], value: Any) -> None:
+        with self._lock:
+            self._store[key] = value
+
+    def __delitem__(self, key: tuple[str, str]) -> None:
+        with self._lock:
+            del self._store[key]
+
+    def __contains__(self, key: object) -> bool:
+        with self._lock:
+            return key in self._store
+
+    def __iter__(self) -> Iterator[tuple[str, str]]:
+        with self._lock:
+            return iter(self._store.copy())  # Prevent modifications during iteration
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._store)
+
+    def __repr__(self) -> str:
+        with self._lock:
+            return f"{self.__class__.__name__}({self._store!r})"
