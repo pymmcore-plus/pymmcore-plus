@@ -277,12 +277,12 @@ class PyCameraMixin(UniCoreBase):
         self, exp_or_label: str | float, exp_: float | None = None, /
     ) -> None:
         """Set the exposure time in milliseconds."""
-        if isinstance(exp_or_label, str) and isinstance(exp_, float):
+        if isinstance(exp_or_label, str) and isinstance(exp_, (int, float)):
             if (cam := self._py_camera(exp_or_label)) is None:
                 return super().setExposure(exp_or_label, exp_)
             with cam:
                 cam.set_exposure(exp_)
-        elif isinstance(exp_or_label, float) and exp_ is None:
+        elif isinstance(exp_or_label, (int, float)) and exp_ is None:
             if (cam := self._py_camera()) is None:
                 return super().setExposure(exp_or_label)
             with cam:

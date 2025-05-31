@@ -20,8 +20,24 @@ from pymmcore_plus.experimental.unicore import Camera, UniMMCore
 _START_TIME: float = time.time()
 
 
-def make_cool_image(shape: tuple[int, int], dtype: np.typing.DTypeLike) -> np.ndarray:
-    """Return a cool looking sinusoidal image with temporal correlations."""
+def make_cool_image(
+    shape: tuple[int, int], dtype: np.typing.DTypeLike, exposure_ms: float = 10.0
+) -> np.ndarray:
+    """Return a cool looking sinusoidal image with temporal correlations.
+
+
+    Parameters
+    ----------
+    shape: tuple[int, int]
+        The shape of the output image.
+        The first element is the height (number of rows), the second is the width
+        (number of columns).
+    dtype: np.typing.DTypeLike
+        The data type of the output image.
+    exposure_ms: float
+        Exposure time in milliseconds. Shorter exposures result in noisier images.
+        100ms gives very good SNR, 1ms is almost dominated by noise.
+    """
     (nx, ny) = shape
 
     x = np.linspace(0, 2 * np.pi, ny, endpoint=False)
@@ -36,8 +52,18 @@ def make_cool_image(shape: tuple[int, int], dtype: np.typing.DTypeLike) -> np.nd
     rotation_angle = 2 * np.pi * elapsed_time / 8.0
     # Additional phase shift for more complex temporal dynamics
     phase_shift = np.pi * elapsed_time / 3.0
-    # Create base pattern with breathing amplitude
-    image = breathing_amplitude * np.sin(X + phase_shift) * np.cos(Y + phase_shift)
+
+    # Signal amplitude scales with exposure time (more photons = stronger signal)
+    # Use square root relationship to simulate photon statistics
+    signal_strength = np.sqrt(exposure_ms / 100.0)  # Normalized to 100ms reference
+
+    # Create base pattern with breathing amplitude and exposure-dependent strength
+    image = (
+        signal_strength
+        * breathing_amplitude
+        * np.sin(X + phase_shift)
+        * np.cos(Y + phase_shift)
+    )
 
     # Add rotated sine wave that slowly rotates over time
     # Apply rotation transformation
@@ -46,13 +72,21 @@ def make_cool_image(shape: tuple[int, int], dtype: np.typing.DTypeLike) -> np.nd
 
     # Add the rotated component with different frequency
     secondary_amplitude = 0.4 + 0.3 * np.sin(2 * np.pi * elapsed_time / 7.0)
-    image += secondary_amplitude * np.sin(1.5 * X_rot) * np.cos(1.2 * Y_rot)
+    image += (
+        signal_strength
+        * secondary_amplitude
+        * np.sin(1.5 * X_rot)
+        * np.cos(1.2 * Y_rot)
+    )
 
-    # Add subtle temporal noise for more organic feel
-    noise_amplitude = 0.1 * np.sin(2 * np.pi * elapsed_time / 2.0)
-    image += noise_amplitude * np.random.uniform(-0.1, 0.1, image.shape)
+    # Add exposure-dependent noise
+    # Shorter exposures have relatively more noise
+    noise_std = 0.1 / np.sqrt(max(exposure_ms, 0.1))  # Avoid division by zero
+    image += np.random.normal(0, noise_std, image.shape)
 
     # normalize to [0, 255] and convert to the specified dtype
+    # Clip to avoid overflow from noise
+    image = np.clip(image, image.min(), image.max())
     image = (image - image.min()) / (image.max() - image.min())
     image = (image * 255).astype(dtype)
     return image  # type: ignore[no-any-return]
@@ -60,7 +94,6 @@ def make_cool_image(shape: tuple[int, int], dtype: np.typing.DTypeLike) -> np.nd
 
 class MyCamera(Camera):
     _exposure: float = 10.0
-    _start_time: float = time.time()
 
     def get_exposure(self) -> float:
         return self._exposure
@@ -80,8 +113,11 @@ class MyCamera(Camera):
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition."""
         for _ in range(n):
-            # Simulate image acquisition
-            get_buffer()[:] = make_cool_image(self.shape(), self.dtype())
+            # Simulate image acquisition with current exposure time
+            time.sleep(self._exposure / 1000.0)  # Convert ms to seconds
+            get_buffer()[:] = make_cool_image(
+                self.shape(), self.dtype(), self._exposure
+            )
             yield {"timestamp": time.time()}  # any metadata
 
 
@@ -91,23 +127,25 @@ core.loadPyDevice("Camera", MyCamera())
 core.initializeDevice("Camera")
 core.setCameraDevice("Camera")
 
-core.setExposure(42.0)
+core.setExposure(42)
 
 
 try:
-    from pymmcore_widgets import ImagePreview, LiveButton, SnapButton
-    from qtpy.QtWidgets import QApplication, QVBoxLayout, QWidget
+    from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
+    from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
 
     app = QApplication([])
 
     window = QWidget()
     window.setWindowTitle("UniCore Camera Example")
     layout = QVBoxLayout(window)
-    layout.addWidget(SnapButton(mmcore=core))
-    layout.addWidget(LiveButton(mmcore=core))
-    preview = ImagePreview(mmcore=core)
-    preview.setMinimumSize(640, 480)
-    layout.addWidget(preview)
+
+    top = QHBoxLayout()
+    top.addWidget(SnapButton(mmcore=core))
+    top.addWidget(LiveButton(mmcore=core))
+    top.addWidget(ExposureWidget(mmcore=core))
+    layout.addLayout(top)
+    layout.addWidget(ImagePreview(mmcore=core))
     window.setLayout(layout)
     window.resize(800, 600)
     window.show()
