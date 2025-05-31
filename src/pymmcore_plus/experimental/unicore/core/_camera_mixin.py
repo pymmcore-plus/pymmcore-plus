@@ -88,7 +88,7 @@ class PyCameraMixin(UniCoreBase):
         """Initialise _seq state and call cam.start_sequence."""
         self._seq = _seq = SeqState(cam.shape(), cam.dtype(), n_images)
         # TODO: should we use None or a large number
-        cam.start_sequence(n_images or 2**63 - 1, _seq.get_buffer, _seq.notify)
+        cam.start_sequence_thread(n_images or 2**63 - 1, _seq.get_buffer, _seq.notify)
 
     # ------------------------------------------------------- startSequenceAcquisition
 

@@ -1,12 +1,12 @@
-import threading
 import time
 from collections.abc import Mapping
-from typing import Callable, Union
+from typing import Callable
 
 import numpy as np
 import pytest
 from numpy.typing import DTypeLike
 
+from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.experimental.unicore import Camera
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
@@ -21,10 +21,6 @@ FRAME = np.random.randint(0, 65535, size=FRAME_SHAPE, dtype=DTYPE)
 class MyCamera(Camera):
     """Example Camera device."""
 
-    def __init__(self) -> None:
-        self._acquisition_thread: Union[threading.Thread, None] = None
-        self._stop_event = threading.Event()
-
     def shape(self) -> tuple[int, int]:
         """Return the shape of the current camera state."""
         return FRAME_SHAPE
@@ -34,34 +30,6 @@ class MyCamera(Camera):
         return DTYPE
 
     def start_sequence(
-        self,
-        n: int,
-        get_buffer: Callable[[], np.ndarray],
-        notify: Callable[[Mapping], None],
-    ) -> None:
-        """Acquire a sequence of n images."""
-        # Stop any existing acquisition
-        self._stop_event.set()
-        if self._acquisition_thread is not None:
-            self._acquisition_thread.join()
-
-        # Reset stop event for new acquisition
-        self._stop_event.clear()
-
-        # Start acquisition in background thread
-        self._acquisition_thread = threading.Thread(
-            target=self._acquire_images, args=(n, get_buffer, notify), daemon=True
-        )
-        self._acquisition_thread.start()
-
-    def stop_sequence(self) -> None:
-        """Stop the current sequence acquisition."""
-        self._stop_event.set()
-        if self._acquisition_thread is not None:
-            self._acquisition_thread.join()
-            self._acquisition_thread = None
-
-    def _acquire_images(
         self,
         n: int,
         get_buffer: Callable[[], np.ndarray],
@@ -123,14 +91,14 @@ def test_basic_acquisition(device: str) -> None:
         if i == n_frames - 1:
             np.testing.assert_array_equal(frame, last_image)
 
-        # assert meta[Keyword.Binning] == "1"
-        # assert meta["Camera"] == "Camera"  # g_Keyword_Metadata_CameraLabel
-        # assert meta["Height"] == str(FRAME_SHAPE[0])  # g_Keyword_Metadata_Height
-        # assert meta["Width"] == str(FRAME_SHAPE[1])  # g_Keyword_Metadata_Width
-        # assert meta[Keyword.PixelType] == "GRAY16"
-        # assert meta[Keyword.Metadata_ImageNumber] == str(i)
-        # assert Keyword.Elapsed_Time_ms in meta  # ElapsedTime-ms
-        # assert "TimeReceivedByCore" in meta  # Metadata_TimeInCore_ms
+        assert meta[Keyword.Binning] == "1"
+        assert meta["Camera"] == "Camera"  # g_Keyword_Metadata_CameraLabel
+        assert meta["Height"] == str(FRAME_SHAPE[0])  # g_Keyword_Metadata_Height
+        assert meta["Width"] == str(FRAME_SHAPE[1])  # g_Keyword_Metadata_Width
+        assert meta[Keyword.PixelType] == "GRAY16"
+        assert meta[Keyword.Metadata_ImageNumber] == str(i)
+        assert Keyword.Elapsed_Time_ms in meta  # ElapsedTime-ms
+        assert "TimeReceivedByCore" in meta  # Metadata_TimeInCore_ms
 
         assert frame.shape == FRAME_SHAPE
         assert frame.dtype == DTYPE

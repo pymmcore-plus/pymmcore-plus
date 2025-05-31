@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Callable
 
@@ -13,6 +14,11 @@ if TYPE_CHECKING:
 
 
 class Camera(Device):
+    def __init__(self) -> None:
+        super().__init__()
+        self._acquisition_thread: None | threading.Thread = None
+        self._stop_event = threading.Event()
+
     @abstractmethod
     def shape(self) -> tuple[int, int]:
         """Return the shape of the image buffer."""
@@ -30,8 +36,10 @@ class Camera(Device):
     ) -> None:
         """Start a sequence acquisition.
 
-        This method should NOT block, and SHOULD return immediately.
-        You should start a background thread to acquire images.
+        This method should be implemented by the camera device adapter. It needn't worry
+        about threading or synchronization; it may block and the core will handle
+        threading and synchronization, though you may reimplement
+        `start_sequence_thread` if you'd like to handle threading yourself.
 
         Parameters
         ----------
@@ -69,6 +77,30 @@ class Camera(Device):
             notify({})
             # notify({})
 
-    @abstractmethod
+    def start_sequence_thread(
+        self,
+        n: int,
+        get_buffer: Callable[[], np.ndarray],
+        notify: Callable[[Mapping], None],
+    ) -> None:
+        """Acquire a sequence of n images in a background thread."""
+        # Stop any existing acquisition
+        self._stop_event.set()
+        if self._acquisition_thread is not None:
+            self._acquisition_thread.join()
+
+        # Reset stop event for new acquisition
+        self._stop_event.clear()
+
+        # Start acquisition in background thread
+        self._acquisition_thread = threading.Thread(
+            target=self.start_sequence, args=(n, get_buffer, notify), daemon=True
+        )
+        self._acquisition_thread.start()
+
     def stop_sequence(self) -> None:
-        """Stop and wait for the Sequence thread finished."""
+        """Stop the current sequence acquisition."""
+        self._stop_event.set()
+        if self._acquisition_thread is not None:
+            self._acquisition_thread.join()
+            self._acquisition_thread = None
