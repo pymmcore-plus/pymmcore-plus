@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime
 from time import perf_counter_ns
-from typing import TYPE_CHECKING, Any, Literal, overload
+from typing import TYPE_CHECKING, Any, Literal, cast, overload
 
 import numpy as np
 
@@ -18,7 +18,7 @@ from ._sequence_buffers import SeqState, SequenceBuffer
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
 
-    from pymmcore import DeviceLabel
+    from pymmcore import AffineTuple, DeviceLabel
 
 
 class PyCameraMixin(UniCoreBase):
@@ -319,6 +319,43 @@ class PyCameraMixin(UniCoreBase):
             return super().prepareSequenceAcquisition(cameraLabel)
         # TODO: Implement prepareSequenceAcquisition for Python cameras?
 
+    @overload
+    def getPixelSizeAffine(self) -> AffineTuple: ...
+    @overload
+    def getPixelSizeAffine(self, cached: bool, /) -> AffineTuple: ...
+    def getPixelSizeAffine(self, cached: bool = False) -> AffineTuple:
+        """Get the pixel size affine transformation matrix."""
+        if not (res_id := self.getCurrentPixelSizeConfig(cached)):  # pragma: no cover
+            return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)  # null affine
+
+        cam = self._py_camera()
+        if cam is None or (binning := float(cam.get_property_value(KW.Binning))) == 1:
+            return super().getPixelSizeAffine(cached)
+
+        # in CMMCore, they scale the pixel size affine by the binning factor and mag
+        # but they won't pay attention to our camera so we have to reimplement it here
+        af = self.getPixelSizeAffineByID(res_id)
+        if (factor := binning / self.getMagnificationFactor()) != 1.0:
+            af = cast("AffineTuple", tuple(v * factor for v in af))
+        return af
+
+    @overload
+    def getPixelSizeUm(self) -> float: ...
+    @overload
+    def getPixelSizeUm(self, cached: bool) -> float: ...
+    def getPixelSizeUm(self, cached: bool = False) -> float:
+        """Get the pixel size in micrometers."""
+        if not (res_id := self.getCurrentPixelSizeConfig(cached)):  # pragma: no cover
+            return 0.0
+
+        # in CMMCore, they scale the pixel size by the binning factor and mag
+        # but they won't pay attention to our camera so we have to reimplement it here
+        cam = self._py_camera()
+        if cam is None or (binning := float(cam.get_property_value(KW.Binning))) == 1:
+            return super().getPixelSizeUm(cached)
+
+        return self.getPixelSizeUmByID(res_id) * binning / self.getMagnificationFactor()
+
 
 # 	clearROI
 # 	getROI
@@ -330,6 +367,3 @@ class PyCameraMixin(UniCoreBase):
 
 # 	initializeCircularBuffer
 # 	setCircularBufferMemoryFootprint
-
-# 	getPixelSizeAffine
-# 	getPixelSizeUm

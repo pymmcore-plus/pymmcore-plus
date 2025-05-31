@@ -80,6 +80,8 @@ class SequenceableCamera(MyCamera):
 
 def _load_device(core: UniMMCore, device: str, cls: type = MyCamera) -> None:
     # load either a Python or C++ camera device
+    if DEV in core.getLoadedDevices():
+        core.unloadDevice(DEV)
     if device == "python":
         camera = cls()
         core.loadPyDevice(DEV, camera)
@@ -92,11 +94,11 @@ def _load_device(core: UniMMCore, device: str, cls: type = MyCamera) -> None:
 
 
 @pytest.mark.parametrize("device", ["python", "c++"])
-def test_basic_acquisition(device: str) -> None:
+def test_basic_properties(device: str) -> None:
     core = UniMMCore()
-    assert not core.getCameraDevice()
 
     # load either a Python or C++ camera device
+    core.loadSystemConfiguration()
     _load_device(core, device)
 
     assert (core.getImageWidth(), core.getImageHeight()) == FRAME_SHAPE
@@ -114,6 +116,22 @@ def test_basic_acquisition(device: str) -> None:
     core.setProperty(DEV, Keyword.Binning, 1)
 
     assert not core.isExposureSequenceable(DEV)
+
+    assert core.getPixelSizeAffine(False) == (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+    assert core.getPixelSizeUm() == 1.0
+
+    core.setProperty(DEV, Keyword.Binning, 2)
+    assert core.getPixelSizeAffine(False) == (2.0, 0.0, 0.0, 0.0, 2.0, 0.0)
+    assert core.getPixelSizeUm() == 2.0
+
+
+@pytest.mark.parametrize("device", ["python", "c++"])
+def test_basic_acquisition(device: str) -> None:
+    core = UniMMCore()
+    assert not core.getCameraDevice()
+
+    # load either a Python or C++ camera device
+    _load_device(core, device)
 
     with pytest.raises(RuntimeError, match="snapImage()"):
         core.getImage()
