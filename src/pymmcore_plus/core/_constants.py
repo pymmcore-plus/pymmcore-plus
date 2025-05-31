@@ -69,12 +69,16 @@ class Keyword(str, Enum):
     HubID = pymmcore.g_Keyword_HubID
 
     # image annotations
-    Meatdata_Exposure = pymmcore.g_Keyword_Meatdata_Exposure
-    Metadata_Score = pymmcore.g_Keyword_Metadata_Score
+    Metadata_CameraLabel = pymmcore.g_Keyword_Metadata_CameraLabel
+    Metadata_Exposure = pymmcore.g_Keyword_Meatdata_Exposure
+    Meatdata_Exposure = Metadata_Exposure  # typo in the original API
+    Metadata_Height = pymmcore.g_Keyword_Metadata_Height
     Metadata_ImageNumber = pymmcore.g_Keyword_Metadata_ImageNumber
     Metadata_ROI_X = pymmcore.g_Keyword_Metadata_ROI_X
     Metadata_ROI_Y = pymmcore.g_Keyword_Metadata_ROI_Y
+    Metadata_Score = pymmcore.g_Keyword_Metadata_Score
     Metadata_TimeInCore = pymmcore.g_Keyword_Metadata_TimeInCore
+    Metadata_Width = pymmcore.g_Keyword_Metadata_Width
 
     def __str__(self) -> str:
         return str(self.value)

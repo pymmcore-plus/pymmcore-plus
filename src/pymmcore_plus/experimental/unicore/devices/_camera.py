@@ -77,6 +77,37 @@ class Camera(Device):
             notify({})
             # notify({})
 
+            # TODO:
+            # Open question: who is responsible for key pieces of metadata?
+            # in CMMCore, each of the camera device adapters is responsible for
+            # injecting to following bits of metadata:
+            # - MM::g_Keyword_Metadata_CameraLabel
+            # - MM::g_Keyword_Elapsed_Time_ms (GetCurrentMMTime - start_time)
+            # - MM::g_Keyword_Metadata_ROI_X
+            # - MM::g_Keyword_Metadata_ROI_Y
+            # - MM::g_Keyword_Binning
+            # --- while the CircularBuffer InsertMultiChannel is responsible for adding:
+            # - MM::g_Keyword_Metadata_ImageNumber
+            # - MM::g_Keyword_Elapsed_Time_ms
+            # - MM::g_Keyword_Metadata_TimeInCore
+            # - MM::g_Keyword_Metadata_Width
+            # - MM::g_Keyword_Metadata_Height
+            # - MM::g_Keyword_PixelType
+
+            # for example:
+            # {
+            #     "Binning": "1",
+            #     "Camera": "Camera",
+            #     "ElapsedTime-ms": "30.50",
+            #     "Height": "512",
+            #     "ImageNumber": "2",
+            #     "PixelType": "GRAY16",
+            #     "ROI-X-start": "0",
+            #     "ROI-Y-start": "0",
+            #     "TimeReceivedByCore": "2025-05-31 09:26:07.964891",
+            #     "Width": "512",
+            # }
+
     def start_sequence_thread(
         self,
         n: int,

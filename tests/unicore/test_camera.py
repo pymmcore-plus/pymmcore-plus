@@ -92,13 +92,13 @@ def test_basic_acquisition(device: str) -> None:
             np.testing.assert_array_equal(frame, last_image)
 
         assert meta[Keyword.Binning] == "1"
-        assert meta["Camera"] == "Camera"  # g_Keyword_Metadata_CameraLabel
-        assert meta["Height"] == str(FRAME_SHAPE[0])  # g_Keyword_Metadata_Height
-        assert meta["Width"] == str(FRAME_SHAPE[1])  # g_Keyword_Metadata_Width
+        assert meta[Keyword.Metadata_CameraLabel] == "Camera"
+        assert meta[Keyword.Metadata_Height] == str(FRAME_SHAPE[0])
+        assert meta[Keyword.Metadata_Width] == str(FRAME_SHAPE[1])
         assert meta[Keyword.PixelType] == "GRAY16"
         assert meta[Keyword.Metadata_ImageNumber] == str(i)
-        assert Keyword.Elapsed_Time_ms in meta  # ElapsedTime-ms
-        assert "TimeReceivedByCore" in meta  # Metadata_TimeInCore_ms
+        assert Keyword.Elapsed_Time_ms in meta
+        assert Keyword.Metadata_TimeInCore in meta
 
         assert frame.shape == FRAME_SHAPE
         assert frame.dtype == DTYPE
