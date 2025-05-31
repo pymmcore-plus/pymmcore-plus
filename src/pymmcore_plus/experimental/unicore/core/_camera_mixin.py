@@ -337,7 +337,7 @@ class PyCameraMixin(UniCoreBase):
         """Get the maximum length of the exposure sequence."""
         if (cam := self._py_camera(cameraLabel)) is None:
             return super().getExposureSequenceMaxLength(cameraLabel)
-        return cam.property(KW.Exposure).sequence_max_length
+        return cam.get_property_info(KW.Exposure).sequence_max_length
 
     def startExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
         """Start a sequence of exposures."""

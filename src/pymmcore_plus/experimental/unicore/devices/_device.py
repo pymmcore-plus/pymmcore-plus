@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from abc import ABC
 from collections import ChainMap
+from enum import EnumMeta
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
@@ -108,6 +109,9 @@ class Device(_Lockable, ABC):
         if property_type is None and default_value is not None:
             property_type = type(default_value)
 
+        if isinstance(property_type, EnumMeta) and allowed_values is None:
+            allowed_values = tuple(property_type)
+
         prop_info = PropertyInfo(
             name=name,
             default_value=default_value,
@@ -158,7 +162,7 @@ class Device(_Lockable, ABC):
         """Return the names of the properties."""
         return self._prop_controllers_.keys()
 
-    def property(self, prop_name: str) -> PropertyInfo:
+    def get_property_info(self, prop_name: str) -> PropertyInfo:
         """Return the property controller for a property."""
         return self._prop_controllers_[prop_name].property
 
@@ -181,18 +185,6 @@ class Device(_Lockable, ABC):
         else:
             ctrl.property.last_value = ctrl.validate(value)
 
-    def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
-        """Load a sequence into a property."""
-        self._prop_controllers_[prop_name].load_sequence(self, sequence)
-
-    def start_property_sequence(self, prop_name: str) -> None:
-        """Start a sequence of a property."""
-        self._prop_controllers_[prop_name].start_sequence(self)
-
-    def stop_property_sequence(self, prop_name: str) -> None:
-        """Stop a sequence of a property."""
-        self._prop_controllers_[prop_name].stop_sequence(self)
-
     def set_property_allowed_values(
         self, prop_name: str, allowed_values: Sequence[Any]
     ) -> None:
@@ -208,6 +200,18 @@ class Device(_Lockable, ABC):
     def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
         """Set the sequence max length of a property."""
         self._prop_controllers_[prop_name].property.sequence_max_length = max_length
+
+    def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
+        """Load a sequence into a property."""
+        self._prop_controllers_[prop_name].load_sequence(self, sequence)
+
+    def start_property_sequence(self, prop_name: str) -> None:
+        """Start a sequence of a property."""
+        self._prop_controllers_[prop_name].start_sequence(self)
+
+    def stop_property_sequence(self, prop_name: str) -> None:
+        """Stop a sequence of a property."""
+        self._prop_controllers_[prop_name].stop_sequence(self)
 
     def is_property_sequenceable(self, prop_name: str) -> bool:
         """Return `True` if the property is sequenceable."""

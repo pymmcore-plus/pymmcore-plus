@@ -13,6 +13,7 @@ import pymmcore_plus._pymmcore as pymmcore
 class Keyword(str, Enum):
     Name = pymmcore.g_Keyword_Name
     Description = pymmcore.g_Keyword_Description
+
     CameraName = pymmcore.g_Keyword_CameraName
     CameraID = pymmcore.g_Keyword_CameraID
     CameraChannelName = pymmcore.g_Keyword_CameraChannelName
@@ -31,6 +32,7 @@ class Keyword(str, Enum):
     Offset = pymmcore.g_Keyword_Offset
     CCDTemperature = pymmcore.g_Keyword_CCDTemperature
     CCDTemperatureSetPoint = pymmcore.g_Keyword_CCDTemperatureSetPoint
+
     State = pymmcore.g_Keyword_State
     Label = pymmcore.g_Keyword_Label
     Position = pymmcore.g_Keyword_Position
@@ -169,7 +171,9 @@ class PropertyType(IntEnum):
     String = pymmcore.String
     Float = pymmcore.Float
     Integer = pymmcore.Integer
+
     Boolean = auto()  # not supported in pymmcore
+    Enum = auto()  # not supported in pymmcore
 
     def to_python(self) -> type | None:
         return {0: None, 1: str, 2: float, 3: int}[self]
@@ -195,6 +199,8 @@ class PropertyType(IntEnum):
                 return PropertyType.Boolean
             if value.lower() in ("string", "str"):
                 return PropertyType.String
+            if value.lower() in ("enum", "enumeration"):
+                return PropertyType.Enum
         if isinstance(value, type):
             if value is float:
                 return PropertyType.Float
@@ -204,6 +210,8 @@ class PropertyType(IntEnum):
                 return PropertyType.String
             elif value is bool:
                 return PropertyType.Boolean
+            elif issubclass(value, Enum):
+                return PropertyType.Enum
 
         raise TypeError(
             f"Property type must be a PropertyType enum member, "

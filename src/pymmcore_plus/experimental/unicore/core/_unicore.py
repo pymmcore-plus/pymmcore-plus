@@ -258,7 +258,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyType(label, propName)
-        return self._pydevices[label].property(propName).type
+        return self._pydevices[label].get_property_info(propName).type
 
     def hasPropertyLimits(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -266,7 +266,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
         if label not in self._pydevices:  # pragma: no cover
             return super().hasPropertyLimits(label, propName)
         with self._pydevices[label] as dev:
-            return dev.property(propName).limits is not None
+            return dev.get_property_info(propName).limits is not None
 
     def getPropertyLowerLimit(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -274,7 +274,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
         if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyLowerLimit(label, propName)
         with self._pydevices[label] as dev:
-            if lims := dev.property(propName).limits:
+            if lims := dev.get_property_info(propName).limits:
                 return lims[0]
             return 0
 
@@ -284,7 +284,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
         if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyUpperLimit(label, propName)
         with self._pydevices[label] as dev:
-            if lims := dev.property(propName).limits:
+            if lims := dev.get_property_info(propName).limits:
                 return lims[1]
             return 0
 
@@ -294,7 +294,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
         if label not in self._pydevices:  # pragma: no cover
             return super().getAllowedPropertyValues(label, propName)
         with self._pydevices[label] as dev:
-            return tuple(dev.property(propName).allowed_values or ())
+            return tuple(dev.get_property_info(propName).allowed_values or ())
 
     def isPropertyPreInit(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -302,7 +302,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
         if label not in self._pydevices:  # pragma: no cover
             return super().isPropertyPreInit(label, propName)
         with self._pydevices[label] as dev:
-            return dev.property(propName).is_pre_init
+            return dev.get_property_info(propName).is_pre_init
 
     def isPropertyReadOnly(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -326,7 +326,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
         if label not in self._pydevices:  # pragma: no cover
             return super().getPropertySequenceMaxLength(label, propName)
         with self._pydevices[label] as dev:
-            return dev.property(propName).sequence_max_length
+            return dev.get_property_info(propName).sequence_max_length
 
     def loadPropertySequence(
         self,

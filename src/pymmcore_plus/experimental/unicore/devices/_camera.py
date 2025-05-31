@@ -2,9 +2,10 @@ from __future__ import annotations
 
 import threading
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Callable
+from types import MappingProxyType
+from typing import TYPE_CHECKING, Callable, ClassVar
 
-from pymmcore_plus.core._constants import Keyword
+from pymmcore_plus.core._constants import Keyword, PixelFormat
 
 from ._device import Device
 
@@ -16,32 +17,7 @@ if TYPE_CHECKING:
 
 
 class Camera(Device):
-    def __init__(self) -> None:
-        super().__init__()
-        self._acquisition_thread: None | threading.Thread = None
-        self._stop_event = threading.Event()
-
-        self.register_property(
-            name=Keyword.Exposure,
-            property_type=float,
-            getter=type(self).get_exposure,
-            setter=type(self).set_exposure,
-        )
-
-        self.register_property(
-            name=Keyword.Binning,
-            property_type=int,
-            getter=type(self).get_binning,
-            setter=type(self).set_binning,
-        )
-
-    def get_binning(self) -> int:
-        """Get the binning factor for the camera."""
-        return 1
-
-    def set_binning(self, value: int) -> None:
-        """Set the binning factor for the camera."""
-        raise NotImplementedError("This camera does not support binning.")
+    # mandatory methods for Camera device adapters
 
     @abstractmethod
     def get_exposure(self) -> float:
@@ -133,19 +109,96 @@ class Camera(Device):
             # - MM::g_Keyword_Metadata_Height
             # - MM::g_Keyword_PixelType
 
-            # for example:
-            # {
-            #     "Binning": "1",
-            #     "Camera": "Camera",
-            #     "ElapsedTime-ms": "30.50",
-            #     "Height": "512",
-            #     "ImageNumber": "2",
-            #     "PixelType": "GRAY16",
-            #     "ROI-X-start": "0",
-            #     "ROI-Y-start": "0",
-            #     "TimeReceivedByCore": "2025-05-31 09:26:07.964891",
-            #     "Width": "512",
-            # }
+    # Standard Properties --------------------------------------------
+
+    # these are the standard properties that cameras may implement.
+    # Cameras are not required to implement all of these properties, and they may
+    # implement additional properties as well.
+    # To implement a property, you MUST define a `get_<snake_name>` method and
+    # MAY define a `set_<snake_name>` method.
+    # To modify the standard properties, you can use the following methods in your
+    # __init__, (after calling super().__init__()):
+    # self.set_property_value(name, ...)
+    # self.set_property_allowed_values(name, ...)
+    # self.set_property_limits(name, ...)
+    # self.set_property_sequence_max_length(name, ...)
+
+    STANDARD_PROPERTIES: ClassVar = MappingProxyType(
+        {
+            Keyword.ActualInterval_ms: ("actual_interval_ms", float),
+            Keyword.Binning: ("binning", int),
+            Keyword.CameraID: ("camera_id", str),
+            Keyword.CameraName: ("camera_name", str),
+            Keyword.CCDTemperature: ("ccd_temperature", float),
+            Keyword.CCDTemperatureSetPoint: ("ccd_temperature_set_point", float),
+            Keyword.EMGain: ("em_gain", float),
+            Keyword.Exposure: ("exposure", float),
+            Keyword.Gain: ("gain", float),
+            Keyword.Interval_ms: ("interval_ms", float),
+            Keyword.Offset: ("offset", float),
+            # Keyword.PixelType: ("pixel_type", str),  # don't use.  use PixelFormat
+            "PixelFormat": ("pixel_format", PixelFormat),
+            Keyword.ReadoutMode: ("readout_mode", str),
+            Keyword.ReadoutTime: ("readout_time", float),
+        }
+    )
+
+    # optional methods
+    # def get_camera_name(self) -> str:
+    # def set_camera_name(self, value: str) -> None:
+    # def get_camera_id(self) -> str:
+    # def set_camera_id(self, value: str) -> None:
+    # def get_binning(self) -> str:
+    # def set_binning(self, value: str) -> None:
+    # def get_pixel_format(self) -> PixelFormat: ...
+    # def set_pixel_format(self, value: PixelFormat) -> None: ...
+    # def get_gain(self) -> str:
+    # def set_gain(self, value: str) -> None:
+    # def get_offset(self) -> str:
+    # def set_offset(self, value: str) -> None:
+    # def get_readout_mode(self) -> str:
+    # def set_readout_mode(self, value: str) -> None:
+    # def get_readout_time(self) -> str:
+    # def set_readout_time(self, value: str) -> None:
+    # def get_actual_interval_ms(self) -> str:
+    # def set_actual_interval_ms(self, value: str) -> None:
+    # def get_interval_ms(self) -> str:
+    # def set_interval_ms(self, value: str) -> None:
+    # def get_em_gain(self) -> str:
+    # def set_em_gain(self, value: str) -> None:
+    # def get_ccd_temperature(self) -> str:
+    # def set_ccd_temperature(self, value: str) -> None:
+    # def get_ccd_temperature_set_point(self) -> str:
+    # def set_ccd_temperature_set_point(self, value: str) -> None:
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._acquisition_thread: None | threading.Thread = None
+        self._stop_event = threading.Event()
+        self.register_standard_properties()
+
+    def register_standard_properties(self) -> None:
+        """Inspect the class for standard properties and register them."""
+        cls = type(self)
+        for name, (snake_name, prop_type) in self.STANDARD_PROPERTIES.items():
+            if getter := getattr(cls, f"get_{snake_name}", None):
+                setter = getattr(cls, f"set_{snake_name}", None)
+                self.register_property(
+                    name=name,
+                    property_type=prop_type,
+                    getter=getter,
+                    setter=setter,
+                )
+
+    # Standard Properties, default implementations -------------------
+
+    # We always implement a standard binning getter.  It does not
+    # mean that the camera supports binning, unless they implement a setter.
+    def get_binning(self) -> int:
+        """Get the binning factor for the camera."""
+        return 1
+
+    # Threading ------------------------------------------------------
 
     def start_sequence_thread(
         self,
