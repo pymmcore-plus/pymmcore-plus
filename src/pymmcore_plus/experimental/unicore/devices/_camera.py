@@ -4,6 +4,8 @@ import threading
 from abc import abstractmethod
 from typing import TYPE_CHECKING, Callable
 
+from pymmcore_plus.core._constants import Keyword
+
 from ._device import Device
 
 if TYPE_CHECKING:
@@ -18,6 +20,38 @@ class Camera(Device):
         super().__init__()
         self._acquisition_thread: None | threading.Thread = None
         self._stop_event = threading.Event()
+
+        self.register_property(
+            name=Keyword.Exposure,
+            property_type=float,
+            getter=type(self).get_exposure,
+            setter=type(self).set_exposure,
+        )
+
+        self.register_property(
+            name=Keyword.Binning,
+            property_type=int,
+            getter=type(self).get_binning,
+            setter=type(self).set_binning,
+        )
+
+    def get_binning(self) -> int:
+        """Get the binning factor for the camera."""
+        return 1
+
+    def set_binning(self, value: int) -> None:
+        """Set the binning factor for the camera."""
+        raise NotImplementedError("This camera does not support binning.")
+
+    @abstractmethod
+    def get_exposure(self) -> float:
+        """Get the current exposure time in milliseconds."""
+        ...
+
+    @abstractmethod
+    def set_exposure(self, exposure: float) -> None:
+        """Set the exposure time in milliseconds."""
+        ...
 
     @abstractmethod
     def shape(self) -> tuple[int, int]:

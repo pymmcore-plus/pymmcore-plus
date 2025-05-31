@@ -15,7 +15,7 @@ from ._base_mixin import UniCoreBase
 from ._sequence_buffers import SeqState, SequenceBuffer
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping
+    from collections.abc import Mapping, Sequence
 
     from pymmcore import DeviceLabel
 
@@ -99,7 +99,7 @@ class PyCameraMixin(UniCoreBase):
 
         n_components = shape[2] if len(shape) > 2 else 1
         base_meta: dict[str, Any] = {
-            KW.Binning: "1",  # TODO
+            KW.Binning: cam.get_property_value(KW.Binning),
             KW.Metadata_CameraLabel: camera_label,
             KW.Metadata_Height: str(shape[0]),
             KW.Metadata_Width: str(shape[1]),
@@ -232,6 +232,12 @@ class PyCameraMixin(UniCoreBase):
         dtype = np.dtype(cam.dtype())
         return dtype.itemsize * 8
 
+    def getBytesPerPixel(self) -> int:
+        if (cam := self._py_camera()) is None:
+            return super().getBytesPerPixel()
+        dtype = np.dtype(cam.dtype())
+        return dtype.itemsize
+
     def getImageBufferSize(self) -> int:
         if (cam := self._py_camera()) is None:
             return super().getImageBufferSize()
@@ -268,3 +274,98 @@ class PyCameraMixin(UniCoreBase):
         raise NotImplementedError(
             "getCameraChannelName is not implemented for Python cameras."
         )
+
+    def _get_binning(self, cameraLabel: DeviceLabel | str | None = None) -> int:
+        """Get the binning for the camera."""
+        if cam := self._py_camera(cameraLabel):
+            with cam:
+                return cam.get_binning()
+        return 1
+
+    @overload
+    def getExposure(self) -> float: ...
+    @overload
+    def getExposure(self, cameraLabel: DeviceLabel | str, /) -> float: ...
+    def getExposure(self, cameraLabel: DeviceLabel | str | None = None) -> float:
+        """Get the exposure time in milliseconds."""
+        if cam := self._py_camera(cameraLabel):
+            with cam:
+                return cam.get_exposure()
+        if cameraLabel is None:
+            return super().getExposure()
+        return super().getExposure(cameraLabel)
+
+    @overload
+    def setExposure(self, exp: float, /) -> None: ...
+    @overload
+    def setExposure(self, cameraLabel: DeviceLabel | str, dExp: float, /) -> None: ...
+    def setExposure(
+        self, exp_or_label: str | float, exp_: float | None = None, /
+    ) -> None:
+        """Set the exposure time in milliseconds."""
+        if isinstance(exp_or_label, str) and isinstance(exp_, float):
+            if (cam := self._py_camera(exp_or_label)) is None:
+                return super().setExposure(exp_or_label, exp_)
+            with cam:
+                cam.set_exposure(exp_)
+        elif isinstance(exp_or_label, float) and exp_ is None:
+            if (cam := self._py_camera()) is None:
+                return super().setExposure(exp_or_label)
+            with cam:
+                cam.set_exposure(exp_or_label)
+        else:
+            raise TypeError(
+                "setExposure must be called with either (exp: float) or "
+                "(cameraLabel: str, exp: float)."
+            )
+
+    def isExposureSequenceable(self, cameraLabel: DeviceLabel | str) -> bool:
+        """Check if the camera supports exposure sequences."""
+        if (cam := self._py_camera(cameraLabel)) is None:
+            return super().isExposureSequenceable(cameraLabel)
+        return cam.is_property_sequenceable(KW.Exposure)
+
+    def loadExposureSequence(
+        self, cameraLabel: DeviceLabel | str, exposureSequence_ms: Sequence[float]
+    ) -> None:
+        """Transfer a sequence of exposure times to the camera."""
+        if (cam := self._py_camera(cameraLabel)) is None:
+            return super().loadExposureSequence(cameraLabel, exposureSequence_ms)
+        cam.load_property_sequence(KW.Exposure, exposureSequence_ms)
+
+    def getExposureSequenceMaxLength(self, cameraLabel: DeviceLabel | str) -> int:
+        """Get the maximum length of the exposure sequence."""
+        if (cam := self._py_camera(cameraLabel)) is None:
+            return super().getExposureSequenceMaxLength(cameraLabel)
+        return cam.property(KW.Exposure).sequence_max_length
+
+    def startExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
+        """Start a sequence of exposures."""
+        if (cam := self._py_camera(cameraLabel)) is None:
+            return super().startExposureSequence(cameraLabel)
+        cam.start_property_sequence(KW.Exposure)
+
+    def stopExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
+        """Stop a sequence of exposures."""
+        if (cam := self._py_camera(cameraLabel)) is None:
+            return super().stopExposureSequence(cameraLabel)
+        cam.stop_property_sequence(KW.Exposure)
+
+
+# 	prepareSequenceAcquisition
+#   assignDefaultRole
+# 	saveSystemConfiguration
+
+# 	clearROI
+# 	getROI
+# 	getMultiROI
+# 	setMultiROI
+# 	setROI
+# 	isMultiROIEnabled
+# 	isMultiROISupported
+
+# 	initializeCircularBuffer
+# 	setCircularBufferMemoryFootprint
+
+# 	getPixelSizeAffine
+# 	getPixelSizeUm

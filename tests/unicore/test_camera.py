@@ -21,6 +21,24 @@ FRAME = np.random.randint(0, 65535, size=FRAME_SHAPE, dtype=DTYPE)
 class MyCamera(Camera):
     """Example Camera device."""
 
+    _exposure: float = 100.0
+
+    def get_exposure(self) -> float:
+        return self._exposure
+
+    def set_exposure(self, exposure: float) -> None:
+        """Set the exposure time in milliseconds."""
+        self._exposure = exposure
+
+    _binning: int = 1
+
+    def get_binning(self) -> int:
+        """Get the binning factor for the camera."""
+        return self._binning
+
+    def set_binning(self, value: int) -> None:
+        self._binning = value
+
     def shape(self) -> tuple[int, int]:
         """Return the shape of the current camera state."""
         return FRAME_SHAPE
@@ -65,11 +83,36 @@ def test_basic_acquisition(device: str) -> None:
     assert core.getImageBitDepth() == FRAME.dtype.itemsize * 8
     assert core.getImageBufferSize() == FRAME.nbytes
 
+    # exposure and binning
+    core.setExposure(42.0)
+    assert core.getExposure() == 42.0
+
+    core.setProperty(DEV, Keyword.Binning, 2)
+    assert str(core.getProperty(DEV, Keyword.Binning)) == "2"
+    core.setProperty(DEV, Keyword.Binning, 1)
+
+    assert not core.isExposureSequenceable(DEV)
+
     # Snap a single image
     core.snapImage()
     frame = core.getImage()
     assert frame.shape == FRAME_SHAPE
     assert frame.dtype == DTYPE
+
+
+@pytest.mark.parametrize("device", ["python", "c++"])
+def test_sequence_acquisition(device: str) -> None:
+    core = UniMMCore()
+
+    # load either a Python or C++ camera device
+    if device == "python":
+        camera = MyCamera()
+        core.loadPyDevice(DEV, camera)
+        core.initializeDevice(DEV)
+    else:
+        core.loadSystemConfiguration()
+
+    core.setCameraDevice(DEV)
 
     # Start sequence acquisition
     assert core.getRemainingImageCount() == 0

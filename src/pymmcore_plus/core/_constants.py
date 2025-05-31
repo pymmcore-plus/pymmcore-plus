@@ -187,7 +187,14 @@ class PropertyType(IntEnum):
         if value is None:
             return PropertyType.Undef
         if isinstance(value, str):
-            return PropertyType[value.lower().capitalize()]
+            if value.lower() in ("int", "integer"):
+                return PropertyType.Integer
+            if value.lower() in ("float", "double"):
+                return PropertyType.Float
+            if value.lower() in ("bool", "boolean"):
+                return PropertyType.Boolean
+            if value.lower() in ("string", "str"):
+                return PropertyType.String
         if isinstance(value, type):
             if value is float:
                 return PropertyType.Float

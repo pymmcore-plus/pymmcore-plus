@@ -73,11 +73,11 @@ class Device(_Lockable, ABC):
 
     def __init_subclass__(cls) -> None:
         """Initialize the property controllers."""
-        cls._cls_prop_controllers = {
-            p.property.name: p
-            for p in cls.__dict__.values()
-            if isinstance(p, PropertyController)
-        }
+        cls._cls_prop_controllers = {}
+        for base in cls.__mro__:
+            for p in base.__dict__.values():
+                if isinstance(p, PropertyController):
+                    cls._cls_prop_controllers[p.property.name] = p
         return super().__init_subclass__()
 
     def register_property(
