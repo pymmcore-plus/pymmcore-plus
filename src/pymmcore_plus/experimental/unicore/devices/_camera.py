@@ -21,7 +21,12 @@ class Camera(Device):
 
     @abstractmethod
     def shape(self) -> tuple[int, int]:
-        """Return the shape of the image buffer."""
+        """Return the shape of the image buffer.
+
+        This is used when querying Width, Height, *and* number of components.
+        If the camera is grayscale, it should return (width, height).
+        If the camera is color, it should return (width, height, n_channels).
+        """
 
     @abstractmethod
     def dtype(self) -> DTypeLike:

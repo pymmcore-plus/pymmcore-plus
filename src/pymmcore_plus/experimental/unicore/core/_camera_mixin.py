@@ -27,9 +27,6 @@ class PyCameraMixin(UniCoreBase):
     _current_image_buffer: np.ndarray | None = None
     _seq: SequenceBuffer | None = None
 
-    # metadata tracking attributes
-    _acquisition_start_time: int | None = None
-
     # --------------------------------------------------------------------- utils
 
     def _py_camera(self, cameraLabel: str | None = None) -> Camera | None:
@@ -126,9 +123,9 @@ class PyCameraMixin(UniCoreBase):
             )
             _seq.notify(base_meta)
 
+        start_time = perf_counter_ns()
         # TODO: should we use None or a large number.  Large number is more consistent
         # for Camera Device Adapters, but hides details from the adapter.
-        self._acquisition_start_time = start_time = perf_counter_ns()
         cam.start_sequence_thread(
             n_images or 2**63 - 1, _seq.get_buffer, notify_with_metadata
         )
@@ -228,11 +225,6 @@ class PyCameraMixin(UniCoreBase):
         return (img, Metadata(md))
 
     # ----------------------------------------------------------------- image info
-
-    def _shape_dtype(self) -> tuple[tuple[int, ...], np.dtype]:
-        if (cam := self._py_camera()) is None:
-            raise RuntimeError("Called _shape_dtype with C++ camera")
-        return cam.shape(), np.dtype(cam.dtype())
 
     def getImageBitDepth(self) -> int:
         if (cam := self._py_camera()) is None:
