@@ -72,8 +72,7 @@ class Keyword(str, Enum):
 
     # image annotations
     Metadata_CameraLabel = pymmcore.g_Keyword_Metadata_CameraLabel
-    Metadata_Exposure = pymmcore.g_Keyword_Meatdata_Exposure
-    Meatdata_Exposure = Metadata_Exposure  # typo in the original API
+    Metadata_Exposure = pymmcore.g_Keyword_Metadata_Exposure
     Metadata_Height = pymmcore.g_Keyword_Metadata_Height
     Metadata_ImageNumber = pymmcore.g_Keyword_Metadata_ImageNumber
     Metadata_ROI_X = pymmcore.g_Keyword_Metadata_ROI_X
