@@ -187,7 +187,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
 
     def deviceTypeBusy(self, devType: int) -> bool:
         if super().deviceTypeBusy(devType):
-            return True
+            return True  # pragma: no cover
 
         for label in self._pydevices.get_labels_of_type(devType):
             with self._pydevices[label] as dev:
@@ -203,9 +203,8 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
     def setDeviceDelayMs(self, label: DeviceLabel | str, delayMs: float) -> None:
         if label not in self._pydevices:  # pragma: no cover
             return super().setDeviceDelayMs(label, delayMs)
-        if delayMs != 0:
+        if delayMs != 0:  # pragma: no cover
             raise NotImplementedError("Python devices do not support delays")
-        return
 
     def usesDeviceDelay(self, label: DeviceLabel | str) -> bool:
         if label not in self._pydevices:  # pragma: no cover
@@ -242,7 +241,7 @@ class UniMMCore(PyCameraMixin, PyStageMixin, UniCoreBase):
     def getPropertyFromCache(
         self, deviceLabel: DeviceLabel | str, propName: PropertyName | str
     ) -> Any:
-        if deviceLabel not in self._pydevices:
+        if deviceLabel not in self._pydevices:  # pragma: no cover
             return super().getPropertyFromCache(deviceLabel, propName)
         return self._state_cache[(deviceLabel, propName)]
 

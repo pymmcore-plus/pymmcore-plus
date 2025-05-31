@@ -94,6 +94,9 @@ class Device(_Lockable, ABC):
         is_read_only: bool = False,
         is_pre_init: bool = False,
         property_type: PropArg = None,
+        sequence_loader: Callable[[TDev, Sequence[TProp]], None] | None = None,
+        sequence_starter: Callable[[TDev], None] | None = None,
+        sequence_stopper: Callable[[TDev], None] | None = None,
     ) -> None:
         """Manually register a property.
 
@@ -124,7 +127,14 @@ class Device(_Lockable, ABC):
             is_pre_init=is_pre_init,
             type=PropertyType.create(property_type),
         )
-        controller = PropertyController(property=prop_info, fget=getter, fset=setter)
+        controller = PropertyController(
+            property=prop_info,
+            fget=getter,
+            fset=setter,
+            fseq_load=sequence_loader,
+            fseq_start=sequence_starter,
+            fseq_stop=sequence_stopper,
+        )
         self._prop_controllers_[name] = controller
 
     def initialize(self) -> None:

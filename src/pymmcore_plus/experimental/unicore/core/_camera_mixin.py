@@ -71,7 +71,7 @@ class PyCameraMixin(UniCoreBase):
     def getImage(
         self, numChannel: int | None = None, *, fix: bool = True
     ) -> np.ndarray:
-        if self._py_camera() is None:
+        if self._py_camera() is None:  # pragma: no cover
             if numChannel is not None:
                 return super().getImage(numChannel, fix=fix)
             return super().getImage(fix=fix)
@@ -131,7 +131,7 @@ class PyCameraMixin(UniCoreBase):
     def _do_start_sequence_acquisition(
         self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
     ) -> None:
-        if (cam := self._py_camera(cameraLabel)) is None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
             return pymmcore.CMMCore.startSequenceAcquisition(
                 self, cameraLabel, numImages, intervalMs, stopOnOverflow
             )
@@ -141,7 +141,7 @@ class PyCameraMixin(UniCoreBase):
     # ------------------------------------------------------ continuous acquisition
 
     def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
-        if (cam := self._py_camera()) is None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
             return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)
 
         self._start_sequence(cam, None)
@@ -149,7 +149,7 @@ class PyCameraMixin(UniCoreBase):
     # ---------------------------------------------------------------- stopSequence
 
     def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
-        if (cam := self._py_camera(cameraLabel)) is None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
             return pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
 
         cam.stop_sequence()
@@ -179,63 +179,64 @@ class PyCameraMixin(UniCoreBase):
             raise IndexError("Circular buffer is empty.")
         return self._seq.buffers[-1]
 
-    # ---------------------------------------------------- popNext helpers
+    # ---------------------------------------------------- popNext
+
+    def _pop_or_raise(self) -> tuple[np.ndarray, Mapping]:
+        if not self._seq or (data := self._seq.pop_left()) is None:
+            raise IndexError("Circular buffer is empty.")
+        return data
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
         if self._py_camera() is None:
             return super().popNextImage(fix=fix)
-        if not self._seq or not (data := self._seq.pop_left()):
-            raise IndexError("Circular buffer is empty.")
-        return data[0]
+        return self._pop_or_raise()[0]
 
     def popNextImageAndMD(
         self, channel: int = 0, slice: int = 0, *, fix: bool = True
     ) -> tuple[np.ndarray, Metadata]:
         if self._py_camera() is None:
             return super().popNextImageAndMD(channel, slice, fix=fix)
-        if not self._seq or not (data := self._seq.pop_left()):
-            raise IndexError("Circular buffer is empty.")
-        img, md = data
+        img, md = self._pop_or_raise()
         return (img, Metadata(md))
 
     # ----------------------------------------------------------------- image info
 
     def getImageBitDepth(self) -> int:
-        if (cam := self._py_camera()) is None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
             return super().getImageBitDepth()
         dtype = np.dtype(cam.dtype())
         return dtype.itemsize * 8
 
     def getBytesPerPixel(self) -> int:
-        if (cam := self._py_camera()) is None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
             return super().getBytesPerPixel()
         dtype = np.dtype(cam.dtype())
         return dtype.itemsize
 
     def getImageBufferSize(self) -> int:
-        if (cam := self._py_camera()) is None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
             return super().getImageBufferSize()
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
         return int(np.prod(shape) * dtype.itemsize)
 
     def getImageHeight(self) -> int:
-        if (cam := self._py_camera()) is None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
             return super().getImageHeight()
         return cam.shape()[0]
 
     def getImageWidth(self) -> int:
-        if (cam := self._py_camera()) is None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
             return super().getImageWidth()
         return cam.shape()[1]
 
     def getNumberOfComponents(self) -> int:
-        if (cam := self._py_camera()) is None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
             return super().getNumberOfComponents()
         shape = cam.shape()
         return 1 if len(shape) == 2 else shape[2]
 
     def getNumberOfCameraChannels(self) -> int:
-        if self._py_camera() is None:
+        if self._py_camera() is None:  # pragma: no cover
             return super().getNumberOfCameraChannels()
         raise NotImplementedError(
             "getNumberOfCameraChannels is not implemented for Python cameras."
@@ -243,18 +244,11 @@ class PyCameraMixin(UniCoreBase):
 
     def getCameraChannelName(self, channelNr: int) -> str:
         """Get the name of the camera channel."""
-        if self._py_camera() is None:
+        if self._py_camera() is None:  # pragma: no cover
             return super().getCameraChannelName(channelNr)
         raise NotImplementedError(
             "getCameraChannelName is not implemented for Python cameras."
         )
-
-    def _get_binning(self, cameraLabel: DeviceLabel | str | None = None) -> int:
-        """Get the binning for the camera."""
-        if cam := self._py_camera(cameraLabel):
-            with cam:
-                return cam.get_binning()
-        return 1
 
     @overload
     def getExposure(self) -> float: ...
@@ -262,74 +256,68 @@ class PyCameraMixin(UniCoreBase):
     def getExposure(self, cameraLabel: DeviceLabel | str, /) -> float: ...
     def getExposure(self, cameraLabel: DeviceLabel | str | None = None) -> float:
         """Get the exposure time in milliseconds."""
-        if cam := self._py_camera(cameraLabel):
-            with cam:
-                return cam.get_exposure()
-        if cameraLabel is None:
-            return super().getExposure()
-        return super().getExposure(cameraLabel)
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            if cameraLabel is None:
+                return super().getExposure()
+            return super().getExposure(cameraLabel)
+
+        with cam:
+            return cam.get_exposure()
 
     @overload
     def setExposure(self, exp: float, /) -> None: ...
     @overload
     def setExposure(self, cameraLabel: DeviceLabel | str, dExp: float, /) -> None: ...
-    def setExposure(
-        self, exp_or_label: str | float, exp_: float | None = None, /
-    ) -> None:
+    def setExposure(self, *args: Any) -> None:
         """Set the exposure time in milliseconds."""
-        if isinstance(exp_or_label, str) and isinstance(exp_, (int, float)):
-            if (cam := self._py_camera(exp_or_label)) is None:
-                return super().setExposure(exp_or_label, exp_)
-            with cam:
-                cam.set_exposure(exp_)
-        elif isinstance(exp_or_label, (int, float)) and exp_ is None:
-            if (cam := self._py_camera()) is None:
-                return super().setExposure(exp_or_label)
-            with cam:
-                cam.set_exposure(exp_or_label)
-        else:
-            raise TypeError(
-                "setExposure must be called with either (exp: float) or "
-                "(cameraLabel: str, exp: float)."
-            )
+        label, args = self._ensure_label(args, min_args=2, getter=self.getCameraDevice)
+        if (cam := self._py_camera(label)) is None:  # pragma: no cover
+            return super().setExposure(label, *args)
+        with cam:
+            cam.set_exposure(*args)
 
     def isExposureSequenceable(self, cameraLabel: DeviceLabel | str) -> bool:
         """Check if the camera supports exposure sequences."""
-        if (cam := self._py_camera(cameraLabel)) is None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
             return super().isExposureSequenceable(cameraLabel)
-        return cam.is_property_sequenceable(KW.Exposure)
+        with cam:
+            return cam.is_property_sequenceable(KW.Exposure)
 
     def loadExposureSequence(
         self, cameraLabel: DeviceLabel | str, exposureSequence_ms: Sequence[float]
     ) -> None:
         """Transfer a sequence of exposure times to the camera."""
-        if (cam := self._py_camera(cameraLabel)) is None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
             return super().loadExposureSequence(cameraLabel, exposureSequence_ms)
-        cam.load_property_sequence(KW.Exposure, exposureSequence_ms)
+        with cam:
+            cam.load_property_sequence(KW.Exposure, exposureSequence_ms)
 
     def getExposureSequenceMaxLength(self, cameraLabel: DeviceLabel | str) -> int:
         """Get the maximum length of the exposure sequence."""
-        if (cam := self._py_camera(cameraLabel)) is None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
             return super().getExposureSequenceMaxLength(cameraLabel)
-        return cam.get_property_info(KW.Exposure).sequence_max_length
+        with cam:
+            return cam.get_property_info(KW.Exposure).sequence_max_length
 
     def startExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
         """Start a sequence of exposures."""
-        if (cam := self._py_camera(cameraLabel)) is None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
             return super().startExposureSequence(cameraLabel)
-        cam.start_property_sequence(KW.Exposure)
+        with cam:
+            cam.start_property_sequence(KW.Exposure)
 
     def stopExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
         """Stop a sequence of exposures."""
-        if (cam := self._py_camera(cameraLabel)) is None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
             return super().stopExposureSequence(cameraLabel)
-        cam.stop_property_sequence(KW.Exposure)
+        with cam:
+            cam.stop_property_sequence(KW.Exposure)
 
     def prepareSequenceAcquisition(self, cameraLabel: DeviceLabel | str) -> None:
         """Prepare the camera for sequence acquisition."""
-        if self._py_camera(cameraLabel) is None:
+        if self._py_camera(cameraLabel) is None:  # pragma: no cover
             return super().prepareSequenceAcquisition(cameraLabel)
-        pass  # TODO: Implement prepareSequenceAcquisition for Python cameras?
+        # TODO: Implement prepareSequenceAcquisition for Python cameras?
 
 
 # 	clearROI

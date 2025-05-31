@@ -1,5 +1,5 @@
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Callable
 
 import numpy as np
@@ -58,14 +58,30 @@ class MyCamera(Camera):
             yield {"random_key": f"value_{i}"}  # Example metadata, can be anything.
 
 
-@pytest.mark.parametrize("device", ["python", "c++"])
-def test_basic_acquisition(device: str) -> None:
-    core = UniMMCore()
-    assert not core.getCameraDevice()
+class SequenceableCamera(MyCamera):
+    """Camera device that supports exposure sequencing."""
 
+    def __init__(self) -> None:
+        super().__init__()
+        self.set_property_sequence_max_length(Keyword.Exposure, 10)
+
+    def load_exposure_sequence(self, sequence: Sequence[float]) -> None:
+        """Load a sequence of exposure times."""
+        self._exposure_sequence = tuple(sequence)
+
+    def start_exposure_sequence(self) -> None:
+        """Start the exposure sequence."""
+        self._exposure_sequence_started = True
+
+    def stop_exposure_sequence(self) -> None:
+        """Stop the exposure sequence."""
+        self._exposure_sequence_stopped = True
+
+
+def _load_device(core: UniMMCore, device: str, cls: type = MyCamera) -> None:
     # load either a Python or C++ camera device
     if device == "python":
-        camera = MyCamera()
+        camera = cls()
         core.loadPyDevice(DEV, camera)
         core.initializeDevice(DEV)
     else:
@@ -73,9 +89,21 @@ def test_basic_acquisition(device: str) -> None:
 
     core.setCameraDevice(DEV)
     assert core.getCameraDevice() == DEV
+
+
+@pytest.mark.parametrize("device", ["python", "c++"])
+def test_basic_acquisition(device: str) -> None:
+    core = UniMMCore()
+    assert not core.getCameraDevice()
+
+    # load either a Python or C++ camera device
+    _load_device(core, device)
+
     assert (core.getImageWidth(), core.getImageHeight()) == FRAME_SHAPE
     assert core.getImageBitDepth() == FRAME.dtype.itemsize * 8
     assert core.getImageBufferSize() == FRAME.nbytes
+    assert core.getBytesPerPixel() == FRAME.dtype.itemsize
+    assert core.getNumberOfComponents() == 1
 
     # exposure and binning
     core.setExposure(42.0)
@@ -86,6 +114,9 @@ def test_basic_acquisition(device: str) -> None:
     core.setProperty(DEV, Keyword.Binning, 1)
 
     assert not core.isExposureSequenceable(DEV)
+
+    with pytest.raises(RuntimeError, match="snapImage()"):
+        core.getImage()
 
     # Snap a single image
     core.snapImage()
@@ -99,14 +130,7 @@ def test_sequence_acquisition(device: str) -> None:
     core = UniMMCore()
 
     # load either a Python or C++ camera device
-    if device == "python":
-        camera = MyCamera()
-        core.loadPyDevice(DEV, camera)
-        core.initializeDevice(DEV)
-    else:
-        core.loadSystemConfiguration()
-
-    core.setCameraDevice(DEV)
+    _load_device(core, device)
 
     # Start sequence acquisition
     assert core.getRemainingImageCount() == 0
@@ -147,3 +171,42 @@ def test_sequence_acquisition(device: str) -> None:
         core.getLastImage()
     with pytest.raises(IndexError):
         core.popNextImage()
+
+
+@pytest.mark.parametrize("device", ["python", "c++"])
+def test_continuous_sequence_acquisition(device: str) -> None:
+    core = UniMMCore()
+    # load either a Python or C++ camera device
+    _load_device(core, device)
+
+    # Start continuous sequence acquisition
+    core.startContinuousSequenceAcquisition()
+    assert core.isSequenceRunning()
+    while core.getRemainingImageCount() < 3:
+        time.sleep(0.001)
+    assert core.getRemainingImageCount() >= 3
+    core.stopSequenceAcquisition()
+    assert not core.isSequenceRunning()
+    assert isinstance(core.getLastImage(), np.ndarray)
+    assert isinstance(core.popNextImage(), np.ndarray)
+
+
+def test_sequenceable_exposures() -> None:
+    """Test camera mixin methods for exposure control and sequencing."""
+    core = UniMMCore()
+
+    camera = SequenceableCamera()
+    core.loadPyDevice(DEV, camera)
+    core.initializeDevice(DEV)
+
+    assert core.isExposureSequenceable(DEV)
+    assert core.getExposureSequenceMaxLength(DEV) == 10
+
+    core.loadExposureSequence(DEV, [10.0, 20.0, 30.0])
+    assert camera._exposure_sequence == (10.0, 20.0, 30.0)
+
+    core.startExposureSequence(DEV)
+    assert camera._exposure_sequence_started
+
+    core.stopExposureSequence(DEV)
+    assert camera._exposure_sequence_stopped

@@ -77,39 +77,38 @@ class Camera(Device):
             corresponding buffer has been filled with image data.
         """
         # EXAMPLE USAGE:
-        for _ in range(n):
-            image = get_buffer()
+        # for _ in range(n):
+        #     image = get_buffer()
 
-            # you MAY call get buffer multiple times before calling notify
-            # ... however, you must call notify the same number of times that
-            # you call get_buffer.  And semantically, each call to notify means
-            # that the buffer corresponding to the first unresolved call to get_buffer
-            # is now ready to be used.
-            # image2 = get_buffer()
+        #     you MAY call get buffer multiple times before calling notify
+        #     ... however, you must call notify the same number of times that
+        #     you call get_buffer.  And semantically, each call to notify means
+        #     that the buffer corresponding to the first unresolved call to get_buffer
+        #     is now ready to be used.
+        #     image2 = get_buffer()
 
-            # get the image from the camera, and fill the buffer in place
-            image[:] = ...
-            # image2[:] = ...
+        #     get the image from the camera, and fill the buffer in place
+        #     image[:] = ...
 
-            # notify the core that the buffer is ready
-            yield {}
+        #     notify the core that the buffer is ready
+        #     yield {}
 
-            # TODO:
-            # Open question: who is responsible for key pieces of metadata?
-            # in CMMCore, each of the camera device adapters is responsible for
-            # injecting to following bits of metadata:
-            # - MM::g_Keyword_Metadata_CameraLabel
-            # - MM::g_Keyword_Elapsed_Time_ms (GetCurrentMMTime - start_time)
-            # - MM::g_Keyword_Metadata_ROI_X
-            # - MM::g_Keyword_Metadata_ROI_Y
-            # - MM::g_Keyword_Binning
-            # --- while the CircularBuffer InsertMultiChannel is responsible for adding:
-            # - MM::g_Keyword_Metadata_ImageNumber
-            # - MM::g_Keyword_Elapsed_Time_ms
-            # - MM::g_Keyword_Metadata_TimeInCore
-            # - MM::g_Keyword_Metadata_Width
-            # - MM::g_Keyword_Metadata_Height
-            # - MM::g_Keyword_PixelType
+        #     TODO:
+        #     Open question: who is responsible for key pieces of metadata?
+        #     in CMMCore, each of the camera device adapters is responsible for
+        #     injecting to following bits of metadata:
+        #     - MM::g_Keyword_Metadata_CameraLabel
+        #     - MM::g_Keyword_Elapsed_Time_ms (GetCurrentMMTime - start_time)
+        #     - MM::g_Keyword_Metadata_ROI_X
+        #     - MM::g_Keyword_Metadata_ROI_Y
+        #     - MM::g_Keyword_Binning
+        #     --- while the CircularBuffer InsertMultiChannel is responsible for adding:
+        #     - MM::g_Keyword_Metadata_ImageNumber
+        #     - MM::g_Keyword_Elapsed_Time_ms
+        #     - MM::g_Keyword_Metadata_TimeInCore
+        #     - MM::g_Keyword_Metadata_Width
+        #     - MM::g_Keyword_Metadata_Height
+        #     - MM::g_Keyword_PixelType
 
     # Standard Properties --------------------------------------------
 
@@ -187,11 +186,17 @@ class Camera(Device):
         for name, (snake_name, prop_type) in self.STANDARD_PROPERTIES.items():
             if getter := getattr(cls, f"get_{snake_name}", None):
                 setter = getattr(cls, f"set_{snake_name}", None)
+                seq_loader = getattr(cls, f"load_{snake_name}_sequence", None)
+                seq_starter = getattr(cls, f"start_{snake_name}_sequence", None)
+                seq_stopper = getattr(cls, f"stop_{snake_name}_sequence", None)
                 self.register_property(
                     name=name,
                     property_type=prop_type,
                     getter=getter,
                     setter=setter,
+                    sequence_loader=seq_loader,
+                    sequence_starter=seq_starter,
+                    sequence_stopper=seq_stopper,
                 )
 
     # Standard Properties, default implementations -------------------
@@ -200,7 +205,7 @@ class Camera(Device):
     # mean that the camera supports binning, unless they implement a setter.
     def get_binning(self) -> int:
         """Get the binning factor for the camera."""
-        return 1
+        return 1  # pragma: no cover
 
     # Threading ------------------------------------------------------
 
@@ -213,7 +218,7 @@ class Camera(Device):
         """Acquire a sequence of n images in a background thread."""
         # Stop any existing acquisition
         self._stop_event.set()
-        if self._acquisition_thread is not None:
+        if self._acquisition_thread is not None:  # pragma: no cover
             self._acquisition_thread.join()
 
         # Reset stop event for new acquisition
@@ -226,7 +231,7 @@ class Camera(Device):
                     notify(metadata)
                     if self._stop_event.is_set():
                         break
-            except Exception as e:
+            except Exception as e:  # pragma: no cover
                 raise RuntimeError(
                     f"Error in device {self.get_label()!r} during sequence acquisition:"
                     f" {e}"
