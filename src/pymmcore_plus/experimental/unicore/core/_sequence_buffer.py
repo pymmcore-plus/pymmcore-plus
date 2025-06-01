@@ -18,7 +18,7 @@ class BufferSlot(NamedTuple):
     """Record describing one frame held in the pool."""
 
     array: NDArray[Any]
-    metadata: dict[str, Any]
+    metadata: Mapping[str, Any] | None  # metadata associated with this frame
     nbytes_total: int  # full span in the pool (data + padding)
 
 
@@ -55,7 +55,7 @@ class SequenceBuffer:
         self._overflow_occurred: bool = False
 
         self._lock = threading.Lock()  # not re-entrant, but slightly faster than RLock
-        self._pending_slot: BufferSlot | None = None  # only 1 outstanding slot
+        self._pending_slot: tuple[NDArray, int] | None = None  # only 1 outstanding slot
 
     # ---------------------------------------------------------------------
     # Producer API - acquire a slot, fill it, finalize it
@@ -112,7 +112,7 @@ class SequenceBuffer:
             arr: NDArray[Any] = np.ndarray(
                 shape, dtype_, buffer=self._pool, offset=start
             )
-            self._pending_slot = BufferSlot(array=arr, metadata={}, nbytes_total=needed)
+            self._pending_slot = (arr, needed)
             return arr
 
     def finalize_slot(self, metadata: Mapping[str, Any] | None = None) -> None:
@@ -127,11 +127,9 @@ class SequenceBuffer:
                 msg = "No pending slot to finalize"
                 raise RuntimeError(msg)
 
-            if metadata:
-                slot.metadata.update(metadata)
-
             self._pending_slot = None
-            self._slots.append(slot)
+            arr, nbytes_total = slot
+            self._slots.append(BufferSlot(arr, metadata, nbytes_total))
 
     # Convenience: copy-in one-shot insert ------------------------------
 
@@ -156,7 +154,7 @@ class SequenceBuffer:
 
     def pop_next(
         self, *, copy: bool = False
-    ) -> tuple[NDArray[Any], dict[str, Any]] | None:
+    ) -> tuple[NDArray[Any], Mapping[str, Any]] | None:
         """Remove and return the oldest frame.
 
         If `copy` is `True`, a copy of the data is returned, otherwise a read-only
@@ -178,7 +176,7 @@ class SequenceBuffer:
             arr.flags.writeable = False
 
         # return actual metadata, we're done with it.
-        return arr, slot.metadata
+        return arr, (slot.metadata or {})
 
     def peek_last(
         self, *, copy: bool = False
@@ -188,7 +186,7 @@ class SequenceBuffer:
 
     def peek_nth_from_last(
         self, n: int, *, copy: bool = False
-    ) -> tuple[NDArray[Any], Mapping[str, Any]] | None:
+    ) -> tuple[NDArray[Any], dict[str, Any]] | None:
         """Return the n-th most recent frame without removing it.
 
         Last frame is n=0, second to last is n=1, etc.
@@ -206,7 +204,7 @@ class SequenceBuffer:
                 arr.flags.writeable = False
 
             # Return a copy of the metadata to avoid external modification
-            return arr, dict(slot.metadata)
+            return arr, (dict(slot.metadata) if slot.metadata else {})
 
     # ------------------------------------------------------------------
     # Administrative helpers

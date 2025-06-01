@@ -5,6 +5,7 @@ import warnings
 from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from datetime import datetime
+from itertools import count
 from time import perf_counter_ns
 from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar, cast, overload
 
@@ -14,7 +15,6 @@ import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._constants import PixelType
-from pymmcore_plus.core._metadata import Metadata
 from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import Camera
@@ -79,10 +79,16 @@ class _CoreDevice:
 class UniMMCore(CMMCorePlus):
     """Unified Core object that first checks for python, then C++ devices."""
 
+    _DEFAULT_BUFFER_SIZE_MB: int = 1000  # default size of the sequence buffer in MB
+
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._pydevices = PyDeviceManager()  # manager for python devices
         self._state_cache = PropertyStateCache()  # threadsafe cache for property states
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
+        self._stop_event: threading.Event = threading.Event()
+        self._acquisition_thread: AcquisitionThread | None = None
+        self._seq_buffer = SequenceBuffer(size_mb=self._DEFAULT_BUFFER_SIZE_MB)
+
         super().__init__(*args, **kwargs)
 
     def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
@@ -725,24 +731,12 @@ class UniMMCore(CMMCorePlus):
 
     # ---------------------------------------------------------------- sequence common
 
-    _seq: SequenceBuffer | None = None
-    _sequence_running: bool = False
-    _circular_buffer_memory_mb: int = 1000  # Memory footprint in MB
-    _stop_event: threading.Event = threading.Event()
-    _acquisition_thread: AcquisitionThread | None = None
-
     def _start_sequence(
         self, cam: Camera, n_images: int | None, stop_on_overflow: bool
     ) -> None:
         """Initialise _seq state and call cam.start_sequence."""
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
         camera_label = cam.get_label()
-
-        # Create buffer with appropriate overflow behavior
-        self._seq = _seq = SequenceBuffer(
-            size_mb=self._circular_buffer_memory_mb,
-            overwrite_on_overflow=not stop_on_overflow,
-        )
 
         n_components = shape[2] if len(shape) > 2 else 1
         base_meta: dict[str, Any] = {
@@ -755,50 +749,57 @@ class UniMMCore(CMMCorePlus):
             KW.PixelType: PixelType.for_bytes(dtype.itemsize, n_components),
         }
 
-        # Keep track of images acquired for metadata and auto-stop
-        acquired_count = 0
-
         def get_buffer_with_overflow_handling(
             shape: Sequence[int], dtype: DTypeLike
         ) -> np.ndarray:
             try:
-                return _seq.acquire_slot(shape, dtype)
+                return self._seq_buffer.acquire_slot(shape, dtype)
             except BufferError:
                 if not stop_on_overflow:  # we shouldn't get here...
                     raise  # pragma: no cover
                 raise BufferOverflowStop() from None
 
+        # Keep track of images acquired for metadata and auto-stop
+        counter = count()
+
         # Create metadata-injecting wrapper for finalize callback
         def finalize_with_metadata(cam_meta: Mapping) -> None:
-            nonlocal acquired_count
+            img_number = next(counter)
             elapsed_ms = (perf_counter_ns() - start_time) / 1e6
             received = datetime.now().isoformat(sep=" ")
             meta_update = {
                 **cam_meta,
                 KW.Metadata_TimeInCore: received,
-                KW.Metadata_ImageNumber: str(acquired_count),
+                KW.Metadata_ImageNumber: str(img_number),
                 KW.Elapsed_Time_ms: f"{elapsed_ms:.2f}",
             }
-            _seq.finalize_slot({**base_meta, **meta_update})
-            acquired_count += 1
+            self._seq_buffer.finalize_slot({**base_meta, **meta_update})
 
             # Auto-stop when we've acquired the requested number of images
-            if n_images is not None and acquired_count >= n_images:
+            if n_images is not None and (img_number + 1) >= n_images:
                 self._stop_event.set()
 
-        # Set acquisition start time for elapsed time calculation
-        start_time = perf_counter_ns()
-        image_generator = cam.start_sequence(
-            n_images or 2**63 - 1,
-            get_buffer_with_overflow_handling,
-        )
-        self._stop_event = threading.Event()
+        # Reset the circular buffer and stop event -------------
+
+        self._stop_event.clear()
+        self._seq_buffer.clear()
+        self._seq_buffer.overwrite_on_overflow = not stop_on_overflow
+
+        # Create the Acquisition Thread ---------
+
         self._acquisition_thread = AcquisitionThread(
-            image_generator=image_generator,
+            image_generator=cam.start_sequence(
+                n_images or 2**63 - 1,
+                get_buffer_with_overflow_handling,
+            ),
             finalize=finalize_with_metadata,
             label=camera_label,
             stop_event=self._stop_event,
         )
+
+        # Zoom zoom ---------
+
+        start_time = perf_counter_ns()
         self._acquisition_thread.start()
 
     # ------------------------------------------------- startSequenceAcquisition
@@ -826,9 +827,7 @@ class UniMMCore(CMMCorePlus):
     def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
         if self._py_camera(cameraLabel) is None:  # pragma: no cover
             pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
-        self._join_acquisition_thread()
 
-    def _join_acquisition_thread(self) -> None:
         if self._acquisition_thread is not None:
             self._stop_event.set()
             self._acquisition_thread.join()
@@ -857,19 +856,63 @@ class UniMMCore(CMMCorePlus):
     def getRemainingImageCount(self) -> int:
         if self._py_camera() is None:
             return super().getRemainingImageCount()
-        return len(self._seq) if self._seq is not None else 0
+        return len(self._seq_buffer) if self._seq_buffer is not None else 0
+
+    # ---------------------------------------------------- getImages
 
     def getLastImage(self) -> np.ndarray:
         if self._py_camera() is None:
             return super().getLastImage()
-        if not (self._seq) or (result := self._seq.peek_last()) is None:
+        if not (self._seq_buffer) or (result := self._seq_buffer.peek_last()) is None:
             raise IndexError("Circular buffer is empty.")
         return result[0]
+
+    @overload
+    def getLastImageMD(
+        self, channel: int, slice: int, md: pymmcore.Metadata, /
+    ) -> np.ndarray: ...
+    @overload
+    def getLastImageMD(self, md: pymmcore.Metadata, /) -> np.ndarray: ...
+    def getLastImageMD(self, *args: Any) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().getLastImageMD(*args)
+        md_object = args[0] if len(args) == 1 else args[-1]
+        if not isinstance(md_object, pymmcore.Metadata):  # pragma: no cover
+            raise TypeError("Expected a Metadata object for the last argument.")
+
+        if not (self._seq_buffer) or (result := self._seq_buffer.peek_last()) is None:
+            raise IndexError("Circular buffer is empty.")
+
+        img, md = result
+        for k, v in md.items():
+            tag = pymmcore.MetadataSingleTag(k, "_", False)
+            tag.SetValue(str(v))
+            md_object.SetTag(tag)
+
+        return img
+
+    def getNBeforeLastImageMD(self, n: int, md: pymmcore.Metadata, /) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().getNBeforeLastImageMD(n, md)
+
+        if (
+            not (self._seq_buffer)
+            or (result := self._seq_buffer.peek_nth_from_last(n)) is None
+        ):
+            raise IndexError("Circular buffer is empty or n is out of range.")
+
+        img, md_data = result
+        for k, v in md_data.items():
+            tag = pymmcore.MetadataSingleTag(k, "_", False)
+            tag.SetValue(str(v))
+            md.SetTag(tag)
+
+        return img
 
     # ---------------------------------------------------- popNext
 
     def _pop_or_raise(self) -> tuple[np.ndarray, Mapping]:
-        if not self._seq or (data := self._seq.pop_next()) is None:
+        if not self._seq_buffer or (data := self._seq_buffer.pop_next()) is None:
             raise IndexError("Circular buffer is empty.")
         return data
 
@@ -878,13 +921,26 @@ class UniMMCore(CMMCorePlus):
             return super().popNextImage(fix=fix)
         return self._pop_or_raise()[0]
 
-    def popNextImageAndMD(
-        self, channel: int = 0, slice: int = 0, *, fix: bool = True
-    ) -> tuple[np.ndarray, Metadata]:
+    @overload
+    def popNextImageMD(
+        self, channel: int, slice: int, md: pymmcore.Metadata, /
+    ) -> np.ndarray: ...
+    @overload
+    def popNextImageMD(self, md: pymmcore.Metadata, /) -> np.ndarray: ...
+    def popNextImageMD(self, *args: Any) -> np.ndarray:
         if self._py_camera() is None:
-            return super().popNextImageAndMD(channel, slice, fix=fix)
+            return super().popNextImageMD(*args)
+
+        md_object = args[0] if len(args) == 1 else args[-1]
+        if not isinstance(md_object, pymmcore.Metadata):  # pragma: no cover
+            raise TypeError("Expected a Metadata object for the last argument.")
+
         img, md = self._pop_or_raise()
-        return (img, Metadata(md))
+        for k, v in md.items():
+            tag = pymmcore.MetadataSingleTag(k, "_", False)
+            tag.SetValue(str(v))
+            md_object.SetTag(tag)
+        return img
 
     # ---------------------------------------------------------------- circular buffer
 
@@ -897,14 +953,17 @@ class UniMMCore(CMMCorePlus):
             raise ValueError("Buffer size must be greater than 0 MB")
 
         # TODO: what if sequence is running?
-        self._circular_buffer_memory_mb = sizeMB
+        if self.isSequenceRunning():
+            self.stopSequenceAcquisition()
+
+        self._seq_buffer = SequenceBuffer(size_mb=sizeMB)
 
     def initializeCircularBuffer(self) -> None:
         """Initialize the circular buffer."""
         if self._py_camera() is None:
             return super().initializeCircularBuffer()
 
-        # The new buffer is initialized when needed in _start_sequence
+        self._seq_buffer.clear()
 
     def getBufferFreeCapacity(self) -> int:
         """Get the number of free slots in the circular buffer."""
@@ -914,19 +973,10 @@ class UniMMCore(CMMCorePlus):
         if (bytes_per_frame := self._predicted_bytes_per_frame(cam)) <= 0:
             return 0  # pragma: no cover  # Invalid frame size
 
-        if self._seq is None:
-            total_bytes = self._circular_buffer_memory_mb * 1024 * 1024
-            return max(1, total_bytes // bytes_per_frame)
-
-        if (free_bytes := self._seq.free_bytes) <= 0:
+        if (free_bytes := self._seq_buffer.free_bytes) <= 0:
             return 0
 
         return free_bytes // bytes_per_frame
-
-    def _predicted_bytes_per_frame(self, cam: Camera) -> int:
-        # Estimate capacity based on camera settings and circular buffer size
-        shape, dtype = cam.shape(), np.dtype(cam.dtype())
-        return int(np.prod(shape) * dtype.itemsize)
 
     def getBufferTotalCapacity(self) -> int:
         """Get the total capacity of the circular buffer."""
@@ -936,33 +986,33 @@ class UniMMCore(CMMCorePlus):
         if (bytes_per_frame := self._predicted_bytes_per_frame(cam)) <= 0:
             return 0  # pragma: no cover  # Invalid frame size
 
-        if self._seq is None:
-            total_bytes = self._circular_buffer_memory_mb * 1024 * 1024
-            return max(1, total_bytes // bytes_per_frame)
+        return self._seq_buffer.size_bytes // bytes_per_frame
 
-        return self._seq.size_bytes // bytes_per_frame
+    def _predicted_bytes_per_frame(self, cam: Camera) -> int:
+        # Estimate capacity based on camera settings and circular buffer size
+        shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        return int(np.prod(shape) * dtype.itemsize)
 
     def getCircularBufferMemoryFootprint(self) -> int:
         """Get the circular buffer memory footprint in MB."""
         if self._py_camera() is None:
             return super().getCircularBufferMemoryFootprint()
 
-        return self._circular_buffer_memory_mb
+        return int(self._seq_buffer.size_mb)
 
     def clearCircularBuffer(self) -> None:
         """Clear all images from the circular buffer."""
         if self._py_camera() is None:
             return super().clearCircularBuffer()
 
-        if self._seq is not None:
-            self._seq.clear()
+        self._seq_buffer.clear()
 
     def isBufferOverflowed(self) -> bool:
         """Check if the circular buffer has overflowed."""
         if self._py_camera() is None:
             return super().isBufferOverflowed()
 
-        return self._seq.overflow_occurred if self._seq is not None else False
+        return self._seq_buffer.overflow_occurred
 
     # ----------------------------------------------------------------- image info
 

@@ -716,9 +716,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         if channel is not None and slice is not None:
-            img = super().getLastImageMD(channel, slice, md)
+            img = self.getLastImageMD(channel, slice, md)
         else:
-            img = super().getLastImageMD(md)
+            img = self.getLastImageMD(md)
         return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     @overload
@@ -760,7 +760,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             Image and metadata
         """
         md = Metadata()
-        img = super().popNextImageMD(channel, slice, md)
+        img = self.popNextImageMD(channel, slice, md)
         return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
@@ -804,7 +804,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
         md = Metadata()
-        img = super().getNBeforeLastImageMD(n, md)
+        img = self.getNBeforeLastImageMD(n, md)
         return self.fixImage(img) if fix and not pymmcore.NANO else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
