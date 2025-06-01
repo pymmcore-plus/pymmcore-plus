@@ -33,6 +33,11 @@ if TYPE_CHECKING:
     PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
     _T = TypeVar("_T")
 
+
+class BufferOverflowStop(Exception):
+    """Exception raised to signal graceful stop on buffer overflow."""
+
+
 CURRENT = {
     KW.CoreCamera: None,
     KW.CoreShutter: None,
@@ -714,6 +719,8 @@ class UniMMCore(CMMCorePlus):
     _seq: SequenceBuffer | None = None
     _sequence_running: bool = False
     _circular_buffer_memory_mb: int = 1000  # Memory footprint in MB
+    _stop_event: threading.Event = threading.Event()
+    _acquisition_thread: AcquisitionThread | None = None
 
     def _start_sequence(
         self, cam: Camera, n_images: int | None, stop_on_overflow: bool
@@ -757,41 +764,31 @@ class UniMMCore(CMMCorePlus):
             acquired_count += 1
 
             # Auto-stop when we've acquired the requested number of images
-            # Use threading.Timer to avoid deadlock from calling stop_sequence()
-            # from within the camera thread
             if n_images is not None and acquired_count >= n_images:
+                self._stop_event.set()
 
-                def delayed_stop() -> None:
-                    cam.stop_sequence()
-                    self._sequence_running = False
-
-                threading.Timer(0.0, delayed_stop).start()
-
-        # Create buffer access wrapper that handles overflow
         def get_buffer_with_overflow_handling() -> np.ndarray:
             try:
                 return _seq.acquire_slot(shape, dtype)
             except BufferError:
-                if stop_on_overflow:
-                    # Use timer to avoid deadlock from calling stop_sequence
-                    # from within the camera thread
-                    def delayed_stop() -> None:
-                        cam.stop_sequence()
-
-                    threading.Timer(0.0, delayed_stop).start()
-                raise MemoryError("Circular buffer overflow occurred.") from None
+                if not stop_on_overflow:
+                    raise
+                raise BufferOverflowStop() from None
 
         # Set acquisition start time for elapsed time calculation
         start_time = perf_counter_ns()
-        # Mark sequence as running
-        self._sequence_running = True
-        # TODO: should we use None or a large number.  Large number is more consistent
-        # for Camera Device Adapters, but hides details from the adapter.
-        cam.start_sequence_thread(
+        image_generator = cam.start_sequence(
             n_images or 2**63 - 1,
             get_buffer_with_overflow_handling,
-            finalize_with_metadata,
         )
+        self._stop_event = threading.Event()
+        self._acquisition_thread = AcquisitionThread(
+            image_generator=image_generator,
+            finalize=finalize_with_metadata,
+            label=camera_label,
+            stop_event=self._stop_event,
+        )
+        self._acquisition_thread.start()
 
     # ------------------------------------------------- startSequenceAcquisition
 
@@ -816,12 +813,15 @@ class UniMMCore(CMMCorePlus):
     # ---------------------------------------------------------------- stopSequence
 
     def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
-        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
-            return pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
+        if self._py_camera(cameraLabel) is None:  # pragma: no cover
+            pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
+        self._join_acquisition_thread()
 
-        cam.stop_sequence()
-        self._sequence_running = False
-        # Note: Keep the sequence buffer for data retrieval after stopping
+    def _join_acquisition_thread(self) -> None:
+        if self._acquisition_thread is not None:
+            self._stop_event.set()
+            self._acquisition_thread.join()
+            self._acquisition_thread = None
 
     # ------------------------------------------------------------------ queries
     @overload
@@ -832,7 +832,16 @@ class UniMMCore(CMMCorePlus):
         if self._py_camera(cameraLabel) is None:
             return super().isSequenceRunning()
 
-        return self._sequence_running
+        if self._acquisition_thread is None:
+            return False
+
+        # Check if the thread is actually still alive
+        if not self._acquisition_thread.is_alive():
+            # Thread has finished, clean it up
+            self._acquisition_thread = None
+            return False
+
+        return True
 
     def getRemainingImageCount(self) -> int:
         if self._py_camera() is None:
@@ -1120,6 +1129,43 @@ class UniMMCore(CMMCorePlus):
             return super().getPixelSizeUm(cached)
 
         return self.getPixelSizeUmByID(res_id) * binning / self.getMagnificationFactor()
+
+
+# Threading ------------------------------------------------------
+
+
+class AcquisitionThread(threading.Thread):
+    """A thread for running sequence acquisition in the background."""
+
+    def __init__(
+        self,
+        image_generator: Iterator[Mapping],
+        finalize: Callable[[Mapping], None],
+        label: str,
+        stop_event: threading.Event,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.image_iterator = image_generator
+        self.finalize = finalize
+        self.label = label
+        self.stop_event = stop_event
+
+    def run(self) -> None:
+        """Run the sequence and handle the generator pattern."""
+        try:
+            for metadata in self.image_iterator:
+                self.finalize(metadata)
+                if self.stop_event.is_set():
+                    break
+        except BufferOverflowStop:
+            # Buffer overflow is a graceful stop condition, not an error
+            pass
+        except BufferError:
+            raise
+        except Exception as e:  # pragma: no cover
+            raise RuntimeError(
+                f"Error in device {self.label!r} during sequence acquisition: {e}"
+            ) from e
 
 
 # -------------------------------------------------------------------------------

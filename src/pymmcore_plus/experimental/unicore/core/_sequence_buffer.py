@@ -227,6 +227,8 @@ class SequenceBuffer:
     @property
     def _contiguous_free_bytes(self) -> int:
         """Get the number of contiguous free bytes in the buffer."""
+        if self._bytes_in_use >= self._size_bytes:
+            return 0
         if self._bytes_in_use == 0:
             return self._size_bytes
         if self._head >= self._tail:
@@ -245,7 +247,9 @@ class SequenceBuffer:
                 msg = "Buffer is full and overwrite is disabled."
                 raise BufferError(msg)
             self._overflow_occurred = True
-            self._evict_slot(self._slots[0])  # evict oldest
+            while self._slots and self._contiguous_free_bytes < needed:
+                slot = self._slots.popleft()
+                self._evict_slot(slot)
 
         # If the buffer is now empty, reset head/tail to maximise contiguous space.
         if self._bytes_in_use == 0:
