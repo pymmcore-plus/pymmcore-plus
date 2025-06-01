@@ -248,7 +248,12 @@ def test_buffer_methods(device: str) -> None:
     assert core.getBufferFreeCapacity() == 40
     assert core.getBufferTotalCapacity() == 40
 
+    core.startSequenceAcquisition(2, 0, True)
+    while core.isSequenceRunning():
+        time.sleep(0.001)
+    assert core.getBufferFreeCapacity() == 38
     assert not core.isBufferOverflowed()
+
     core.startSequenceAcquisition(10000, 0, True)
     timeout = 1.0
     while core.isSequenceRunning():

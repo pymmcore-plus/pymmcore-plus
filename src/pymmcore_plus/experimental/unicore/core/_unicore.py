@@ -432,13 +432,6 @@ class UniMMCore(CMMCorePlus):
     # ---------------------------- XYStageDevice -----------------------------
     # ########################################################################
 
-    def _py_xy_stage(self, xyStageLabel: str | None = None) -> XYStageDevice | None:
-        """Return the *Python* XYStage for ``label`` (or current), else ``None``."""
-        label = xyStageLabel or self.getXYStageDevice()
-        if label in self._pydevices:
-            return self._pydevices.get_device_of_type(label, XYStageDevice)
-        return None
-
     def setXYStageDevice(self, xyStageLabel: DeviceLabel | str) -> None:
         label = self._set_current_if_pydevice(KW.CoreXYStage, xyStageLabel)
         super().setXYStageDevice(label)
@@ -771,8 +764,8 @@ class UniMMCore(CMMCorePlus):
             try:
                 return _seq.acquire_slot(shape, dtype)
             except BufferError:
-                if not stop_on_overflow:
-                    raise
+                if not stop_on_overflow:  # we shouldn't get here...
+                    raise  # pragma: no cover
                 raise BufferOverflowStop() from None
 
         # Set acquisition start time for elapsed time calculation
@@ -851,10 +844,7 @@ class UniMMCore(CMMCorePlus):
     def getLastImage(self) -> np.ndarray:
         if self._py_camera() is None:
             return super().getLastImage()
-        if not (self._seq):
-            raise IndexError("Circular buffer is empty.")
-        result = self._seq.peek_last()
-        if result is None:
+        if not (self._seq) or (result := self._seq.peek_last()) is None:
             raise IndexError("Circular buffer is empty.")
         return result[0]
 
@@ -882,12 +872,13 @@ class UniMMCore(CMMCorePlus):
 
     def setCircularBufferMemoryFootprint(self, sizeMB: int) -> None:
         """Set the circular buffer memory footprint in MB."""
-        if sizeMB <= 0:
-            raise ValueError("Buffer size must be greater than 0 MB")
-
         if self._py_camera() is None:
             return super().setCircularBufferMemoryFootprint(sizeMB)
 
+        if sizeMB <= 0:  # pragma: no cover
+            raise ValueError("Buffer size must be greater than 0 MB")
+
+        # TODO: what if sequence is running?
         self._circular_buffer_memory_mb = sizeMB
 
     def initializeCircularBuffer(self) -> None:
@@ -899,56 +890,38 @@ class UniMMCore(CMMCorePlus):
 
     def getBufferFreeCapacity(self) -> int:
         """Get the number of free slots in the circular buffer."""
-        if self._py_camera() is None:
+        if (cam := self._py_camera()) is None:
             return super().getBufferFreeCapacity()
 
+        if (bytes_per_frame := self._predicted_bytes_per_frame(cam)) <= 0:
+            return 0  # pragma: no cover  # Invalid frame size
+
         if self._seq is None:
-            # Estimate capacity based on camera settings
-            cam = self._pydevices.get_device_of_type(self.getCameraDevice(), Camera)
-            shape = cam.shape()
-            dtype = np.dtype(cam.dtype())
-            bytes_per_frame = int(np.prod(shape) * dtype.itemsize)
-            if bytes_per_frame <= 0:
-                return 0
             total_bytes = self._circular_buffer_memory_mb * 1024 * 1024
             return max(1, total_bytes // bytes_per_frame)
 
-        # Return free space in bytes converted to estimated frame capacity
-        if self._seq.free_bytes <= 0:
+        if (free_bytes := self._seq.free_bytes) <= 0:
             return 0
 
-        # Estimate frames that could fit in free space
-        cam = self._pydevices.get_device_of_type(self.getCameraDevice(), Camera)
-        shape = cam.shape()
-        dtype = np.dtype(cam.dtype())
-        bytes_per_frame = int(np.prod(shape) * dtype.itemsize)
-        if bytes_per_frame <= 0:
-            return 0
-        return self._seq.free_bytes // bytes_per_frame
+        return free_bytes // bytes_per_frame
+
+    def _predicted_bytes_per_frame(self, cam: Camera) -> int:
+        # Estimate capacity based on camera settings and circular buffer size
+        shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        return int(np.prod(shape) * dtype.itemsize)
 
     def getBufferTotalCapacity(self) -> int:
         """Get the total capacity of the circular buffer."""
-        if self._py_camera() is None:
+        if (cam := self._py_camera()) is None:
             return super().getBufferTotalCapacity()
 
+        if (bytes_per_frame := self._predicted_bytes_per_frame(cam)) <= 0:
+            return 0  # pragma: no cover  # Invalid frame size
+
         if self._seq is None:
-            # Estimate capacity based on camera settings
-            cam = self._pydevices.get_device_of_type(self.getCameraDevice(), Camera)
-            shape = cam.shape()
-            dtype = np.dtype(cam.dtype())
-            bytes_per_frame = int(np.prod(shape) * dtype.itemsize)
-            if bytes_per_frame <= 0:
-                return 0
             total_bytes = self._circular_buffer_memory_mb * 1024 * 1024
             return max(1, total_bytes // bytes_per_frame)
 
-        # Estimate total capacity based on buffer size and frame size
-        cam = self._pydevices.get_device_of_type(self.getCameraDevice(), Camera)
-        shape = cam.shape()
-        dtype = np.dtype(cam.dtype())
-        bytes_per_frame = int(np.prod(shape) * dtype.itemsize)
-        if bytes_per_frame <= 0:
-            return 0
         return self._seq.size_bytes // bytes_per_frame
 
     def getCircularBufferMemoryFootprint(self) -> int:
@@ -1159,9 +1132,10 @@ class AcquisitionThread(threading.Thread):
                     break
         except BufferOverflowStop:
             # Buffer overflow is a graceful stop condition, not an error
+            # this was likely raised by the Unicore above in _start_sequence
             pass
         except BufferError:
-            raise
+            raise  # pragma: no cover
         except Exception as e:  # pragma: no cover
             raise RuntimeError(
                 f"Error in device {self.label!r} during sequence acquisition: {e}"

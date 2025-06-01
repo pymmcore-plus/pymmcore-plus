@@ -296,7 +296,8 @@ class SequenceBuffer:
             return self._size_bytes
         if self._head >= self._tail:
             return self._size_bytes - self._head
-        return self._tail - self._head
+        # it's very hard to make this case happen...
+        return self._tail - self._head  # pragma: no cover
 
     def _ensure_space(self, needed: int) -> None:
         """Ensure `needed` bytes contiguous space is available."""

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import threading
 from abc import abstractmethod
 from types import MappingProxyType
 from typing import TYPE_CHECKING, Callable, ClassVar
@@ -55,9 +54,7 @@ class Camera(Device):
         get_buffer() to get a buffer, fill it with image data, then yield the
         metadata for that image.
 
-        The core will handle threading and synchronization, though you may
-        reimplement `start_sequence_thread` if you'd like to handle threading yourself.
-
+        The core will handle threading and synchronization.  This function may block.
 
         Parameters
         ----------
@@ -176,8 +173,6 @@ class Camera(Device):
 
     def __init__(self) -> None:
         super().__init__()
-        self._acquisition_thread: None | threading.Thread = None
-        self._stop_event = threading.Event()
         self.register_standard_properties()
 
     def register_standard_properties(self) -> None:
@@ -206,44 +201,3 @@ class Camera(Device):
     def get_binning(self) -> int:
         """Get the binning factor for the camera."""
         return 1  # pragma: no cover
-
-    # Threading ------------------------------------------------------
-
-    def start_sequence_thread(
-        self,
-        n: int,
-        get_buffer: Callable[[], np.ndarray],
-        notify: Callable[[Mapping], None],
-    ) -> None:
-        """Acquire a sequence of n images in a background thread."""
-        # Stop any existing acquisition
-        self._stop_event.set()
-        if self._acquisition_thread is not None:  # pragma: no cover
-            self._acquisition_thread.join()
-
-        # Reset stop event for new acquisition
-        self._stop_event.clear()
-
-        def _run_sequence() -> None:
-            """Run the sequence and handle the generator pattern."""
-            try:
-                for metadata in self.start_sequence(n, get_buffer):
-                    notify(metadata)
-                    if self._stop_event.is_set():
-                        break
-            except Exception as e:  # pragma: no cover
-                raise RuntimeError(
-                    f"Error in device {self.get_label()!r} during sequence acquisition:"
-                    f" {e}"
-                ) from e
-
-        # Start acquisition in background thread
-        self._acquisition_thread = threading.Thread(target=_run_sequence, daemon=True)
-        self._acquisition_thread.start()
-
-    def stop_sequence(self) -> None:
-        """Stop the current sequence acquisition."""
-        self._stop_event.set()
-        if self._acquisition_thread is not None:
-            self._acquisition_thread.join()
-            self._acquisition_thread = None
