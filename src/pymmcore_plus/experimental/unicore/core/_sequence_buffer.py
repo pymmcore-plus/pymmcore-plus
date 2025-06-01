@@ -23,7 +23,11 @@ class BufferSlot(NamedTuple):
 
 
 class SequenceBuffer:
-    """A lock-protected circular buffer backed by a single NumPy byte array.
+    """A lock-protected circular buffer backed by a single numpy byte array.
+
+    This buffer is designed for a single device.  If you want to stream data from
+    multiple devices, it is recommended to use a separate `SequenceBuffer` for each
+    device (rather than to pack two streams into a single FIFO buffer).
 
     Parameters
     ----------
@@ -47,14 +51,14 @@ class SequenceBuffer:
         # active frames in FIFO order (BufferSlot objects)
         self._slots: deque[BufferSlot] = deque()
 
-        self._overwrite: bool = overwrite_on_overflow
+        self._overwrite_on_overflow: bool = overwrite_on_overflow
         self._overflow_occurred: bool = False
 
         self._lock = threading.Lock()  # not re-entrant, but slightly faster than RLock
         self._pending_slot: BufferSlot | None = None  # only 1 outstanding slot
 
     # ---------------------------------------------------------------------
-    # Public - acquisition API
+    # Producer API - acquire a slot, fill it, finalize it
     # ---------------------------------------------------------------------
 
     def acquire_slot(
@@ -147,7 +151,7 @@ class SequenceBuffer:
         self.finalize_slot(metadata)
 
     # ------------------------------------------------------------------
-    # Data retrieval - default is **no copy**
+    # Consumer API - pop frames, peek at frames
     # ------------------------------------------------------------------
 
     def pop_next(
@@ -216,47 +220,7 @@ class SequenceBuffer:
             self._overflow_occurred = False
 
     # ------------------------------------------------------------------
-    # Internal helpers
-    # ------------------------------------------------------------------
-
-    def _evict_slot(self, slot: BufferSlot) -> None:
-        """Advance the tail pointer past `slot`, updating house-keeping."""
-        self._tail = (self._tail + slot.nbytes_total) % self._size_bytes
-        self._bytes_in_use -= slot.nbytes_total
-
-    @property
-    def _contiguous_free_bytes(self) -> int:
-        """Get the number of contiguous free bytes in the buffer."""
-        if self._bytes_in_use >= self._size_bytes:
-            return 0
-        if self._bytes_in_use == 0:
-            return self._size_bytes
-        if self._head >= self._tail:
-            return self._size_bytes - self._head
-        return self._tail - self._head
-
-    def _ensure_space(self, needed: int) -> None:
-        """Ensure `needed` bytes contiguous space is available."""
-        while self._contiguous_free_bytes < needed:
-            if not self._slots:
-                # Buffer empty but fragmented: just reset pointers
-                self._head = self._tail = self._bytes_in_use = 0
-                break
-            if not self._overwrite:
-                self._overflow_occurred = True
-                msg = "Buffer is full and overwrite is disabled."
-                raise BufferError(msg)
-            self._overflow_occurred = True
-            while self._slots and self._contiguous_free_bytes < needed:
-                slot = self._slots.popleft()
-                self._evict_slot(slot)
-
-        # If the buffer is now empty, reset head/tail to maximise contiguous space.
-        if self._bytes_in_use == 0:
-            self._head = self._tail = 0
-
-    # ------------------------------------------------------------------
-    # Properties & dunder
+    # Properties
     # ------------------------------------------------------------------
 
     @property
@@ -286,7 +250,7 @@ class SequenceBuffer:
     @property
     def overwrite_on_overflow(self) -> bool:
         """Return the overflow policy (immutable while data is present)."""
-        return self._overwrite
+        return self._overwrite_on_overflow
 
     @overwrite_on_overflow.setter
     def overwrite_on_overflow(self, value: bool) -> None:
@@ -295,7 +259,7 @@ class SequenceBuffer:
             if self._bytes_in_use > 0:
                 msg = "Cannot change overflow policy with active data in buffer."
                 raise RuntimeError(msg)
-            self._overwrite = value
+            self._overwrite_on_overflow = value
 
     def __len__(self) -> int:
         """Return the number of frames currently in the buffer."""
@@ -311,5 +275,45 @@ class SequenceBuffer:
         name = self.__class__.__name__
         return (
             f"{name}(size_mb={self.size_mb:.1f}, slots={len(self)}, "
-            f"used_mb={used_mb:.1f}, overwrite={self._overwrite})"
+            f"used_mb={used_mb:.1f}, overwrite={self._overwrite_on_overflow})"
         )
+
+    # ------------------------------------------------------------------
+    # Internal helpers
+    # ------------------------------------------------------------------
+
+    def _evict_slot(self, slot: BufferSlot) -> None:
+        """Advance the tail pointer past `slot`, updating house-keeping."""
+        self._tail = (self._tail + slot.nbytes_total) % self._size_bytes
+        self._bytes_in_use -= slot.nbytes_total
+
+    @property
+    def _contiguous_free_bytes(self) -> int:
+        """Get the number of contiguous free bytes in the buffer."""
+        if self._bytes_in_use >= self._size_bytes:
+            return 0
+        if self._bytes_in_use == 0:
+            return self._size_bytes
+        if self._head >= self._tail:
+            return self._size_bytes - self._head
+        return self._tail - self._head
+
+    def _ensure_space(self, needed: int) -> None:
+        """Ensure `needed` bytes contiguous space is available."""
+        while self._contiguous_free_bytes < needed:
+            if not self._slots:
+                # Buffer empty but fragmented: just reset pointers
+                self._head = self._tail = self._bytes_in_use = 0
+                break
+            if not self._overwrite_on_overflow:
+                self._overflow_occurred = True
+                msg = "Buffer is full and overwrite is disabled."
+                raise BufferError(msg)
+            self._overflow_occurred = True
+            while self._slots and self._contiguous_free_bytes < needed:
+                slot = self._slots.popleft()
+                self._evict_slot(slot)
+
+        # If the buffer is now empty, reset head/tail to maximise contiguous space.
+        if self._bytes_in_use == 0:
+            self._head = self._tail = 0
