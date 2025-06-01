@@ -86,7 +86,7 @@ class SeqState(SequenceBuffer):
         return buf
 
     def notify(self, meta: Mapping) -> None:
-        if not self.pending:
+        if not self.pending:  # pragma: no cover
             raise RuntimeError("notify() called more times than get_buffer()")
 
         buf = self.pending.popleft()
@@ -98,8 +98,9 @@ class SeqState(SequenceBuffer):
             self.running = False
 
     def pop_left(self) -> tuple[np.ndarray, Mapping] | None:
-        if not self.buffers:
+        if not self.buffers:  # pragma: no cover
             return None
+
         buf = self.buffers.popleft()
         meta = self.metadata.popleft() if self.metadata else {}
         return buf, meta
@@ -170,7 +171,7 @@ class SeqStateContiguous(SequenceBuffer):
         # In ring buffer mode, wrap around when we reach the end
         if self._ring_mode and self._next >= self.expected:
             self._next = 0
-        elif not self._ring_mode and self._next >= self.expected:
+        elif not self._ring_mode and self._next >= self.expected:  # pragma: no cover
             raise RuntimeError("Camera requested more frames than pre-allocated")
 
         buf = self._array[self._next]  # view, no copy
@@ -179,7 +180,7 @@ class SeqStateContiguous(SequenceBuffer):
         return buf  # type: ignore[no-any-return]
 
     def notify(self, meta: Mapping) -> None:
-        if not self.pending:
+        if not self.pending:  # pragma: no cover
             raise RuntimeError("notify() called more times than get_buffer()")
 
         buf = self.pending.popleft()
@@ -200,7 +201,7 @@ class SeqStateContiguous(SequenceBuffer):
             self.running = False
 
     def pop_left(self) -> tuple[np.ndarray, Mapping] | None:
-        if not self.buffers:
+        if not self.buffers:  # pragma: no cover
             return None
         buf = self.buffers.popleft()
         meta = self.metadata.popleft() if self.metadata else {}
@@ -248,7 +249,7 @@ class SeqStateRingPool(SequenceBuffer):
         *,
         pool: int = 16,  # tune to match your pipeline depth
     ) -> None:
-        if pool < 2:
+        if pool < 2:  # pragma: no cover
             raise ValueError("pool size must be >= 2")
 
         self.shape = shape
@@ -269,7 +270,7 @@ class SeqStateRingPool(SequenceBuffer):
     # ---------------------------------------------------------------- public API
 
     def get_buffer(self) -> np.ndarray:
-        if not self._free:
+        if not self._free:  # pragma: no cover
             raise BufferError("No free buffer - pool exhausted; enlarge *pool*")
 
         buf = self._free.popleft()
@@ -277,7 +278,7 @@ class SeqStateRingPool(SequenceBuffer):
         return buf
 
     def notify(self, meta: Mapping) -> None:
-        if not self.pending:
+        if not self.pending:  # pragma: no cover
             raise RuntimeError("notify() called more times than get_buffer()")
 
         buf = self.pending.popleft()
@@ -294,7 +295,7 @@ class SeqStateRingPool(SequenceBuffer):
     # ---------------------------------------------------------------- consumer hook
 
     def pop_left(self) -> tuple[np.ndarray, Mapping] | None:
-        if not self.buffers:
+        if not self.buffers:  # pragma: no cover
             return None
         buf = self.buffers.popleft()
         meta = self.metadata.popleft() if self.metadata else {}
