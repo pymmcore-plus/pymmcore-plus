@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import threading
+import warnings
 from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from datetime import datetime
@@ -26,6 +27,7 @@ if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
     from typing import Literal, NewType
 
+    from numpy.typing import DTypeLike
     from pymmcore import AdapterName, AffineTuple, DeviceLabel, DeviceName, PropertyName
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
@@ -679,10 +681,24 @@ class UniMMCore(CMMCorePlus):
         if (cam := self._py_camera()) is None:
             return pymmcore.CMMCore.snapImage(self)
 
-        buf = np.empty(cam.shape(), dtype=cam.dtype())
+        buf = None
+
+        def _get_buffer(shape: Sequence[int], dtype: DTypeLike) -> np.ndarray:
+            """Get a buffer for the camera image."""
+            nonlocal buf
+            buf = np.empty(shape, dtype=dtype)
+            return buf
+
         # synchronous call - consume one item from the generator
-        for _ in cam.start_sequence(1, get_buffer=lambda: buf):
-            self._current_image_buffer = buf
+        for _ in cam.start_sequence(1, get_buffer=_get_buffer):
+            if buf is not None:
+                self._current_image_buffer = buf
+            else:  # pragma: no cover  #  bad camera implementation
+                warnings.warn(
+                    "Camera device did not provide an image buffer.",
+                    RuntimeWarning,
+                    stacklevel=2,
+                )
             return
 
     # --------------------------------------------------------------------- getImage
@@ -742,6 +758,16 @@ class UniMMCore(CMMCorePlus):
         # Keep track of images acquired for metadata and auto-stop
         acquired_count = 0
 
+        def get_buffer_with_overflow_handling(
+            shape: Sequence[int], dtype: DTypeLike
+        ) -> np.ndarray:
+            try:
+                return _seq.acquire_slot(shape, dtype)
+            except BufferError:
+                if not stop_on_overflow:  # we shouldn't get here...
+                    raise  # pragma: no cover
+                raise BufferOverflowStop() from None
+
         # Create metadata-injecting wrapper for finalize callback
         def finalize_with_metadata(cam_meta: Mapping) -> None:
             nonlocal acquired_count
@@ -759,14 +785,6 @@ class UniMMCore(CMMCorePlus):
             # Auto-stop when we've acquired the requested number of images
             if n_images is not None and acquired_count >= n_images:
                 self._stop_event.set()
-
-        def get_buffer_with_overflow_handling() -> np.ndarray:
-            try:
-                return _seq.acquire_slot(shape, dtype)
-            except BufferError:
-                if not stop_on_overflow:  # we shouldn't get here...
-                    raise  # pragma: no cover
-                raise BufferOverflowStop() from None
 
         # Set acquisition start time for elapsed time calculation
         start_time = perf_counter_ns()

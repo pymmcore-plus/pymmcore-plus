@@ -10,10 +10,11 @@ with other C++ devices.
 """
 
 import time
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator, Mapping, Sequence
 from typing import Callable
 
 import numpy as np
+from numpy.typing import DTypeLike
 
 from pymmcore_plus.experimental.unicore import Camera, UniMMCore
 
@@ -21,7 +22,7 @@ _START_TIME: float = time.time()
 
 
 def make_cool_image(
-    shape: tuple[int, int], dtype: np.typing.DTypeLike, exposure_ms: float = 10.0
+    shape: tuple[int, int], dtype: DTypeLike, exposure_ms: float = 10.0
 ) -> np.ndarray:
     """Return a cool looking sinusoidal image with temporal correlations.
 
@@ -32,7 +33,7 @@ def make_cool_image(
         The shape of the output image.
         The first element is the height (number of rows), the second is the width
         (number of columns).
-    dtype: np.typing.DTypeLike
+    dtype: DTypeLike
         The data type of the output image.
     exposure_ms: float
         Exposure time in milliseconds. Shorter exposures result in noisier images.
@@ -104,20 +105,21 @@ class MyCamera(Camera):
     def shape(self) -> tuple[int, int]:
         return (480, 640)
 
-    def dtype(self) -> np.typing.DTypeLike:
+    def dtype(self) -> DTypeLike:
         """Return the data type of the image buffer."""
         return np.uint8
 
     def start_sequence(
-        self, n: int, get_buffer: Callable[[], np.ndarray]
+        self,
+        n: int,
+        get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition."""
         for _ in range(n):
             # Simulate image acquisition with current exposure time
             time.sleep(self._exposure / 1000.0)  # Convert ms to seconds
-            get_buffer()[:] = make_cool_image(
-                self.shape(), self.dtype(), self._exposure
-            )
+            buf = get_buffer(self.shape(), self.dtype())
+            buf[:] = make_cool_image(self.shape(), self.dtype(), self._exposure)
             yield {"timestamp": time.time()}  # any metadata
 
 

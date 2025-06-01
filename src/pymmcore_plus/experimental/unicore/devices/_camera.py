@@ -9,7 +9,7 @@ from pymmcore_plus.core._constants import Keyword, PixelFormat
 from ._device import Device
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping
+    from collections.abc import Iterator, Mapping, Sequence
 
     import numpy as np
     from numpy.typing import DTypeLike
@@ -45,7 +45,7 @@ class Camera(Device):
     def start_sequence(
         self,
         n: int,
-        get_buffer: Callable[[], np.ndarray],
+        get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition.
 
@@ -60,12 +60,11 @@ class Camera(Device):
         ----------
         n : int
             The number of images to acquire.
-        get_buffer : Callable[[], np.ndarray]
-            A callable that returns a buffer to be filled with the image data.
-            The buffer will be a numpy array with the shape and dtype
-            returned by `shape()` and `dtype()`.
-            The point here is that the core creates the buffer, and the device adapter
-            should just mutate it in place with the image data.
+        get_buffer : Callable[[Sequence[int], DTypeLike], np.ndarray]
+            A callable that returns a buffer for the camera to fill with image data.
+            You should call this with the shape of the image and the dtype
+            of the image data.  The core will produce a buffer of the requested shape
+            and dtype, and you should fill it (in place) with the image data.
 
         Yields
         ------
@@ -74,21 +73,13 @@ class Camera(Device):
             corresponding buffer has been filled with image data.
         """
         # EXAMPLE USAGE:
+        # shape, dtype = self.shape(), self.dtype()
         # for _ in range(n):
-        #     image = get_buffer()
-
-        #     you MAY call get buffer multiple times before calling notify
-        #     ... however, you must call notify the same number of times that
-        #     you call get_buffer.  And semantically, each call to notify means
-        #     that the buffer corresponding to the first unresolved call to get_buffer
-        #     is now ready to be used.
-        #     image2 = get_buffer()
-
+        #     image = get_buffer(shape, dtype)
         #     get the image from the camera, and fill the buffer in place
-        #     image[:] = ...
-
-        #     notify the core that the buffer is ready
-        #     yield {}
+        #     image[:] = <your_camera_data>
+        #     notify the core that the buffer is ready, and provide any metadata
+        #     yield {"key": "value", ...}  # metadata for the image
 
         #     TODO:
         #     Open question: who is responsible for key pieces of metadata?

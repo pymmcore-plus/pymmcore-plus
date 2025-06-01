@@ -49,11 +49,12 @@ class MyCamera(Camera):
         return DTYPE
 
     def start_sequence(
-        self, n: int, get_buffer: Callable[[], np.ndarray]
+        self, n: int, get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray]
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition."""
+        shape, dtype = self.shape(), self.dtype()
         for i in range(n):
-            buffer = get_buffer()
+            buffer = get_buffer(shape, dtype)
             time.sleep(0.01)  # Simulate time taken to acquire an image
             buffer[:] = FRAME
             yield {"random_key": f"value_{i}"}  # Example metadata, can be anything.
