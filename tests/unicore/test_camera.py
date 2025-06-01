@@ -274,7 +274,8 @@ def test_buffer_methods(device: str, bufcls: type[SequenceBuffer]) -> None:
     core._sequence_buffer_cls = bufcls
     _load_device(core, device)
 
-    assert core.getCircularBufferMemoryFootprint() == 250
+    expect = 250 if device == "c++" else 1000
+    assert core.getCircularBufferMemoryFootprint() == expect
     core.setCircularBufferMemoryFootprint(20)
     assert core.getCircularBufferMemoryFootprint() == 20
 
@@ -283,8 +284,14 @@ def test_buffer_methods(device: str, bufcls: type[SequenceBuffer]) -> None:
     assert core.getBufferTotalCapacity() == 40
 
     assert not core.isBufferOverflowed()
-    core.startContinuousSequenceAcquisition()
-    while not core.isBufferOverflowed():
-        time.sleep(0.001)
-        print("Buffer free capacity:", core.getBufferFreeCapacity())
+    core.startSequenceAcquisition(10000, 0, True)
+    timeout = 2.0
+    while True:
+        if core.isBufferOverflowed():
+            break
+        if timeout <= 0:
+            raise RuntimeError("Buffer overflow did not occur within the timeout.")
+        time.sleep(0.1)
+        timeout -= 0.1
+    assert core.isBufferOverflowed()
     core.clearCircularBuffer()

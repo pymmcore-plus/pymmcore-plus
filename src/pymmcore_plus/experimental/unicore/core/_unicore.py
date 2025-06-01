@@ -20,7 +20,7 @@ from pymmcore_plus.experimental.unicore.devices._camera import Camera
 from pymmcore_plus.experimental.unicore.devices._device import Device
 from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
 
-from ._sequence_buffers import SeqState, SeqStateContiguous, SequenceBuffer
+from ._sequence_buffers import SeqState, SequenceBuffer
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
@@ -652,14 +652,6 @@ class UniMMCore(CMMCorePlus):
     # ------------------------ Camera Device Methods -------------------------
     # ########################################################################
 
-    # attributes created on-demand
-    _current_image_buffer: np.ndarray | None = None
-    _seq: SequenceBuffer | None = None
-    _sequence_buffer_cls: type[SequenceBuffer] = SeqState
-    _original_sequence_buffer_cls: type[SequenceBuffer] | None = None
-    _circular_buffer_memory_mb: int = 250  # Memory footprint in MB
-    _circular_buffer_capacity: int = 0  # Number of frames that fit in memory
-
     # --------------------------------------------------------------------- utils
 
     def _py_camera(self, cameraLabel: str | None = None) -> Camera | None:
@@ -682,6 +674,8 @@ class UniMMCore(CMMCorePlus):
         return self._pycore.current(KW.CoreCamera) or super().getCameraDevice()
 
     # --------------------------------------------------------------------- snap
+
+    _current_image_buffer: np.ndarray | None = None
 
     def _do_snap_image(self) -> None:
         if (cam := self._py_camera()) is None:
@@ -717,6 +711,12 @@ class UniMMCore(CMMCorePlus):
 
     # ---------------------------------------------------------------- sequence common
 
+    _seq: SequenceBuffer | None = None
+    _sequence_buffer_cls: type[SequenceBuffer] = SeqState
+    _original_sequence_buffer_cls: type[SequenceBuffer] | None = None
+    _circular_buffer_memory_mb: int = 1000  # Memory footprint in MB
+    _circular_buffer_capacity: int = 0  # Number of frames that fit in memory
+
     def _start_sequence(
         self, cam: Camera, n_images: int | None, stop_on_overflow: bool
     ) -> None:
@@ -724,25 +724,9 @@ class UniMMCore(CMMCorePlus):
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
         camera_label = cam.get_label()
 
-        # Create the sequence buffer instance
-        # For circular buffer mode, override n_images with buffer capacity
-        if (
-            self._sequence_buffer_cls == SeqStateContiguous
-            and self._circular_buffer_capacity > 0
-        ):
-            # Use circular buffer capacity instead of n_images for ring mode
-            self._seq = _seq = self._sequence_buffer_cls(
-                shape,
-                dtype,
-                self._circular_buffer_capacity,
-                stop_on_overflow=stop_on_overflow,
-            )
-        else:
-            self._seq = _seq = self._sequence_buffer_cls(
-                shape, dtype, n_images, stop_on_overflow=stop_on_overflow
-            )
-
-        # Set acquisition start time for elapsed time calculation
+        self._seq = _seq = self._sequence_buffer_cls(
+            shape, dtype, n_images, stop_on_overflow=stop_on_overflow
+        )
 
         n_components = shape[2] if len(shape) > 2 else 1
         base_meta: dict[str, Any] = {
@@ -775,16 +759,11 @@ class UniMMCore(CMMCorePlus):
             try:
                 return _seq.get_buffer()
             except BufferError:
-                # Buffer overflow occurred
                 if _seq.stop_on_overflow:
-                    # Stop the camera sequence
                     cam.stop_sequence()
-                    raise
-                else:
-                    # Continue acquisition - this should not happen normally
-                    # as the buffer should handle overflow internally
-                    raise
+                raise MemoryError("Circular buffer overflow occurred.") from None
 
+        # Set acquisition start time for elapsed time calculation
         start_time = perf_counter_ns()
         # TODO: should we use None or a large number.  Large number is more consistent
         # for Camera Device Adapters, but hides details from the adapter.
@@ -866,6 +845,95 @@ class UniMMCore(CMMCorePlus):
             return super().popNextImageAndMD(channel, slice, fix=fix)
         img, md = self._pop_or_raise()
         return (img, Metadata(md))
+
+    # ---------------------------------------------------------------- circular buffer
+
+    def setCircularBufferMemoryFootprint(self, sizeMB: int) -> None:
+        """Set the circular buffer memory footprint in MB."""
+        if sizeMB <= 0:
+            raise ValueError("Buffer size must be greater than 0 MB")
+
+        if self._py_camera() is None:
+            return super().setCircularBufferMemoryFootprint(sizeMB)
+
+        self._circular_buffer_memory_mb = sizeMB
+
+        self._calculate_circular_buffer_capacity()
+
+    def initializeCircularBuffer(self) -> None:
+        """Initialize the circular buffer."""
+        if self._py_camera() is None:
+            return super().initializeCircularBuffer()
+
+        # Calculate capacity based on current camera settings
+        self._calculate_circular_buffer_capacity()
+
+    def _calculate_circular_buffer_capacity(self) -> None:
+        """Calculate how many frames can fit in the circular buffer memory."""
+        if not self._circular_buffer_memory_mb:
+            self._circular_buffer_capacity = 0
+            return
+
+        cam = self._pydevices.get_device_of_type(self.getCameraDevice(), Camera)
+
+        # Calculate memory per frame
+        shape = cam.shape()
+        dtype = np.dtype(cam.dtype())
+        bytes_per_frame = int(np.prod(shape) * dtype.itemsize)
+
+        if bytes_per_frame <= 0:
+            self._circular_buffer_capacity = 0
+            return
+
+        # Convert MB to bytes and calculate capacity
+        total_bytes = self._circular_buffer_memory_mb * 1024 * 1024
+        self._circular_buffer_capacity = max(1, total_bytes // bytes_per_frame)
+
+    def getBufferFreeCapacity(self) -> int:
+        """Get the number of free slots in the circular buffer."""
+        if self._py_camera() is None:
+            return super().getBufferFreeCapacity()
+
+        if self._seq is None:
+            return self._circular_buffer_capacity
+
+        # For circular buffers, free capacity is total capacity minus used slots
+        used_slots = len(self._seq)
+        return max(0, self._circular_buffer_capacity - used_slots)
+
+    def getBufferTotalCapacity(self) -> int:
+        """Get the total capacity of the circular buffer."""
+        if self._py_camera() is None:
+            return super().getBufferTotalCapacity()
+
+        return self._circular_buffer_capacity
+
+    def getCircularBufferMemoryFootprint(self) -> int:
+        """Get the circular buffer memory footprint in MB."""
+        if self._py_camera() is None:
+            return super().getCircularBufferMemoryFootprint()
+
+        return self._circular_buffer_memory_mb
+
+    def clearCircularBuffer(self) -> None:
+        """Clear all images from the circular buffer."""
+        if self._py_camera() is None:
+            return super().clearCircularBuffer()
+
+        if self._seq is not None:
+            # Clear the buffers
+            self._seq.buffers.clear()
+            if hasattr(self._seq, "metadata"):
+                self._seq.metadata.clear()
+
+    def isBufferOverflowed(self) -> bool:
+        """Check if the circular buffer has overflowed."""
+        if self._py_camera() is None:
+            return super().isBufferOverflowed()
+
+        # For Python cameras, we implement ring buffer semantics
+        # so overflow is handled gracefully by overwriting old frames
+        return False
 
     # ----------------------------------------------------------------- image info
 
@@ -1023,93 +1091,6 @@ class UniMMCore(CMMCorePlus):
             return super().getPixelSizeUm(cached)
 
         return self.getPixelSizeUmByID(res_id) * binning / self.getMagnificationFactor()
-
-    def setCircularBufferMemoryFootprint(self, sizeMB: int) -> None:
-        """Set the circular buffer memory footprint in MB."""
-        if sizeMB <= 0:
-            raise ValueError("Buffer size must be greater than 0 MB")
-
-        if self._py_camera() is None:
-            return super().setCircularBufferMemoryFootprint(sizeMB)
-
-        self._circular_buffer_memory_mb = sizeMB
-
-        self._calculate_circular_buffer_capacity()
-
-    def initializeCircularBuffer(self) -> None:
-        """Initialize the circular buffer."""
-        if self._py_camera() is None:
-            return super().initializeCircularBuffer()
-
-        # Calculate capacity based on current camera settings
-        self._calculate_circular_buffer_capacity()
-
-    def _calculate_circular_buffer_capacity(self) -> None:
-        """Calculate how many frames can fit in the circular buffer memory."""
-        if not self._circular_buffer_memory_mb:
-            self._circular_buffer_capacity = 0
-            return
-
-        cam = self._pydevices.get_device_of_type(self.getCameraDevice(), Camera)
-
-        # Calculate memory per frame
-        shape = cam.shape()
-        dtype = np.dtype(cam.dtype())
-        bytes_per_frame = int(np.prod(shape) * dtype.itemsize)
-
-        if bytes_per_frame <= 0:
-            self._circular_buffer_capacity = 0
-            return
-
-        # Convert MB to bytes and calculate capacity
-        total_bytes = self._circular_buffer_memory_mb * 1024 * 1024
-        self._circular_buffer_capacity = max(1, total_bytes // bytes_per_frame)
-
-    def getBufferFreeCapacity(self) -> int:
-        """Get the number of free slots in the circular buffer."""
-        if self._py_camera() is None:
-            return super().getBufferFreeCapacity()
-
-        if self._seq is None:
-            return self._circular_buffer_capacity
-
-        # For circular buffers, free capacity is total capacity minus used slots
-        used_slots = len(self._seq)
-        return max(0, self._circular_buffer_capacity - used_slots)
-
-    def getBufferTotalCapacity(self) -> int:
-        """Get the total capacity of the circular buffer."""
-        if self._py_camera() is None:
-            return super().getBufferTotalCapacity()
-
-        return self._circular_buffer_capacity
-
-    def getCircularBufferMemoryFootprint(self) -> int:
-        """Get the circular buffer memory footprint in MB."""
-        if self._py_camera() is None:
-            return super().getCircularBufferMemoryFootprint()
-
-        return self._circular_buffer_memory_mb
-
-    def clearCircularBuffer(self) -> None:
-        """Clear all images from the circular buffer."""
-        if self._py_camera() is None:
-            return super().clearCircularBuffer()
-
-        if self._seq is not None:
-            # Clear the buffers
-            self._seq.buffers.clear()
-            if hasattr(self._seq, "metadata"):
-                self._seq.metadata.clear()
-
-    def isBufferOverflowed(self) -> bool:
-        """Check if the circular buffer has overflowed."""
-        if self._py_camera() is None:
-            return super().isBufferOverflowed()
-
-        # For Python cameras, we implement ring buffer semantics
-        # so overflow is handled gracefully by overwriting old frames
-        return False
 
 
 # -------------------------------------------------------------------------------
