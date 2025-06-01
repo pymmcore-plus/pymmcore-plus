@@ -227,59 +227,6 @@ class UniMMCore(CMMCorePlus):
             return super().getDeviceDescription(label)
         return self._pydevices[label].description()
 
-    # ------------------------------ Ready State ----------------------------
-
-    def deviceBusy(self, label: DeviceLabel | str) -> bool:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().deviceBusy(label)
-        with self._pydevices[label] as dev:
-            return dev.busy()
-
-    def waitForDevice(self, label: DeviceLabel | str) -> None:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().waitForDevice(label)
-        self._pydevices.wait_for(label, self.getTimeoutMs())
-
-    # def waitForConfig
-
-    # probably only needed because C++ method is not virtual
-    def systemBusy(self) -> bool:
-        return self.deviceTypeBusy(DeviceType.AnyType)
-
-    # probably only needed because C++ method is not virtual
-    def waitForSystem(self) -> None:
-        self.waitForDeviceType(DeviceType.AnyType)
-
-    def waitForDeviceType(self, devType: int) -> None:
-        super().waitForDeviceType(devType)
-        self._pydevices.wait_for_device_type(devType, self.getTimeoutMs())
-
-    def deviceTypeBusy(self, devType: int) -> bool:
-        if super().deviceTypeBusy(devType):
-            return True  # pragma: no cover
-
-        for label in self._pydevices.get_labels_of_type(devType):
-            with self._pydevices[label] as dev:
-                if dev.busy():
-                    return True
-        return False
-
-    def getDeviceDelayMs(self, label: DeviceLabel | str) -> float:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().getDeviceDelayMs(label)
-        return 0  # pydevices don't yet support delays
-
-    def setDeviceDelayMs(self, label: DeviceLabel | str, delayMs: float) -> None:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().setDeviceDelayMs(label, delayMs)
-        if delayMs != 0:  # pragma: no cover
-            raise NotImplementedError("Python devices do not support delays")
-
-    def usesDeviceDelay(self, label: DeviceLabel | str) -> bool:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().usesDeviceDelay(label)
-        return False
-
     # ---------------------------- Properties ---------------------------
 
     def getDevicePropertyNames(
@@ -423,9 +370,62 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices[label] as dev:
             dev.stop_property_sequence(propName)
 
-    ##########################################################################
-    # ------------------------ Stage Device Methods -------------------------#
-    ##########################################################################
+    # ------------------------------ Ready State ----------------------------
+
+    def deviceBusy(self, label: DeviceLabel | str) -> bool:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().deviceBusy(label)
+        with self._pydevices[label] as dev:
+            return dev.busy()
+
+    def waitForDevice(self, label: DeviceLabel | str) -> None:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().waitForDevice(label)
+        self._pydevices.wait_for(label, self.getTimeoutMs())
+
+    # def waitForConfig
+
+    # probably only needed because C++ method is not virtual
+    def systemBusy(self) -> bool:
+        return self.deviceTypeBusy(DeviceType.AnyType)
+
+    # probably only needed because C++ method is not virtual
+    def waitForSystem(self) -> None:
+        self.waitForDeviceType(DeviceType.AnyType)
+
+    def waitForDeviceType(self, devType: int) -> None:
+        super().waitForDeviceType(devType)
+        self._pydevices.wait_for_device_type(devType, self.getTimeoutMs())
+
+    def deviceTypeBusy(self, devType: int) -> bool:
+        if super().deviceTypeBusy(devType):
+            return True  # pragma: no cover
+
+        for label in self._pydevices.get_labels_of_type(devType):
+            with self._pydevices[label] as dev:
+                if dev.busy():
+                    return True
+        return False
+
+    def getDeviceDelayMs(self, label: DeviceLabel | str) -> float:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().getDeviceDelayMs(label)
+        return 0  # pydevices don't yet support delays
+
+    def setDeviceDelayMs(self, label: DeviceLabel | str, delayMs: float) -> None:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setDeviceDelayMs(label, delayMs)
+        if delayMs != 0:  # pragma: no cover
+            raise NotImplementedError("Python devices do not support delays")
+
+    def usesDeviceDelay(self, label: DeviceLabel | str) -> bool:
+        if label not in self._pydevices:  # pragma: no cover
+            return super().usesDeviceDelay(label)
+        return False
+
+    # ########################################################################
+    # ---------------------------- XYStageDevice -----------------------------
+    # ########################################################################
 
     def _py_xy_stage(self, xyStageLabel: str | None = None) -> XYStageDevice | None:
         """Return the *Python* XYStage for ``label`` (or current), else ``None``."""
@@ -648,9 +648,9 @@ class UniMMCore(CMMCorePlus):
         dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
         dev.stop()
 
-    ##########################################################################
-    # ------------------------ Camera Device Methods ------------------------#
-    ##########################################################################
+    # ########################################################################
+    # ------------------------ Camera Device Methods -------------------------
+    # ########################################################################
 
     # attributes created on-demand
     _current_image_buffer: np.ndarray | None = None
@@ -983,6 +983,9 @@ class UniMMCore(CMMCorePlus):
             return super().getPixelSizeUm(cached)
 
         return self.getPixelSizeUmByID(res_id) * binning / self.getMagnificationFactor()
+
+
+# -------------------------------------------------------------------------------
 
 
 def _ensure_label(
