@@ -9,6 +9,12 @@ from numpy.typing import DTypeLike
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.experimental.unicore import Camera
+from pymmcore_plus.experimental.unicore.core._sequence_buffers import (
+    SeqState,
+    SeqStateContiguous,
+    SeqStateRingPool,
+    SequenceBuffer,
+)
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 DEV = "Camera"
@@ -144,9 +150,18 @@ def test_basic_acquisition(device: str) -> None:
     assert frame.dtype == DTYPE
 
 
-@pytest.mark.parametrize("device", ["python", "c++"])
-def test_sequence_acquisition(device: str) -> None:
+@pytest.mark.parametrize(
+    "device, bufcls",
+    [
+        ("python", SeqState),
+        ("python", SeqStateContiguous),
+        ("python", SeqStateRingPool),
+        ("c++", SeqState),
+    ],
+)
+def test_sequence_acquisition(device: str, bufcls: type[SequenceBuffer]) -> None:
     core = UniMMCore()
+    core._sequence_buffer_cls = bufcls
 
     # load either a Python or C++ camera device
     _load_device(core, device)
@@ -195,9 +210,20 @@ def test_sequence_acquisition(device: str) -> None:
         core.popNextImage()
 
 
-@pytest.mark.parametrize("device", ["python", "c++"])
-def test_continuous_sequence_acquisition(device: str) -> None:
+@pytest.mark.parametrize(
+    "device, bufcls",
+    [
+        ("python", SeqState),
+        ("python", SeqStateContiguous),
+        ("python", SeqStateRingPool),
+        ("c++", SeqState),
+    ],
+)
+def test_continuous_sequence_acquisition(
+    device: str, bufcls: type[SequenceBuffer]
+) -> None:
     core = UniMMCore()
+    core._sequence_buffer_cls = bufcls
     # load either a Python or C++ camera device
     _load_device(core, device)
 

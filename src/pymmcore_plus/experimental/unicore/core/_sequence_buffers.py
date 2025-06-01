@@ -12,6 +12,7 @@ if TYPE_CHECKING:
 class SequenceBuffer(Protocol):
     running: bool
     buffers: deque[np.ndarray]
+    acquired: int
 
     def __init__(
         self, shape: tuple[int, ...], dtype: np.dtype, expected: int | None
@@ -130,6 +131,7 @@ class SeqStateContiguous(SequenceBuffer):
     __slots__ = (
         "_array",
         "_next",
+        "_ring_mode",
         "acquired",
         "buffers",
         "dtype",
@@ -143,8 +145,10 @@ class SeqStateContiguous(SequenceBuffer):
     def __init__(
         self, shape: tuple[int, ...], dtype: np.dtype, expected: int | None
     ) -> None:
+        # Use default buffer size when expected is None (for continuous acquisition)
+        self._ring_mode = expected is None
         if expected is None:
-            raise ValueError("Contiguous-array strategy needs a finite *expected*")
+            expected = 100  # Default ring buffer size
 
         self.shape = shape
         self.dtype = dtype
@@ -163,8 +167,12 @@ class SeqStateContiguous(SequenceBuffer):
     # ---------------------------------------------------------------- public API
 
     def get_buffer(self) -> np.ndarray:
-        if self._next >= self.expected:
+        # In ring buffer mode, wrap around when we reach the end
+        if self._ring_mode and self._next >= self.expected:
+            self._next = 0
+        elif not self._ring_mode and self._next >= self.expected:
             raise RuntimeError("Camera requested more frames than pre-allocated")
+
         buf = self._array[self._next]  # view, no copy
         self._next += 1
         self.pending.append(buf)
@@ -175,11 +183,20 @@ class SeqStateContiguous(SequenceBuffer):
             raise RuntimeError("notify() called more times than get_buffer()")
 
         buf = self.pending.popleft()
+
+        # In ring buffer mode, maintain fixed buffer size
+        if self._ring_mode and len(self.buffers) >= self.expected:
+            # Remove oldest frame to make room for new one
+            self.buffers.popleft()
+            if self.metadata:
+                self.metadata.popleft()
+
         self.buffers.append(buf)  # view is still valid
         self.metadata.append(dict(meta))
         self.acquired += 1
 
-        if self.acquired >= self.expected:
+        # Only stop if we have a finite expected count and we've reached it
+        if self.acquired >= self.expected and not self._ring_mode:
             self.running = False
 
     def pop_left(self) -> tuple[np.ndarray, Mapping] | None:

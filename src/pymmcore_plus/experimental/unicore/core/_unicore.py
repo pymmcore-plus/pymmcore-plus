@@ -655,6 +655,7 @@ class UniMMCore(CMMCorePlus):
     # attributes created on-demand
     _current_image_buffer: np.ndarray | None = None
     _seq: SequenceBuffer | None = None
+    _sequence_buffer_cls: type[SequenceBuffer] = SeqState
 
     # --------------------------------------------------------------------- utils
 
@@ -718,7 +719,7 @@ class UniMMCore(CMMCorePlus):
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
         camera_label = cam.get_label()
 
-        self._seq = _seq = SeqState(shape, dtype, n_images)
+        self._seq = _seq = self._sequence_buffer_cls(shape, dtype, n_images)
         # Set acquisition start time for elapsed time calculation
 
         n_components = shape[2] if len(shape) > 2 else 1
