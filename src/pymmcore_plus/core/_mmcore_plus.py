@@ -2187,20 +2187,28 @@ class CMMCorePlus(pymmcore.CMMCore):
             return list(xs), list(ys), list(ws), list(hs)
 
     @overload
-    def setROI(self, x: int, y: int, width: int, height: int) -> None: ...
+    def setROI(self, x: int, y: int, width: int, height: int, /) -> None: ...
 
     @overload
-    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None: ...
+    def setROI(
+        self, label: str, x: int, y: int, width: int, height: int, /
+    ) -> None: ...
 
-    def setROI(self, *args: Any, **kwargs: Any) -> None:
+    def setROI(self, *args: Any) -> None:
         """Set the camera Region of Interest (ROI).
 
         **Why Override?** To emit a `roiSet` event.
         """
-        super().setROI(*args, **kwargs)
         if len(args) == 4:
             args = (super().getCameraDevice(), *args)
+        self._do_set_roi(*args)
         self.events.roiSet.emit(*args)
+
+    # here for ease of overriding in Unicore
+
+    def _do_set_roi(self, label: str, x: int, y: int, width: int, height: int) -> None:
+        """Internal method to set the ROI for a specific camera device."""
+        super().setROI(label, x, y, width, height)
 
     def setChannelGroup(self, channelGroup: str) -> None:
         """Specifies the group determining the channel selection.
