@@ -258,3 +258,33 @@ def test_sequenceable_exposures() -> None:
 
     core.stopExposureSequence(DEV)
     assert camera._exposure_sequence_stopped
+
+
+@pytest.mark.parametrize(
+    "device, bufcls",
+    [
+        ("c++", SeqState),
+        ("python", SeqState),
+        ("python", SeqStateContiguous),
+        ("python", SeqStateRingPool),
+    ],
+)
+def test_buffer_methods(device: str, bufcls: type[SequenceBuffer]) -> None:
+    core = UniMMCore()
+    core._sequence_buffer_cls = bufcls
+    _load_device(core, device)
+
+    assert core.getCircularBufferMemoryFootprint() == 250
+    core.setCircularBufferMemoryFootprint(20)
+    assert core.getCircularBufferMemoryFootprint() == 20
+
+    core.initializeCircularBuffer()
+    assert core.getBufferFreeCapacity() == 40
+    assert core.getBufferTotalCapacity() == 40
+
+    assert not core.isBufferOverflowed()
+    core.startContinuousSequenceAcquisition()
+    while not core.isBufferOverflowed():
+        time.sleep(0.001)
+        print("Buffer free capacity:", core.getBufferFreeCapacity())
+    core.clearCircularBuffer()

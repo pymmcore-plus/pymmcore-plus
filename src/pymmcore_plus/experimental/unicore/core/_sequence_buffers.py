@@ -12,10 +12,18 @@ if TYPE_CHECKING:
 class SequenceBuffer(Protocol):
     running: bool
     buffers: deque[np.ndarray]
+    metadata: deque[Mapping]
     acquired: int
+    stop_on_overflow: bool
 
     def __init__(
-        self, shape: tuple[int, ...], dtype: np.dtype, expected: int | None
+        self,
+        shape: tuple[int, ...],
+        dtype: np.dtype,
+        expected: int | None,
+        *,
+        stop_on_overflow: bool = True,
+        max_size: int | None = None,
     ) -> None: ...
 
     # ---------- required call-backs for the Camera ---------------------
@@ -61,14 +69,22 @@ class SeqState(SequenceBuffer):
         "buffers",
         "dtype",
         "expected",
+        "max_size",
         "metadata",
         "pending",
         "running",
         "shape",
+        "stop_on_overflow",
     )
 
     def __init__(
-        self, shape: tuple[int, ...], dtype: np.dtype, expected: int | None
+        self,
+        shape: tuple[int, ...],
+        dtype: np.dtype,
+        expected: int | None,
+        *,
+        stop_on_overflow: bool = True,
+        max_size: int | None = None,
     ) -> None:
         self.shape = shape
         self.dtype = dtype
@@ -78,6 +94,8 @@ class SeqState(SequenceBuffer):
         self.running: bool = True
         self.expected = expected
         self.acquired = 0
+        self.stop_on_overflow = stop_on_overflow
+        self.max_size = max_size
 
     def get_buffer(self) -> np.ndarray:
         """Get a new empty buffer for the next image."""
@@ -90,6 +108,20 @@ class SeqState(SequenceBuffer):
             raise RuntimeError("notify() called more times than get_buffer()")
 
         buf = self.pending.popleft()
+
+        # Check for max_size overflow
+        if self.max_size is not None and len(self.buffers) >= self.max_size:
+            # Buffer overflow condition
+            if self.stop_on_overflow:
+                # Stop acquisition on overflow
+                self.running = False
+                return
+            else:
+                # Continue acquisition, drop oldest frame
+                self.buffers.popleft()
+                if self.metadata:
+                    self.metadata.popleft()
+
         self.buffers.append(buf)
         self.metadata.append(dict(meta))
         self.acquired += 1
@@ -141,10 +173,16 @@ class SeqStateContiguous(SequenceBuffer):
         "pending",
         "running",
         "shape",
+        "stop_on_overflow",
     )
 
     def __init__(
-        self, shape: tuple[int, ...], dtype: np.dtype, expected: int | None
+        self,
+        shape: tuple[int, ...],
+        dtype: np.dtype,
+        expected: int | None,
+        *,
+        stop_on_overflow: bool = True,
     ) -> None:
         # Use default buffer size when expected is None (for continuous acquisition)
         self._ring_mode = expected is None
@@ -154,6 +192,7 @@ class SeqStateContiguous(SequenceBuffer):
         self.shape = shape
         self.dtype = dtype
         self.expected = expected
+        self.stop_on_overflow = stop_on_overflow
 
         # allocate (N, H, W[, C])
         self._array = np.empty(expected, dtype=(self.dtype, shape))
@@ -185,12 +224,18 @@ class SeqStateContiguous(SequenceBuffer):
 
         buf = self.pending.popleft()
 
-        # In ring buffer mode, maintain fixed buffer size
+        # In ring buffer mode, check for overflow
         if self._ring_mode and len(self.buffers) >= self.expected:
-            # Remove oldest frame to make room for new one
-            self.buffers.popleft()
-            if self.metadata:
-                self.metadata.popleft()
+            # Buffer overflow condition
+            if self.stop_on_overflow:
+                # Stop acquisition on overflow
+                self.running = False
+                return
+            else:
+                # Continue acquisition, drop oldest frame
+                self.buffers.popleft()
+                if self.metadata:
+                    self.metadata.popleft()
 
         self.buffers.append(buf)  # view is still valid
         self.metadata.append(dict(meta))
@@ -239,6 +284,7 @@ class SeqStateRingPool(SequenceBuffer):
         "pending",
         "running",
         "shape",
+        "stop_on_overflow",
     )
 
     def __init__(
@@ -248,6 +294,7 @@ class SeqStateRingPool(SequenceBuffer):
         expected: int | None,
         *,
         pool: int = 16,  # tune to match your pipeline depth
+        stop_on_overflow: bool = True,
     ) -> None:
         if pool < 2:  # pragma: no cover
             raise ValueError("pool size must be >= 2")
@@ -255,6 +302,7 @@ class SeqStateRingPool(SequenceBuffer):
         self.shape = shape
         self.dtype = dtype
         self.expected = expected  # may be None for continuous acquisition
+        self.stop_on_overflow = stop_on_overflow
 
         # pre-allocate pool
         self._free: deque[np.ndarray] = deque(
@@ -270,8 +318,16 @@ class SeqStateRingPool(SequenceBuffer):
     # ---------------------------------------------------------------- public API
 
     def get_buffer(self) -> np.ndarray:
-        if not self._free:  # pragma: no cover
-            raise BufferError("No free buffer - pool exhausted; enlarge *pool*")
+        if not self._free:
+            # Buffer overflow condition - no free buffers available
+            if self.stop_on_overflow:
+                # Stop acquisition on overflow
+                self.running = False
+                raise BufferError("Buffer overflow - acquisition stopped")
+            else:
+                # Continue acquisition - this would cause the camera to wait
+                # or potentially drop frames, but we don't stop
+                raise BufferError("No free buffer - pool exhausted; enlarge *pool*")
 
         buf = self._free.popleft()
         self.pending.append(buf)
