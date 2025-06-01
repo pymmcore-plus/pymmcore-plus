@@ -242,17 +242,17 @@ def test_buffer_methods(device: str) -> None:
 
     expect = 250 if device == "c++" else 1000
     assert core.getCircularBufferMemoryFootprint() == expect
-    core.setCircularBufferMemoryFootprint(20)
-    assert core.getCircularBufferMemoryFootprint() == 20
+    core.setCircularBufferMemoryFootprint(10)
+    assert core.getCircularBufferMemoryFootprint() == 10
 
     core.initializeCircularBuffer()
-    assert core.getBufferFreeCapacity() == 40
-    assert core.getBufferTotalCapacity() == 40
+    assert core.getBufferFreeCapacity() == 20
+    assert core.getBufferTotalCapacity() == 20
 
     core.startSequenceAcquisition(2, 0, True)
     while core.isSequenceRunning():
         time.sleep(0.001)
-    assert core.getBufferFreeCapacity() == 38
+    assert core.getBufferFreeCapacity() == 18
     assert not core.isBufferOverflowed()
 
     core.startSequenceAcquisition(10000, 0, True)
