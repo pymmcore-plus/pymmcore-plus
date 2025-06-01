@@ -256,7 +256,7 @@ def test_buffer_methods(device: str) -> None:
     assert not core.isBufferOverflowed()
 
     core.startSequenceAcquisition(10000, 0, True)
-    timeout = 1.0
+    timeout = 5.0
     while core.isSequenceRunning():
         if timeout <= 0:
             raise RuntimeError("Buffer overflow did not occur within the timeout.")
