@@ -9,13 +9,23 @@ This example demonstrates how to create a custom Python camera device that uses 
 Hamamatsu DCAM API to acquire images from a Hamamatsu camera.
 """
 
+try:
+    import pyDCAM as dc
+except Exception as e:
+    raise ImportError(
+        "This example requires:\n\n"
+        "    1. Windows OS\n"
+        "    2. Hamamatsu DCAM API installed\n"
+        "       https://www.hamamatsu.com/jp/en/product/cameras/software/driver-software/dcam-api-for-windows.html\n"
+        "    3. pyDCAM to be installed: `pip install pyDCAM`\n\n"
+    ) from e
+
 import ctypes as c
 import time
 from collections.abc import Iterator, Mapping, Sequence
 from typing import Callable
 
 import numpy as np
-import pyDCAM as dc
 from numpy.typing import DTypeLike
 
 from pymmcore_plus.experimental.unicore import Camera, UniMMCore
