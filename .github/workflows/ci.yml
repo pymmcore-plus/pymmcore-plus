@@ -114,7 +114,7 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
-      - uses: pyvista/setup-headless-display-action@v3
+      - uses: pyvista/setup-headless-display-action@v4
         with:
           qt: true
 
