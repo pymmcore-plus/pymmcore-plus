@@ -130,7 +130,7 @@ class HamaCam(Camera):
                     dc.dcamapi.dcambuf_copyframe(hdcam.hdcam, c.byref(frame))
                 )
 
-                yield {}
+                yield {"timestamp": f"{frame.timestamp.sec}:{frame.timestamp.microsec}"}
 
         finally:
             # stop & drain
@@ -162,36 +162,37 @@ ticks: list = []
 while len(ticks) < 50:
     if core.getRemainingImageCount():
         ticks.append(time.perf_counter())
-        core.popNextImage()
+        (img, md) = core.popNextImageAndMD()
 core.stopSequenceAcquisition()
 fps = len(ticks) / (ticks[-1] - ticks[0])
 print(f"FPS: {fps}")
+print(f"Image shape: {img.shape}, dtype: {img.dtype}, metadata: {md}")
 
 core.setExposure(50)
 
 # --------- Optional GUI using pymmcore-widgets
 
-try:
-    from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
-    from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
+# try:
+#     from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
+#     from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
 
-    app = QApplication([])
+#     app = QApplication([])
 
-    window = QWidget()
-    window.setWindowTitle("UniCore Camera Example")
-    layout = QVBoxLayout(window)
+#     window = QWidget()
+#     window.setWindowTitle("UniCore Camera Example")
+#     layout = QVBoxLayout(window)
 
-    top = QHBoxLayout()
-    top.addWidget(SnapButton(mmcore=core))
-    top.addWidget(LiveButton(mmcore=core))
-    top.addWidget(ExposureWidget(mmcore=core))
-    layout.addLayout(top)
-    layout.addWidget(ImagePreview(mmcore=core))
-    window.setLayout(layout)
-    window.resize(800, 600)
-    window.show()
-    app.exec()
-except Exception:
-    print("run `pip install pymmcore-widgets[image] PyQt6` to run the GUI example")
+#     top = QHBoxLayout()
+#     top.addWidget(SnapButton(mmcore=core))
+#     top.addWidget(LiveButton(mmcore=core))
+#     top.addWidget(ExposureWidget(mmcore=core))
+#     layout.addLayout(top)
+#     layout.addWidget(ImagePreview(mmcore=core))
+#     window.setLayout(layout)
+#     window.resize(800, 600)
+#     window.show()
+#     app.exec()
+# except Exception:
+#     print("run `pip install pymmcore-widgets[image] PyQt6` to run the GUI example")
 
 core.reset()
