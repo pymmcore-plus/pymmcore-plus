@@ -10,6 +10,8 @@ Hamamatsu DCAM API to acquire images from a Hamamatsu camera.
 """
 
 try:
+    # using pydcam for convenience, but it's a thin ctypes wrapper around the DLL
+    # and could be replaced with direct ctypes calls if needed.
     import pyDCAM as dc
 except Exception as e:
     raise ImportError(
@@ -165,6 +167,10 @@ core.stopSequenceAcquisition()
 fps = len(ticks) / (ticks[-1] - ticks[0])
 print(f"FPS: {fps}")
 
+core.setExposure(50)
+
+# --------- Optional GUI using pymmcore-widgets
+
 try:
     from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
     from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
@@ -187,10 +193,5 @@ try:
     app.exec()
 except Exception:
     print("run `pip install pymmcore-widgets[image] PyQt6` to run the GUI example")
-    core.snapImage()
-    image = core.getImage()
-    print("Image shape:", image.shape)
-    print("Image dtype:", image.dtype)
-    print("Image data:", image)
 
 core.reset()
