@@ -91,7 +91,7 @@ class HamaCam(Camera):
         n_frames: int,
         get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
-        """Stream **n_frames** images, yielding a dict per frame as UniMMCore expects."""
+        """Stream `n_frames` images, yielding a dict per frame as UniMMCore expects."""
         shape, dtype = self.shape(), self.dtype()
         hdcam = self._hdcam
         hdcam.dcambuf_alloc(min(n_frames, 64))  # internal DCAM ring buffer
