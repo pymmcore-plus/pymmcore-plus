@@ -41,6 +41,7 @@ class _DCAMBUF_ATTACH(c.Structure):
         ("buffercount", c.c_int32),
     )
 
+# ----- small helper subclass for HDCAM, to facilitate shape/dtype/acquisition
 
 class HDCAM(dc.HDCAM):
     """Subclass of dc.HDCAM to add convenience methods."""
@@ -76,7 +77,7 @@ class HDCAM(dc.HDCAM):
         ptr_array[0] = c.c_void_p(img.ctypes.data)
         attach = _DCAMBUF_ATTACH(
             size=c.sizeof(_DCAMBUF_ATTACH),
-            iKind=0,
+            iKind=0, # DCAMBUF_ATTACHKIND_FRAME
             buffer=ptr_array,
             buffercount=1,
         )
@@ -109,16 +110,8 @@ class HDCAM(dc.HDCAM):
         )
         return out
 
-    def stream(self, num: int) -> Iterator[np.ndarray]:
-        """Stream images from the camera."""
-        self.dcamcap_start(dc.DCAMCAP_START.DCAMCAP_START_SEQUENCE)
-        for _ in range(num):
-            self.dcamwait_open().dcamwait_start()
-            img = np.empty(self.shape(), dtype=self.dtype(), order="C")
-            yield img
-            self.dcambuf_release()
-        self.dcamcap_stop()
 
+# -------- Here is our actual Device Adaptor for pymmcore_plus.unicore.Camera
 
 class HamaCam(Camera):
     def initialize(self) -> None:
@@ -158,20 +151,95 @@ class HamaCam(Camera):
         get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition."""
-        shape, dtype = self.shape(), self.dtype()
-        for _ in range(n):
-            buf = get_buffer(shape, dtype)
-            self._hdcam.snap(buf)
-            yield {}
+        shape, dtype = self._hdcam.shape(), self._hdcam.dtype()
 
+        # stream
+        self._hdcam.dcambuf_alloc(min(n, 64))  # DCAM internal ring buffer
+        hwait = self._hdcam.dcamwait_open()
+
+        try:
+            
+            # 2. Start sequence capture
+            self._hdcam.dcamcap_start(dc.DCAMCAP_START.DCAMCAP_START_SEQUENCE)
+
+            for _i in range(n): # Loop for the number of frames UniMMCore expects
+                # 3. Wait for a frame to be ready in DCAM's internal buffer
+                # Use DCAMWAIT_CAPEVENT_FRAMEREADY
+                hwait.dcamwait_start(
+                    eventmask=dc.DCAMWAIT_EVENT.DCAMWAIT_CAPEVENT_FRAMEREADY,
+                    timeout=2000  # Example timeout in ms, adjust as needed
+                )
+
+                # 4. Get the destination buffer from UniMMCore (or your calling layer)
+                img = get_buffer(shape, dtype)
+
+                # 5. Copy the captured frame into the user's provided buffer
+                # You need to construct a DCAMBUF_FRAME structure for dcambuf_copyframe
+                frame_params = dc.DCAMBUF_FRAME(
+                    size=c.sizeof(dc.DCAMBUF_FRAME),
+                    iFrame = -1,  # Request the latest captured image
+                    buf = img.ctypes.data_as(c.c_void_p),  # Buffer to copy into
+                    rowbytes = img.strides[0],
+                    type = 0,  #  copy frame
+                    width = shape[1],  # Width of the image
+                    height = shape[0],  # Height of the image
+                    left = 0,  # Left offset in the image
+                    top = 0,  # Top offset in the image
+                )
+
+
+                # Call the dcambuf_copyframe function.
+                # This might be available as a method on self._hdcam (e.g., self._hdcam.dcambuf_copyframe(frame_params))
+                # or you might need to call the raw API function if pyDCAM doesn't wrap it this way.
+                # Assuming pyDCAM's check_status and dcamapi are accessible:
+                dc.check_status(
+                    dcamapi.dcambuf_copyframe(self._hdcam.hdcam, c.byref(frame_params))
+                )
+
+                # Yield metadata or confirmation
+                yield {"skipped_frames": 0, "frame_time_us": 0} # Placeholder
+
+        finally:
+            # 6. Stop capture and release resources
+            self._hdcam.dcamcap_stop()
+            
+
+            # It's good practice to wait for the STOPPED event to ensure clean termination
+            try:
+                hwait.dcamwait_start(
+                    eventmask=dc.DCAMWAIT_EVENT.DCAMWAIT_CAPEVENT_STOPPED, 
+                    timeout=1000 
+                )
+            except dc.DCAMError as e:
+                # Handle timeout or other errors if necessary, e.g., print a warning
+                print(f"Warning/Error waiting for capture to stop: {e}")
+            
+            hwait.dcamwait_close() 
+            
+            # Release the internally allocated DCAM buffers
+            self._hdcam.dcambuf_release() 
+
+
+
+# --------- Use our custom camera in UniMMCore
 
 core = UniMMCore()
 core.loadPyDevice("Camera", HamaCam())
 core.initializeDevice("Camera")
 core.setCameraDevice("Camera")
 
-core.setExposure(42)
+core.setExposure(50)
 
+# test FPS
+core.startContinuousSequenceAcquisition()
+ticks: list = []
+while len(ticks) < 20:
+    if core.getRemainingImageCount():
+        ticks.append(time.perf_counter())
+        core.popNextImage()
+core.stopSequenceAcquisition()
+fps = len(ticks) / (ticks[-1] - ticks[0])
+print(f"FPS: {fps}")
 
 try:
     from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
