@@ -157,7 +157,7 @@ core.setExposure(1)
 # test FPS
 core.startContinuousSequenceAcquisition()
 ticks: list = []
-while len(ticks) < 20:
+while len(ticks) < 50:
     if core.getRemainingImageCount():
         ticks.append(time.perf_counter())
         core.popNextImage()
@@ -165,32 +165,32 @@ core.stopSequenceAcquisition()
 fps = len(ticks) / (ticks[-1] - ticks[0])
 print(f"FPS: {fps}")
 
-# try:
-#     from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
-#     from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
+try:
+    from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
+    from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
 
-#     app = QApplication([])
+    app = QApplication([])
 
-#     window = QWidget()
-#     window.setWindowTitle("UniCore Camera Example")
-#     layout = QVBoxLayout(window)
+    window = QWidget()
+    window.setWindowTitle("UniCore Camera Example")
+    layout = QVBoxLayout(window)
 
-#     top = QHBoxLayout()
-#     top.addWidget(SnapButton(mmcore=core))
-#     top.addWidget(LiveButton(mmcore=core))
-#     top.addWidget(ExposureWidget(mmcore=core))
-#     layout.addLayout(top)
-#     layout.addWidget(ImagePreview(mmcore=core))
-#     window.setLayout(layout)
-#     window.resize(800, 600)
-#     window.show()
-#     app.exec()
-# except Exception:
-#     print("run `pip install pymmcore-widgets[image] PyQt6` to run the GUI example")
-#     core.snapImage()
-#     image = core.getImage()
-#     print("Image shape:", image.shape)
-#     print("Image dtype:", image.dtype)
-#     print("Image data:", image)
+    top = QHBoxLayout()
+    top.addWidget(SnapButton(mmcore=core))
+    top.addWidget(LiveButton(mmcore=core))
+    top.addWidget(ExposureWidget(mmcore=core))
+    layout.addLayout(top)
+    layout.addWidget(ImagePreview(mmcore=core))
+    window.setLayout(layout)
+    window.resize(800, 600)
+    window.show()
+    app.exec()
+except Exception:
+    print("run `pip install pymmcore-widgets[image] PyQt6` to run the GUI example")
+    core.snapImage()
+    image = core.getImage()
+    print("Image shape:", image.shape)
+    print("Image dtype:", image.dtype)
+    print("Image data:", image)
 
-# core.reset()
+core.reset()
