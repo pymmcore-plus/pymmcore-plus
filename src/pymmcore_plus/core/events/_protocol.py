@@ -32,6 +32,7 @@ class PSignalInstance(Protocol):
         """Emits the signal with the given arguments."""
 
 
+@runtime_checkable
 class PSignal(Protocol):
     """Descriptor that returns a signal instance."""
 
