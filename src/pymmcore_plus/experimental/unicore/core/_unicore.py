@@ -696,18 +696,19 @@ class UniMMCore(CMMCorePlus):
             return buf
 
         # synchronous call - consume one item from the generator
-        for _ in cam.start_sequence(1, get_buffer=_get_buffer):
-            if buf is not None:
-                self._current_image_buffer = buf
-            else:  # pragma: no cover  #  bad camera implementation
-                warnings.warn(
-                    "Camera device did not provide an image buffer.",
-                    RuntimeWarning,
-                    stacklevel=2,
-                )
-            return
+        with cam:
+            for _ in cam.start_sequence(1, get_buffer=_get_buffer):
+                if buf is not None:
+                    self._current_image_buffer = buf
+                else:  # pragma: no cover  #  bad camera implementation
+                    warnings.warn(
+                        "Camera device did not provide an image buffer.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                return
 
-    # --------------------------------------------------------------------- getImage
+        # --------------------------------------------------------------------- getImage
 
     @overload
     def getImage(self, *, fix: bool = True) -> np.ndarray: ...
@@ -811,16 +812,16 @@ class UniMMCore(CMMCorePlus):
             return pymmcore.CMMCore.startSequenceAcquisition(
                 self, cameraLabel, numImages, intervalMs, stopOnOverflow
             )
-
-        self._start_sequence(cam, numImages, stopOnOverflow)
+        with cam:
+            self._start_sequence(cam, numImages, stopOnOverflow)
 
     # ------------------------------------------------- continuous acquisition
 
     def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
         if (cam := self._py_camera()) is None:  # pragma: no cover
             return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)
-
-        self._start_sequence(cam, None, False)
+        with cam:
+            self._start_sequence(cam, None, False)
 
     # ---------------------------------------------------------------- stopSequence
 
@@ -1171,7 +1172,12 @@ class UniMMCore(CMMCorePlus):
             return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)  # null affine
 
         cam = self._py_camera()
-        if cam is None or (binning := float(cam.get_property_value(KW.Binning))) == 1:
+        if cam is not None:
+            with cam:
+                binning = float(cam.get_property_value(KW.Binning))
+        else:
+            binning = 1.0
+        if cam is None or binning == 1:
             return tuple(super().getPixelSizeAffine(cached))  # type: ignore
 
         # in CMMCore, they scale the pixel size affine by the binning factor and mag

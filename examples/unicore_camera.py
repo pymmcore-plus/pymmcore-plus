@@ -5,8 +5,8 @@ subclasses of `pymmcore_plus.unicore.Device`. The final API is unchanged from
 CMMCorePlus: the Unicore knows whether a device label corresponds to a C++ or Python
 device and routes the call accordingly.
 
-This example demonstrates how to create a custom Python stage device and use it together
-with other C++ devices.
+This example demonstrates how to create a custom Python camera device that generates
+cool synthetic images.
 """
 
 import time
@@ -153,7 +153,7 @@ try:
     window.show()
     app.exec()
 except Exception:
-    print("run `pip install pymmcore-widgets[image]` to run the GUI example")
+    print("run `pip install pymmcore-widgets[image] PyQt6` to run the GUI example")
     core.snapImage()
     image = core.getImage()
     print("Image shape:", image.shape)
