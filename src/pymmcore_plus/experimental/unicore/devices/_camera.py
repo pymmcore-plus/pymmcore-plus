@@ -29,7 +29,7 @@ class Camera(Device):
         ...
 
     @abstractmethod
-    def shape(self) -> tuple[int, int]:
+    def shape(self) -> tuple[int, ...]:
         """Return the shape of the image buffer.
 
         This is used when querying Width, Height, *and* number of components.

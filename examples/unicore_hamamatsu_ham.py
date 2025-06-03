@@ -33,86 +33,6 @@ from pymmcore_plus.experimental.unicore import Camera, UniMMCore
 dcamapi = dc.dcamapi
 
 
-class _DCAMBUF_ATTACH(c.Structure):
-    _fields_ = (
-        ("size", c.c_int32),
-        ("iKind", c.c_int32),
-        ("buffer", c.POINTER(c.c_void_p)),
-        ("buffercount", c.c_int32),
-    )
-
-
-# ----- small helper subclass for HDCAM, to facilitate shape/dtype/acquisition
-
-
-class HDCAM(dc.HDCAM):
-    """Subclass of dc.HDCAM to add convenience methods."""
-
-    def dcamcap_status(self) -> dc.DCAMCAP_STATUS:
-        """Return the current capture status of the camera."""
-        iStatus = c.c_int32(0)
-        dc.check_status(dcamapi.dcamcap_status(self.hdcam, c.byref(iStatus)))
-        return dc.DCAMCAP_STATUS(iStatus.value)  # bug upstream, doesn't use value
-
-    def shape(self) -> tuple[int, ...]:
-        """Return the shape of the image buffer."""
-        width = int(self.dcamprop_getvalue(dc.DCAMIDPROP.DCAM_IDPROP_IMAGE_WIDTH))
-        height = int(self.dcamprop_getvalue(dc.DCAMIDPROP.DCAM_IDPROP_IMAGE_HEIGHT))
-        return (height, width)
-
-    def dtype(self) -> np.dtype:
-        """Return the NumPy dtype of the image buffer."""
-        pixel_type = dc.DCAM_PIXELTYPE(
-            int(self.dcamprop_getvalue(dc.DCAMIDPROP.DCAM_IDPROP_IMAGE_PIXELTYPE))
-        )
-        if pixel_type == dc.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO8:
-            return np.dtype(np.uint8)
-        elif pixel_type == dc.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO16:
-            return np.dtype(np.uint16)
-        raise NotImplementedError(
-            f"Unsupported pixel type: {pixel_type}. Only MONO8 and MONO16 are supported"
-        )
-
-    def attach_buffer(self, img: np.ndarray) -> None:
-        """Attach a preallocated NumPy array to the camera buffer."""
-        ptr_array = (c.c_void_p * 1)()
-        ptr_array[0] = c.c_void_p(img.ctypes.data)
-        attach = _DCAMBUF_ATTACH(
-            size=c.sizeof(_DCAMBUF_ATTACH),
-            iKind=0,  # DCAMBUF_ATTACHKIND_FRAME
-            buffer=ptr_array,
-            buffercount=1,
-        )
-        while self.dcamcap_status() == dc.DCAMCAP_STATUS.DCAMCAP_STATUS_BUSY:
-            print("Waiting for camera to be ready...", self.dcamcap_status().name)
-            time.sleep(0.1)
-        dc.check_status(dcamapi.dcambuf_attach(self.hdcam, c.byref(attach)))
-
-    def snap(
-        self,
-        out: np.ndarray | None = None,
-        *,
-        timeout: int = 2000,
-    ) -> np.ndarray:
-        """Snap into the attached buffer."""
-        if out is None:
-            self.dcambuf_alloc(1)
-        else:
-            self.attach_buffer(out)
-        hwait = self.dcamwait_open()
-        self.dcamcap_start(dc.DCAMCAP_START.DCAMCAP_START_SNAP)
-        hwait.dcamwait_start(timeout=timeout)
-        if out is None:
-            # see also: dcambuf_lockframe
-            out = self.dcambuf_copyframe()
-        self.dcambuf_release()
-        self.dcamcap_stop()
-        hwait.dcamwait_start(
-            dc.DCAMWAIT_EVENT.DCAMWAIT_CAPEVENT_STOPPED, timeout=timeout
-        )
-        return out
-
-
 # -------- Here is our actual Device Adaptor for pymmcore_plus.unicore.Camera
 
 
@@ -124,7 +44,7 @@ class HamaCam(Camera):
         else:
             raise RuntimeError("Failed to initialize DCAM API")
 
-        self._hdcam = HDCAM()
+        self._hdcam = dc.HDCAM()
 
     def shutdown(self) -> None:
         self._hdcam.dcamdev_close()
@@ -142,11 +62,23 @@ class HamaCam(Camera):
         self._hdcam.dcamprop_setvalue(dc.DCAMIDPROP.DCAM_IDPROP_EXPOSURETIME, exp_s)
 
     def shape(self) -> tuple[int, ...]:
-        return self._hdcam.shape()
+        """Return the shape of the image buffer."""
+        hdcam = self._hdcam
+        width = int(hdcam.dcamprop_getvalue(dc.DCAMIDPROP.DCAM_IDPROP_IMAGE_WIDTH))
+        height = int(hdcam.dcamprop_getvalue(dc.DCAMIDPROP.DCAM_IDPROP_IMAGE_HEIGHT))
+        return (height, width)
 
-    def dtype(self) -> DTypeLike:
-        """Return the data type of the image buffer."""
-        return self._hdcam.dtype()
+    def dtype(self) -> np.dtype:
+        """Return the NumPy dtype of the image buffer."""
+        pt = self._hdcam.dcamprop_getvalue(dc.DCAMIDPROP.DCAM_IDPROP_IMAGE_PIXELTYPE)
+        pixel_type = dc.DCAM_PIXELTYPE(int(pt))
+        if pixel_type == dc.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO8:
+            return np.dtype(np.uint8)
+        elif pixel_type == dc.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO16:
+            return np.dtype(np.uint16)
+        raise NotImplementedError(
+            f"Unsupported pixel type: {pixel_type}. Only MONO8 and MONO16 are supported"
+        )
 
     def start_sequence(
         self,
@@ -154,7 +86,7 @@ class HamaCam(Camera):
         get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition."""
-        shape, dtype = self._hdcam.shape(), self._hdcam.dtype()
+        shape, dtype = self.shape(), self.dtype()
 
         # stream
         self._hdcam.dcambuf_alloc(min(n, 64))  # DCAM internal ring buffer
