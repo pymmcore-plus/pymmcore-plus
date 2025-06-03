@@ -30,8 +30,13 @@ from numpy.typing import DTypeLike
 
 from pymmcore_plus.experimental.unicore import Camera, UniMMCore
 
-dcamapi = dc.dcamapi
+dll = dc.dcamapi
 
+
+PIXEL_TYPE_TO_DTYPE: dict[int, np.dtype] = {
+    dc.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO8: np.dtype(np.uint8),
+    dc.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO16: np.dtype(np.uint16),
+}
 
 # -------- Here is our actual Device Adaptor for pymmcore_plus.unicore.Camera
 
@@ -72,83 +77,72 @@ class HamaCam(Camera):
         """Return the NumPy dtype of the image buffer."""
         pt = self._hdcam.dcamprop_getvalue(dc.DCAMIDPROP.DCAM_IDPROP_IMAGE_PIXELTYPE)
         pixel_type = dc.DCAM_PIXELTYPE(int(pt))
-        if pixel_type == dc.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO8:
-            return np.dtype(np.uint8)
-        elif pixel_type == dc.DCAM_PIXELTYPE.DCAM_PIXELTYPE_MONO16:
-            return np.dtype(np.uint16)
-        raise NotImplementedError(
-            f"Unsupported pixel type: {pixel_type}. Only MONO8 and MONO16 are supported"
-        )
+        try:
+            return PIXEL_TYPE_TO_DTYPE[pixel_type]
+        except KeyError:  # pragma: no cover
+            raise NotImplementedError(
+                f"unsupported pixel type {pixel_type.name}; only MONO8/16 are handled"
+            ) from None
 
     def start_sequence(
         self,
-        n: int,
+        n_frames: int,
         get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
-        """Start a sequence acquisition."""
+        """Stream **n_frames** images, yielding a dict per frame as UniMMCore expects."""
         shape, dtype = self.shape(), self.dtype()
+        hdcam = self._hdcam
+        hdcam.dcambuf_alloc(min(n_frames, 64))  # internal DCAM ring buffer
+        hwait = hdcam.dcamwait_open()
+        timeout = 2_000  # ms
 
-        # stream
-        self._hdcam.dcambuf_alloc(min(n, 64))  # DCAM internal ring buffer
-        hwait = self._hdcam.dcamwait_open()
+        # Pre-build the frame descriptor (will update .buf each iteration)
+        frame = dc.DCAMBUF_FRAME(
+            size=c.sizeof(dc.DCAMBUF_FRAME),
+            iFrame=-1,
+            buf=None,  # will be assigned per-frame
+            rowbytes=shape[1] * dtype.itemsize,
+            type=0,
+            width=shape[1],
+            height=shape[0],
+            left=0,
+            top=0,
+        )
 
         try:
-            # 2. Start sequence capture
-            self._hdcam.dcamcap_start(dc.DCAMCAP_START.DCAMCAP_START_SEQUENCE)
+            hdcam.dcamcap_start(dc.DCAMCAP_START.DCAMCAP_START_SEQUENCE)
 
-            for _i in range(n):  # Loop for the number of frames UniMMCore expects
-                # 3. Wait for a frame to be ready in DCAM's internal buffer
-                # Use DCAMWAIT_CAPEVENT_FRAMEREADY
+            for _ in range(n_frames):
+                # wait for HW to have a fresh frame
                 hwait.dcamwait_start(
-                    eventmask=dc.DCAMWAIT_EVENT.DCAMWAIT_CAPEVENT_FRAMEREADY,
-                    timeout=2000,  # Example timeout in ms, adjust as needed
+                    dc.DCAMWAIT_EVENT.DCAMWAIT_CAPEVENT_FRAMEREADY,
+                    timeout=timeout,  # pyright: ignore
                 )
 
-                # 4. Get the destination buffer from UniMMCore (or your calling layer)
+                # get the frame from core
                 img = get_buffer(shape, dtype)
+                frame.buf = img.ctypes.data_as(c.c_void_p)
 
-                # 5. Copy the captured frame into the user's provided buffer
-                # You need to construct a DCAMBUF_FRAME structure for dcambuf_copyframe
-                frame_params = dc.DCAMBUF_FRAME(
-                    size=c.sizeof(dc.DCAMBUF_FRAME),
-                    iFrame=-1,  # Request the latest captured image
-                    buf=img.ctypes.data_as(c.c_void_p),  # Buffer to copy into
-                    rowbytes=img.strides[0],
-                    type=0,  #  copy frame
-                    width=shape[1],  # Width of the image
-                    height=shape[0],  # Height of the image
-                    left=0,  # Left offset in the image
-                    top=0,  # Top offset in the image
-                )
-
-                # Call the dcambuf_copyframe function.
-                # This might be available as a method on self._hdcam (e.g., self._hdcam.dcambuf_copyframe(frame_params))
-                # or you might need to call the raw API function if pyDCAM doesn't wrap it this way.
-                # Assuming pyDCAM's check_status and dcamapi are accessible:
+                # copy the frame from the DCAM buffer to our buffer
                 dc.check_status(
-                    dcamapi.dcambuf_copyframe(self._hdcam.hdcam, c.byref(frame_params))
+                    dc.dcamapi.dcambuf_copyframe(hdcam.hdcam, c.byref(frame))
                 )
 
-                # Yield metadata or confirmation
-                yield {"skipped_frames": 0, "frame_time_us": 0}  # Placeholder
+                yield {}
 
         finally:
-            # 6. Stop capture and release resources
-            self._hdcam.dcamcap_stop()
-
-            # It's good practice to wait for the STOPPED event to ensure clean termination
+            # stop & drain
+            hdcam.dcamcap_stop()
             try:
                 hwait.dcamwait_start(
-                    eventmask=dc.DCAMWAIT_EVENT.DCAMWAIT_CAPEVENT_STOPPED, timeout=1000
+                    eventmask=dc.DCAMWAIT_EVENT.DCAMWAIT_CAPEVENT_STOPPED,
+                    timeout=timeout,  # pyright: ignore
                 )
-            except dc.DCAMError as e:
-                # Handle timeout or other errors if necessary, e.g., print a warning
-                print(f"Warning/Error waiting for capture to stop: {e}")
+            except dc.DCAMError as exc:  # pragma: no cover
+                print(f"[DCAM] warning while stopping capture: {exc}")
 
             hwait.dcamwait_close()
-
-            # Release the internally allocated DCAM buffers
-            self._hdcam.dcambuf_release()
+            hdcam.dcambuf_release()
 
 
 # --------- Use our custom camera in UniMMCore
@@ -158,7 +152,7 @@ core.loadPyDevice("Camera", HamaCam())
 core.initializeDevice("Camera")
 core.setCameraDevice("Camera")
 
-core.setExposure(50)
+core.setExposure(1)
 
 # test FPS
 core.startContinuousSequenceAcquisition()
@@ -171,32 +165,32 @@ core.stopSequenceAcquisition()
 fps = len(ticks) / (ticks[-1] - ticks[0])
 print(f"FPS: {fps}")
 
-try:
-    from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
-    from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
+# try:
+#     from pymmcore_widgets import ExposureWidget, ImagePreview, LiveButton, SnapButton
+#     from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
 
-    app = QApplication([])
+#     app = QApplication([])
 
-    window = QWidget()
-    window.setWindowTitle("UniCore Camera Example")
-    layout = QVBoxLayout(window)
+#     window = QWidget()
+#     window.setWindowTitle("UniCore Camera Example")
+#     layout = QVBoxLayout(window)
 
-    top = QHBoxLayout()
-    top.addWidget(SnapButton(mmcore=core))
-    top.addWidget(LiveButton(mmcore=core))
-    top.addWidget(ExposureWidget(mmcore=core))
-    layout.addLayout(top)
-    layout.addWidget(ImagePreview(mmcore=core))
-    window.setLayout(layout)
-    window.resize(800, 600)
-    window.show()
-    app.exec()
-except Exception:
-    print("run `pip install pymmcore-widgets[image] PyQt6` to run the GUI example")
-    core.snapImage()
-    image = core.getImage()
-    print("Image shape:", image.shape)
-    print("Image dtype:", image.dtype)
-    print("Image data:", image)
+#     top = QHBoxLayout()
+#     top.addWidget(SnapButton(mmcore=core))
+#     top.addWidget(LiveButton(mmcore=core))
+#     top.addWidget(ExposureWidget(mmcore=core))
+#     layout.addLayout(top)
+#     layout.addWidget(ImagePreview(mmcore=core))
+#     window.setLayout(layout)
+#     window.resize(800, 600)
+#     window.show()
+#     app.exec()
+# except Exception:
+#     print("run `pip install pymmcore-widgets[image] PyQt6` to run the GUI example")
+#     core.snapImage()
+#     image = core.getImage()
+#     print("Image shape:", image.shape)
+#     print("Image dtype:", image.dtype)
+#     print("Image data:", image)
 
-core.reset()
+# core.reset()
