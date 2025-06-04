@@ -716,9 +716,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         if channel is not None and slice is not None:
-            img = super().getLastImageMD(channel, slice, md)
+            img = self.getLastImageMD(channel, slice, md)
         else:
-            img = super().getLastImageMD(md)
+            img = self.getLastImageMD(md)
         return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     @overload
@@ -760,7 +760,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             Image and metadata
         """
         md = Metadata()
-        img = super().popNextImageMD(channel, slice, md)
+        img = self.popNextImageMD(channel, slice, md)
         return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
@@ -804,7 +804,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
         md = Metadata()
-        img = super().getNBeforeLastImageMD(n, md)
+        img = self.getNBeforeLastImageMD(n, md)
         return self.fixImage(img) if fix and not pymmcore.NANO else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
@@ -1617,7 +1617,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if autoshutter := self.getAutoShutter():
             self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
         try:
-            super().snapImage()
+            self._do_snap_image()
             self.events.imageSnapped.emit()
         finally:
             if autoshutter:
@@ -1902,15 +1902,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To emit a `startContinuousSequenceAcquisition` event.
         """
         self.events.continuousSequenceAcquisitionStarting.emit()
-        super().startContinuousSequenceAcquisition(intervalMs)
+        self._do_start_continuous_sequence_acquisition(intervalMs)
         self.events.continuousSequenceAcquisitionStarted.emit()
 
     @overload
     def startSequenceAcquisition(
-        self,
-        numImages: int,
-        intervalMs: float,
-        stopOnOverflow: bool,
+        self, numImages: int, intervalMs: float, stopOnOverflow: bool, /
     ) -> None: ...
 
     @overload
@@ -1920,9 +1917,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         numImages: int,
         intervalMs: float,
         stopOnOverflow: bool,
+        /,
     ) -> None: ...
 
-    def startSequenceAcquisition(self, *args: Any, **kwargs: Any) -> None:
+    def startSequenceAcquisition(self, *args: Any) -> None:
         """Starts streaming camera sequence acquisition.
 
         This command does not block the calling thread for the duration of the
@@ -1931,18 +1929,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To emit a `startSequenceAcquisition` event.
         """
         if len(args) == 3:
-            numImages, intervalMs, stopOnOverflow = args
-            cameraLabel = super().getCameraDevice()
-        else:
-            cameraLabel, numImages, intervalMs, stopOnOverflow = args
+            args = (self.getCameraDevice(), *args)
+        elif len(args) != 4:
+            raise ValueError(
+                "startSequenceAcquisition requires either 3 or 4 arguments, "
+                f"got {len(args)}."
+            )
 
-        self.events.sequenceAcquisitionStarting.emit(
-            cameraLabel, numImages, intervalMs, stopOnOverflow
-        )
-        super().startSequenceAcquisition(*args, **kwargs)
-        self.events.sequenceAcquisitionStarted.emit(
-            cameraLabel, numImages, intervalMs, stopOnOverflow
-        )
+        self.events.sequenceAcquisitionStarting.emit(*args)
+        self._do_start_sequence_acquisition(*args)
+        self.events.sequenceAcquisitionStarted.emit(*args)
 
     def stopSequenceAcquisition(self, cameraLabel: str | None = None) -> None:
         """Stops streaming camera sequence acquisition.
@@ -1951,12 +1947,31 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To emit a `stopSequenceAcquisition` event.
         """
-        if cameraLabel is None:
-            super().stopSequenceAcquisition()
-        else:
-            super().stopSequenceAcquisition(cameraLabel)
         cameraLabel = cameraLabel or super().getCameraDevice()
+        self._do_stop_sequence_acquisition(cameraLabel)
         self.events.sequenceAcquisitionStopped.emit(cameraLabel)
+
+    # here for ease of overriding in Unicore ---------------------
+
+    def _do_snap_image(self) -> None:
+        super().snapImage()
+
+    def _do_start_sequence_acquisition(
+        self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
+    ) -> None:
+        super().startSequenceAcquisition(
+            cameraLabel, numImages, intervalMs, stopOnOverflow
+        )
+
+    def _do_start_continuous_sequence_acquisition(self, intervalMs: float) -> None:
+        """Starts the actual continuous sequence acquisition process."""
+        super().startContinuousSequenceAcquisition(intervalMs)
+
+    def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
+        """Stops the actual sequence acquisition process."""
+        super().stopSequenceAcquisition(cameraLabel)
+
+    # end of Unicore helpers ---------------------
 
     def setAutoFocusOffset(self, offset: float) -> None:
         """Applies offset the one-shot focusing device.
@@ -2172,20 +2187,28 @@ class CMMCorePlus(pymmcore.CMMCore):
             return list(xs), list(ys), list(ws), list(hs)
 
     @overload
-    def setROI(self, x: int, y: int, width: int, height: int) -> None: ...
+    def setROI(self, x: int, y: int, width: int, height: int, /) -> None: ...
 
     @overload
-    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None: ...
+    def setROI(
+        self, label: str, x: int, y: int, width: int, height: int, /
+    ) -> None: ...
 
-    def setROI(self, *args: Any, **kwargs: Any) -> None:
+    def setROI(self, *args: Any) -> None:
         """Set the camera Region of Interest (ROI).
 
         **Why Override?** To emit a `roiSet` event.
         """
-        super().setROI(*args, **kwargs)
         if len(args) == 4:
             args = (super().getCameraDevice(), *args)
+        self._do_set_roi(*args)
         self.events.roiSet.emit(*args)
+
+    # here for ease of overriding in Unicore
+
+    def _do_set_roi(self, label: str, x: int, y: int, width: int, height: int) -> None:
+        """Internal method to set the ROI for a specific camera device."""
+        super().setROI(label, x, y, width, height)
 
     def setChannelGroup(self, channelGroup: str) -> None:
         """Specifies the group determining the channel selection.

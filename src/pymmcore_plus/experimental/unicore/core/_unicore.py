@@ -1,33 +1,44 @@
 from __future__ import annotations
 
 import threading
+import warnings
 from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, cast, overload
+from datetime import datetime
+from itertools import count
+from time import perf_counter_ns
+from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar, cast, overload
 
-from pymmcore_plus.core import (
-    CMMCorePlus,
-    DeviceType,
-    Keyword,
-)
+import numpy as np
+
+import pymmcore_plus._pymmcore as pymmcore
+from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
 from pymmcore_plus.core import Keyword as KW
+from pymmcore_plus.core._constants import PixelType
+from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
+from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
+from pymmcore_plus.experimental.unicore.devices._camera import Camera
+from pymmcore_plus.experimental.unicore.devices._device import Device
+from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
 
-from ._device_manager import PyDeviceManager
-from ._proxy import create_core_proxy
-from .devices._device import Device
-from .devices._stage import XYStageDevice, _BaseStage
+from ._sequence_buffer import SequenceBuffer
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-    from typing import Callable, Literal, NewType, TypeVar
+    from collections.abc import Mapping, Sequence
+    from typing import Literal, NewType
 
-    from pymmcore import AdapterName, DeviceLabel, DeviceName, PropertyName
+    from numpy.typing import DTypeLike
+    from pymmcore import AdapterName, AffineTuple, DeviceLabel, DeviceName, PropertyName
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
     PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
-
     _T = TypeVar("_T")
+
+
+class BufferOverflowStop(Exception):
+    """Exception raised to signal graceful stop on buffer overflow."""
+
 
 CURRENT = {
     KW.CoreCamera: None,
@@ -68,11 +79,17 @@ class _CoreDevice:
 class UniMMCore(CMMCorePlus):
     """Unified Core object that first checks for python, then C++ devices."""
 
-    def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
-        super().__init__(mm_path, adapter_paths)
+    _DEFAULT_BUFFER_SIZE_MB: int = 1000  # default size of the sequence buffer in MB
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._pydevices = PyDeviceManager()  # manager for python devices
         self._state_cache = PropertyStateCache()  # threadsafe cache for property states
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
+        self._stop_event: threading.Event = threading.Event()
+        self._acquisition_thread: AcquisitionThread | None = None
+        self._seq_buffer = SequenceBuffer(size_mb=self._DEFAULT_BUFFER_SIZE_MB)
+
+        super().__init__(*args, **kwargs)
 
     def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
         """Helper function to set the current core device if it is a python device.
@@ -99,9 +116,9 @@ class UniMMCore(CMMCorePlus):
         self._pycore.reset_current()
         super().reset()
 
-    # -----------------------------------------------------------------------
+    # ------------------------------------------------------------------------
     # ----------------- Functionality for All Devices ------------------------
-    # -----------------------------------------------------------------------
+    # ------------------------------------------------------------------------
 
     def loadDevice(
         self, label: str, moduleName: AdapterName | str, deviceName: DeviceName | str
@@ -238,7 +255,7 @@ class UniMMCore(CMMCorePlus):
     ) -> bool:
         if label not in self._pydevices:  # pragma: no cover
             return super().hasProperty(label, propName)
-        return propName in self._pydevices[label].get_property_names()
+        return self._pydevices[label].has_property(propName)
 
     def getProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -253,7 +270,7 @@ class UniMMCore(CMMCorePlus):
     def getPropertyFromCache(
         self, deviceLabel: DeviceLabel | str, propName: PropertyName | str
     ) -> Any:
-        if deviceLabel not in self._pydevices:
+        if deviceLabel not in self._pydevices:  # pragma: no cover
             return super().getPropertyFromCache(deviceLabel, propName)
         return self._state_cache[(deviceLabel, propName)]
 
@@ -269,7 +286,7 @@ class UniMMCore(CMMCorePlus):
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyType(label, propName)
-        return self._pydevices[label].property(propName).type
+        return self._pydevices[label].get_property_info(propName).type
 
     def hasPropertyLimits(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -277,7 +294,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().hasPropertyLimits(label, propName)
         with self._pydevices[label] as dev:
-            return dev.property(propName).limits is not None
+            return dev.get_property_info(propName).limits is not None
 
     def getPropertyLowerLimit(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -285,7 +302,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyLowerLimit(label, propName)
         with self._pydevices[label] as dev:
-            if lims := dev.property(propName).limits:
+            if lims := dev.get_property_info(propName).limits:
                 return lims[0]
             return 0
 
@@ -295,7 +312,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getPropertyUpperLimit(label, propName)
         with self._pydevices[label] as dev:
-            if lims := dev.property(propName).limits:
+            if lims := dev.get_property_info(propName).limits:
                 return lims[1]
             return 0
 
@@ -305,7 +322,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getAllowedPropertyValues(label, propName)
         with self._pydevices[label] as dev:
-            return tuple(dev.property(propName).allowed_values or ())
+            return tuple(dev.get_property_info(propName).allowed_values or ())
 
     def isPropertyPreInit(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -313,7 +330,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().isPropertyPreInit(label, propName)
         with self._pydevices[label] as dev:
-            return dev.property(propName).is_pre_init
+            return dev.get_property_info(propName).is_pre_init
 
     def isPropertyReadOnly(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -337,7 +354,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getPropertySequenceMaxLength(label, propName)
         with self._pydevices[label] as dev:
-            return dev.property(propName).sequence_max_length
+            return dev.get_property_info(propName).sequence_max_length
 
     def loadPropertySequence(
         self,
@@ -395,7 +412,7 @@ class UniMMCore(CMMCorePlus):
 
     def deviceTypeBusy(self, devType: int) -> bool:
         if super().deviceTypeBusy(devType):
-            return True
+            return True  # pragma: no cover
 
         for label in self._pydevices.get_labels_of_type(devType):
             with self._pydevices[label] as dev:
@@ -411,18 +428,17 @@ class UniMMCore(CMMCorePlus):
     def setDeviceDelayMs(self, label: DeviceLabel | str, delayMs: float) -> None:
         if label not in self._pydevices:  # pragma: no cover
             return super().setDeviceDelayMs(label, delayMs)
-        if delayMs != 0:
+        if delayMs != 0:  # pragma: no cover
             raise NotImplementedError("Python devices do not support delays")
-        return
 
     def usesDeviceDelay(self, label: DeviceLabel | str) -> bool:
         if label not in self._pydevices:  # pragma: no cover
             return super().usesDeviceDelay(label)
         return False
 
-    # -----------------------------------------------------------------------
-    # ---------------------------- XYStageDevice ----------------------------
-    # -----------------------------------------------------------------------
+    # ########################################################################
+    # ---------------------------- XYStageDevice -----------------------------
+    # ########################################################################
 
     def setXYStageDevice(self, xyStageLabel: DeviceLabel | str) -> None:
         label = self._set_current_if_pydevice(KW.CoreXYStage, xyStageLabel)
@@ -637,6 +653,597 @@ class UniMMCore(CMMCorePlus):
 
         dev = self._pydevices.get_device_of_type(xyOrZStageLabel, _BaseStage)
         dev.stop()
+
+    # ########################################################################
+    # ------------------------ Camera Device Methods -------------------------
+    # ########################################################################
+
+    # --------------------------------------------------------------------- utils
+
+    def _py_camera(self, cameraLabel: str | None = None) -> Camera | None:
+        """Return the *Python* Camera for ``label`` (or current), else ``None``."""
+        label = cameraLabel or self.getCameraDevice()
+        if label in self._pydevices:
+            return self._pydevices.get_device_of_type(label, Camera)
+        return None
+
+    def setCameraDevice(self, cameraLabel: DeviceLabel | str) -> None:
+        """Set the camera device."""
+        label = self._set_current_if_pydevice(KW.CoreCamera, cameraLabel)
+        super().setCameraDevice(label)
+
+    def getCameraDevice(self) -> DeviceLabel | Literal[""]:
+        """Returns the label of the currently selected camera device.
+
+        Returns empty string if no camera device is selected.
+        """
+        return self._pycore.current(KW.CoreCamera) or super().getCameraDevice()
+
+    # --------------------------------------------------------------------- snap
+
+    _current_image_buffer: np.ndarray | None = None
+
+    def _do_snap_image(self) -> None:
+        if (cam := self._py_camera()) is None:
+            return pymmcore.CMMCore.snapImage(self)
+
+        buf = None
+
+        def _get_buffer(shape: Sequence[int], dtype: DTypeLike) -> np.ndarray:
+            """Get a buffer for the camera image."""
+            nonlocal buf
+            buf = np.empty(shape, dtype=dtype)
+            return buf
+
+        # synchronous call - consume one item from the generator
+        with cam:
+            for _ in cam.start_sequence(1, get_buffer=_get_buffer):
+                if buf is not None:
+                    self._current_image_buffer = buf
+                else:  # pragma: no cover  #  bad camera implementation
+                    warnings.warn(
+                        "Camera device did not provide an image buffer.",
+                        RuntimeWarning,
+                        stacklevel=2,
+                    )
+                return
+
+        # --------------------------------------------------------------------- getImage
+
+    @overload
+    def getImage(self, *, fix: bool = True) -> np.ndarray: ...
+    @overload
+    def getImage(self, numChannel: int, *, fix: bool = True) -> np.ndarray: ...
+
+    def getImage(
+        self, numChannel: int | None = None, *, fix: bool = True
+    ) -> np.ndarray:
+        if self._py_camera() is None:  # pragma: no cover
+            if numChannel is not None:
+                return super().getImage(numChannel, fix=fix)
+            return super().getImage(fix=fix)
+
+        if self._current_image_buffer is None:
+            raise RuntimeError(
+                "No image buffer available. Call snapImage() before calling getImage()."
+            )
+
+        return self._current_image_buffer
+
+    # ---------------------------------------------------------------- sequence common
+
+    def _start_sequence(
+        self, cam: Camera, n_images: int | None, stop_on_overflow: bool
+    ) -> None:
+        """Initialise _seq state and call cam.start_sequence."""
+        shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        camera_label = cam.get_label()
+
+        n_components = shape[2] if len(shape) > 2 else 1
+        base_meta: dict[str, Any] = {
+            KW.Binning: cam.get_property_value(KW.Binning),
+            KW.Metadata_CameraLabel: camera_label,
+            KW.Metadata_Height: str(shape[0]),
+            KW.Metadata_Width: str(shape[1]),
+            KW.Metadata_ROI_X: "0",
+            KW.Metadata_ROI_Y: "0",
+            KW.PixelType: PixelType.for_bytes(dtype.itemsize, n_components),
+        }
+
+        def get_buffer_with_overflow_handling(
+            shape: Sequence[int], dtype: DTypeLike
+        ) -> np.ndarray:
+            try:
+                return self._seq_buffer.acquire_slot(shape, dtype)
+            except BufferError:
+                if not stop_on_overflow:  # we shouldn't get here...
+                    raise  # pragma: no cover
+                raise BufferOverflowStop() from None
+
+        # Keep track of images acquired for metadata and auto-stop
+        counter = count()
+
+        # Create metadata-injecting wrapper for finalize callback
+        def finalize_with_metadata(cam_meta: Mapping) -> None:
+            img_number = next(counter)
+            elapsed_ms = (perf_counter_ns() - start_time) / 1e6
+            received = datetime.now().isoformat(sep=" ")
+            meta_update = {
+                **cam_meta,
+                KW.Metadata_TimeInCore: received,
+                KW.Metadata_ImageNumber: str(img_number),
+                KW.Elapsed_Time_ms: f"{elapsed_ms:.2f}",
+            }
+            self._seq_buffer.finalize_slot({**base_meta, **meta_update})
+
+            # Auto-stop when we've acquired the requested number of images
+            if n_images is not None and (img_number + 1) >= n_images:
+                self._stop_event.set()
+
+        # Reset the circular buffer and stop event -------------
+
+        self._stop_event.clear()
+        self._seq_buffer.clear()
+        self._seq_buffer.overwrite_on_overflow = not stop_on_overflow
+
+        # Create the Acquisition Thread ---------
+
+        self._acquisition_thread = AcquisitionThread(
+            image_generator=cam.start_sequence(
+                n_images or 2**63 - 1,
+                get_buffer_with_overflow_handling,
+            ),
+            finalize=finalize_with_metadata,
+            label=camera_label,
+            stop_event=self._stop_event,
+        )
+
+        # Zoom zoom ---------
+
+        start_time = perf_counter_ns()
+        self._acquisition_thread.start()
+
+    # ------------------------------------------------- startSequenceAcquisition
+
+    def _do_start_sequence_acquisition(
+        self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
+    ) -> None:
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return pymmcore.CMMCore.startSequenceAcquisition(
+                self, cameraLabel, numImages, intervalMs, stopOnOverflow
+            )
+        with cam:
+            self._start_sequence(cam, numImages, stopOnOverflow)
+
+    # ------------------------------------------------- continuous acquisition
+
+    def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)
+        with cam:
+            self._start_sequence(cam, None, False)
+
+    # ---------------------------------------------------------------- stopSequence
+
+    def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
+        if self._py_camera(cameraLabel) is None:  # pragma: no cover
+            pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
+
+        if self._acquisition_thread is not None:
+            self._stop_event.set()
+            self._acquisition_thread.join()
+            self._acquisition_thread = None
+
+    # ------------------------------------------------------------------ queries
+    @overload
+    def isSequenceRunning(self) -> bool: ...
+    @overload
+    def isSequenceRunning(self, cameraLabel: DeviceLabel | str) -> bool: ...
+    def isSequenceRunning(self, cameraLabel: DeviceLabel | str | None = None) -> bool:
+        if self._py_camera(cameraLabel) is None:
+            return super().isSequenceRunning()
+
+        if self._acquisition_thread is None:
+            return False
+
+        # Check if the thread is actually still alive
+        if not self._acquisition_thread.is_alive():
+            # Thread has finished, clean it up
+            self._acquisition_thread = None
+            return False
+
+        return True
+
+    def getRemainingImageCount(self) -> int:
+        if self._py_camera() is None:
+            return super().getRemainingImageCount()
+        return len(self._seq_buffer) if self._seq_buffer is not None else 0
+
+    # ---------------------------------------------------- getImages
+
+    def getLastImage(self) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().getLastImage()
+        if not (self._seq_buffer) or (result := self._seq_buffer.peek_last()) is None:
+            raise IndexError("Circular buffer is empty.")
+        return result[0]
+
+    @overload
+    def getLastImageMD(
+        self, channel: int, slice: int, md: pymmcore.Metadata, /
+    ) -> np.ndarray: ...
+    @overload
+    def getLastImageMD(self, md: pymmcore.Metadata, /) -> np.ndarray: ...
+    def getLastImageMD(self, *args: Any) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().getLastImageMD(*args)
+        md_object = args[0] if len(args) == 1 else args[-1]
+        if not isinstance(md_object, pymmcore.Metadata):  # pragma: no cover
+            raise TypeError("Expected a Metadata object for the last argument.")
+
+        if not (self._seq_buffer) or (result := self._seq_buffer.peek_last()) is None:
+            raise IndexError("Circular buffer is empty.")
+
+        img, md = result
+        for k, v in md.items():
+            tag = pymmcore.MetadataSingleTag(k, "_", False)
+            tag.SetValue(str(v))
+            md_object.SetTag(tag)
+
+        return img
+
+    def getNBeforeLastImageMD(self, n: int, md: pymmcore.Metadata, /) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().getNBeforeLastImageMD(n, md)
+
+        if (
+            not (self._seq_buffer)
+            or (result := self._seq_buffer.peek_nth_from_last(n)) is None
+        ):
+            raise IndexError("Circular buffer is empty or n is out of range.")
+
+        img, md_data = result
+        for k, v in md_data.items():
+            tag = pymmcore.MetadataSingleTag(k, "_", False)
+            tag.SetValue(str(v))
+            md.SetTag(tag)
+
+        return img
+
+    # ---------------------------------------------------- popNext
+
+    def _pop_or_raise(self) -> tuple[np.ndarray, Mapping]:
+        if not self._seq_buffer or (data := self._seq_buffer.pop_next()) is None:
+            raise IndexError("Circular buffer is empty.")
+        return data
+
+    def popNextImage(self, *, fix: bool = True) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().popNextImage(fix=fix)
+        return self._pop_or_raise()[0]
+
+    @overload
+    def popNextImageMD(
+        self, channel: int, slice: int, md: pymmcore.Metadata, /
+    ) -> np.ndarray: ...
+    @overload
+    def popNextImageMD(self, md: pymmcore.Metadata, /) -> np.ndarray: ...
+    def popNextImageMD(self, *args: Any) -> np.ndarray:
+        if self._py_camera() is None:
+            return super().popNextImageMD(*args)
+
+        md_object = args[0] if len(args) == 1 else args[-1]
+        if not isinstance(md_object, pymmcore.Metadata):  # pragma: no cover
+            raise TypeError("Expected a Metadata object for the last argument.")
+
+        img, md = self._pop_or_raise()
+        for k, v in md.items():
+            tag = pymmcore.MetadataSingleTag(k, "_", False)
+            tag.SetValue(str(v))
+            md_object.SetTag(tag)
+        return img
+
+    # ---------------------------------------------------------------- circular buffer
+
+    def setCircularBufferMemoryFootprint(self, sizeMB: int) -> None:
+        """Set the circular buffer memory footprint in MB."""
+        if self._py_camera() is None:
+            return super().setCircularBufferMemoryFootprint(sizeMB)
+
+        if sizeMB <= 0:  # pragma: no cover
+            raise ValueError("Buffer size must be greater than 0 MB")
+
+        # TODO: what if sequence is running?
+        if self.isSequenceRunning():
+            self.stopSequenceAcquisition()
+
+        self._seq_buffer = SequenceBuffer(size_mb=sizeMB)
+
+    def initializeCircularBuffer(self) -> None:
+        """Initialize the circular buffer."""
+        if self._py_camera() is None:
+            return super().initializeCircularBuffer()
+
+        self._seq_buffer.clear()
+
+    def getBufferFreeCapacity(self) -> int:
+        """Get the number of free slots in the circular buffer."""
+        if (cam := self._py_camera()) is None:
+            return super().getBufferFreeCapacity()
+
+        if (bytes_per_frame := self._predicted_bytes_per_frame(cam)) <= 0:
+            return 0  # pragma: no cover  # Invalid frame size
+
+        if (free_bytes := self._seq_buffer.free_bytes) <= 0:
+            return 0
+
+        return free_bytes // bytes_per_frame
+
+    def getBufferTotalCapacity(self) -> int:
+        """Get the total capacity of the circular buffer."""
+        if (cam := self._py_camera()) is None:
+            return super().getBufferTotalCapacity()
+
+        if (bytes_per_frame := self._predicted_bytes_per_frame(cam)) <= 0:
+            return 0  # pragma: no cover  # Invalid frame size
+
+        return self._seq_buffer.size_bytes // bytes_per_frame
+
+    def _predicted_bytes_per_frame(self, cam: Camera) -> int:
+        # Estimate capacity based on camera settings and circular buffer size
+        shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        return int(np.prod(shape) * dtype.itemsize)
+
+    def getCircularBufferMemoryFootprint(self) -> int:
+        """Get the circular buffer memory footprint in MB."""
+        if self._py_camera() is None:
+            return super().getCircularBufferMemoryFootprint()
+
+        return int(self._seq_buffer.size_mb)
+
+    def clearCircularBuffer(self) -> None:
+        """Clear all images from the circular buffer."""
+        if self._py_camera() is None:
+            return super().clearCircularBuffer()
+
+        self._seq_buffer.clear()
+
+    def isBufferOverflowed(self) -> bool:
+        """Check if the circular buffer has overflowed."""
+        if self._py_camera() is None:
+            return super().isBufferOverflowed()
+
+        return self._seq_buffer.overflow_occurred
+
+    # ----------------------------------------------------------------- image info
+
+    def getImageBitDepth(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getImageBitDepth()
+        dtype = np.dtype(cam.dtype())
+        return dtype.itemsize * 8
+
+    def getBytesPerPixel(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getBytesPerPixel()
+        dtype = np.dtype(cam.dtype())
+        return dtype.itemsize
+
+    def getImageBufferSize(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getImageBufferSize()
+        shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        return int(np.prod(shape) * dtype.itemsize)
+
+    def getImageHeight(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getImageHeight()
+        return cam.shape()[0]
+
+    def getImageWidth(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getImageWidth()
+        return cam.shape()[1]
+
+    def getNumberOfComponents(self) -> int:
+        if (cam := self._py_camera()) is None:  # pragma: no cover
+            return super().getNumberOfComponents()
+        shape = cam.shape()
+        return 1 if len(shape) == 2 else shape[2]
+
+    def getNumberOfCameraChannels(self) -> int:
+        if self._py_camera() is None:  # pragma: no cover
+            return super().getNumberOfCameraChannels()
+        raise NotImplementedError(
+            "getNumberOfCameraChannels is not implemented for Python cameras."
+        )
+
+    def getCameraChannelName(self, channelNr: int) -> str:
+        """Get the name of the camera channel."""
+        if self._py_camera() is None:  # pragma: no cover
+            return super().getCameraChannelName(channelNr)
+        raise NotImplementedError(
+            "getCameraChannelName is not implemented for Python cameras."
+        )
+
+    @overload
+    def getExposure(self) -> float: ...
+    @overload
+    def getExposure(self, cameraLabel: DeviceLabel | str, /) -> float: ...
+    def getExposure(self, cameraLabel: DeviceLabel | str | None = None) -> float:
+        """Get the exposure time in milliseconds."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            if cameraLabel is None:
+                return super().getExposure()
+            return super().getExposure(cameraLabel)
+
+        with cam:
+            return cam.get_exposure()
+
+    @overload
+    def setExposure(self, exp: float, /) -> None: ...
+    @overload
+    def setExposure(self, cameraLabel: DeviceLabel | str, dExp: float, /) -> None: ...
+    def setExposure(self, *args: Any) -> None:
+        """Set the exposure time in milliseconds."""
+        label, args = _ensure_label(args, min_args=2, getter=self.getCameraDevice)
+        if (cam := self._py_camera(label)) is None:  # pragma: no cover
+            return super().setExposure(label, *args)
+        with cam:
+            cam.set_exposure(*args)
+
+    def _do_set_roi(self, label: str, x: int, y: int, width: int, height: int) -> None:
+        if self._py_camera(label) is not None:
+            raise NotImplementedError(
+                "setROI is not yet implemented for Python cameras."
+            )
+        return pymmcore.CMMCore.setROI(self, label, x, y, width, height)
+
+    @overload
+    def getROI(self) -> list[int]: ...
+    @overload
+    def getROI(self, label: DeviceLabel | str) -> list[int]: ...
+    def getROI(self, label: DeviceLabel | str = "") -> list[int]:
+        """Get the current region of interest (ROI) for the camera."""
+        if self._py_camera(label) is None:  # pragma: no cover
+            raise NotImplementedError(
+                "getROI is not yet implemented for Python cameras."
+            )
+        return super().getROI(label)
+
+    def clearROI(self) -> None:
+        """Clear the current region of interest (ROI) for the camera."""
+        if self._py_camera() is not None:  # pragma: no cover
+            raise NotImplementedError(
+                "clearROI is not yet implemented for Python cameras."
+            )
+        return super().clearROI()
+
+    def isExposureSequenceable(self, cameraLabel: DeviceLabel | str) -> bool:
+        """Check if the camera supports exposure sequences."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().isExposureSequenceable(cameraLabel)
+        with cam:
+            return cam.is_property_sequenceable(KW.Exposure)
+
+    def loadExposureSequence(
+        self, cameraLabel: DeviceLabel | str, exposureSequence_ms: Sequence[float]
+    ) -> None:
+        """Transfer a sequence of exposure times to the camera."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().loadExposureSequence(cameraLabel, exposureSequence_ms)
+        with cam:
+            cam.load_property_sequence(KW.Exposure, exposureSequence_ms)
+
+    def getExposureSequenceMaxLength(self, cameraLabel: DeviceLabel | str) -> int:
+        """Get the maximum length of the exposure sequence."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().getExposureSequenceMaxLength(cameraLabel)
+        with cam:
+            return cam.get_property_info(KW.Exposure).sequence_max_length
+
+    def startExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
+        """Start a sequence of exposures."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().startExposureSequence(cameraLabel)
+        with cam:
+            cam.start_property_sequence(KW.Exposure)
+
+    def stopExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
+        """Stop a sequence of exposures."""
+        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+            return super().stopExposureSequence(cameraLabel)
+        with cam:
+            cam.stop_property_sequence(KW.Exposure)
+
+    def prepareSequenceAcquisition(self, cameraLabel: DeviceLabel | str) -> None:
+        """Prepare the camera for sequence acquisition."""
+        if self._py_camera(cameraLabel) is None:  # pragma: no cover
+            return super().prepareSequenceAcquisition(cameraLabel)
+        # TODO: Implement prepareSequenceAcquisition for Python cameras?
+
+    @overload
+    def getPixelSizeAffine(self) -> AffineTuple: ...
+    @overload
+    def getPixelSizeAffine(self, cached: bool, /) -> AffineTuple: ...
+    def getPixelSizeAffine(self, cached: bool = False) -> AffineTuple:
+        """Get the pixel size affine transformation matrix."""
+        if not (res_id := self.getCurrentPixelSizeConfig(cached)):  # pragma: no cover
+            return (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)  # null affine
+
+        cam = self._py_camera()
+        if cam is not None:
+            with cam:
+                binning = float(cam.get_property_value(KW.Binning))
+        else:
+            binning = 1.0
+        if cam is None or binning == 1:
+            return tuple(super().getPixelSizeAffine(cached))  # type: ignore
+
+        # in CMMCore, they scale the pixel size affine by the binning factor and mag
+        # but they won't pay attention to our camera so we have to reimplement it here
+        af = self.getPixelSizeAffineByID(res_id)
+        if (factor := binning / self.getMagnificationFactor()) != 1.0:
+            af = cast("AffineTuple", tuple(v * factor for v in af))
+        return af
+
+    @overload
+    def getPixelSizeUm(self) -> float: ...
+    @overload
+    def getPixelSizeUm(self, cached: bool) -> float: ...
+    def getPixelSizeUm(self, cached: bool = False) -> float:
+        """Get the pixel size in micrometers."""
+        if not (res_id := self.getCurrentPixelSizeConfig(cached)):  # pragma: no cover
+            return 0.0
+
+        # in CMMCore, they scale the pixel size by the binning factor and mag
+        # but they won't pay attention to our camera so we have to reimplement it here
+        cam = self._py_camera()
+        if cam is None or (binning := float(cam.get_property_value(KW.Binning))) == 1:
+            return super().getPixelSizeUm(cached)
+
+        return self.getPixelSizeUmByID(res_id) * binning / self.getMagnificationFactor()
+
+
+# Threading ------------------------------------------------------
+
+
+class AcquisitionThread(threading.Thread):
+    """A thread for running sequence acquisition in the background."""
+
+    def __init__(
+        self,
+        image_generator: Iterator[Mapping],
+        finalize: Callable[[Mapping], None],
+        label: str,
+        stop_event: threading.Event,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.image_iterator = image_generator
+        self.finalize = finalize
+        self.label = label
+        self.stop_event = stop_event
+
+    def run(self) -> None:
+        """Run the sequence and handle the generator pattern."""
+        try:
+            for metadata in self.image_iterator:
+                self.finalize(metadata)
+                if self.stop_event.is_set():
+                    break
+        except BufferOverflowStop:
+            # Buffer overflow is a graceful stop condition, not an error
+            # this was likely raised by the Unicore above in _start_sequence
+            pass
+        except BufferError:
+            raise  # pragma: no cover
+        except Exception as e:  # pragma: no cover
+            raise RuntimeError(
+                f"Error in device {self.label!r} during sequence acquisition: {e}"
+            ) from e
+
+
+# -------------------------------------------------------------------------------
 
 
 def _ensure_label(
