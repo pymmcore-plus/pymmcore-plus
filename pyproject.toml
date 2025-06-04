@@ -79,15 +79,14 @@ test = [
     "pymmcore >=11.5.0.73",
 ]
 test-codspeed = [{ include-group = "test" }, "pytest-codspeed >=3.2.0"]
-test-qt = ["pytest-qt >=4.4", "qtpy >=2"]
+test-qt = [{ include-group = 'test' }, "pytest-qt >=4.4", "qtpy >=2"]
 PyQt6 = [{ include-group = 'test-qt' }, "pymmcore-plus[PyQt6]"]
 PySide6 = [{ include-group = 'test-qt' }, "pymmcore-plus[PySide6]"]
 PyQt5 = [{ include-group = 'test-qt' }, "pymmcore-plus[PyQt5]"]
 PySide2 = [{ include-group = 'test-qt' }, "pymmcore-plus[PySide2]"]
 dev = [
     # { include-group = "docs" },
-    { include-group = "test" },
-    "PyQt6 >=6.4.2",
+    { include-group = "PyQt6" },
     "ipython>=8.18.1",
     "pdbpp>=0.11.6 ; sys_platform != 'win32'",
     "mypy>=1.14.1",
@@ -158,7 +157,7 @@ ignore = [
 ]
 
 [tool.ruff.lint.per-file-ignores]
-"tests/*.py" = ["D", "SLF"]
+"tests/**/*.py" = ["D", "SLF"]
 "examples/*.py" = ["D"]
 "_cli.py" = ["B008"]
 "docs/*.py" = ["A", "D"]
