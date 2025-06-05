@@ -52,3 +52,23 @@ class SLMDevice(SequenceableDevice[np.ndarray]):
     def get_exposure(self) -> float:
         """Find out the exposure interval of an SLM."""
         ...
+
+    # Sequence methods from SequenceableDevice
+    def get_sequence_max_length(self) -> int:
+        """Return the maximum length of an image sequence that can be uploaded."""
+        return 0  # Override in subclasses that support sequencing
+
+    def send_sequence(self, sequence: tuple[np.ndarray, ...]) -> None:
+        """Load a sequence of images to the SLM."""
+        # Default implementation - override in subclasses that support sequencing
+        raise NotImplementedError("This SLM device does not support sequences.")
+
+    def start_sequence(self) -> None:
+        """Start a sequence of images on the SLM."""
+        # Default implementation - override in subclasses that support sequencing
+        raise NotImplementedError("This SLM device does not support sequences.")
+
+    def stop_sequence(self) -> None:
+        """Stop a sequence of images on the SLM."""
+        # Default implementation - override in subclasses that support sequencing
+        raise NotImplementedError("This SLM device does not support sequences.")
