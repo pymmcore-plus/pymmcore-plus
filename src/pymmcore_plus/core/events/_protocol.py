@@ -1,4 +1,14 @@
-from typing import Any, Callable, Optional, Protocol, Union, runtime_checkable
+from typing import (
+    Any,
+    Callable,
+    ClassVar,
+    Optional,
+    Protocol,
+    overload,
+    runtime_checkable,
+)
+
+from typing_extensions import Self
 
 
 @runtime_checkable
@@ -23,14 +33,18 @@ class PSignalInstance(Protocol):
 
 
 @runtime_checkable
-class PSignalDescriptor(Protocol):
+class PSignal(Protocol):
     """Descriptor that returns a signal instance."""
 
-    def __get__(self, instance: Optional[Any], owner: Any) -> PSignalInstance:
+    @overload
+    def __get__(self, instance: None, owner: type, /) -> Self: ...
+    @overload
+    def __get__(self, instance: Any, owner: type | None = None, /) -> Any: ...
+    def __get__(
+        self, instance: Any, owner: type | None = ..., /
+    ) -> "PSignalInstance | PSignal":
         """Returns the signal instance for this descriptor."""
-
-
-PSignal = Union[PSignalDescriptor, PSignalInstance]
+        ...
 
 
 @runtime_checkable
@@ -91,95 +105,95 @@ class PCoreSignaler(Protocol):
     """
 
     # native MMCore callback events
-    propertiesChanged: PSignal
+    propertiesChanged: ClassVar[PSignal]
     """Emits with no arguments when properties have changed."""
-    propertyChanged: PSignal
+    propertyChanged: ClassVar[PSignal]
     """Emits `(name: str, : propName: str, propValue: str)` when a specific property has changed."""  # noqa: E501
-    channelGroupChanged: PSignal
+    channelGroupChanged: ClassVar[PSignal]
     """Emits `(newChannelGroupName: str)` when a channel group has changed."""
-    configGroupChanged: PSignal
+    configGroupChanged: ClassVar[PSignal]
     """Emits `(groupName: str, newConfigName: str)` when a config group has changed."""
-    systemConfigurationLoaded: PSignal
+    systemConfigurationLoaded: ClassVar[PSignal]
     """Emits with no arguments when the system configuration has been loaded."""
-    pixelSizeChanged: PSignal
+    pixelSizeChanged: ClassVar[PSignal]
     """Emits `(newPixelSizeUm: float)` when the pixel size has changed."""
-    pixelSizeAffineChanged: PSignal
+    pixelSizeAffineChanged: ClassVar[PSignal]
     """Emits `(float, float, float, float, float, float)` when the pixel size affine has changed."""  # noqa: E501
-    stagePositionChanged: PSignal
+    stagePositionChanged: ClassVar[PSignal]
     """Emits `(name: str, pos: float)` when a stage position has changed."""
-    XYStagePositionChanged: PSignal
+    XYStagePositionChanged: ClassVar[PSignal]
     """Emits `(name: str, xpos: float, ypos: float)` when an XY stage position has changed."""  # noqa: E501
-    xYStagePositionChanged: PSignal  # alias
-    exposureChanged: PSignal
+    xYStagePositionChanged: ClassVar[PSignal]  # alias
+    exposureChanged: ClassVar[PSignal]
     """Emits `(name: str, newExposure: float)` when an exposure has changed."""
-    SLMExposureChanged: PSignal
+    SLMExposureChanged: ClassVar[PSignal]
     """Emits `(name: str, newExposure: float)` when the exposure of the SLM device changes."""  # noqa: E501
-    sLMExposureChanged: PSignal  # alias
+    sLMExposureChanged: ClassVar[PSignal]  # alias
 
     # added for CMMCorePlus
-    configSet: PSignal
+    configSet: ClassVar[PSignal]
     """Emits `(str, str)` when a config has been set.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    imageSnapped: PSignal
+    imageSnapped: ClassVar[PSignal]
     """Emits with no arguments whenever snap is called.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    mdaEngineRegistered: PSignal
+    mdaEngineRegistered: ClassVar[PSignal]
     """Emits `(MDAEngine, MDAEngine)` when an MDAEngine is registered.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
 
-    continuousSequenceAcquisitionStarting: PSignal
+    continuousSequenceAcquisitionStarting: ClassVar[PSignal]
     """Emits with no arguments *before* continuous sequence acquisition is started.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    continuousSequenceAcquisitionStarted: PSignal
+    continuousSequenceAcquisitionStarted: ClassVar[PSignal]
     """Emits with no arguments *after* continuous sequence acquisition has started.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    sequenceAcquisitionStarting: PSignal
+    sequenceAcquisitionStarting: ClassVar[PSignal]
     """Emits `(str, int, float, bool)` *before* sequence acquisition is started.
 
     (cameraLabel, numImages, intervalMs, stopOnOverflow)
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    sequenceAcquisitionStarted: PSignal
+    sequenceAcquisitionStarted: ClassVar[PSignal]
     """Emits `(str, int, float, bool)` *after* sequence acquisition has started.
 
     (cameraLabel, numImages, intervalMs, stopOnOverflow)
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    sequenceAcquisitionStopped: PSignal
+    sequenceAcquisitionStopped: ClassVar[PSignal]
     """Emits `(str)` when sequence acquisition is stopped.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    autoShutterSet: PSignal
+    autoShutterSet: ClassVar[PSignal]
     """Emits `(bool)` when the auto shutter setting is changed.
 
     """
-    configGroupDeleted: PSignal
+    configGroupDeleted: ClassVar[PSignal]
     """Emits `(str)` when a config group is deleted.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    configDeleted: PSignal
+    configDeleted: ClassVar[PSignal]
     """Emits `(str, str)` when a config is deleted.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    configDefined: PSignal
+    configDefined: ClassVar[PSignal]
     """Emits `(str, str, str, str, str)` when a config is defined.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
-    roiSet: PSignal
+    roiSet: ClassVar[PSignal]
     """Emits `(str, int, int, int, int)` when an ROI is set.
 
     > :sparkles: This signal is unique to `pymmcore-plus`.
