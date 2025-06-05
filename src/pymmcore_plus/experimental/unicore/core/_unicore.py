@@ -29,6 +29,7 @@ from pymmcore_plus.experimental.unicore.devices._camera import Camera
 from pymmcore_plus.experimental.unicore.devices._device import Device
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
+from pymmcore_plus.experimental.unicore.devices._state import StateDevice
 
 from ._sequence_buffer import SequenceBuffer
 
@@ -37,7 +38,14 @@ if TYPE_CHECKING:
     from typing import Literal, NewType
 
     from numpy.typing import DTypeLike
-    from pymmcore import AdapterName, AffineTuple, DeviceLabel, DeviceName, PropertyName
+    from pymmcore import (
+        AdapterName,
+        AffineTuple,
+        DeviceLabel,
+        DeviceName,
+        PropertyName,
+        StateLabel,
+    )
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
@@ -1477,6 +1485,111 @@ class UniMMCore(CMMCorePlus):
 
         with slm:
             slm.stop_sequence()
+
+    # ########################################################################
+    # ------------------------ State Device Methods -------------------------
+    # ########################################################################
+
+    # --------------------------------------------------------------------- utils
+
+    def _py_state(self, stateLabel: str | None = None) -> StateDevice | None:
+        """Return the *Python* State device for ``label``, else ``None``."""
+        label = stateLabel or ""
+        if label in self._pydevices:
+            return self._pydevices.get_device_of_type(label, StateDevice)
+        return None  # pragma: no cover
+
+    # ------------------------------------------------------------------- setState
+
+    def setState(self, stateDeviceLabel: DeviceLabel | str, state: int) -> None:
+        """Set state (position) on the specific device."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().setState(stateDeviceLabel, state)
+
+        with state_dev:
+            state_dev.set_position(state)
+
+    # ------------------------------------------------------------------- getState
+
+    def getState(self, stateDeviceLabel: DeviceLabel | str) -> int:
+        """Return the current state (position) on the specific device."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getState(stateDeviceLabel)
+
+        with state_dev:
+            return state_dev.get_current_position()
+
+    # ---------------------------------------------------------------- getNumberOfStates
+
+    def getNumberOfStates(self, stateDeviceLabel: DeviceLabel | str) -> int:
+        """Return the total number of available positions (states)."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getNumberOfStates(stateDeviceLabel)
+
+        with state_dev:
+            return state_dev.get_number_of_positions()
+
+    # ----------------------------------------------------------------- setStateLabel
+
+    def setStateLabel(
+        self, stateDeviceLabel: DeviceLabel | str, stateLabel: str
+    ) -> None:
+        """Set device state using the previously assigned label (string)."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().setStateLabel(stateDeviceLabel, stateLabel)
+
+        with state_dev:
+            state_dev.set_position(stateLabel)
+
+    # ----------------------------------------------------------------- getStateLabel
+
+    def getStateLabel(self, stateDeviceLabel: DeviceLabel | str) -> StateLabel:
+        """Return the current state as the label (string)."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getStateLabel(stateDeviceLabel)
+
+        with state_dev:
+            return state_dev.get_current_label()
+
+    # --------------------------------------------------------------- defineStateLabel
+
+    def defineStateLabel(
+        self, stateDeviceLabel: DeviceLabel | str, state: int, label: str
+    ) -> None:
+        """Define a label for the specific state."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().defineStateLabel(stateDeviceLabel, state, label)
+
+        with state_dev:
+            state_dev.set_position_label(state, label)
+
+    # ----------------------------------------------------------------- getStateLabels
+
+    def getStateLabels(
+        self, stateDeviceLabel: DeviceLabel | str
+    ) -> tuple[StateLabel, ...]:
+        """Return labels for all states."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getStateLabels(stateDeviceLabel)
+
+        with state_dev:
+            num_states = state_dev.get_number_of_positions()
+            labels = []
+            for i in range(num_states):
+                labels.append(state_dev.get_label_for_position(i))
+            return tuple(labels)
+
+    # ------------------------------------------------------------- getStateFromLabel
+
+    def getStateFromLabel(
+        self, stateDeviceLabel: DeviceLabel | str, stateLabel: str
+    ) -> int:
+        """Obtain the state for a given label."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getStateFromLabel(stateDeviceLabel, stateLabel)
+
+        with state_dev:
+            return state_dev.get_position_for_label(stateLabel)
 
 
 # -------------------------------------------------------------------------------

@@ -1,9 +1,15 @@
-from collections.abc import Iterable, Mapping
-from typing import ClassVar, Literal, overload
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
 
 from ._device import Device
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable, Mapping
+
+    from pymmcore import StateLabel
 
 
 class StateDevice(Device):
@@ -22,7 +28,7 @@ class StateDevice(Device):
     """
 
     _TYPE: ClassVar[Literal[DeviceType.State]] = DeviceType.State
-    _states: dict[int, str]
+    _states: dict[int, StateLabel]
 
     @overload
     def __init__(self, num_positions: int = ..., /) -> None: ...
@@ -36,11 +42,11 @@ class StateDevice(Device):
         super().__init__()
 
         if isinstance(arg0, int):
-            self._states = {i: f"State {i}" for i in range(arg0)}
+            self._states = {i: f"State {i}" for i in range(arg0)}  # type: ignore
         else:
-            self._states = dict(arg0) if arg0 is not None else {}
+            self._states = dict(arg0) if arg0 is not None else {}  # type: ignore
 
-        if not self._states:
+        if not self._states:  # pragma: no cover
             raise ValueError("State device must have at least one state.")
 
         states, labels = zip(*self._states.items())
@@ -65,23 +71,28 @@ class StateDevice(Device):
 
     def set_position_label(self, pos: int, label: str) -> None:
         """Assign a label to a position."""
-        self._states[pos] = label
+        self._states[pos] = cast("StateLabel", label)
 
     def get_current_position(self) -> int:
         """Return the current position of the device."""
         return int(self.get_property_value(Keyword.State))
 
-    def get_current_label(self) -> str:
+    def get_current_label(self) -> StateLabel:
         """Return the label of the current position."""
         return self.get_label_for_position(self.get_current_position())
 
-    def get_label_for_position(self, pos: int) -> str:
+    def get_label_for_position(self, pos: int) -> StateLabel:
         """Return the label of the provided position."""
         return self._states[pos]
 
     def get_position_for_label(self, label: str) -> int:
         """Return the position of the provided label."""
-        return next(pos for pos, lbl in self._states.items() if lbl == label)
+        for pos, lbl in self._states.items():
+            if lbl == label:
+                return pos
+        raise RuntimeError(
+            f"Label not defined: {label!r}. Available labels: {self._states.values()}"
+        )
 
     def get_number_of_positions(self) -> int:
         """Return the number of positions."""
