@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 from typing import (
     Any,
     Callable,
     ClassVar,
-    Optional,
     Protocol,
     overload,
     runtime_checkable,
@@ -22,7 +23,7 @@ class PSignalInstance(Protocol):
     def connect(self, slot: Callable) -> Any:
         """Connect slot to this signal."""
 
-    def disconnect(self, slot: Optional[Callable] = None) -> Any:
+    def disconnect(self, slot: Callable | None = None) -> Any:
         """Disconnect slot from this signal.
 
         If `None`, all slots should be disconnected.
@@ -42,7 +43,7 @@ class PSignal(Protocol):
     def __get__(self, instance: Any, owner: type | None = None, /) -> Any: ...
     def __get__(
         self, instance: Any, owner: type | None = ..., /
-    ) -> "PSignalInstance | PSignal":
+    ) -> PSignalInstance | PSignal:
         """Returns the signal instance for this descriptor."""
         ...
 
@@ -200,7 +201,7 @@ class PCoreSignaler(Protocol):
     """
 
     def devicePropertyChanged(
-        self, device: str, property: Optional[str] = None
+        self, device: str, property: str | None = None
     ) -> PSignalInstance:
         """Return object to connect/disconnect to device/property-specific changes.
 
