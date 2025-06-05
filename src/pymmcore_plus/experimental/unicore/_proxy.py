@@ -106,22 +106,39 @@ def create_proxy(
     ```
     """
     sub_proxies = sub_proxies or {}
+
+    # Get all public attribute names from the protocol (both from dir() and type hints)
     allowed_names = {
         x
         for x in chain(dir(protocol), get_type_hints(protocol))
-        if not x.startswith("_")
+        if not x.startswith("_")  # Exclude private/dunder attributes
     }
+
+    # Create an immutable module to act as our proxy object
     proxy = _ImmutableModule(protocol.__name__)
+
+    # Iterate through each allowed attribute name
     for attr_name in allowed_names:
+        # Get the actual attribute from the source object
         attr = getattr(obj, attr_name)
+
+        # Check if this attribute should be sub-proxied
         if subprotocol := sub_proxies.get(attr_name):
-            # look for nested sub-proxies on attr_name, e.g. `attr_name.sub_attr`
+            # Look for nested sub-proxies on attr_name, e.g. `attr_name.sub_attr`
+            # Filter sub_proxies for keys that start with "attr_name."
             sub = {
-                k.split(".", 1)[1]: v
+                k.split(".", 1)[1]: v  # Remove the "attr_name." prefix
                 for k, v in sub_proxies.items()
                 if k.startswith(f"{attr_name}.")
             }
+            # Recursively create a proxy for this attribute
             attr = create_proxy(attr, subprotocol, sub)
+
+        # Set the attribute on our proxy object
         setattr(proxy, attr_name, attr)
+
+    # Freeze the proxy to prevent further modifications
     proxy.__frozen__ = True
+
+    # Return the proxy cast to the expected protocol type
     return cast("T", proxy)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 from abc import ABC
 from collections import ChainMap
+from enum import EnumMeta
 from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
@@ -73,11 +74,11 @@ class Device(_Lockable, ABC):
 
     def __init_subclass__(cls) -> None:
         """Initialize the property controllers."""
-        cls._cls_prop_controllers = {
-            p.property.name: p
-            for p in cls.__dict__.values()
-            if isinstance(p, PropertyController)
-        }
+        cls._cls_prop_controllers = {}
+        for base in cls.__mro__:
+            for p in base.__dict__.values():
+                if isinstance(p, PropertyController):
+                    cls._cls_prop_controllers[p.property.name] = p
         return super().__init_subclass__()
 
     def register_property(
@@ -93,6 +94,9 @@ class Device(_Lockable, ABC):
         is_read_only: bool = False,
         is_pre_init: bool = False,
         property_type: PropArg = None,
+        sequence_loader: Callable[[TDev, Sequence[TProp]], None] | None = None,
+        sequence_starter: Callable[[TDev], None] | None = None,
+        sequence_stopper: Callable[[TDev], None] | None = None,
     ) -> None:
         """Manually register a property.
 
@@ -108,6 +112,9 @@ class Device(_Lockable, ABC):
         if property_type is None and default_value is not None:
             property_type = type(default_value)
 
+        if isinstance(property_type, EnumMeta) and allowed_values is None:
+            allowed_values = tuple(property_type)
+
         prop_info = PropertyInfo(
             name=name,
             default_value=default_value,
@@ -120,7 +127,14 @@ class Device(_Lockable, ABC):
             is_pre_init=is_pre_init,
             type=PropertyType.create(property_type),
         )
-        controller = PropertyController(property=prop_info, fget=getter, fset=setter)
+        controller = PropertyController(
+            property=prop_info,
+            fget=getter,
+            fset=setter,
+            fseq_load=sequence_loader,
+            fseq_start=sequence_starter,
+            fseq_stop=sequence_stopper,
+        )
         self._prop_controllers_[name] = controller
 
     def initialize(self) -> None:
@@ -154,18 +168,30 @@ class Device(_Lockable, ABC):
 
     # PROPERTIES
 
+    def _get_prop_or_raise(self, prop_name: str) -> PropertyController:
+        """Get a property controller by name or raise an error."""
+        if prop_name not in self._prop_controllers_:
+            raise KeyError(
+                f"Device {self.get_label()!r} has no property {prop_name!r}."
+            )
+        return self._prop_controllers_[prop_name]
+
+    def has_property(self, prop_name: str) -> bool:
+        """Return `True` if the device has a property with the given name."""
+        return prop_name in self._prop_controllers_
+
     def get_property_names(self) -> KeysView[str]:
         """Return the names of the properties."""
         return self._prop_controllers_.keys()
 
-    def property(self, prop_name: str) -> PropertyInfo:
+    def get_property_info(self, prop_name: str) -> PropertyInfo:
         """Return the property controller for a property."""
-        return self._prop_controllers_[prop_name].property
+        return self._get_prop_or_raise(prop_name).property
 
     def get_property_value(self, prop_name: str) -> Any:
         """Return the value of a property."""
         # TODO: catch errors
-        ctrl = self._prop_controllers_[prop_name]
+        ctrl = self._get_prop_or_raise(prop_name)
         if ctrl.fget is None:
             return ctrl.property.last_value
         return self._prop_controllers_[prop_name].__get__(self, self.__class__)
@@ -173,7 +199,7 @@ class Device(_Lockable, ABC):
     def set_property_value(self, prop_name: str, value: Any) -> None:
         """Set the value of a property."""
         # TODO: catch errors
-        ctrl = self._prop_controllers_[prop_name]
+        ctrl = self._get_prop_or_raise(prop_name)
         if ctrl.is_read_only:
             raise ValueError(f"Property {prop_name!r} is read-only.")
         if ctrl.fset is not None:
@@ -181,41 +207,41 @@ class Device(_Lockable, ABC):
         else:
             ctrl.property.last_value = ctrl.validate(value)
 
-    def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
-        """Load a sequence into a property."""
-        self._prop_controllers_[prop_name].load_sequence(self, sequence)
-
-    def start_property_sequence(self, prop_name: str) -> None:
-        """Start a sequence of a property."""
-        self._prop_controllers_[prop_name].start_sequence(self)
-
-    def stop_property_sequence(self, prop_name: str) -> None:
-        """Stop a sequence of a property."""
-        self._prop_controllers_[prop_name].stop_sequence(self)
-
     def set_property_allowed_values(
         self, prop_name: str, allowed_values: Sequence[Any]
     ) -> None:
         """Set the allowed values of a property."""
-        self._prop_controllers_[prop_name].property.allowed_values = allowed_values
+        self._get_prop_or_raise(prop_name).property.allowed_values = allowed_values
 
     def set_property_limits(
         self, prop_name: str, limits: tuple[float, float] | None
     ) -> None:
         """Set the limits of a property."""
-        self._prop_controllers_[prop_name].property.limits = limits
+        self._get_prop_or_raise(prop_name).property.limits = limits
 
     def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
         """Set the sequence max length of a property."""
-        self._prop_controllers_[prop_name].property.sequence_max_length = max_length
+        self._get_prop_or_raise(prop_name).property.sequence_max_length = max_length
+
+    def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
+        """Load a sequence into a property."""
+        self._get_prop_or_raise(prop_name).load_sequence(self, sequence)
+
+    def start_property_sequence(self, prop_name: str) -> None:
+        """Start a sequence of a property."""
+        self._get_prop_or_raise(prop_name).start_sequence(self)
+
+    def stop_property_sequence(self, prop_name: str) -> None:
+        """Stop a sequence of a property."""
+        self._get_prop_or_raise(prop_name).stop_sequence(self)
 
     def is_property_sequenceable(self, prop_name: str) -> bool:
         """Return `True` if the property is sequenceable."""
-        return self._prop_controllers_[prop_name].is_sequenceable
+        return self._get_prop_or_raise(prop_name).is_sequenceable
 
     def is_property_read_only(self, prop_name: str) -> bool:
         """Return `True` if the property is read-only."""
-        return self._prop_controllers_[prop_name].is_read_only
+        return self._get_prop_or_raise(prop_name).is_read_only
 
 
 SeqT = TypeVar("SeqT")

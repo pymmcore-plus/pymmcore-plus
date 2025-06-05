@@ -29,6 +29,12 @@ from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, _util, instal
 runner = CliRunner()
 subrun = subprocess.run
 
+skipif_no_drivers_available = pytest.mark.skipif(
+    platform.system() == "Linux"
+    or (platform.system() == "Darwin" and platform.machine() == "arm64"),
+    reason="Drivers not available on Linux or macOS ARM64",
+)
+
 
 def _mock_urlretrieve(url: str, filename: str, reporthook=None) -> None:
     """fake urlretrieve that writes a fake file."""
@@ -68,7 +74,7 @@ def _mock_run(dest: Path) -> Callable:
     return runner
 
 
-@pytest.mark.skipif(platform.system() == "Linux", reason="Not supported on Linux")
+@skipif_no_drivers_available
 def test_install_app(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
@@ -79,7 +85,7 @@ def test_install_app(tmp_path: Path) -> None:
     assert result.exit_code == 0
 
 
-@pytest.mark.skipif(platform.system() == "Linux", reason="Not supported on Linux")
+@skipif_no_drivers_available
 def test_basic_install(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
@@ -91,13 +97,14 @@ def test_basic_install(tmp_path: Path) -> None:
     assert mock.call_args_list[-1][0][0].startswith("Installed")
 
 
-@pytest.mark.skipif(platform.system() == "Linux", reason="Not supported on Linux")
+@skipif_no_drivers_available
 def test_available_versions() -> None:
     """installing with an erroneous version should fail and show available versions."""
     result = runner.invoke(app, ["install", "-r", "xxxx"])
     assert result.exit_code > 0
-    assert "Release 'xxxx' not found" in result.stdout
-    assert "Last 15 releases:" in result.stdout
+    msg = result.stdout or result.stderr
+    assert "Release 'xxxx' not found" in msg
+    assert "Last 15 releases:" in msg
 
 
 def test_show_version() -> None:
@@ -283,6 +290,7 @@ def _background_tail(q: Queue, runner: Any, logfile: Path) -> None:
 # by pretty much every test that creates a core after it.
 @pytest.mark.skipif(bool(not os.getenv("CI")), reason="this is a crappy test")
 @pytest.mark.run_last
+@pytest.mark.filterwarnings("ignore:unclosed file:ResourceWarning")
 def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # create mock log file
     TEST_LOG = tmp_path / "test.log"

@@ -2,12 +2,22 @@ from __future__ import annotations
 
 import os
 import sys
-from typing import Callable
+import time
+from typing import TYPE_CHECKING, Any, Callable
 
+import numpy as np
 import pytest
 import useq
 
 from pymmcore_plus import CMMCorePlus
+from pymmcore_plus.experimental.unicore import Camera
+from pymmcore_plus.experimental.unicore.core._sequence_buffer import SequenceBuffer
+from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Mapping, Sequence
+
+    from numpy.typing import DTypeLike
 
 if all(x not in {"--codspeed", "tests/test_bench.py"} for x in sys.argv):
     pytest.skip(
@@ -87,3 +97,95 @@ def test_mda_frame_metadata(benchmark: Callable) -> None:
     core.loadSystemConfiguration()
     event = useq.MDAEvent()
     benchmark(core.mda.engine.exec_event, event)  # type: ignore
+
+
+@pytest.fixture(scope="session", params=[(256, 256), (1024, 1024)])
+def test_frame(request: Any) -> np.ndarray:
+    """Reusable random frame."""
+    rng = np.random.default_rng(seed=0)
+    return rng.integers(0, 256, size=request.param, dtype=np.uint8)
+
+
+def test_acquire_finalize_pop(test_frame: np.ndarray, benchmark: Callable) -> None:
+    seqbuf = SequenceBuffer(size_mb=16.0, overwrite_on_overflow=True)
+
+    def _producer_consumer() -> None:
+        buf = seqbuf.acquire_slot(test_frame.shape, test_frame.dtype)
+        # Simulate the camera filling the buffer (memcpy cost is part of reality)
+        buf[:] = test_frame
+        seqbuf.finalize_slot(None)
+        seqbuf.pop_next(copy=False)
+
+    benchmark(_producer_consumer)
+
+
+def test_insert_data(test_frame: np.ndarray, benchmark: Callable) -> None:
+    seqbuf = SequenceBuffer(size_mb=16.0, overwrite_on_overflow=True)
+
+    def _copy_path() -> None:
+        seqbuf.insert_data(test_frame, metadata=None)
+        seqbuf.pop_next(copy=True)
+
+    benchmark(_copy_path)
+
+
+def test_overwrite_under_pressure(benchmark: Callable) -> None:
+    tiny_buf = SequenceBuffer(size_mb=1.0, overwrite_on_overflow=True)
+    frame = np.ones((600, 600), dtype=np.uint8)
+
+    def _overwrite() -> None:
+        tiny_buf.insert_data(frame, None)  # no pop: buffer stays full, evicts
+
+    benchmark(_overwrite)
+
+
+DEV = "Camera"
+FRAME_SHAPE = (512, 512)
+DTYPE = np.uint16
+FRAME = np.ones(FRAME_SHAPE, dtype=DTYPE)
+
+
+class MyCamera(Camera):
+    def get_exposure(self) -> float:
+        return 100.0
+
+    def set_exposure(self, exposure: float) -> None:
+        pass
+
+    def shape(self) -> tuple[int, int]:
+        """Return the shape of the current camera state."""
+        return FRAME_SHAPE
+
+    def dtype(self) -> DTypeLike:
+        """Return the data type of the current camera state."""
+        return DTYPE
+
+    def start_sequence(
+        self, n: int, get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray]
+    ) -> Iterator[Mapping]:
+        """Start a sequence acquisition."""
+        shape, dtype = self.shape(), self.dtype()
+        for _ in range(n):
+            time.sleep(0.001)
+            get_buffer(shape, dtype)[:] = FRAME
+            yield {}
+
+
+@pytest.mark.parametrize("device", ["python", "c++"])
+def test_bench_unicore_camera(device: str, benchmark: Callable) -> None:
+    core = UniMMCore()
+    if device == "python":
+        core.loadPyDevice(DEV, MyCamera())
+    else:
+        core.loadDevice(DEV, "DemoCamera", "DCam")
+    core.initializeAllDevices()
+    core.setCameraDevice(DEV)
+    core.setExposure(1)
+
+    def _burst() -> None:
+        core.startSequenceAcquisition(20, 0, True)
+        while core.getRemainingImageCount():
+            core.popNextImage()
+        core.stopSequenceAcquisition()
+
+    benchmark(_burst)

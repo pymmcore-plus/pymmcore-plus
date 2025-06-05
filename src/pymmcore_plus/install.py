@@ -8,8 +8,9 @@ import subprocess
 import sys
 import tempfile
 from contextlib import contextmanager, nullcontext
+from functools import cache
 from pathlib import Path
-from platform import system
+from platform import machine, system
 from typing import TYPE_CHECKING, Callable, Protocol
 from urllib.request import urlopen, urlretrieve
 
@@ -57,7 +58,35 @@ except ImportError:  # pragma: no cover
 
 
 PLATFORM = system()
+MACH = machine()
 BASE_URL = "https://download.micro-manager.org"
+plat = {"Darwin": "Mac", "Windows": "Windows", "Linux": "Linux"}.get(PLATFORM)
+DOWNLOADS_URL = f"{BASE_URL}/nightly/2.0/{plat}/"
+
+
+# Dates of release for each interface version.
+# generally running `mmcore install -r <some_date>` will bring in devices with
+# the NEW interface.
+INTERFACES: dict[int, str] = {
+    73: "20250318",
+    72: "20250318",
+    71: "20221031",
+    70: "20210219",
+    69: "20180712",
+    68: "20171107",
+    67: "20160609",
+    66: "20160608",
+    65: "20150528",
+    64: "20150515",
+    63: "20150505",
+    62: "20150501",
+    61: "20140801",
+    60: "20140618",
+    59: "20140515",
+    58: "20140514",
+    57: "20140125",
+    56: "20140120",
+}
 
 
 def _get_download_name(url: str) -> str:
@@ -141,10 +170,10 @@ def _mac_install(dmg: Path, dest: Path, log_msg: _MsgLogger) -> None:
         os.rename(_tmp / "ImageJ.app", install_path / "ImageJ.app")
 
 
+@cache
 def available_versions() -> dict[str, str]:
     """Return a map of version -> url available for download."""
-    plat = {"Darwin": "Mac", "Windows": "Windows"}[PLATFORM]
-    with urlopen(f"{BASE_URL}/nightly/2.0/{plat}/") as resp:
+    with urlopen(DOWNLOADS_URL) as resp:
         html = resp.read().decode("utf-8")
 
     all_links = re.findall(r"href=\"([^\"]+)\"", html)
@@ -187,7 +216,7 @@ def _download_url(url: str, output_path: Path, show_progress: bool = True) -> No
 
 def install(
     dest: Path | str = USER_DATA_MM_PATH,
-    release: str = "latest",
+    release: str = "latest-compatible",
     log_msg: _MsgLogger = _pretty_print,
 ) -> None:
     """Install Micro-Manager to `dest`.
@@ -199,20 +228,52 @@ def install(
         folder in the user's data directory: `appdirs.user_data_dir()`.
     release : str, optional
         Which release to install, by default "latest". Should be a date in the form
-        YYYYMMDD, or "latest" to install the latest nightly release.
+        YYYYMMDD, "latest" to install the latest nightly release, or "latest-compatible"
+        to install the latest nightly release that is compatible with the
+        device interface version of the current pymmcore version.
     log_msg : _MsgLogger, optional
         Callback to log messages, must have signature:
         `def logger(text: str, color: str = "", emoji: str = ""): ...`
         May ignore color and emoji.
     """
-    if PLATFORM not in ("Darwin", "Windows"):  # pragma: no cover
-        log_msg(f"Unsupported platform: {PLATFORM!r}", "bold red", ":x:")
+    if PLATFORM not in ("Darwin", "Windows") or (
+        PLATFORM == "Darwin" and MACH == "arm64"
+    ):  # pragma: no cover
+        log_msg(
+            f"Unsupported platform/architecture: {PLATFORM}/{MACH}", "bold red", ":x:"
+        )
         log_msg(
             "Consider building from source (mmcore build-dev).",
             "bold yellow",
             ":light_bulb:",
         )
         raise sys.exit(1)
+
+    if release == "latest-compatible":
+        from pymmcore_plus import _pymmcore
+
+        div = _pymmcore.version_info.device_interface
+        # date when the device interface version FOLLOWING the version that this
+        # pymmcore supports was released.
+        next_div_date = INTERFACES.get(div + 1, None)
+
+        # if div is equal to the greatest known interface version, use latest
+        if div == max(INTERFACES.keys()) or next_div_date is None:
+            release = "latest"
+        else:  # pragma: no cover
+            # otherwise, find the date of the release in available_versions() that
+            # is less than the next_div date.
+            available = available_versions()
+            release = max(
+                (date for date in available if date < next_div_date),
+                default="unavailable",
+            )
+            if release == "unavailable":
+                # fallback to latest if no compatible versions found
+                raise ValueError(
+                    "Unable to find a compatible release for device interface"
+                    f"{div} at {DOWNLOADS_URL} "
+                )
 
     if release == "latest":
         plat = {
