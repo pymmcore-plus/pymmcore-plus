@@ -1245,7 +1245,13 @@ class UniMMCore(CMMCorePlus):
             return super().setSLMImage(label, *args)
 
         with slm:
-            slm.set_image(args[0])
+            shape, dtype = slm.shape(), np.dtype(slm.dtype())
+            arr = np.asarray(args[0], dtype=dtype)
+            if not arr.shape == shape:  # pragma: no cover
+                raise ValueError(
+                    f"Image shape {arr.shape} doesn't match SLM shape {shape}."
+                )
+            slm.set_image(arr)
 
     @overload
     def setSLMPixelsTo(self, intensity: int, /) -> None: ...
@@ -1421,21 +1427,38 @@ class UniMMCore(CMMCorePlus):
             return slm.get_sequence_max_length()
 
     def loadSLMSequence(
-        self, slmLabel: DeviceLabel | str, imageSequence: list[bytes]
+        self,
+        slmLabel: DeviceLabel | str,
+        imageSequence: Sequence[bytes | np.ndarray],
     ) -> None:
         """Load a sequence of images to the SLM."""
         if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
-            return super().loadSLMSequence(slmLabel, imageSequence)
-
-        # Convert bytes to numpy arrays for Python device
-        np_arrays = []
-        for img_bytes in imageSequence:
-            # Note: This conversion may need to be adjusted based on actual image format
-            img_array = np.frombuffer(img_bytes, dtype=np.uint8)
-            np_arrays.append(img_array)
+            return super().loadSLMSequence(slmLabel, imageSequence)  # type: ignore[arg-type]
 
         with slm:
-            slm.send_sequence(tuple(np_arrays))
+            if (m := slm.get_sequence_max_length()) == 0:
+                raise RuntimeError(f"SLM {slmLabel!r} does not support sequences.")
+
+            shape = slm.shape()
+            dtype = np.dtype(slm.dtype())
+
+            np_arrays: list[np.ndarray] = []
+            for i, img_bytes in enumerate(imageSequence):
+                if isinstance(img_bytes, bytes):
+                    arr = np.frombuffer(img_bytes, dtype=dtype).reshape(shape)
+                else:
+                    arr = np.asarray(img_bytes, dtype=dtype)
+                    if arr.shape != shape:
+                        raise ValueError(
+                            f"Image {i} shape {arr.shape} does not "
+                            f"match SLM shape {shape}"
+                        )
+                np_arrays.append(arr)
+            if len(np_arrays) > (m := slm.get_sequence_max_length()):
+                raise ValueError(
+                    f"Sequence length {len(np_arrays)} exceeds maximum {m}."
+                )
+            slm.send_sequence(np_arrays)
 
     def startSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
         """Start a sequence of images on the SLM."""

@@ -1,4 +1,5 @@
 from abc import abstractmethod
+from collections.abc import Sequence
 from typing import ClassVar, Literal
 
 import numpy as np
@@ -58,7 +59,7 @@ class SLMDevice(SequenceableDevice[np.ndarray]):
         """Return the maximum length of an image sequence that can be uploaded."""
         return 0  # Override in subclasses that support sequencing
 
-    def send_sequence(self, sequence: tuple[np.ndarray, ...]) -> None:
+    def send_sequence(self, sequence: Sequence[np.ndarray]) -> None:
         """Load a sequence of images to the SLM."""
         # Default implementation - override in subclasses that support sequencing
         raise NotImplementedError("This SLM device does not support sequences.")
