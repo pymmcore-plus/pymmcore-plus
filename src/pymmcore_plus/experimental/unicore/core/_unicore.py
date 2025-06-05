@@ -1216,7 +1216,7 @@ class UniMMCore(CMMCorePlus):
         label = slmLabel or self.getSLMDevice()
         if label in self._pydevices:
             return self._pydevices.get_device_of_type(label, SLMDevice)
-        return None
+        return None  # pragma: no cover
 
     def setSLMDevice(self, slmLabel: DeviceLabel | str) -> None:
         """Set the SLM device."""
@@ -1279,18 +1279,14 @@ class UniMMCore(CMMCorePlus):
             dtype = slm.dtype()
 
             # Determine if we have RGB (3 or 4 args) or single intensity (1 or 2 args)
-            if len(args) == 1:
-                # setSLMPixelsTo(intensity)
+            if len(args) == 1:  # setSLMPixelsTo(intensity)
                 pixels = np.full(shape, args[0], dtype=dtype)
-            elif len(args) == 2:
-                # setSLMPixelsTo(slmLabel, intensity)
+            elif len(args) == 2:  # setSLMPixelsTo(slmLabel, intensity)
                 pixels = np.full(shape, args[1], dtype=dtype)
-            elif len(args) == 3:
-                # setSLMPixelsTo(red, green, blue)
+            elif len(args) == 3:  # setSLMPixelsTo(red, green, blue)
                 rgb_values = args
                 pixels = np.broadcast_to(rgb_values, (*shape[:2], 3))
-            elif len(args) == 4:
-                # setSLMPixelsTo(slmLabel, red, green, blue)
+            elif len(args) == 4:  # setSLMPixelsTo(slmLabel, red, green, blue)
                 rgb_values = args[1:4]
                 pixels = np.broadcast_to(rgb_values, (*shape[:2], 3))
             if len(shape) == 2 and pixels.ndim == 3:
