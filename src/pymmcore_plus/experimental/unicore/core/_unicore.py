@@ -1267,27 +1267,10 @@ class UniMMCore(CMMCorePlus):
     ) -> None: ...
     def setSLMPixelsTo(self, *args: Any) -> None:
         """Set all pixels of the SLM to a uniform intensity or RGB values."""
-        # Determine if we have RGB (3 or 4 args) or single intensity (1 or 2 args)
-        if len(args) == 1:
-            # setSLMPixelsTo(intensity)
-            label = self.getSLMDevice()
-            intensity = args[0]
-            rgb_values = None
-        elif len(args) == 2:
-            # setSLMPixelsTo(slmLabel, intensity)
-            label, intensity = args
-            rgb_values = None
-        elif len(args) == 3:
-            # setSLMPixelsTo(red, green, blue)
-            label = self.getSLMDevice()
-            rgb_values = args
-        elif len(args) == 4:
-            # setSLMPixelsTo(slmLabel, red, green, blue)
-            label = args[0]
-            rgb_values = args[1:4]
-        else:
-            raise ValueError("Invalid number of arguments for setSLMPixelsTo")
+        if len(args) < 1 or len(args) > 4:  # pragma: no cover
+            raise ValueError("setSLMPixelsTo requires 1 to 4 arguments.")
 
+        label = args[0] if len(args) in (2, 4) else self.getSLMDevice()
         if (slm := self._py_slm(label)) is None:  # pragma: no cover
             return super().setSLMPixelsTo(*args)
 
@@ -1295,21 +1278,24 @@ class UniMMCore(CMMCorePlus):
             shape = slm.shape()
             dtype = slm.dtype()
 
-            if rgb_values is None:
-                # Single intensity - create uniform array
-                pixels = np.full(shape, intensity, dtype=dtype)
-            else:
-                # RGB values
-                if len(shape) == 2:
-                    # Grayscale SLM - convert RGB to grayscale (simple average)
-                    intensity = sum(rgb_values) // 3
-                    pixels = np.full(shape, intensity, dtype=dtype)
-                else:
-                    # Color SLM
-                    pixels = np.zeros(shape, dtype=dtype)
-                    if len(shape) >= 3:  # Ensure we have color channels
-                        for i, value in enumerate(rgb_values[: shape[2]]):
-                            pixels[:, :, i] = value
+            # Determine if we have RGB (3 or 4 args) or single intensity (1 or 2 args)
+            if len(args) == 1:
+                # setSLMPixelsTo(intensity)
+                pixels = np.full(shape, args[0], dtype=dtype)
+            elif len(args) == 2:
+                # setSLMPixelsTo(slmLabel, intensity)
+                pixels = np.full(shape, args[1], dtype=dtype)
+            elif len(args) == 3:
+                # setSLMPixelsTo(red, green, blue)
+                rgb_values = args
+                pixels = np.broadcast_to(rgb_values, (*shape[:2], 3))
+            elif len(args) == 4:
+                # setSLMPixelsTo(slmLabel, red, green, blue)
+                rgb_values = args[1:4]
+                pixels = np.broadcast_to(rgb_values, (*shape[:2], 3))
+            if len(shape) == 2 and pixels.ndim == 3:
+                # Grayscale SLM - convert RGB to grayscale (simple average)
+                pixels = np.mean(pixels, axis=2, dtype=dtype).astype(dtype)
 
             slm.set_image(pixels)
 
