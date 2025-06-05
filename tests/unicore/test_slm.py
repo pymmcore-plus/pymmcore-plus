@@ -41,6 +41,12 @@ class MySLM(SLMDevice):
         self._current_image = pixels.copy()
         self._image_displayed = False
 
+    def get_image(self) -> np.ndarray:
+        """Get the current image from the SLM device adapter."""
+        if self._current_image is None:
+            raise RuntimeError("No image loaded")
+        return self._current_image
+
     def display_image(self) -> None:
         """Command the SLM to display the loaded image."""
         if self._current_image is None:
@@ -261,6 +267,7 @@ def test_slm_with_device_label(device: str) -> None:
     core.setSLMPixelsTo(DEV, 200)
     core.setSLMImage(DEV, TEST_IMAGE)
     core.displaySLMImage(DEV)
+    assert np.array_equal(core.getSLMImage(DEV), TEST_IMAGE)
 
 
 def test_slm_sequence_errors() -> None:

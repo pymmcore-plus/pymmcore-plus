@@ -1253,6 +1253,17 @@ class UniMMCore(CMMCorePlus):
                 )
             slm.set_image(arr)
 
+    def getSLMImage(self, slmLabel: DeviceLabel | str | None = None) -> np.ndarray:
+        """Get the current image from the SLM device."""
+        if (slm := self._py_slm(slmLabel)) is None:
+            raise NotImplementedError(
+                "getSLMImage is not implemented for C++ SLM devices. "
+                "(This method is unique to Python SLM devices.)"
+            )
+
+        with slm:
+            return slm.get_image()
+
     @overload
     def setSLMPixelsTo(self, intensity: int, /) -> None: ...
     @overload

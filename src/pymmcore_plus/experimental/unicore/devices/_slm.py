@@ -40,6 +40,13 @@ class SLMDevice(SequenceableDevice[np.ndarray]):
         """Load the image into the SLM device adapter."""
         ...
 
+    def get_image(self) -> np.ndarray:
+        """Get the current image from the SLM device adapter.
+
+        This is useful for verifying that the image was set correctly.
+        """
+        raise NotImplementedError("This SLM device does not support getting images.")
+
     @abstractmethod
     def display_image(self) -> None:
         """Command the SLM to display the loaded image."""
