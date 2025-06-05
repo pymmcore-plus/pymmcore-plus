@@ -14,7 +14,7 @@ from pymmcore_plus.experimental.unicore.devices._properties import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import KeysView, Sequence
 
     from typing_extensions import Any, Self
 
@@ -52,17 +52,6 @@ class Device(_Lockable, ABC):
 
     _TYPE: ClassVar[DeviceType] = DeviceType.UnknownType
     _cls_prop_controllers: ClassVar[dict[str, PropertyController]]
-
-    def __init_subclass__(cls) -> None:
-        """Initialize the property controllers."""
-        # this collects all the PropertyController from the class and its bases.
-        # (`@pymm_property` decorators return instances of PropertyController.)
-        cls._cls_prop_controllers = {
-            p.property.name: p
-            for p in cls.__dict__.values()
-            if isinstance(p, PropertyController)
-        }
-        return super().__init_subclass__()
 
     def __init__(self) -> None:
         super().__init__()
@@ -193,7 +182,7 @@ class Device(_Lockable, ABC):
 
     def get_property_names(self) -> KeysView[str]:
         """Return the names of the properties."""
-        return tuple(self._prop_controllers_.keys())
+        return self._prop_controllers_.keys()
 
     def get_property_info(self, prop_name: str) -> PropertyInfo:
         """Return the property controller for a property."""
@@ -205,7 +194,7 @@ class Device(_Lockable, ABC):
         ctrl = self._get_prop_or_raise(prop_name)
         if ctrl.fget is None:
             return ctrl.property.last_value
-        return self._get_prop_controller(prop_name).__get__(self, self.__class__)
+        return self._prop_controllers_[prop_name].__get__(self, self.__class__)
 
     def set_property_value(self, prop_name: str, value: Any) -> None:
         """Set the value of a property."""
