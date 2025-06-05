@@ -1507,7 +1507,7 @@ class UniMMCore(CMMCorePlus):
             return super().setState(stateDeviceLabel, state)
 
         with state_dev:
-            state_dev.set_position(state)
+            state_dev.set_position_or_label(state)
 
     # ------------------------------------------------------------------- getState
 
@@ -1517,7 +1517,7 @@ class UniMMCore(CMMCorePlus):
             return super().getState(stateDeviceLabel)
 
         with state_dev:
-            return state_dev.get_current_position()
+            return int(state_dev.get_property_value(KW.State))
 
     # ---------------------------------------------------------------- getNumberOfStates
 
@@ -1527,7 +1527,7 @@ class UniMMCore(CMMCorePlus):
             return super().getNumberOfStates(stateDeviceLabel)
 
         with state_dev:
-            return state_dev.get_number_of_positions()
+            return state_dev.get_property_info(KW.State).number_of_allowed_values
 
     # ----------------------------------------------------------------- setStateLabel
 
@@ -1539,7 +1539,10 @@ class UniMMCore(CMMCorePlus):
             return super().setStateLabel(stateDeviceLabel, stateLabel)
 
         with state_dev:
-            state_dev.set_position(stateLabel)
+            try:
+                state_dev.set_position_or_label(stateLabel)
+            except KeyError as e:
+                raise RuntimeError(str(e)) from e  # convert to RuntimeError
 
     # ----------------------------------------------------------------- getStateLabel
 
@@ -1549,7 +1552,7 @@ class UniMMCore(CMMCorePlus):
             return super().getStateLabel(stateDeviceLabel)
 
         with state_dev:
-            return state_dev.get_current_label()
+            return cast("StateLabel", state_dev.get_property_value(KW.Label))
 
     # --------------------------------------------------------------- defineStateLabel
 
@@ -1561,7 +1564,7 @@ class UniMMCore(CMMCorePlus):
             return super().defineStateLabel(stateDeviceLabel, state, label)
 
         with state_dev:
-            state_dev.set_position_label(state, label)
+            state_dev.assign_label_to_position(state, label)
 
     # ----------------------------------------------------------------- getStateLabels
 
@@ -1573,11 +1576,7 @@ class UniMMCore(CMMCorePlus):
             return super().getStateLabels(stateDeviceLabel)
 
         with state_dev:
-            num_states = state_dev.get_number_of_positions()
-            labels = []
-            for i in range(num_states):
-                labels.append(state_dev.get_label_for_position(i))
-            return tuple(labels)
+            return tuple(state_dev.get_property_info(KW.Label).allowed_values or [])
 
     # ------------------------------------------------------------- getStateFromLabel
 
@@ -1589,7 +1588,10 @@ class UniMMCore(CMMCorePlus):
             return super().getStateFromLabel(stateDeviceLabel, stateLabel)
 
         with state_dev:
-            return state_dev.get_position_for_label(stateLabel)
+            try:
+                return state_dev.get_position_for_label(stateLabel)
+            except KeyError as e:
+                raise RuntimeError(str(e)) from e  # convert to RuntimeError
 
 
 # -------------------------------------------------------------------------------

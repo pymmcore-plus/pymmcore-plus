@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, ClassVar, Literal, cast, overload
+from abc import abstractmethod
+from typing import TYPE_CHECKING, cast
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
 
@@ -8,8 +9,10 @@ from ._device import Device
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
+    from typing import ClassVar, Literal
 
     from pymmcore import StateLabel
+    from typing_extensions import Self
 
 
 class StateDevice(Device):
@@ -20,85 +23,106 @@ class StateDevice(Device):
     interface contains functions to get and set the state, to give states human readable
     labels, and functions to make it possible to treat the state device as a shutter.
 
+    In terms of implementation, this base class provides the basic functionality by
+    presenting state and label as properties, which it keeps in sync with the
+    underlying device.
+
     Parameters
     ----------
-    arg0 : int | Mapping[int, str] | Iterable[tuple[int, str]], optional
-        If an integer, the number of states to create, by default 0.
-        If a mapping or iterable of tuples, a map of state indices to labels.
+    state_labels: Mapping[int, str] | Iterable[tuple[int, str]]
+        A mapping (or iterable of 2-tuples) of integer state indices to string labels.
     """
 
-    _TYPE: ClassVar[Literal[DeviceType.State]] = DeviceType.State
-    _states: dict[int, StateLabel]
+    # Mandatory methods for state devices
 
-    @overload
-    def __init__(self, num_positions: int = ..., /) -> None: ...
-    @overload
+    @abstractmethod
+    def get_state(self) -> int:
+        """Get the current state of the device (integer index)."""
+        ...
+
+    @abstractmethod
+    def set_state(self, position: int) -> None:
+        """Set the state of the device (integer index)."""
+        ...
+
+    # ------------------ The rest is base class implementation ------------------
+    # (adaptors may override these methods if desired)
+
+    _TYPE: ClassVar[Literal[DeviceType.State]] = DeviceType.State
+
+    @classmethod
+    def from_count(cls, count: int) -> Self:
+        """Simplified constructor with just a number of states."""
+        if count < 1:
+            raise ValueError("State device must have at least one state.")
+        return cls({i: f"State-{i}" for i in range(count)})
+
     def __init__(
         self, state_labels: Mapping[int, str] | Iterable[tuple[int, str]], /
-    ) -> None: ...
-    def __init__(
-        self, arg0: int | Mapping[int, str] | Iterable[tuple[int, str]] = 0, /
     ) -> None:
         super().__init__()
-
-        if isinstance(arg0, int):
-            self._states = {i: f"State {i}" for i in range(arg0)}  # type: ignore
-        else:
-            self._states = dict(arg0) if arg0 is not None else {}  # type: ignore
-
-        if not self._states:  # pragma: no cover
+        if not (states := dict(state_labels)):  # pragma: no cover
             raise ValueError("State device must have at least one state.")
 
-        states, labels = zip(*self._states.items())
+        self._state_to_label: dict[int, StateLabel] = states  # type: ignore[assignment]
+        # reverse mapping for O(1) lookup
+        self._label_to_state: dict[str, int] = {lbl: p for p, lbl in states.items()}
+
+        self.register_standard_properties()
+
+    def register_standard_properties(self) -> None:
+        """Inspect the class for standard properties and register them."""
+        states, labels = zip(*self._state_to_label.items())
+        cls = type(self)
         self.register_property(
-            name=Keyword.State, default_value=states[0], allowed_values=states
+            name=Keyword.State,
+            default_value=states[0],
+            allowed_values=states,
+            getter=cls.get_state,
+            setter=cls.set_state,
         )
         self.register_property(
-            name=Keyword.Label.value, default_value=labels[0], allowed_values=labels
+            name=Keyword.Label.value,
+            default_value=labels[0],
+            allowed_values=labels,
         )
 
-    def set_position(self, pos: int | str) -> None:
-        """Set the position of the device.
+    def set_position_or_label(self, pos_or_label: int | str) -> None:
+        """Set the position of the device by index or label."""
+        if isinstance(pos_or_label, str):
+            label = pos_or_label
+            pos = self.get_position_for_label(pos_or_label)
+        else:
+            pos = int(pos_or_label)
+            label = self._state_to_label.get(pos, "")
+        if pos not in self._state_to_label:
+            raise ValueError(
+                f"Position {pos} is not a valid state. "
+                f"Available states: {self._state_to_label.keys()}"
+            )
+        self.set_property_value(Keyword.State, pos)  # will trigger set_state
+        self.set_property_value(Keyword.Label.value, label)
 
-        If `pos` is an integer, it is the index of the state to set.
-        If `pos` is a string, it is the label of the state to set.
-        """
-        if isinstance(pos, str):
-            pos = self.get_position_for_label(pos)
-        if pos not in self._states:
-            raise ValueError(f"Position {pos} is not a valid state.")
-        self.set_property_value(Keyword.State, pos)
+    def assign_label_to_position(self, pos: int, label: str) -> None:
+        """Assign a User-defined label to a position."""
+        if not isinstance(pos, int):
+            raise TypeError(f"Position must be an integer, got {type(pos).__name__}.")
 
-    def set_position_label(self, pos: int, label: str) -> None:
-        """Assign a label to a position."""
-        self._states[pos] = cast("StateLabel", label)
+        # update internal state
+        self._state_to_label[pos] = label = cast("StateLabel", str(label))
+        self._label_to_state[label] = pos
+        self._update_allowed_labels()
 
-    def get_current_position(self) -> int:
-        """Return the current position of the device."""
-        return int(self.get_property_value(Keyword.State))
-
-    def get_current_label(self) -> StateLabel:
-        """Return the label of the current position."""
-        return self.get_label_for_position(self.get_current_position())
-
-    def get_label_for_position(self, pos: int) -> StateLabel:
-        """Return the label of the provided position."""
-        return self._states[pos]
+    def _update_allowed_labels(self) -> None:
+        """Update the allowed values for the label property."""
+        label_prop_info = self.get_property_info(Keyword.Label)
+        label_prop_info.allowed_values = list(self._state_to_label.values())
 
     def get_position_for_label(self, label: str) -> int:
-        """Return the position of the provided label."""
-        for pos, lbl in self._states.items():
-            if lbl == label:
-                return pos
-        raise RuntimeError(
-            f"Label not defined: {label!r}. Available labels: {self._states.values()}"
-        )
-
-    def get_number_of_positions(self) -> int:
-        """Return the number of positions."""
-        return len(self._states)
-
-    # these methods are implemented in the C++ layer... but i think they're only there
-    # for the StateDeviceShutter utility?
-    #   virtual int SetGateOpen(bool open = true) = 0;
-    #   virtual int GetGateOpen(bool& open) = 0;
+        """Return the position corresponding to the provided label."""
+        if label not in self._label_to_state:
+            raise KeyError(
+                f"Label not defined: {label!r}. "
+                f"Available labels: {self._state_to_label.values()}"
+            )
+        return self._label_to_state[label]
