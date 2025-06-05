@@ -13,9 +13,18 @@ from pathlib import Path
 from re import Pattern
 from textwrap import dedent
 from threading import Thread
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    NamedTuple,
+    TypeVar,
+    cast,
+    overload,
+)
 
 from psygnal import SignalInstance
+from typing_extensions import deprecated
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus._logger import current_logfile, logger
@@ -23,6 +32,7 @@ from pymmcore_plus._util import find_micromanager, print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from pymmcore_plus.metadata.functions import summary_metadata
 
+from . import _device
 from ._adapter import DeviceAdapter
 from ._config import Configuration
 from ._config_group import ConfigGroup
@@ -31,26 +41,38 @@ from ._constants import (
     DeviceInitializationState,
     DeviceType,
     FocusDirection,
+    Keyword,
     PixelType,
     PropertyType,
 )
-from ._device import Device
 from ._metadata import Metadata
 from ._property import DeviceProperty
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
-    from typing import Literal, TypedDict, Unpack
+    from typing import Literal, Never, TypeAlias, TypedDict, Union, Unpack
 
     import numpy as np
+    from pymmcore import DeviceLabel
     from useq import MDAEvent
 
     from pymmcore_plus.mda._runner import SingleOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
+    _DT = TypeVar("_DT", bound=_device.Device)
     ListOrTuple = list[_T] | tuple[_T, ...]
+    DeviceTypesWithCurrent: TypeAlias = Union[
+        Literal[DeviceType.CameraDevice]
+        | Literal[DeviceType.ShutterDevice]
+        | Literal[DeviceType.StageDevice]
+        | Literal[DeviceType.XYStageDevice]
+        | Literal[DeviceType.AutoFocusDevice]
+        | Literal[DeviceType.SLMDevice]
+        | Literal[DeviceType.GalvoDevice]
+        | Literal[DeviceType.ImageProcessorDevice]
+    ]
 
     class PropertySchema(TypedDict, total=False):
         """JSON schema `dict` describing a device property."""
@@ -207,14 +229,39 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__()
+        if os.getenv("PYMM_DEBUG_LOG", "0").lower() in ("1", "true"):
+            self.enableDebugLog(True)
+        if os.getenv("PYMM_STDERR_LOG", "0").lower() in ("1", "true"):
+            self.enableStderrLog(True)
+        if buf_size := os.getenv("PYMM_BUFFER_SIZE_MB", ""):
+            try:
+                buf_size_int = int(buf_size)
+                if buf_size_int:
+                    self.setCircularBufferMemoryFootprint(buf_size_int)
+            except (ValueError, TypeError):
+                warnings.warn("PYMM_BUFFER_SIZE_MB must be an integer", stacklevel=2)
 
         # Set the first instance of this class as the global singleton
         global _instance
         if _instance is None:
             _instance = self
 
-        if hasattr("self", "enableFeature"):
-            self.enableFeature("StrictInitializationChecks", True)
+        if hasattr(self, "enableFeature"):
+            strict = True
+            if env_strict := os.getenv("PYMM_STRICT_INIT_CHECKS", "").lower():
+                if env_strict in ("1", "true"):
+                    strict = True
+                elif env_strict in ("0", "false"):
+                    strict = False
+            self.enableFeature("StrictInitializationChecks", strict)
+
+            parallel = True
+            if env_parallel := os.getenv("PYMM_PARALLEL_INIT", "").lower():
+                if env_parallel in ("1", "true"):
+                    parallel = True
+                elif env_parallel in ("0", "false"):
+                    parallel = False
+            self.enableFeature("ParallelDeviceInitialization", parallel)
 
         # TODO: test this on windows ... writing to the same file may be an issue there
         if logfile := current_logfile(logger):
@@ -236,7 +283,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
-        self.registerCallback(self._callback_relay)
+        super().registerCallback(self._callback_relay)
 
         self._mda_runner = MDARunner()
         self._mda_runner.set_engine(MDAEngine(self))
@@ -248,6 +295,24 @@ class CMMCorePlus(pymmcore.CMMCore):
         # garbage collected
         self._weak_clean = weakref.WeakMethod(self.unloadAllDevices)
         atexit.register(self._weak_clean)
+
+    @deprecated(
+        "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
+    )
+    def registerCallback(self, *_: Never) -> Never:  # type: ignore[override]
+        """*registerCallback is disallowed in pymmcore-plus!*
+
+        If you want to connect callbacks to events, use the
+        [`CMMCorePlus.events`][pymmcore_plus.CMMCorePlus.events] property instead.
+        """  # noqa
+        raise RuntimeError(
+            dedent("""
+            This method is disallowed in pymmcore-plus.
+
+            If you want to connect callbacks to events, use the
+            `CMMCorePlus.events` property instead.
+            """)
+        )
 
     @property
     def events(self) -> PCoreSignaler:
@@ -262,14 +327,20 @@ class CMMCorePlus(pymmcore.CMMCore):
         return self._events
 
     def __repr__(self) -> str:
-        return f"<{type(self).__name__} at {hex(id(self))}>"
+        """Return a string representation of the core object."""
+        ndevices = len(self.getLoadedDevices()) - 1
+        return f"<{type(self).__name__} at {hex(id(self))} with {ndevices} devices>"
 
     def __del__(self) -> None:
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
-        self.unloadAllDevices()
-        # clean up logging
-        self.setPrimaryLogFile("")
+        try:
+            super().registerCallback(None)  # type: ignore
+            self.reset()
+            # clean up logging
+            self.setPrimaryLogFile("")
+        except Exception as e:
+            logger.exception("Error during CMMCorePlus.__del__(): %s", e)
 
     # Re-implemented methods from the CMMCore API
 
@@ -309,7 +380,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         and the property Value has actually changed.
         """
         with self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS):
-            super().setStateLabel(stateDeviceLabel, stateLabel)
+            try:
+                super().setStateLabel(stateDeviceLabel, stateLabel)
+            except RuntimeError as e:  # pragma: no cover
+                state_labels = self.getStateLabels(stateDeviceLabel)
+                msg = f"{e}.  Available Labels: {state_labels}"
+                raise RuntimeError(msg) from None
 
     def setDeviceAdapterSearchPaths(self, paths: Sequence[str]) -> None:
         """Set the device adapter search paths.
@@ -352,9 +428,12 @@ class CMMCorePlus(pymmcore.CMMCore):
             recognized by the specific plugin library. See
             [`pymmcore.CMMCore.getAvailableDevices`][] for a list of valid device names.
         """
+        if str(label).lower() == Keyword.CoreDevice.value.lower():  # pragma: no cover
+            raise ValueError(f"Label {label!r} is reserved.")
+
         try:
             super().loadDevice(label, moduleName, deviceName)
-        except RuntimeError as e:
+        except (RuntimeError, ValueError) as e:
             if exc := self._load_error_with_info(label, moduleName, deviceName, str(e)):
                 raise exc from e
 
@@ -645,9 +724,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         md = Metadata()
         if channel is not None and slice is not None:
-            img = super().getLastImageMD(channel, slice, md)
+            img = self.getLastImageMD(channel, slice, md)
         else:
-            img = super().getLastImageMD(md)
+            img = self.getLastImageMD(md)
         return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     @overload
@@ -689,7 +768,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             Image and metadata
         """
         md = Metadata()
-        img = super().popNextImageMD(channel, slice, md)
+        img = self.popNextImageMD(channel, slice, md)
         return (self.fixImage(img) if fix and not pymmcore.NANO else img, md)
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
@@ -733,7 +812,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             will be reshaped to (w, h, n_components) using `fixImage`.
         """
         md = Metadata()
-        img = super().getNBeforeLastImageMD(n, md)
+        img = self.getNBeforeLastImageMD(n, md)
         return self.fixImage(img) if fix and not pymmcore.NANO else img, md
 
     def setConfig(self, groupName: str, configName: str) -> None:
@@ -825,7 +904,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_adapter: str | re.Pattern | None = ...,
         *,
         as_object: Literal[True] = ...,
-    ) -> Iterator[Device]: ...
+    ) -> Iterator[_device.Device]: ...
 
     def iterDevices(
         self,
@@ -834,7 +913,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         device_adapter: str | re.Pattern | None = None,
         *,
         as_object: bool = True,
-    ) -> Iterator[Device] | Iterator[str]:
+    ) -> Iterator[_device.Device] | Iterator[str]:
         """Iterate over currently loaded devices.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -887,7 +966,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             devices = [d for d in devices if ptrn.search(self.getDeviceLibrary(d))]
 
         for dev in devices:
-            yield Device(dev, mmcore=self) if as_object else dev
+            yield _device.Device.create(dev, mmcore=self) if as_object else dev
 
     @overload
     def iterProperties(
@@ -1068,7 +1147,77 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceAdapter(library_name, mmcore=self)
 
-    def getDeviceObject(self, device_label: str) -> Device:
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Camera]
+    ) -> _device.CameraDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Stage]
+    ) -> _device.StageDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.State]
+    ) -> _device.StateDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Shutter]
+    ) -> _device.ShutterDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.XYStage]
+    ) -> _device.XYStageDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Serial]
+    ) -> _device.SerialDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Generic]
+    ) -> _device.GenericDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.AutoFocus]
+    ) -> _device.AutoFocusDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.ImageProcessor]
+    ) -> _device.ImageProcessorDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.SignalIO]
+    ) -> _device.SignalIODevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Magnifier]
+    ) -> _device.MagnifierDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.SLM]
+    ) -> _device.SLMDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Hub]
+    ) -> _device.HubDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: Literal[DeviceType.Galvo]
+    ) -> _device.GalvoDevice: ...
+    @overload
+    def getDeviceObject(
+        self,
+        device_label: Literal[Keyword.CoreDevice],
+        device_type: Literal[DeviceType.Core],
+    ) -> _device.CoreDevice: ...
+    @overload
+    def getDeviceObject(
+        self, device_label: str, device_type: DeviceType = ...
+    ) -> _device.Device: ...
+    @overload
+    def getDeviceObject(self, device_label: str, device_type: type[_DT]) -> _DT: ...
+    def getDeviceObject(
+        self, device_label: str, device_type: type[_DT] | DeviceType = DeviceType.Any
+    ) -> _DT | _device.Device:
         """Return a `Device` object bound to device_label on this core.
 
         :sparkles: *This method is new in `CMMCorePlus`.*
@@ -1111,7 +1260,18 @@ class CMMCorePlus(pymmcore.CMMCore):
             }
         }
         """
-        return Device(device_label, mmcore=self)
+        dev = _device.Device.create(device_label, mmcore=self)
+        if (isinstance(device_type, type) and not isinstance(dev, device_type)) or (
+            isinstance(device_type, DeviceType)
+            and device_type not in {DeviceType.Any, DeviceType.Unknown}
+            and dev.type() != device_type
+        ):
+            raise TypeError(
+                f"{device_type!r} requested but device with label "
+                f"{device_label!r} is a {dev.type()}."
+            )
+
+        return dev
 
     def getConfigGroupObject(
         self, group_name: str, allow_missing: bool = False
@@ -1163,6 +1323,61 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         for group in self.getAvailableConfigGroups():
             yield ConfigGroup(group, mmcore=self)
+
+    def getCurrentDeviceOfType(
+        self, device_type: DeviceTypesWithCurrent
+    ) -> DeviceLabel | Literal[""]:
+        """Return the current device of type `device_type`.
+
+        Only the following device types have a "current" device:
+            - CameraDevice
+            - ShutterDevice
+            - StageDevice
+            - XYStageDevice
+            - AutoFocusDevice
+            - SLMDevice
+            - GalvoDevice
+            - ImageProcessorDevice
+
+        Calling this method with any other device type will raise a `ValueError`.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        Parameters
+        ----------
+        device_type : DeviceType
+            The type of device to get the current device for.
+            See [`DeviceType`][pymmcore_plus.DeviceType] for a list of device types.
+
+        Returns
+        -------
+        str
+            The label of the current device of type `device_type`.
+            If no device of that type is currently set, an empty string is returned.
+
+        Raises
+        ------
+        ValueError
+            If the core does not have the concept of a "current" device of the provided
+            `device_type`.
+        """
+        if device_type == DeviceType.CameraDevice:
+            return self.getCameraDevice()
+        if device_type == DeviceType.ShutterDevice:
+            return self.getShutterDevice()
+        if device_type == DeviceType.StageDevice:
+            return self.getFocusDevice()
+        if device_type == DeviceType.XYStageDevice:
+            return self.getXYStageDevice()
+        if device_type == DeviceType.AutoFocusDevice:
+            return self.getAutoFocusDevice()
+        if device_type == DeviceType.SLMDevice:
+            return self.getSLMDevice()
+        if device_type == DeviceType.GalvoDevice:
+            return self.getGalvoDevice()
+        if device_type == DeviceType.ImageProcessorDevice:
+            return self.getImageProcessorDevice()
+        raise ValueError(f"'Current' {device_type.name} is undefined. ")
 
     def getDeviceSchema(self, device_label: str) -> DeviceSchema:
         """Return JSON-schema describing device `device_label` and its properties.
@@ -1352,7 +1567,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setXYPosition(self, x: float, y: float, /) -> None: ...
     @overload
     def setXYPosition(self, xyStageLabel: str, x: float, y: float, /) -> None: ...
-    def setXYPosition(self, *args: str | float) -> None:
+    def setXYPosition(self, *args: Any) -> None:
         """Sets the position of the XY stage in microns.
 
         **Why Override?** to store the last commanded stage position internally.
@@ -1361,10 +1576,10 @@ class CMMCorePlus(pymmcore.CMMCore):
             label: str | None = None
             x, y = cast("tuple[float, float]", args)
         elif len(args) == 3:
-            label, x, y = args  # type: ignore
+            label, x, y = args
         else:
             raise ValueError("Invalid number of arguments. Expected 2 or 3.")
-        super().setXYPosition(*args)  # type: ignore
+        super().setXYPosition(*args)
         self._last_xy_position[label] = (x, y)
 
     def getZPosition(self) -> float:
@@ -1410,7 +1625,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if autoshutter := self.getAutoShutter():
             self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
         try:
-            super().snapImage()
+            self._do_snap_image()
             self.events.imageSnapped.emit()
         finally:
             if autoshutter:
@@ -1695,15 +1910,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To emit a `startContinuousSequenceAcquisition` event.
         """
         self.events.continuousSequenceAcquisitionStarting.emit()
-        super().startContinuousSequenceAcquisition(intervalMs)
+        self._do_start_continuous_sequence_acquisition(intervalMs)
         self.events.continuousSequenceAcquisitionStarted.emit()
 
     @overload
     def startSequenceAcquisition(
-        self,
-        numImages: int,
-        intervalMs: float,
-        stopOnOverflow: bool,
+        self, numImages: int, intervalMs: float, stopOnOverflow: bool, /
     ) -> None: ...
 
     @overload
@@ -1713,9 +1925,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         numImages: int,
         intervalMs: float,
         stopOnOverflow: bool,
+        /,
     ) -> None: ...
 
-    def startSequenceAcquisition(self, *args: Any, **kwargs: Any) -> None:
+    def startSequenceAcquisition(self, *args: Any) -> None:
         """Starts streaming camera sequence acquisition.
 
         This command does not block the calling thread for the duration of the
@@ -1724,18 +1937,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To emit a `startSequenceAcquisition` event.
         """
         if len(args) == 3:
-            numImages, intervalMs, stopOnOverflow = args
-            cameraLabel = super().getCameraDevice()
-        else:
-            cameraLabel, numImages, intervalMs, stopOnOverflow = args
+            args = (self.getCameraDevice(), *args)
+        elif len(args) != 4:
+            raise ValueError(
+                "startSequenceAcquisition requires either 3 or 4 arguments, "
+                f"got {len(args)}."
+            )
 
-        self.events.sequenceAcquisitionStarting.emit(
-            cameraLabel, numImages, intervalMs, stopOnOverflow
-        )
-        super().startSequenceAcquisition(*args, **kwargs)
-        self.events.sequenceAcquisitionStarted.emit(
-            cameraLabel, numImages, intervalMs, stopOnOverflow
-        )
+        self.events.sequenceAcquisitionStarting.emit(*args)
+        self._do_start_sequence_acquisition(*args)
+        self.events.sequenceAcquisitionStarted.emit(*args)
 
     def stopSequenceAcquisition(self, cameraLabel: str | None = None) -> None:
         """Stops streaming camera sequence acquisition.
@@ -1744,12 +1955,31 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         **Why Override?** To emit a `stopSequenceAcquisition` event.
         """
-        if cameraLabel is None:
-            super().stopSequenceAcquisition()
-        else:
-            super().stopSequenceAcquisition(cameraLabel)
         cameraLabel = cameraLabel or super().getCameraDevice()
+        self._do_stop_sequence_acquisition(cameraLabel)
         self.events.sequenceAcquisitionStopped.emit(cameraLabel)
+
+    # here for ease of overriding in Unicore ---------------------
+
+    def _do_snap_image(self) -> None:
+        super().snapImage()
+
+    def _do_start_sequence_acquisition(
+        self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
+    ) -> None:
+        super().startSequenceAcquisition(
+            cameraLabel, numImages, intervalMs, stopOnOverflow
+        )
+
+    def _do_start_continuous_sequence_acquisition(self, intervalMs: float) -> None:
+        """Starts the actual continuous sequence acquisition process."""
+        super().startContinuousSequenceAcquisition(intervalMs)
+
+    def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
+        """Stops the actual sequence acquisition process."""
+        super().stopSequenceAcquisition(cameraLabel)
+
+    # end of Unicore helpers ---------------------
 
     def setAutoFocusOffset(self, offset: float) -> None:
         """Applies offset the one-shot focusing device.
@@ -1965,20 +2195,28 @@ class CMMCorePlus(pymmcore.CMMCore):
             return list(xs), list(ys), list(ws), list(hs)
 
     @overload
-    def setROI(self, x: int, y: int, width: int, height: int) -> None: ...
+    def setROI(self, x: int, y: int, width: int, height: int, /) -> None: ...
 
     @overload
-    def setROI(self, label: str, x: int, y: int, width: int, height: int) -> None: ...
+    def setROI(
+        self, label: str, x: int, y: int, width: int, height: int, /
+    ) -> None: ...
 
-    def setROI(self, *args: Any, **kwargs: Any) -> None:
+    def setROI(self, *args: Any) -> None:
         """Set the camera Region of Interest (ROI).
 
         **Why Override?** To emit a `roiSet` event.
         """
-        super().setROI(*args, **kwargs)
         if len(args) == 4:
             args = (super().getCameraDevice(), *args)
+        self._do_set_roi(*args)
         self.events.roiSet.emit(*args)
+
+    # here for ease of overriding in Unicore
+
+    def _do_set_roi(self, label: str, x: int, y: int, width: int, height: int) -> None:
+        """Internal method to set the ROI for a specific camera device."""
+        super().setROI(label, x, y, width, height)
 
     def setChannelGroup(self, channelGroup: str) -> None:
         """Specifies the group determining the channel selection.
@@ -2001,9 +2239,10 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To also save pixel size configurations.
         """
         super().saveSystemConfiguration(filename)
-        # saveSystemConfiguration does not save the pixel size config so here
-        # we add to the saved file also any pixel size config.
-        self._save_pixel_configurations(filename)
+        if pymmcore.version_info < (11, 5):
+            # saveSystemConfiguration does not save the pixel size config so hereq
+            # we add to the saved file also any pixel size config.
+            self._save_pixel_configurations(filename)
 
     def _save_pixel_configurations(self, filename: str) -> None:
         px_configs = self.getAvailablePixelSizeConfigs()

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from pathlib import Path
 
 import pytest
@@ -56,7 +57,7 @@ def test_model_from_summary_metadata(tmp_path: Path) -> None:
 
 def non_empty_lines(path: Path) -> list[str]:
     return [
-        ln
+        ln.replace("1.0", "1").replace("0.0", "0")  # normalize floats
         for line in path.read_text().splitlines()
         if (ln := line.strip()) and not ln.startswith("#")
     ]
@@ -95,16 +96,19 @@ def _assert_cfg_matches_core_save(
     model.save(model_out)
     core.saveSystemConfiguration(str(core_out))
 
-    # MMCore DOES write out default affine transforms... MMStudio doesn't and we don't
-    core_lines = [
-        x for x in non_empty_lines(core_out) if "1.0,0.0,0.0,0.0,1.0,0.0" not in x
-    ]
-    # MMCore doesn't write out AutoShutter prefs
+    # MMCore DOES write out default affine transforms and angles...
+    # MMStudio doesn't and we don't
+    pattern = re.compile(
+        r"(PixelSizeAffine,.+,1(?:\.0)?,0(?:\.0)?,0(?:\.0)?,0(?:\.0)?,1(?:\.0)?,0(?:\.0)?"
+        r"|PixelSizeAngle_dxdz,.+,0|"
+        r"PixelSizeAngle_dydz,.+,0|PixelSizeOptimalZ_Um,.+,0)"
+    )
+    core_lines = [x for x in non_empty_lines(core_out) if not pattern.match(x)]
+    # MMCore doesn't write out AutoShutter prefs, but we do
     model_lines = [
         x
         for x in non_empty_lines(model_out)
-        if not x.startswith("Property,Core,AutoShutter")
-        and "1.0,0.0,0.0,0.0,1.0,0.0" not in x
+        if not x.startswith("Property,Core,AutoShutter") and "1,0,0,0,1,0" not in x
     ]
     assert core_lines == model_lines
 

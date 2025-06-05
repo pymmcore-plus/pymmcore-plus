@@ -1,3 +1,6 @@
+import os
+import platform
+from collections.abc import Iterator
 from contextlib import suppress
 from math import prod
 from typing import cast
@@ -123,7 +126,7 @@ def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:
 
 
 @pytest.fixture
-def sequence_tester() -> CMMCorePlus:
+def sequence_tester() -> Iterator[CMMCorePlus]:
     core = CMMCorePlus()
     try:
         core.loadDevice("THub", "SequenceTester", "THub")
@@ -141,6 +144,10 @@ def sequence_tester() -> CMMCorePlus:
     yield core
 
 
+@pytest.mark.skipif(
+    bool(os.getenv("CI") and platform.machine() == "arm64"),
+    reason="macos-latest having issues with SequenceTester on CI",
+)
 def test_sequence_tester_decoding(sequence_tester: CMMCorePlus) -> None:
     core = sequence_tester
     core.startContinuousSequenceAcquisition(3)

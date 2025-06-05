@@ -5,7 +5,7 @@ from __future__ import annotations
 import warnings
 from typing import TYPE_CHECKING, Any, Callable
 
-from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword
+from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword, _pymmcore
 from pymmcore_plus._util import timestamp
 
 from ._config_group import ConfigGroup, ConfigPreset, Setting
@@ -162,6 +162,12 @@ def iter_pixel_size_presets(scope: Microscope) -> Iterable[str]:
         yield _serialize(CFGCommand.PixelSize_um, p.name, p.pixel_size_um)
         if p.affine != DEFAULT_AFFINE:
             yield _serialize(CFGCommand.PixelSizeAffine, p.name, *p.affine)
+        if p.angle_dxdz and (cmd := getattr(CFGCommand, "PixelSizeAngleDxdz", None)):
+            yield _serialize(cmd, p.name, p.angle_dxdz)
+        if p.angle_dydz and (cmd := getattr(CFGCommand, "PixelSizeAngleDydz", None)):
+            yield _serialize(cmd, p.name, p.angle_dydz)
+        if p.optimalz_um and (cmd := getattr(CFGCommand, "PixelSize_OptimalZUm", None)):
+            yield _serialize(cmd, p.name, p.optimalz_um)
 
 
 # Order will determine the order of the sections in the file
@@ -180,9 +186,16 @@ CONFIG_SECTIONS: dict[str, Callable[[Microscope], Iterable[str]]] = {
     "Camera-synchronized devices": lambda _: [],
     "Labels": iter_labels,
     "Configuration presets": iter_config_presets,
-    "Roles": iter_roles,  # MMStudio puts this above Cam-Synched devices, MMCore here.
-    "PixelSize settings": iter_pixel_size_presets,
 }
+
+
+if _pymmcore.version_info >= (11, 5):
+    CONFIG_SECTIONS["PixelSize settings"] = iter_pixel_size_presets
+    CONFIG_SECTIONS["Roles"] = iter_roles
+else:
+    CONFIG_SECTIONS["Roles"] = iter_roles
+    CONFIG_SECTIONS["PixelSize settings"] = iter_pixel_size_presets
+
 
 # ------------------ Deserialization ------------------
 

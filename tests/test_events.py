@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from typing import get_args
 from unittest.mock import Mock, call
 
 import pytest
 
 from pymmcore_plus import CMMCorePlus, Keyword
-from pymmcore_plus._util import MMCORE_PLUS_SIGNALS_BACKEND
+from pymmcore_plus._util import PYMM_SIGNALS_BACKEND
 from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler
+from pymmcore_plus.core.events._protocol import PSignal, PSignalInstance
 
 Signalers = [CMMCoreSignaler]
 try:
@@ -38,7 +38,7 @@ def test_signal_backend_selection(
 
         _ = QApplication.instance() or QApplication([])
 
-    monkeypatch.setenv(MMCORE_PLUS_SIGNALS_BACKEND, env_var)
+    monkeypatch.setenv(PYMM_SIGNALS_BACKEND, env_var)
     ctx = (
         pytest.warns(UserWarning)
         if (env_var == "nonsense" or (env_var == "qt" and QCoreSignaler is None))
@@ -59,11 +59,12 @@ def test_events_protocols(cls):
             f"{name!r} does not implement the CoreSignaler Protocol. "
             f"Missing attributes: {required - set(dir(obj))!r}"
         )
-    for attr, value in PCoreSignaler.__annotations__.items():
+    for attr in PCoreSignaler.__annotations__:
         m = getattr(obj, attr)
-        if not isinstance(m, get_args(value) or value):
+        if not isinstance(m, (PSignal, PSignalInstance)):
             raise AssertionError(
-                f"'{name}.{attr}' expected type {value.__name__!r}, got {type(m)}"
+                f"'{name}.{attr}' expected type "
+                f"{(PSignal, PSignalInstance)!r}, got {type(m)}"
             )
 
 
