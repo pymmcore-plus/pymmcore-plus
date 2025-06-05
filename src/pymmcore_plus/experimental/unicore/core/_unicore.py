@@ -7,7 +7,15 @@ from contextlib import suppress
 from datetime import datetime
 from itertools import count
 from time import perf_counter_ns
-from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Literal,
+    TypeVar,
+    cast,
+    overload,
+)
 
 import numpy as np
 
@@ -77,10 +85,11 @@ class _CoreDevice:
         self._state_cache[(KW.CoreDevice, keyword)] = label
 
 
+_DEFAULT_BUFFER_SIZE_MB: int = 1000
+
+
 class UniMMCore(CMMCorePlus):
     """Unified Core object that first checks for python, then C++ devices."""
-
-    _DEFAULT_BUFFER_SIZE_MB: int = 1000  # default size of the sequence buffer in MB
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._pydevices = PyDeviceManager()  # manager for python devices
@@ -88,7 +97,7 @@ class UniMMCore(CMMCorePlus):
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
         self._stop_event: threading.Event = threading.Event()
         self._acquisition_thread: AcquisitionThread | None = None  # TODO: implement
-        self._seq_buffer = SequenceBuffer(size_mb=self._DEFAULT_BUFFER_SIZE_MB)
+        self._seq_buffer = SequenceBuffer(size_mb=_DEFAULT_BUFFER_SIZE_MB)
 
         super().__init__(*args, **kwargs)
 

@@ -240,8 +240,8 @@ def test_buffer_methods(device: str) -> None:
     core = UniMMCore()
     _load_device(core, device)
 
-    expect = 250 if device == "c++" else 1000
-    assert core.getCircularBufferMemoryFootprint() == expect
+    # note: 250 is the default on C++, for python we patch this in conftest.py
+    assert core.getCircularBufferMemoryFootprint() == 250
     core.setCircularBufferMemoryFootprint(10)
     assert core.getCircularBufferMemoryFootprint() == 10
 
