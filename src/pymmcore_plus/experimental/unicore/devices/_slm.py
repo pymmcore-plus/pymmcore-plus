@@ -2,6 +2,7 @@ from abc import abstractmethod
 from typing import ClassVar, Literal
 
 import numpy as np
+from numpy.typing import DTypeLike
 
 from pymmcore_plus.core._constants import DeviceType
 
@@ -19,41 +20,35 @@ class SLMDevice(SequenceableDevice[np.ndarray]):
     _TYPE: ClassVar[Literal[DeviceType.SLM]] = DeviceType.SLM
 
     @abstractmethod
-    def get_width(self) -> int:
-        """Get the SLM width in pixels."""
+    def shape(self) -> tuple[int, ...]:
+        """Return the shape of the SLM image buffer.
+
+        This is used when querying Width, Height, *and* number of components.
+        If the SLM is grayscale, it should return (width, height).
+        If the SLM is color, it should return (width, height, n_channels).
+        """
+        ...
 
     @abstractmethod
-    def get_height(self) -> int:
-        """Get the SLM height in pixels."""
+    def dtype(self) -> DTypeLike:
+        """Return the data type of the image buffer."""
+        ...
 
     @abstractmethod
-    def get_bytes_per_pixel(self) -> int:
-        """Get the SLM number of bytes per pixel."""
-
     def set_image(self, pixels: np.ndarray) -> None:
         """Load the image into the SLM device adapter."""
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def display_image(self) -> None:
         """Command the SLM to display the loaded image."""
-        raise NotImplementedError
 
-    def set_pixels_to(self, intensity: int) -> None:
-        """Command the SLM to display one 8-bit intensity."""
-        raise NotImplementedError
-
-    def set_pixels_to_rgb(self, red: int, green: int, blue: int) -> None:
-        """Command the SLM to display one 32-bit color."""
-        raise NotImplementedError
-
+    @abstractmethod
     def set_exposure(self, interval_ms: float) -> None:
         """Command the SLM to turn off after a specified interval."""
-        raise NotImplementedError
+        ...
 
+    @abstractmethod
     def get_exposure(self) -> float:
         """Find out the exposure interval of an SLM."""
-        raise NotImplementedError
-
-    def get_number_of_components(self) -> int:
-        """Get the SLM number of components (colors)."""
-        raise NotImplementedError
+        ...
