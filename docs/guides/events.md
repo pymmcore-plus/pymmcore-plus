@@ -87,7 +87,7 @@ support the same connection/disconnection API.)
     ```
 
 The signature of the callback function should match the signature of the event
-emitter's signal.  See [API documentation](../api/events.md) for the specific
+emitter's signal.  See [API documentation][pymmcore_plus.core.events] for the specific
 event signatures.
 
 You may **disconnect** a callback from an event by calling the `disconnect` method

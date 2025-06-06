@@ -336,7 +336,7 @@ def pymm_property(
         Whether the property must be set before initialization, by default False.
     name : str, optional
         The name of the property, by default, the name of the getter method is used.
-    prop_type : PropArg, optional
+    property_type : PropArg, optional
         The type of the property, by default the return annotation of the getter method
         is used (but must be one of `float`, `int`, or `str`).
 

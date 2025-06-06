@@ -8,18 +8,18 @@ pure python/C environments**.
 
 - `pymmcore-plus` itself is a superset of
   [`pymmcore`](https://github.com/micro-manager/pymmcore) (python bindings
-  for Micro-manager's C++ `CMMCore`). [`pymmcore_plus.CMMCorePlus`](api/cmmcoreplus.md) (the main object in this library)
+  for Micro-manager's C++ `CMMCore`). [`pymmcore_plus.CMMCorePlus`][] (the main object in this library)
   aims to be a drop-in replacement for `pymmcore.CMMCore`, while adding a number
   of additional features including:
 
     - A multi-dimensional [acquisition engine][pymmcore_plus.CMMCorePlus.run_mda]
       implemented in pure python. (The existing acquisition engines in
       Micro-manager are written in Java and Clojure).
-    - More flexible [event](api/events.md) connections and callback handling.
+    - More flexible [event](guides/events.md) connections and callback handling.
     - Extended convenience APIs for working with core (which would be hard or
       impossible to implement in the `pymmcore` SWIG wrapper).
     - More pythonic APIs for various pymmcore objects (e.g. [`pymmcore_plus.Device`][],
-      [`pymmcore_plus.Configuration`][]) and [constants](api/constants.md).
+      [`pymmcore_plus.Configuration`][]) and constants.
 
 - [`pymmcore-widgets`](https://github.com/pymmcore-plus/pymmcore-widgets) is a
     [Qt](https://www.google.com/search?q=qt)-based widget library built on
@@ -107,7 +107,7 @@ mmc = CMMCorePlus()
 mmc.loadSystemConfiguration()
 ```
 
-See the [`CMMCorePlus` API documentation](api/cmmcoreplus.md) for details on
+See the [`CMMCorePlus` API documentation][pymmcore_plus.CMMCorePlus] for details on
 the additional features of `CMMCorePlus`.
 
 !!! tip "`CMMCorePlus.instance`"
@@ -133,3 +133,5 @@ example of how to use them together.
 
 We welcome contributions to `pymmcore-plus` and related libraries.  Please see
 [contributing](contributing.md) for more information.
+
+::: pymmcore.CMMCore

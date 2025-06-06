@@ -52,7 +52,7 @@ Your engine must conform to the engine protocol defined by
 inherit from the protocol.
 
 You can be alerted to the the registering of a new engine with the
-[`core.events.mdaEngineRegistered`][pymmcore_plus.core.events._protocol.PCoreSignaler.mdaEngineRegistered]
+[`core.events.mdaEngineRegistered`][pymmcore_plus.core.events.PCoreSignaler.mdaEngineRegistered]
 signal.
 
 ```python

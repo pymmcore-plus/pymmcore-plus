@@ -413,12 +413,14 @@ class CMMCorePlus(pymmcore.CMMCore):
             Name to be assigned to the device during this core session.
         moduleName: str
             The name of the device adapter module (short name, not full file name).
-            See [`pymmcore.CMMCore.getDeviceAdapterNames`][] for a list of valid
-            module names.
+            See
+            [`getDeviceAdapterNames`][pymmcore_plus.CMMCorePlus.getDeviceAdapterNames]
+            for a list of valid module names.
         deviceName: str
             the name of the device. The name must correspond to one of the names
             recognized by the specific plugin library. See
-            [`pymmcore.CMMCore.getAvailableDevices`][] for a list of valid device names.
+            [`getAvailableDevices`][pymmcore_plus.CMMCorePlus.getAvailableDevices] for a
+            list of valid device names.
         """
         if str(label).lower() == Keyword.CoreDevice.value.lower():  # pragma: no cover
             raise ValueError(f"Label {label!r} is reserved.")

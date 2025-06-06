@@ -16,69 +16,23 @@ of the metadata and for static type checking.
 
 ## Primary Metadata Types
 
-:::pymmcore_plus.metadata.SummaryMetaV1
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.FrameMetaV1
-    options:
-        heading_level: 3
-        members: []
+- [`pymmcore_plus.metadata.SummaryMetaV1`][]
+- [`pymmcore_plus.metadata.FrameMetaV1`][]
 
 ------------
 
 ## Supporting Types
 
-:::pymmcore_plus.metadata.DeviceInfo
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.SystemInfo
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.ImageInfo
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.ConfigGroup
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.ConfigPreset
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.PixelSizeConfigPreset
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.PropertyInfo
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.PropertyValue
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.Position
-    options:
-        heading_level: 3
-        members: []
-
-:::pymmcore_plus.metadata.StagePosition
-    options:
-        heading_level: 3
-        members: []
+- [`pymmcore_plus.metadata.DeviceInfo`][]
+- [`pymmcore_plus.metadata.SystemInfo`][]
+- [`pymmcore_plus.metadata.ImageInfo`][]
+- [`pymmcore_plus.metadata.ConfigGroup`][]
+- [`pymmcore_plus.metadata.ConfigPreset`][]
+- [`pymmcore_plus.metadata.PixelSizeConfigPreset`][]
+- [`pymmcore_plus.metadata.PropertyInfo`][]
+- [`pymmcore_plus.metadata.PropertyValue`][]
+- [`pymmcore_plus.metadata.Position`][]
+- [`pymmcore_plus.metadata.StagePosition`][]
 
 ------------
 
@@ -90,12 +44,5 @@ argument to either the
 [`frameReady`][pymmcore_plus.mda.events.PMDASignaler.frameReady] callbacks in an
 MDA. However, they can also be generated with the following functions.
 
-:::pymmcore_plus.metadata.summary_metadata
-    options:
-        show_source: true
-        heading_level: 3
-
-:::pymmcore_plus.metadata.frame_metadata
-    options:
-        show_source: true
-        heading_level: 3
+- [`pymmcore_plus.metadata.summary_metadata`][]
+- [`pymmcore_plus.metadata.frame_metadata`][]

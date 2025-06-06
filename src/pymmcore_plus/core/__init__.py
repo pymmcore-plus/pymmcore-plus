@@ -21,6 +21,7 @@ __all__ = [
     "GenericDevice",
     "HubDevice",
     "ImageProcessorDevice",
+    "InfoDict",
     "Keyword",
     "MagnifierDevice",
     "Metadata",
@@ -75,5 +76,5 @@ from ._device import (
 )
 from ._metadata import Metadata
 from ._mmcore_plus import CMMCorePlus
-from ._property import DeviceProperty
+from ._property import DeviceProperty, InfoDict
 from ._sequencing import SequencedEvent, iter_sequenced_events

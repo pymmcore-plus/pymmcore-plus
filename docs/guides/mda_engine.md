@@ -570,10 +570,10 @@ mmc.mda.engine.use_hardware_sequencing = True
     The low-level `CMMCore` object itself has a number of methods that query
     whether certain devices are capable of hardware triggering, such as
 
-    - [`pymmcore.CMMCore.isStageSequenceable`][]
-    - [`pymmcore.CMMCore.isPropertySequenceable`][]
-    - [`pymmcore.CMMCore.isXYStageSequenceable`][]
-    - [`pymmcore.CMMCore.isExposureSequenceable`][]
+    - [`pymmcore.CMMCore.isStageSequenceable`][pymmcore_plus.CMMCorePlus.isStageSequenceable]
+    - [`pymmcore.CMMCore.isPropertySequenceable`][pymmcore_plus.CMMCorePlus.isPropertySequenceable]
+    - [`pymmcore.CMMCore.isXYStageSequenceable`][pymmcore_plus.CMMCorePlus.isXYStageSequenceable]
+    - [`pymmcore.CMMCore.isExposureSequenceable`][pymmcore_plus.CMMCorePlus.isExposureSequenceable]
 
     Hint: Many devices that support sequencing have a property (often named
     `Sequence` or similar) that can be used to toggle their responses to the
