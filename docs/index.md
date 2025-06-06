@@ -133,5 +133,3 @@ example of how to use them together.
 
 We welcome contributions to `pymmcore-plus` and related libraries.  Please see
 [contributing](contributing.md) for more information.
-
-::: pymmcore.CMMCore
