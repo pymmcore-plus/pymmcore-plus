@@ -194,7 +194,7 @@ class Device(_Lockable, ABC):
         ctrl = self._get_prop_or_raise(prop_name)
         if ctrl.fget is None:
             return ctrl.property.last_value
-        return self._prop_controllers_[prop_name].__get__(self, self.__class__)
+        return ctrl.__get__(self, self.__class__)
 
     def set_property_value(self, prop_name: str, value: Any) -> None:
         """Set the value of a property."""

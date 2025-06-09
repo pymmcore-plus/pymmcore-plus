@@ -77,6 +77,13 @@ class PropertyInfo(Generic[TProp]):
     is_pre_init: bool = False
 
     @property
+    def number_of_allowed_values(self) -> int:
+        """Return the number of allowed values."""
+        if self.allowed_values is None:
+            return 0
+        return len(self.allowed_values)
+
+    @property
     def is_sequenceable(self) -> bool:
         """Return True if the property is sequenceable."""
         return self.sequence_max_length > 0
@@ -291,7 +298,7 @@ def pymm_property(
     is_pre_init: bool = ...,
     name: str | None = ...,
     property_type: PropArg = ...,
-) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
+) -> Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]: ...
 def pymm_property(
     fget: Callable[[TDev], TProp] | None = None,
     *,
