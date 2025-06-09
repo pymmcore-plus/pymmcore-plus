@@ -79,12 +79,14 @@ class StateDevice(Device):
             default_value=states[0],
             allowed_values=states,
             getter=cls.get_state,
-            setter=cls.set_state,
+            setter=cls._set_state,
         )
         self.register_property(
             name=Keyword.Label.value,
             default_value=labels[0],
             allowed_values=labels,
+            getter=cls._get_current_label,
+            setter=cls._set_current_label,
         )
 
     def set_position_or_label(self, pos_or_label: int | str) -> None:
@@ -113,11 +115,6 @@ class StateDevice(Device):
         self._label_to_state[label] = pos
         self._update_allowed_labels()
 
-    def _update_allowed_labels(self) -> None:
-        """Update the allowed values for the label property."""
-        label_prop_info = self.get_property_info(Keyword.Label)
-        label_prop_info.allowed_values = list(self._state_to_label.values())
-
     def get_position_for_label(self, label: str) -> int:
         """Return the position corresponding to the provided label."""
         if label not in self._label_to_state:
@@ -126,3 +123,30 @@ class StateDevice(Device):
                 f"Available labels: {self._state_to_label.values()}"
             )
         return self._label_to_state[label]
+
+    # ------------------ private methods for internal use ------------------
+
+    def _update_allowed_labels(self) -> None:
+        """Update the allowed values for the label property."""
+        label_prop_info = self.get_property_info(Keyword.Label)
+        label_prop_info.allowed_values = list(self._state_to_label.values())
+
+    def _set_state(self, state: int) -> None:
+        # internal method to set the state, called by the property setter
+        # to keep the label and state property in sync
+        self.set_state(state)  # call the device-specific method
+        label = self._state_to_label.get(state, "")
+        self.set_property_value(Keyword.Label, label)
+
+    def _get_current_label(self) -> str:
+        # internal method to get the current label, called by the property getter
+        # to keep the label and state property in sync
+        pos = self.get_property_value(Keyword.State)
+        return self._state_to_label.get(pos, "")
+
+    def _set_current_label(self, label: str) -> None:
+        # internal method to set the label, called by the property setter
+        # to keep the label and state property in sync
+        pos = self._label_to_state.get(label)
+        if pos != self.get_property_value(Keyword.State):
+            self.set_property_value(Keyword.State, pos)  # will trigger set_state

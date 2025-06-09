@@ -86,11 +86,37 @@ def test_set_state_by_position(unicore: UniMMCore) -> None:
     for new_state in range(min(3, num_states)):
         unicore.setState(DEV, new_state)
         assert unicore.getState(DEV) == new_state
+        assert str(unicore.getProperty(DEV, Keyword.State)) == str(new_state)
 
         # Verify label is updated too
         label = unicore.getStateLabel(DEV)
         assert isinstance(label, str)
         assert len(label) > 0
+
+
+def test_set_state_by_state_property(unicore: UniMMCore) -> None:
+    """Test setting state by position number."""
+    unicore.getState(DEV)
+    # Test setting by property rather than direct method
+    for new_state in range(3):
+        unicore.setProperty(DEV, Keyword.State, new_state)
+        assert unicore.getState(DEV) == new_state
+        assert unicore.getStateLabel(DEV) == f"State-{new_state}"
+
+
+def test_set_state_by_label_property(unicore: UniMMCore) -> None:
+    """Test setting state by label property."""
+    unicore.getState(DEV)
+    labels = unicore.getStateLabels(DEV)
+
+    # Test setting state by label
+    for label in labels[:3]:
+        unicore.setProperty(DEV, Keyword.Label.value, label)
+        assert unicore.getStateLabel(DEV) == label
+
+        # Verify position is updated correctly
+        expected_position = unicore.getStateFromLabel(DEV, label)
+        assert unicore.getState(DEV) == expected_position
 
 
 def test_set_state_by_label(unicore: UniMMCore) -> None:
