@@ -1,12 +1,23 @@
 # Changelog
 
-## [v0.14.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.14.1) (2025-05-30)
+## [v0.15.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.0) (2025-06-10)
 
-[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.14.0...v0.14.1)
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.14.0...v0.15.0)
+
+**Implemented enhancements:**
+
+- feat: add Unicore camera implementation [\#468](https://github.com/pymmcore-plus/pymmcore-plus/pull/468) ([tlambert03](https://github.com/tlambert03))
+- feat: Unicore StateDevice [\#420](https://github.com/pymmcore-plus/pymmcore-plus/pull/420) ([tlambert03](https://github.com/tlambert03))
+- feat: Unicore SLMDevice [\#414](https://github.com/pymmcore-plus/pymmcore-plus/pull/414) ([tlambert03](https://github.com/tlambert03))
 
 **Fixed bugs:**
 
 - fix: dangling callback during core deletion, and disallow `registerCallback` [\#467](https://github.com/pymmcore-plus/pymmcore-plus/pull/467) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- ci\(dependabot\): bump pyvista/setup-headless-display-action from 3 to 4 [\#470](https://github.com/pymmcore-plus/pymmcore-plus/pull/470) ([dependabot[bot]](https://github.com/apps/dependabot))
+- ci\(pre-commit.ci\): autoupdate [\#469](https://github.com/pymmcore-plus/pymmcore-plus/pull/469) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
 
 ## [v0.14.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.14.0) (2025-05-05)
 
