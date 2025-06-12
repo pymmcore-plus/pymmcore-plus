@@ -1,4 +1,8 @@
-# Overview
+---
+title: pymmcore-plus
+icon: material/heart-plus
+description: Overview of pymmcore-plus
+---
 
 `pymmcore-plus` aims to extend
 [pymmcore](https://github.com/micro-manager/pymmcore) (python bindings for the

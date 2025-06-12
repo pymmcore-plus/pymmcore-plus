@@ -12,17 +12,29 @@ if TYPE_CHECKING:
     from ._mmcore_plus import CMMCorePlus
 
 
-class InfoDict(TypedDict):
+class PropertyInfoDict(TypedDict):
+    """Dictionary of information about a device property."""
+
     valid: bool
+    """True if the device is loaded and has this property."""
     value: Any | None
+    """Current value of the property, or None if invalid."""
     type: str | None
+    """Type of the property, as a string representation of `PropertyType`."""
     device_type: str | None
+    """Type of the device this property belongs to, as a string representation of `DeviceType`."""  # noqa: E501
     read_only: bool | None
+    """True if the property is read-only."""
     sequenceable: bool | None
+    """True if the property can be used in a sequence."""
     sequence_max_length: int | None
+    """Maximum number of events that can be put in a sequence for this property."""
     pre_init: bool | None
+    """True if the property must be defined before device initialization."""
     range: tuple[float, float] | None
+    """Range of the property as a tuple (lower_limit, upper_limit), or None if no limits."""  # noqa: E501
     allowed_values: tuple[str, ...] | None
+    """Tuple of allowed values for this property, or None if not constrained."""
 
 
 class DeviceProperty:
@@ -143,7 +155,7 @@ class DeviceProperty:
         return self._mmc.getDeviceType(self.device)
 
     def allowedValues(self) -> tuple[str, ...]:
-        """Return allowed values for this property, if contstrained."""
+        """Return allowed values for this property, if constrained."""
         # https://github.com/micro-manager/mmCoreAndDevices/issues/172
         allowed = self._mmc.getAllowedPropertyValues(self.device, self.name)
         if not allowed and self.deviceType() is DeviceType.StateDevice:
@@ -181,10 +193,10 @@ class DeviceProperty:
         """Stop an ongoing sequence of triggered events in a property."""
         self._mmc.stopPropertySequence(self.device, self.name)
 
-    def dict(self) -> InfoDict:
+    def dict(self) -> PropertyInfoDict:
         """Return dict of info about this Property.
 
-        Returns an [`InfoDict`][pymmcore_plus.core._property.InfoDict] with the
+        Returns an [`PropertyInfoDict`][pymmcore_plus.core.PropertyInfoDict] with the
         following keys: `"valid", "value", "type", "device_type", "read_only",
         "pre_init", "range", "allowed"`.
 
@@ -220,7 +232,7 @@ class DeviceProperty:
                 "allowed_values": None,
             }
 
-    InfoDict = InfoDict
+    InfoDict = PropertyInfoDict
 
     def __repr__(self) -> str:
         v = f"value={self.value!r}" if self.isValid() else "INVALID"

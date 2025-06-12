@@ -120,13 +120,13 @@ plugins:
             parameter_headings: true
             separate_signature: true
             show_root_heading: true
-            inherited_members: true
+            # inherited_members: true
             show_signature_annotations: true
             show_symbol_type_heading: true
             show_symbol_type_toc: true
             summary: true
-            allow_inspection: false # default is true
-            show_if_no_docstring: true # default is false
+            # allow_inspection: false # default is true
+            # show_if_no_docstring: true # default is false
             show_source: false
 extra_css:
   - stylesheets/extra.css
