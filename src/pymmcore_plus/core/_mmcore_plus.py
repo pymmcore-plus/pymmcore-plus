@@ -13,7 +13,15 @@ from pathlib import Path
 from re import Pattern
 from textwrap import dedent
 from threading import Thread
-from typing import TYPE_CHECKING, Any, Callable, NamedTuple, TypeVar, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    NamedTuple,
+    TypeVar,
+    cast,
+    overload,
+)
 
 from psygnal import SignalInstance
 from typing_extensions import deprecated
@@ -1561,7 +1569,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def setXYPosition(self, x: float, y: float, /) -> None: ...
     @overload
     def setXYPosition(self, xyStageLabel: str, x: float, y: float, /) -> None: ...
-    def setXYPosition(self, *args: str | float) -> None:
+    def setXYPosition(self, *args: Any) -> None:
         """Sets the position of the XY stage in microns.
 
         **Why Override?** to store the last commanded stage position internally.
@@ -1570,10 +1578,10 @@ class CMMCorePlus(pymmcore.CMMCore):
             label: str | None = None
             x, y = cast("tuple[float, float]", args)
         elif len(args) == 3:
-            label, x, y = args  # type: ignore
+            label, x, y = args
         else:
             raise ValueError("Invalid number of arguments. Expected 2 or 3.")
-        super().setXYPosition(*args)  # type: ignore
+        super().setXYPosition(*args)
         self._last_xy_position[label] = (x, y)
 
     def getZPosition(self) -> float:

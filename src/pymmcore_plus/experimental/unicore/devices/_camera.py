@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Callable, ClassVar
+from typing import TYPE_CHECKING, Callable, ClassVar, Literal
 
-from pymmcore_plus.core._constants import Keyword, PixelFormat
+from pymmcore_plus.core._constants import DeviceType, Keyword, PixelFormat
 
 from ._device import Device
 
@@ -17,6 +17,8 @@ if TYPE_CHECKING:
 
 class Camera(Device):
     # mandatory methods for Camera device adapters
+
+    _TYPE: ClassVar[Literal[DeviceType.Camera]] = DeviceType.Camera
 
     @abstractmethod
     def get_exposure(self) -> float:

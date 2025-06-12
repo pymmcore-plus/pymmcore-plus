@@ -7,7 +7,15 @@ from contextlib import suppress
 from datetime import datetime
 from itertools import count
 from time import perf_counter_ns
-from typing import TYPE_CHECKING, Any, Callable, Literal, TypeVar, cast, overload
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Literal,
+    TypeVar,
+    cast,
+    overload,
+)
 
 import numpy as np
 
@@ -19,7 +27,9 @@ from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import Camera
 from pymmcore_plus.experimental.unicore.devices._device import Device
+from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
+from pymmcore_plus.experimental.unicore.devices._state import StateDevice
 
 from ._sequence_buffer import SequenceBuffer
 
@@ -28,7 +38,14 @@ if TYPE_CHECKING:
     from typing import Literal, NewType
 
     from numpy.typing import DTypeLike
-    from pymmcore import AdapterName, AffineTuple, DeviceLabel, DeviceName, PropertyName
+    from pymmcore import (
+        AdapterName,
+        AffineTuple,
+        DeviceLabel,
+        DeviceName,
+        PropertyName,
+        StateLabel,
+    )
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
@@ -76,18 +93,19 @@ class _CoreDevice:
         self._state_cache[(KW.CoreDevice, keyword)] = label
 
 
+_DEFAULT_BUFFER_SIZE_MB: int = 1000
+
+
 class UniMMCore(CMMCorePlus):
     """Unified Core object that first checks for python, then C++ devices."""
-
-    _DEFAULT_BUFFER_SIZE_MB: int = 1000  # default size of the sequence buffer in MB
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._pydevices = PyDeviceManager()  # manager for python devices
         self._state_cache = PropertyStateCache()  # threadsafe cache for property states
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
         self._stop_event: threading.Event = threading.Event()
-        self._acquisition_thread: AcquisitionThread | None = None
-        self._seq_buffer = SequenceBuffer(size_mb=self._DEFAULT_BUFFER_SIZE_MB)
+        self._acquisition_thread: AcquisitionThread | None = None  # TODO: implement
+        self._seq_buffer = SequenceBuffer(size_mb=_DEFAULT_BUFFER_SIZE_MB)
 
         super().__init__(*args, **kwargs)
 
@@ -1204,43 +1222,376 @@ class UniMMCore(CMMCorePlus):
 
         return self.getPixelSizeUmByID(res_id) * binning / self.getMagnificationFactor()
 
+    # ########################################################################
+    # ------------------------- SLM Device Methods -------------------------
+    # ########################################################################
 
-# Threading ------------------------------------------------------
+    # --------------------------------------------------------------------- utils
 
+    def _py_slm(self, slmLabel: str | None = None) -> SLMDevice | None:
+        """Return the *Python* SLM for ``label`` (or current), else ``None``."""
+        label = slmLabel or self.getSLMDevice()
+        if label in self._pydevices:
+            return self._pydevices.get_device_of_type(label, SLMDevice)
+        return None  # pragma: no cover
 
-class AcquisitionThread(threading.Thread):
-    """A thread for running sequence acquisition in the background."""
+    def setSLMDevice(self, slmLabel: DeviceLabel | str) -> None:
+        """Set the SLM device."""
+        label = self._set_current_if_pydevice(KW.CoreSLM, slmLabel)
+        super().setSLMDevice(label)
 
-    def __init__(
+    def getSLMDevice(self) -> DeviceLabel | Literal[""]:
+        """Returns the label of the currently selected SLM device.
+
+        Returns empty string if no SLM device is selected.
+        """
+        return self._pycore.current(KW.CoreSLM) or super().getSLMDevice()
+
+    # ------------------------------------------------------------------- set image
+
+    @overload
+    def setSLMImage(self, pixels: np.ndarray, /) -> None: ...
+    @overload
+    def setSLMImage(
+        self, slmLabel: DeviceLabel | str, pixels: np.ndarray, /
+    ) -> None: ...
+    def setSLMImage(self, *args: Any) -> None:
+        """Load the image into the SLM device adapter."""
+        label, args = _ensure_label(args, min_args=2, getter=self.getSLMDevice)
+        if (slm := self._py_slm(label)) is None:  # pragma: no cover
+            return super().setSLMImage(label, *args)
+
+        with slm:
+            shape, dtype = slm.shape(), np.dtype(slm.dtype())
+            arr = np.asarray(args[0], dtype=dtype)
+            if not arr.shape == shape:  # pragma: no cover
+                raise ValueError(
+                    f"Image shape {arr.shape} doesn't match SLM shape {shape}."
+                )
+            slm.set_image(arr)
+
+    def getSLMImage(self, slmLabel: DeviceLabel | str | None = None) -> np.ndarray:
+        """Get the current image from the SLM device."""
+        if (slm := self._py_slm(slmLabel)) is None:
+            raise NotImplementedError(
+                "getSLMImage is not implemented for C++ SLM devices. "
+                "(This method is unique to Python SLM devices.)"
+            )
+
+        with slm:
+            return slm.get_image()
+
+    @overload
+    def setSLMPixelsTo(self, intensity: int, /) -> None: ...
+    @overload
+    def setSLMPixelsTo(self, red: int, green: int, blue: int, /) -> None: ...
+    @overload
+    def setSLMPixelsTo(
+        self, slmLabel: DeviceLabel | str, intensity: int, /
+    ) -> None: ...
+    @overload
+    def setSLMPixelsTo(
+        self, slmLabel: DeviceLabel | str, red: int, green: int, blue: int, /
+    ) -> None: ...
+    def setSLMPixelsTo(self, *args: Any) -> None:
+        """Set all pixels of the SLM to a uniform intensity or RGB values."""
+        if len(args) < 1 or len(args) > 4:  # pragma: no cover
+            raise ValueError("setSLMPixelsTo requires 1 to 4 arguments.")
+
+        label = args[0] if len(args) in (2, 4) else self.getSLMDevice()
+        if (slm := self._py_slm(label)) is None:  # pragma: no cover
+            return super().setSLMPixelsTo(*args)
+
+        with slm:
+            shape = slm.shape()
+            dtype = slm.dtype()
+
+            # Determine if we have RGB (3 or 4 args) or single intensity (1 or 2 args)
+            if len(args) == 1:  # setSLMPixelsTo(intensity)
+                pixels = np.full(shape, args[0], dtype=dtype)
+            elif len(args) == 2:  # setSLMPixelsTo(slmLabel, intensity)
+                pixels = np.full(shape, args[1], dtype=dtype)
+            elif len(args) == 3:  # setSLMPixelsTo(red, green, blue)
+                rgb_values = args
+                pixels = np.broadcast_to(rgb_values, (*shape[:2], 3))
+            elif len(args) == 4:  # setSLMPixelsTo(slmLabel, red, green, blue)
+                rgb_values = args[1:4]
+                pixels = np.broadcast_to(rgb_values, (*shape[:2], 3))
+            if len(shape) == 2 and pixels.ndim == 3:
+                # Grayscale SLM - convert RGB to grayscale (simple average)
+                pixels = np.mean(pixels, axis=2, dtype=dtype).astype(dtype)
+
+            slm.set_image(pixels)
+
+    @overload
+    def displaySLMImage(self) -> None: ...
+    @overload
+    def displaySLMImage(self, slmLabel: DeviceLabel | str, /) -> None: ...
+    def displaySLMImage(self, slmLabel: DeviceLabel | str | None = None) -> None:
+        """Command the SLM to display the loaded image."""
+        label = slmLabel or self.getSLMDevice()
+        if (slm := self._py_slm(label)) is None:  # pragma: no cover
+            if slmLabel is None:
+                return super().displaySLMImage(label)
+            return super().displaySLMImage(slmLabel)
+
+        with slm:
+            slm.display_image()
+
+    # ------------------------------------------------------------------ exposure
+
+    @overload
+    def setSLMExposure(self, interval_ms: float, /) -> None: ...
+    @overload
+    def setSLMExposure(
+        self, slmLabel: DeviceLabel | str, interval_ms: float, /
+    ) -> None: ...
+    def setSLMExposure(self, *args: Any) -> None:
+        """Command the SLM to turn off after a specified interval."""
+        label, args = _ensure_label(args, min_args=2, getter=self.getSLMDevice)
+        if (slm := self._py_slm(label)) is None:  # pragma: no cover
+            return super().setSLMExposure(label, *args)
+
+        with slm:
+            slm.set_exposure(args[0])
+
+    @overload
+    def getSLMExposure(self) -> float: ...
+    @overload
+    def getSLMExposure(self, slmLabel: DeviceLabel | str, /) -> float: ...
+    def getSLMExposure(self, slmLabel: DeviceLabel | str | None = None) -> float:
+        """Find out the exposure interval of an SLM."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            label = slmLabel or self.getSLMDevice()
+            return super().getSLMExposure(label)
+
+        with slm:
+            return slm.get_exposure()
+
+    # ----------------------------------------------------------------- dimensions
+
+    @overload
+    def getSLMWidth(self) -> int: ...
+    @overload
+    def getSLMWidth(self, slmLabel: DeviceLabel | str, /) -> int: ...
+    def getSLMWidth(self, slmLabel: DeviceLabel | str | None = None) -> int:
+        """Returns the width of the SLM in pixels."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            label = slmLabel or self.getSLMDevice()
+            return super().getSLMWidth(label)
+
+        with slm:
+            return slm.shape()[1]  # width is second dimension
+
+    @overload
+    def getSLMHeight(self) -> int: ...
+    @overload
+    def getSLMHeight(self, slmLabel: DeviceLabel | str, /) -> int: ...
+    def getSLMHeight(self, slmLabel: DeviceLabel | str | None = None) -> int:
+        """Returns the height of the SLM in pixels."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            label = slmLabel or self.getSLMDevice()
+            return super().getSLMHeight(label)
+
+        with slm:
+            return slm.shape()[0]  # height is first dimension
+
+    @overload
+    def getSLMNumberOfComponents(self) -> int: ...
+    @overload
+    def getSLMNumberOfComponents(self, slmLabel: DeviceLabel | str, /) -> int: ...
+    def getSLMNumberOfComponents(
+        self, slmLabel: DeviceLabel | str | None = None
+    ) -> int:
+        """Returns the number of color components (channels) in the SLM."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            label = slmLabel or self.getSLMDevice()
+            return super().getSLMNumberOfComponents(label)
+
+        with slm:
+            shape = slm.shape()
+            return 1 if len(shape) == 2 else shape[2]
+
+    @overload
+    def getSLMBytesPerPixel(self) -> int: ...
+    @overload
+    def getSLMBytesPerPixel(self, slmLabel: DeviceLabel | str, /) -> int: ...
+    def getSLMBytesPerPixel(self, slmLabel: DeviceLabel | str | None = None) -> int:
+        """Returns the number of bytes per pixel for the SLM."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            label = slmLabel or self.getSLMDevice()
+            return super().getSLMBytesPerPixel(label)
+
+        with slm:
+            dtype = np.dtype(slm.dtype())
+            return dtype.itemsize
+
+    # ------------------------------------------------------------------ sequences
+
+    def getSLMSequenceMaxLength(self, slmLabel: DeviceLabel | str) -> int:
+        """Get the maximum length of an image sequence that can be uploaded."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            return super().getSLMSequenceMaxLength(slmLabel)
+
+        with slm:
+            return slm.get_sequence_max_length()
+
+    def loadSLMSequence(
         self,
-        image_generator: Iterator[Mapping],
-        finalize: Callable[[Mapping], None],
-        label: str,
-        stop_event: threading.Event,
+        slmLabel: DeviceLabel | str,
+        imageSequence: Sequence[bytes | np.ndarray],
     ) -> None:
-        super().__init__(daemon=True)
-        self.image_iterator = image_generator
-        self.finalize = finalize
-        self.label = label
-        self.stop_event = stop_event
+        """Load a sequence of images to the SLM."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            return super().loadSLMSequence(slmLabel, imageSequence)  # type: ignore[arg-type]
 
-    def run(self) -> None:
-        """Run the sequence and handle the generator pattern."""
-        try:
-            for metadata in self.image_iterator:
-                self.finalize(metadata)
-                if self.stop_event.is_set():
-                    break
-        except BufferOverflowStop:
-            # Buffer overflow is a graceful stop condition, not an error
-            # this was likely raised by the Unicore above in _start_sequence
-            pass
-        except BufferError:
-            raise  # pragma: no cover
-        except Exception as e:  # pragma: no cover
-            raise RuntimeError(
-                f"Error in device {self.label!r} during sequence acquisition: {e}"
-            ) from e
+        with slm:
+            if (m := slm.get_sequence_max_length()) == 0:
+                raise RuntimeError(f"SLM {slmLabel!r} does not support sequences.")
+
+            shape = slm.shape()
+            dtype = np.dtype(slm.dtype())
+
+            np_arrays: list[np.ndarray] = []
+            for i, img_bytes in enumerate(imageSequence):
+                if isinstance(img_bytes, bytes):
+                    arr = np.frombuffer(img_bytes, dtype=dtype).reshape(shape)
+                else:
+                    arr = np.asarray(img_bytes, dtype=dtype)
+                    if arr.shape != shape:
+                        raise ValueError(
+                            f"Image {i} shape {arr.shape} does not "
+                            f"match SLM shape {shape}"
+                        )
+                np_arrays.append(arr)
+            if len(np_arrays) > (m := slm.get_sequence_max_length()):
+                raise ValueError(
+                    f"Sequence length {len(np_arrays)} exceeds maximum {m}."
+                )
+            slm.send_sequence(np_arrays)
+
+    def startSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
+        """Start a sequence of images on the SLM."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            return super().startSLMSequence(slmLabel)
+
+        with slm:
+            slm.start_sequence()
+
+    def stopSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
+        """Stop a sequence of images on the SLM."""
+        if (slm := self._py_slm(slmLabel)) is None:  # pragma: no cover
+            return super().stopSLMSequence(slmLabel)
+
+        with slm:
+            slm.stop_sequence()
+
+    # ########################################################################
+    # ------------------------ State Device Methods -------------------------
+    # ########################################################################
+
+    # --------------------------------------------------------------------- utils
+
+    def _py_state(self, stateLabel: str | None = None) -> StateDevice | None:
+        """Return the *Python* State device for ``label``, else ``None``."""
+        label = stateLabel or ""
+        if label in self._pydevices:
+            return self._pydevices.get_device_of_type(label, StateDevice)
+        return None  # pragma: no cover
+
+    # ------------------------------------------------------------------- setState
+
+    def setState(self, stateDeviceLabel: DeviceLabel | str, state: int) -> None:
+        """Set state (position) on the specific device."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().setState(stateDeviceLabel, state)
+
+        with state_dev:
+            state_dev.set_position_or_label(state)
+
+    # ------------------------------------------------------------------- getState
+
+    def getState(self, stateDeviceLabel: DeviceLabel | str) -> int:
+        """Return the current state (position) on the specific device."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getState(stateDeviceLabel)
+
+        with state_dev:
+            return int(state_dev.get_property_value(KW.State))
+
+    # ---------------------------------------------------------------- getNumberOfStates
+
+    def getNumberOfStates(self, stateDeviceLabel: DeviceLabel | str) -> int:
+        """Return the total number of available positions (states)."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getNumberOfStates(stateDeviceLabel)
+
+        with state_dev:
+            return state_dev.get_property_info(KW.State).number_of_allowed_values
+
+    # ----------------------------------------------------------------- setStateLabel
+
+    def setStateLabel(
+        self, stateDeviceLabel: DeviceLabel | str, stateLabel: str
+    ) -> None:
+        """Set device state using the previously assigned label (string)."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().setStateLabel(stateDeviceLabel, stateLabel)
+
+        with state_dev:
+            try:
+                state_dev.set_position_or_label(stateLabel)
+            except KeyError as e:
+                raise RuntimeError(str(e)) from e  # convert to RuntimeError
+
+    # ----------------------------------------------------------------- getStateLabel
+
+    def getStateLabel(self, stateDeviceLabel: DeviceLabel | str) -> StateLabel:
+        """Return the current state as the label (string)."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getStateLabel(stateDeviceLabel)
+
+        with state_dev:
+            return cast("StateLabel", state_dev.get_property_value(KW.Label))
+
+    # --------------------------------------------------------------- defineStateLabel
+
+    def defineStateLabel(
+        self, stateDeviceLabel: DeviceLabel | str, state: int, label: str
+    ) -> None:
+        """Define a label for the specific state."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().defineStateLabel(stateDeviceLabel, state, label)
+
+        with state_dev:
+            state_dev.assign_label_to_position(state, label)
+
+    # ----------------------------------------------------------------- getStateLabels
+
+    def getStateLabels(
+        self, stateDeviceLabel: DeviceLabel | str
+    ) -> tuple[StateLabel, ...]:
+        """Return labels for all states."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getStateLabels(stateDeviceLabel)
+
+        with state_dev:
+            return tuple(state_dev.get_property_info(KW.Label).allowed_values or [])
+
+    # ------------------------------------------------------------- getStateFromLabel
+
+    def getStateFromLabel(
+        self, stateDeviceLabel: DeviceLabel | str, stateLabel: str
+    ) -> int:
+        """Obtain the state for a given label."""
+        if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
+            return super().getStateFromLabel(stateDeviceLabel, stateLabel)
+
+        with state_dev:
+            try:
+                return state_dev.get_position_for_label(stateLabel)
+            except KeyError as e:
+                raise RuntimeError(str(e)) from e  # convert to RuntimeError
 
 
 # -------------------------------------------------------------------------------
@@ -1308,3 +1659,44 @@ class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
     def __repr__(self) -> str:
         with self._lock:
             return f"{self.__class__.__name__}({self._store!r})"
+
+
+# Threading ------------------------------------------------------
+
+
+class AcquisitionThread(threading.Thread):
+    """A thread for running sequence acquisition in the background."""
+
+    def __init__(
+        self,
+        image_generator: Iterator[Mapping],
+        finalize: Callable[[Mapping], None],
+        label: str,
+        stop_event: threading.Event,
+    ) -> None:
+        super().__init__(daemon=True)
+        self.image_iterator = image_generator
+        self.finalize = finalize
+        self.label = label
+        self.stop_event = stop_event
+
+    def run(self) -> None:
+        """Run the sequence and handle the generator pattern."""
+        try:
+            for metadata in self.image_iterator:
+                self.finalize(metadata)
+                if self.stop_event.is_set():
+                    break
+        except BufferOverflowStop:
+            # Buffer overflow is a graceful stop condition, not an error
+            # this was likely raised by the Unicore above in _start_sequence
+            pass
+        except BufferError:
+            raise  # pragma: no cover
+        except Exception as e:  # pragma: no cover
+            raise RuntimeError(
+                f"Error in device {self.label!r} during sequence acquisition: {e}"
+            ) from e
+
+
+# -------------------------------------------------------------------------------

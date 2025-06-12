@@ -38,9 +38,9 @@ class CMMCoreSignaler(SignalGroup, _DevicePropertyEventMixin):
 
     # aliases for lower casing
     @property
-    def xYStagePositionChanged(self) -> SignalInstance:  # type: ignore
+    def xYStagePositionChanged(self) -> SignalInstance:
         return self.XYStagePositionChanged
 
     @property
-    def sLMExposureChanged(self) -> SignalInstance:  # type: ignore
+    def sLMExposureChanged(self) -> SignalInstance:
         return self.SLMExposureChanged
