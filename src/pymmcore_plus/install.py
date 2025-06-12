@@ -173,7 +173,7 @@ def _mac_install(dmg: Path, dest: Path, log_msg: _MsgLogger) -> None:
 @cache
 def available_versions() -> dict[str, str]:
     """Return a map of version -> url available for download."""
-    with urlopen(DOWNLOADS_URL) as resp:
+    with urlopen(DOWNLOADS_URL, timeout=2) as resp:
         html = resp.read().decode("utf-8")
 
     all_links = re.findall(r"href=\"([^\"]+)\"", html)
