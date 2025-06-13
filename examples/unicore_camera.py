@@ -111,16 +111,63 @@ class MyCamera(Camera):
 
     def start_sequence(
         self,
-        n: int,
+        n: int | None,
         get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition."""
-        for _ in range(n):
-            # Simulate image acquisition with current exposure time
-            time.sleep(self._exposure / 1000.0)  # Convert ms to seconds
-            buf = get_buffer(self.shape(), self.dtype())
-            buf[:] = make_cool_image(self.shape(), self.dtype(), self._exposure)
-            yield {"timestamp": time.time()}  # any metadata
+        if n is None:
+            n = 2**63  # Use a large number to simulate continuous acquisition
+        try:
+            for _i in range(n):
+                # Simulate image acquisition with current exposure time
+                time.sleep(self._exposure / 1000.0)  # Convert ms to seconds
+
+                buf = get_buffer(self.shape(), self.dtype())
+                buf[:] = make_cool_image(self.shape(), self.dtype(), self._exposure)
+
+                yield {"timestamp": time.time()}  # any metadata
+        finally:
+            ...
+            # any cleanup code, e.g. stopping the camera or releasing resources
+
+    # this is what a start_sequence method might look like if your camera
+    # driver API requires a callback that it will call when an image is ready.
+    def start_sequence_callback_version(
+        self,
+        n: int | None,
+        get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
+    ) -> Iterator[Mapping]:
+        from queue import Queue
+
+        queue: Queue[dict | Exception] = Queue()
+
+        shape, _dtype = (512, 512), np.uint16
+
+        def _callback_sent_to_driver(data_pointer: np.ndarray) -> None:
+            try:
+                buf = get_buffer(shape, _dtype)
+                buf[:] = data_pointer
+                metadata: dict = {}
+            except Exception as e:  # pragma: no cover
+                queue.put(e)
+            else:
+                queue.put(metadata)
+
+        # driver_api.start(_callback_sent_to_driver, n)
+        try:
+            counter = 0
+            while True:
+                meta_or_exception = queue.get()
+                if isinstance(meta_or_exception, Exception):
+                    raise meta_or_exception
+                yield meta_or_exception
+                counter += 1
+                if n is not None and counter >= n:
+                    break
+
+        finally:
+            ...
+            # driver_api.stop()
 
 
 core = UniMMCore()

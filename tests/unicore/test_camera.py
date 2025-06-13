@@ -49,10 +49,14 @@ class MyCamera(Camera):
         return DTYPE
 
     def start_sequence(
-        self, n: int, get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray]
+        self,
+        n: int | None,
+        get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition."""
         shape, dtype = self.shape(), self.dtype()
+        if n is None:
+            n = 2**63
         for i in range(n):
             buffer = get_buffer(shape, dtype)
             time.sleep(0.01)  # Simulate time taken to acquire an image

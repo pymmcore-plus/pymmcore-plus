@@ -786,13 +786,15 @@ class UniMMCore(CMMCorePlus):
             img_number = next(counter)
             elapsed_ms = (perf_counter_ns() - start_time) / 1e6
             received = datetime.now().isoformat(sep=" ")
-            meta_update = {
-                **cam_meta,
-                KW.Metadata_TimeInCore: received,
-                KW.Metadata_ImageNumber: str(img_number),
-                KW.Elapsed_Time_ms: f"{elapsed_ms:.2f}",
-            }
-            self._seq_buffer.finalize_slot({**base_meta, **meta_update})
+            self._seq_buffer.finalize_slot(
+                {
+                    **base_meta,
+                    **cam_meta,
+                    KW.Metadata_TimeInCore: received,
+                    KW.Metadata_ImageNumber: str(img_number),
+                    KW.Elapsed_Time_ms: f"{elapsed_ms:.2f}",
+                }
+            )
 
             # Auto-stop when we've acquired the requested number of images
             if n_images is not None and (img_number + 1) >= n_images:
@@ -808,8 +810,7 @@ class UniMMCore(CMMCorePlus):
 
         self._acquisition_thread = AcquisitionThread(
             image_generator=cam.start_sequence(
-                n_images or 2**63 - 1,
-                get_buffer_with_overflow_handling,
+                n_images, get_buffer_with_overflow_handling
             ),
             finalize=finalize_with_metadata,
             label=camera_label,
@@ -823,6 +824,7 @@ class UniMMCore(CMMCorePlus):
 
     # ------------------------------------------------- startSequenceAcquisition
 
+    # startSequenceAcquisition
     def _do_start_sequence_acquisition(
         self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
     ) -> None:
@@ -835,6 +837,7 @@ class UniMMCore(CMMCorePlus):
 
     # ------------------------------------------------- continuous acquisition
 
+    # startContinuousSequenceAcquisition
     def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
         if (cam := self._py_camera()) is None:  # pragma: no cover
             return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)

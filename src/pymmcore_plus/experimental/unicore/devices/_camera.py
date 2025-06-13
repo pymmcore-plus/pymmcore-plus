@@ -46,7 +46,7 @@ class Camera(Device):
     @abstractmethod
     def start_sequence(
         self,
-        n: int,
+        n: int | None,
         get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition.
@@ -60,8 +60,9 @@ class Camera(Device):
 
         Parameters
         ----------
-        n : int
-            The number of images to acquire.
+        n : int | None
+            If an integer, this is the number of images to acquire.
+            If None, the camera should acquire images indefinitely until stopped.
         get_buffer : Callable[[Sequence[int], DTypeLike], np.ndarray]
             A callable that returns a buffer for the camera to fill with image data.
             You should call this with the shape of the image and the dtype
@@ -76,6 +77,10 @@ class Camera(Device):
         """
         # EXAMPLE USAGE:
         # shape, dtype = self.shape(), self.dtype()
+        # if n is None:  # acquire indefinitely until stopped
+        #    while True:
+        #        yield ...
+        #    return
         # for _ in range(n):
         #     image = get_buffer(shape, dtype)
         #     get the image from the camera, and fill the buffer in place

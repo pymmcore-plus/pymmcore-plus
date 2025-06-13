@@ -22,6 +22,11 @@ class BufferSlot(NamedTuple):
     nbytes_total: int  # full span in the pool (data + padding)
 
 
+# TODO: version that doesn't use contiguous memory,
+# but rather uses a deuqe of numpy arrays.
+class SequenceStack: ...
+
+
 class SequenceBuffer:
     """A lock-protected circular buffer backed by a single numpy byte array.
 
@@ -55,7 +60,7 @@ class SequenceBuffer:
         self._overflow_occurred: bool = False
 
         self._lock = threading.Lock()  # not re-entrant, but slightly faster than RLock
-        self._pending_slot: tuple[NDArray, int] | None = None  # only 1 outstanding slot
+        self._pending_slot: deque[tuple[NDArray, int]] = deque()
 
     # ---------------------------------------------------------------------
     # Producer API - acquire a slot, fill it, finalize it
@@ -82,10 +87,6 @@ class SequenceBuffer:
         # --- reserve space -------------------------------------------------
 
         with self._lock:
-            if self._pending_slot is not None:
-                msg = "Cannot acquire a new slot before finalizing the pending one."
-                raise RuntimeError(msg)
-
             # Calculate padding needed to align start address to dtype boundary
             align_pad = (-self._head) % dtype_.itemsize
             needed = nbytes_data + align_pad
@@ -112,7 +113,7 @@ class SequenceBuffer:
             arr: NDArray[Any] = np.ndarray(
                 shape, dtype_, buffer=self._pool, offset=start
             )
-            self._pending_slot = (arr, needed)
+            self._pending_slot.append((arr, needed))
             return arr
 
     def finalize_slot(self, metadata: Mapping[str, Any] | None = None) -> None:
@@ -123,12 +124,11 @@ class SequenceBuffer:
         slot's metadata dictionary.
         """
         with self._lock:
-            if (slot := self._pending_slot) is None:
+            if not self._pending_slot:
                 msg = "No pending slot to finalize"
                 raise RuntimeError(msg)
 
-            self._pending_slot = None
-            arr, nbytes_total = slot
+            arr, nbytes_total = self._pending_slot.popleft()
             self._slots.append(BufferSlot(arr, metadata, nbytes_total))
 
     # Convenience: copy-in one-shot insert ------------------------------
@@ -153,7 +153,7 @@ class SequenceBuffer:
     # ------------------------------------------------------------------
 
     def pop_next(
-        self, *, copy: bool = False
+        self, *, out: np.ndarray | None = None
     ) -> tuple[NDArray[Any], Mapping[str, Any]] | None:
         """Remove and return the oldest frame.
 
@@ -165,27 +165,23 @@ class SequenceBuffer:
             if not self._slots:
                 return None
             slot = self._slots.popleft()
-            self._evict_slot(slot)
 
-        if copy:
-            arr = slot.array.copy()
+        if out is not None:
+            out[:] = slot.array
+            arr = out
         else:
-            # even though we're popping, we still return a read-only view since
-            # the caller should be able to modify our _pool directly.
-            arr = slot.array.view()
-            arr.flags.writeable = False
+            arr = slot.array.copy()
+        self._evict_slot(slot)
 
         # return actual metadata, we're done with it.
         return arr, (slot.metadata or {})
 
-    def peek_last(
-        self, *, copy: bool = False
-    ) -> tuple[NDArray[Any], Mapping[str, Any]] | None:
+    def peek_last(self) -> tuple[NDArray[Any], Mapping[str, Any]] | None:
         """Return the newest frame without removing it."""
-        return self.peek_nth_from_last(0, copy=copy)
+        return self.peek_nth_from_last(0)
 
     def peek_nth_from_last(
-        self, n: int, *, copy: bool = False
+        self, n: int, *, out: np.ndarray | None = None
     ) -> tuple[NDArray[Any], dict[str, Any]] | None:
         """Return the n-th most recent frame without removing it.
 
@@ -195,13 +191,11 @@ class SequenceBuffer:
             if n < 0 or n >= len(self._slots):
                 return None
             slot = self._slots[-(n + 1)]
-
-            if copy:
-                arr = slot.array.copy()
+            if out is not None:
+                out[:] = slot.array
+                arr = out
             else:
-                # Return a read-only view to prevent modification of data in the buffer
-                arr = slot.array.view()
-                arr.flags.writeable = False
+                arr = slot.array.copy()
 
             # Return a copy of the metadata to avoid external modification
             return arr, (dict(slot.metadata) if slot.metadata else {})
@@ -213,7 +207,7 @@ class SequenceBuffer:
     def clear(self) -> None:
         with self._lock:
             self._slots.clear()
-            self._pending_slot = None
+            self._pending_slot.clear()
             self._head = self._tail = self._bytes_in_use = 0
             self._overflow_occurred = False
 
