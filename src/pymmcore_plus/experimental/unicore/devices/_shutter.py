@@ -4,7 +4,7 @@ from abc import abstractmethod
 
 from pymmcore_plus.core._constants import DeviceType
 
-from ._device import Device
+from ._device_base import Device
 
 
 class ShutterDevice(Device):
