@@ -15,7 +15,7 @@ if TYPE_CHECKING:
     from numpy.typing import DTypeLike
 
 
-class Camera(Device):
+class CameraDevice(Device):
     # mandatory methods for Camera device adapters
 
     _TYPE: ClassVar[Literal[DeviceType.Camera]] = DeviceType.Camera

@@ -10,7 +10,7 @@ import pytest
 import useq
 
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.experimental.unicore import Camera
+from pymmcore_plus.experimental.unicore import CameraDevice
 from pymmcore_plus.experimental.unicore.core._sequence_buffer import SequenceBuffer
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
@@ -147,7 +147,7 @@ DTYPE = np.uint16
 FRAME = np.ones(FRAME_SHAPE, dtype=DTYPE)
 
 
-class MyCamera(Camera):
+class MyCamera(CameraDevice):
     def get_exposure(self) -> float:
         return 100.0
 

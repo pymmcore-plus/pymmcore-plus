@@ -30,7 +30,7 @@ from typing import Callable
 import numpy as np
 from numpy.typing import DTypeLike
 
-from pymmcore_plus.experimental.unicore import Camera, UniMMCore
+from pymmcore_plus.experimental.unicore import CameraDevice, UniMMCore
 
 dll = dc.dcamapi
 
@@ -43,7 +43,7 @@ PIXEL_TYPE_TO_DTYPE: dict[int, np.dtype] = {
 # -------- Here is our actual Device Adaptor for pymmcore_plus.unicore.Camera
 
 
-class HamaCam(Camera):
+class HamaCam(CameraDevice):
     def initialize(self) -> None:
         """Initialize the camera."""
         if count := dc.dcamapi_init():

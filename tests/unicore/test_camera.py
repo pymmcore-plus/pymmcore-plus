@@ -8,7 +8,7 @@ import pytest
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core._constants import Keyword
-from pymmcore_plus.experimental.unicore import Camera
+from pymmcore_plus.experimental.unicore import CameraDevice
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 if TYPE_CHECKING:
@@ -24,7 +24,7 @@ DTYPE = np.uint16
 FRAME = np.random.randint(0, 65535, size=FRAME_SHAPE, dtype=DTYPE)
 
 
-class MyCamera(Camera):
+class MyCamera(CameraDevice):
     """Example Camera device."""
 
     _exposure: float = 100.0
