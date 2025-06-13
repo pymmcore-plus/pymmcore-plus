@@ -1,15 +1,20 @@
+from __future__ import annotations
+
 import time
-from collections.abc import Iterator, Mapping, Sequence
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 import pytest
-from numpy.typing import DTypeLike
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.experimental.unicore import Camera
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Mapping, Sequence
+
+    from numpy.typing import DTypeLike
 
 DEV = "Camera"
 
@@ -49,10 +54,14 @@ class MyCamera(Camera):
         return DTYPE
 
     def start_sequence(
-        self, n: int, get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray]
+        self,
+        n: int | None,
+        get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
     ) -> Iterator[Mapping]:
         """Start a sequence acquisition."""
         shape, dtype = self.shape(), self.dtype()
+        if n is None:
+            n = 2**63
         for i in range(n):
             buffer = get_buffer(shape, dtype)
             time.sleep(0.01)  # Simulate time taken to acquire an image

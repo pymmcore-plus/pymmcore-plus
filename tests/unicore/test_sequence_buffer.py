@@ -540,38 +540,38 @@ def test_mixed_data_types(small_buffer: SequenceBuffer) -> None:
     assert meta3["type"] == "int16"
 
 
-# Additional tests to cover missing lines
-def test_pop_next_with_copy(small_buffer: SequenceBuffer) -> None:
-    """Test pop_next with copy=True to cover line 173."""
-    data = np.array([[1, 2], [3, 4]], dtype=np.uint8)
-    small_buffer.insert_data(data, {"test": True})
-
-    result = small_buffer.pop_next(copy=True)
-    assert result is not None
-    retrieved_data, metadata = result
-
-    # Should be a copy, not a view
-    assert retrieved_data.flags.owndata is True
-    np.testing.assert_array_equal(retrieved_data, data)
-    assert metadata["test"] is True
-
-
-def test_acquire_slot_with_pending_slot_error() -> None:
+def test_acquire_2slots_in_a_row() -> None:
     """Test acquiring slot when one is already pending."""
     buffer = SequenceBuffer(size_mb=1.0)
 
     # Acquire a slot but don't finalize it
     buffer.acquire_slot((10, 10))
-
-    # Try to acquire another slot - should raise error
-    with pytest.raises(
-        RuntimeError, match="Cannot acquire a new slot before finalizing"
-    ):
-        buffer.acquire_slot((5, 5))
+    # acquire again
+    buffer.acquire_slot((5, 5))
 
     # Finalize the first slot
+    buffer.finalize_slot()
+    # Finalize the second slot
     buffer.finalize_slot()
 
     # Now should be able to acquire a new slot
     buffer.acquire_slot((5, 5))
     buffer.finalize_slot()
+
+
+# Additional tests to cover missing lines
+def test_pop_into_buffer(small_buffer: SequenceBuffer) -> None:
+    """Test pop_next with copy=True to cover line 173."""
+    data = np.array([[1, 2], [3, 4]], dtype=np.uint8)
+    out = np.empty_like(data)
+    small_buffer.insert_data(data, {"test": True})
+
+    result = small_buffer.pop_next(out=out)
+    assert result is not None
+    retrieved_data, metadata = result
+    assert retrieved_data is out  # Should return the output buffer
+
+    # Should be a copy, not a view
+    assert retrieved_data.flags.owndata is True
+    np.testing.assert_array_equal(retrieved_data, data)
+    assert metadata["test"] is True

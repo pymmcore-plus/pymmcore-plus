@@ -786,13 +786,15 @@ class UniMMCore(CMMCorePlus):
             img_number = next(counter)
             elapsed_ms = (perf_counter_ns() - start_time) / 1e6
             received = datetime.now().isoformat(sep=" ")
-            meta_update = {
-                **cam_meta,
-                KW.Metadata_TimeInCore: received,
-                KW.Metadata_ImageNumber: str(img_number),
-                KW.Elapsed_Time_ms: f"{elapsed_ms:.2f}",
-            }
-            self._seq_buffer.finalize_slot({**base_meta, **meta_update})
+            self._seq_buffer.finalize_slot(
+                {
+                    **base_meta,
+                    **cam_meta,
+                    KW.Metadata_TimeInCore: received,
+                    KW.Metadata_ImageNumber: str(img_number),
+                    KW.Elapsed_Time_ms: f"{elapsed_ms:.2f}",
+                }
+            )
 
             # Auto-stop when we've acquired the requested number of images
             if n_images is not None and (img_number + 1) >= n_images:
@@ -808,8 +810,7 @@ class UniMMCore(CMMCorePlus):
 
         self._acquisition_thread = AcquisitionThread(
             image_generator=cam.start_sequence(
-                n_images or 2**63 - 1,
-                get_buffer_with_overflow_handling,
+                n_images, get_buffer_with_overflow_handling
             ),
             finalize=finalize_with_metadata,
             label=camera_label,
@@ -823,6 +824,7 @@ class UniMMCore(CMMCorePlus):
 
     # ------------------------------------------------- startSequenceAcquisition
 
+    # startSequenceAcquisition
     def _do_start_sequence_acquisition(
         self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
     ) -> None:
@@ -835,6 +837,7 @@ class UniMMCore(CMMCorePlus):
 
     # ------------------------------------------------- continuous acquisition
 
+    # startContinuousSequenceAcquisition
     def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
         if (cam := self._py_camera()) is None:  # pragma: no cover
             return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)
@@ -879,27 +882,41 @@ class UniMMCore(CMMCorePlus):
 
     # ---------------------------------------------------- getImages
 
-    def getLastImage(self) -> np.ndarray:
+    def getLastImage(self, *, out: np.ndarray | None = None) -> np.ndarray:
         if self._py_camera() is None:
             return super().getLastImage()
-        if not (self._seq_buffer) or (result := self._seq_buffer.peek_last()) is None:
+        if (
+            not (self._seq_buffer)
+            or (result := self._seq_buffer.peek_last(out=out)) is None
+        ):
             raise IndexError("Circular buffer is empty.")
         return result[0]
 
     @overload
     def getLastImageMD(
-        self, channel: int, slice: int, md: pymmcore.Metadata, /
+        self,
+        channel: int,
+        slice: int,
+        md: pymmcore.Metadata,
+        /,
+        *,
+        out: np.ndarray | None = None,
     ) -> np.ndarray: ...
     @overload
-    def getLastImageMD(self, md: pymmcore.Metadata, /) -> np.ndarray: ...
-    def getLastImageMD(self, *args: Any) -> np.ndarray:
+    def getLastImageMD(
+        self, md: pymmcore.Metadata, /, *, out: np.ndarray | None = None
+    ) -> np.ndarray: ...
+    def getLastImageMD(self, *args: Any, out: np.ndarray | None = None) -> np.ndarray:
         if self._py_camera() is None:
             return super().getLastImageMD(*args)
         md_object = args[0] if len(args) == 1 else args[-1]
         if not isinstance(md_object, pymmcore.Metadata):  # pragma: no cover
             raise TypeError("Expected a Metadata object for the last argument.")
 
-        if not (self._seq_buffer) or (result := self._seq_buffer.peek_last()) is None:
+        if (
+            not (self._seq_buffer)
+            or (result := self._seq_buffer.peek_last(out=out)) is None
+        ):
             raise IndexError("Circular buffer is empty.")
 
         img, md = result
@@ -910,13 +927,20 @@ class UniMMCore(CMMCorePlus):
 
         return img
 
-    def getNBeforeLastImageMD(self, n: int, md: pymmcore.Metadata, /) -> np.ndarray:
+    def getNBeforeLastImageMD(
+        self,
+        n: int,
+        md: pymmcore.Metadata,
+        /,
+        *,
+        out: np.ndarray | None = None,
+    ) -> np.ndarray:
         if self._py_camera() is None:
             return super().getNBeforeLastImageMD(n, md)
 
         if (
             not (self._seq_buffer)
-            or (result := self._seq_buffer.peek_nth_from_last(n)) is None
+            or (result := self._seq_buffer.peek_nth_from_last(n, out=out)) is None
         ):
             raise IndexError("Circular buffer is empty or n is out of range.")
 
