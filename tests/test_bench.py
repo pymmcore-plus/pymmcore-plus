@@ -106,25 +106,13 @@ def test_frame(request: Any) -> np.ndarray:
     return rng.integers(0, 256, size=request.param, dtype=np.uint8)
 
 
-def test_acquire_finalize_pop(test_frame: np.ndarray, benchmark: Callable) -> None:
-    seqbuf = SequenceBuffer(size_mb=16.0, overwrite_on_overflow=True)
-
-    def _producer_consumer() -> None:
-        buf = seqbuf.acquire_slot(test_frame.shape, test_frame.dtype)
-        # Simulate the camera filling the buffer (memcpy cost is part of reality)
-        buf[:] = test_frame
-        seqbuf.finalize_slot(None)
-        seqbuf.pop_next(copy=False)
-
-    benchmark(_producer_consumer)
-
-
 def test_insert_data(test_frame: np.ndarray, benchmark: Callable) -> None:
     seqbuf = SequenceBuffer(size_mb=16.0, overwrite_on_overflow=True)
 
     def _copy_path() -> None:
-        seqbuf.insert_data(test_frame, metadata=None)
-        seqbuf.pop_next(copy=True)
+        seqbuf.acquire_slot(test_frame.shape, test_frame.dtype)[:] = test_frame
+        seqbuf.finalize_slot()
+        seqbuf.pop_next()
 
     benchmark(_copy_path)
 
