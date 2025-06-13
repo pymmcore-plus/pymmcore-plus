@@ -1,15 +1,20 @@
+from __future__ import annotations
+
 import time
-from collections.abc import Iterator, Mapping, Sequence
-from typing import Callable
+from typing import TYPE_CHECKING, Callable
 
 import numpy as np
 import pytest
-from numpy.typing import DTypeLike
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.experimental.unicore import Camera
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Mapping, Sequence
+
+    from numpy.typing import DTypeLike
 
 DEV = "Camera"
 
