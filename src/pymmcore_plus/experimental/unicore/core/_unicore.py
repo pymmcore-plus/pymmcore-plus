@@ -26,7 +26,7 @@ from pymmcore_plus.core._constants import PixelType
 from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import Camera
-from pymmcore_plus.experimental.unicore.devices._device import Device
+from pymmcore_plus.experimental.unicore.devices._device_base import Device
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice

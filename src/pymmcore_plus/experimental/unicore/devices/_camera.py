@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Callable, ClassVar, Literal
 
 from pymmcore_plus.core._constants import DeviceType, Keyword, PixelFormat
 
-from ._device import Device
+from ._device_base import Device
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence

@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, cast
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
 
-from ._device import Device
+from ._device_base import Device
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
