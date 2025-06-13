@@ -2037,25 +2037,26 @@ class CMMCorePlus(pymmcore.CMMCore):
         self.events.autoShutterSet.emit(state)
 
     @overload
-    def setShutterOpen(self, state: bool) -> None: ...
-
+    def setShutterOpen(self, state: bool, /) -> None: ...
     @overload
-    def setShutterOpen(self, shutterLabel: str, state: bool) -> None: ...
-
-    def setShutterOpen(self, *args: Any, **kwargs: Any) -> None:
+    def setShutterOpen(self, shutterLabel: str, state: bool, /) -> None: ...
+    def setShutterOpen(self, *args: Any) -> None:
         """Open or close the currently selected or `shutterLabel` shutter.
 
         **Why Override?** To emit a `propertyChanged` event.
         """
-        super().setShutterOpen(*args, **kwargs)
-        shutterLabel, state = kwargs.get("shutterLabel"), kwargs.get("state")
         if len(args) == 2:
             shutterLabel, state = args
         elif len(args) == 1:
             shutterLabel = super().getShutterDevice()
             state = args[0]
+        self._do_shutter_open(shutterLabel, state)
         state = str(int(bool(state)))
         self.events.propertyChanged.emit(shutterLabel, "State", state)
+
+    def _do_shutter_open(self, shutterLabel: str, state: bool, /) -> None:
+        """Open or close the shutter."""
+        super().setShutterOpen(shutterLabel, state)
 
     @overload
     def deleteConfig(self, groupName: str, configName: str) -> None: ...
