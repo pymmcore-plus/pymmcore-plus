@@ -16,7 +16,7 @@ from typing import Callable
 import numpy as np
 from numpy.typing import DTypeLike
 
-from pymmcore_plus.experimental.unicore import Camera, UniMMCore
+from pymmcore_plus.experimental.unicore import CameraDevice, UniMMCore
 
 _START_TIME: float = time.time()
 
@@ -93,7 +93,7 @@ def make_cool_image(
     return image  # type: ignore[no-any-return]
 
 
-class MyCamera(Camera):
+class MyCamera(CameraDevice):
     _exposure: float = 10.0
 
     def get_exposure(self) -> float:

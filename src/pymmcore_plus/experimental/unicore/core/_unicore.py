@@ -25,7 +25,7 @@ from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._constants import PixelType
 from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
-from pymmcore_plus.experimental.unicore.devices._camera import Camera
+from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
 from pymmcore_plus.experimental.unicore.devices._device import Device
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
@@ -678,11 +678,11 @@ class UniMMCore(CMMCorePlus):
 
     # --------------------------------------------------------------------- utils
 
-    def _py_camera(self, cameraLabel: str | None = None) -> Camera | None:
+    def _py_camera(self, cameraLabel: str | None = None) -> CameraDevice | None:
         """Return the *Python* Camera for ``label`` (or current), else ``None``."""
         label = cameraLabel or self.getCameraDevice()
         if label in self._pydevices:
-            return self._pydevices.get_device_of_type(label, Camera)
+            return self._pydevices.get_device_of_type(label, CameraDevice)
         return None
 
     def setCameraDevice(self, cameraLabel: DeviceLabel | str) -> None:
@@ -751,7 +751,7 @@ class UniMMCore(CMMCorePlus):
     # ---------------------------------------------------------------- sequence common
 
     def _start_sequence(
-        self, cam: Camera, n_images: int | None, stop_on_overflow: bool
+        self, cam: CameraDevice, n_images: int | None, stop_on_overflow: bool
     ) -> None:
         """Initialise _seq state and call cam.start_sequence."""
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
@@ -1031,7 +1031,7 @@ class UniMMCore(CMMCorePlus):
 
         return self._seq_buffer.size_bytes // bytes_per_frame
 
-    def _predicted_bytes_per_frame(self, cam: Camera) -> int:
+    def _predicted_bytes_per_frame(self, cam: CameraDevice) -> int:
         # Estimate capacity based on camera settings and circular buffer size
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
         return int(np.prod(shape) * dtype.itemsize)
