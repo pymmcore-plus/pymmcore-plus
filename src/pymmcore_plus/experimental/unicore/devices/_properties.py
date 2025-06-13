@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import Self, TypeAlias
 
-    from ._device import Device
+    from ._device_base import Device
 
     PropArg: TypeAlias = (
         PropertyType | type | Literal["float", "integer", "string", "boolean"] | None
