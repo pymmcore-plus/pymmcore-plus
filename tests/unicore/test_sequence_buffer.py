@@ -557,3 +557,21 @@ def test_acquire_2slots_in_a_row() -> None:
     # Now should be able to acquire a new slot
     buffer.acquire_slot((5, 5))
     buffer.finalize_slot()
+
+
+# Additional tests to cover missing lines
+def test_pop_into_buffer(small_buffer: SequenceBuffer) -> None:
+    """Test pop_next with copy=True to cover line 173."""
+    data = np.array([[1, 2], [3, 4]], dtype=np.uint8)
+    out = np.empty_like(data)
+    small_buffer.insert_data(data, {"test": True})
+
+    result = small_buffer.pop_next(out=out)
+    assert result is not None
+    retrieved_data, metadata = result
+    assert retrieved_data is out  # Should return the output buffer
+
+    # Should be a copy, not a view
+    assert retrieved_data.flags.owndata is True
+    np.testing.assert_array_equal(retrieved_data, data)
+    assert metadata["test"] is True

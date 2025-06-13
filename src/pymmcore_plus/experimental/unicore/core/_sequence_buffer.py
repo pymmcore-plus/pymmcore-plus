@@ -176,9 +176,11 @@ class SequenceBuffer:
         # return actual metadata, we're done with it.
         return arr, (slot.metadata or {})
 
-    def peek_last(self) -> tuple[NDArray[Any], Mapping[str, Any]] | None:
+    def peek_last(
+        self, *, out: np.ndarray | None = None
+    ) -> tuple[NDArray[Any], Mapping[str, Any]] | None:
         """Return the newest frame without removing it."""
-        return self.peek_nth_from_last(0)
+        return self.peek_nth_from_last(0, out=out)
 
     def peek_nth_from_last(
         self, n: int, *, out: np.ndarray | None = None
