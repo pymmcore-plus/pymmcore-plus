@@ -7,7 +7,7 @@ from numpy.typing import DTypeLike
 
 from pymmcore_plus.core._constants import DeviceType
 
-from ._device import SequenceableDevice
+from ._device_base import SequenceableDevice
 
 
 class SLMDevice(SequenceableDevice[np.ndarray]):
