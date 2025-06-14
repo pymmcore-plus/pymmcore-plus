@@ -39,6 +39,7 @@ nav:
           - api/constants.md
           - Metadata: api/metadata.md
           - Utilities: api/utils.md
+          - api/unicore.md
       - metadata.md
       - env_var.md
       - cli.md

@@ -6,7 +6,8 @@
 
 ## A Unified controller of C++ and Pure-Python Devices
 
-The `UniMMCore` class is a subclass of `CMMCorePlus` that can control both
+The [`UniMMCore`][pymmcore_plus.experimental.unicore.UniMMCore] class is a
+subclass of [`CMMCorePlus`][pymmcore_plus.CMMCorePlus] that can control both
 "classic" C++ devices (via the CMMCore) as well pure-Python device adapters.
 This simplifies the task of controlling new devices using pure-Python code,
 without the need to write and compile a C++ device adapter.
