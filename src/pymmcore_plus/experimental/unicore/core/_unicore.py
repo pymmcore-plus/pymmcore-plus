@@ -27,6 +27,7 @@ from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
+from pymmcore_plus.experimental.unicore.devices._shutter import ShutterDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice
@@ -1616,6 +1617,48 @@ class UniMMCore(CMMCorePlus):
                 return state_dev.get_position_for_label(stateLabel)
             except KeyError as e:
                 raise RuntimeError(str(e)) from e  # convert to RuntimeError
+
+    # ########################################################################
+    # ------------------------ Shutter Device Methods ------------------------
+    # ########################################################################
+
+    def _py_shutter(self, shutterLabel: str | None = None) -> ShutterDevice | None:
+        """Return the *Python* Shutter device for ``label``, else ``None``."""
+        label = shutterLabel or self.getShutterDevice()
+        if label in self._pydevices:
+            return self._pydevices.get_device_of_type(label, ShutterDevice)
+        return None
+
+    def setShutterDevice(self, shutterLabel: DeviceLabel | str) -> None:
+        label = self._set_current_if_pydevice(KW.CoreShutter, shutterLabel)
+        super().setShutterDevice(label)
+
+    def getShutterDevice(self) -> DeviceLabel | Literal[""]:
+        """Returns the label of the currently selected Shutter device.
+
+        Returns empty string if no Shutter device is selected.
+        """
+        return self._pycore.current(KW.CoreShutter) or super().getShutterDevice()
+
+    @overload
+    def getShutterOpen(self) -> bool: ...
+    @overload
+    def getShutterOpen(self, shutterLabel: DeviceLabel | str) -> bool: ...
+    def getShutterOpen(self, shutterLabel: DeviceLabel | str | None = None) -> bool:
+        shutterLabel = shutterLabel or self.getShutterDevice()
+        if (shutter := self._py_shutter(shutterLabel)) is None:
+            return super().getShutterOpen(shutterLabel)
+
+        with shutter:
+            return shutter.get_open()
+
+    def _do_shutter_open(self, shutterLabel: str, state: bool, /) -> None:
+        """Open or close the shutter."""
+        if (shutter := self._py_shutter(shutterLabel)) is None:  # pragma: no cover
+            return pymmcore.CMMCore.setShutterOpen(self, shutterLabel, state)
+
+        with shutter:
+            shutter.set_open(state)
 
 
 # -------------------------------------------------------------------------------
