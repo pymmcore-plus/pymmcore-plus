@@ -335,7 +335,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
         try:
-            super().registerCallback(None)  # type: ignore
+            super().registerCallback(None)
             self.reset()
             # clean up logging
             self.setPrimaryLogFile("")
@@ -2385,8 +2385,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         try:
             before = [self.getProperty(device, p) for p in properties]
         except Exception as e:
-            logger.error(
-                "Error getting properties %s on %s: %s. Cannot ensure signal emission",
+            logger.warning(
+                "Error getting properties %s on %s: %s. "
+                "Cannot ensure propertyChanged signal emission",
                 properties,
                 device,
                 e,
