@@ -335,7 +335,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
         try:
-            super().registerCallback(None)  # type: ignore
+            super().registerCallback(None)
             self.reset()
             # clean up logging
             self.setPrimaryLogFile("")
