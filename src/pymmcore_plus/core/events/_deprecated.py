@@ -1,8 +1,11 @@
+from __future__ import annotations
+
 import inspect
 import warnings
-from typing import Any, Callable
+from typing import TYPE_CHECKING, Any, Callable
 
-from ._protocol import PSignalInstance
+if TYPE_CHECKING:
+    from ._protocol import PSignalInstance
 
 
 class DeprecatedSignalProxy:
