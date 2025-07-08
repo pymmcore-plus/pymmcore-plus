@@ -40,7 +40,7 @@ dependencies = [
     "numpy >=1.26.0; python_version >= '3.12'",
     "numpy >=1.25.2",
     "psygnal >=0.10",
-    "pymmcore >=11.2.1.71.0",
+    "pymmcore >=11.9.0.73.0",
     "typing-extensions >=4",                                   # not actually required at runtime
     "useq-schema >=0.7.2",
     "tensorstore >=0.1.71,!=0.1.72; python_version >= '3.13'",
@@ -76,7 +76,6 @@ test = [
     "pytest-cov >=5",
     "pytest >=8",
     "xarray >=2024.1",
-    "pymmcore >=11.5.0.73",
 ]
 test-codspeed = [{ include-group = "test" }, "pytest-codspeed >=3.2.0"]
 test-qt = [{ include-group = 'test' }, "pytest-qt >=4.4", "qtpy >=2"]
