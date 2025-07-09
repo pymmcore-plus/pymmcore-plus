@@ -1626,7 +1626,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
         try:
             self._do_snap_image()
-            self.events.imageSnapped.emit()
+            self.events.imageSnapped.emit(self.getCameraDevice())
         finally:
             if autoshutter:
                 self.events.propertyChanged.emit(
@@ -2564,12 +2564,9 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         return reemit
 
 
+MMCORE_SIGNAL_NAMES = {n for n in dir(pymmcore.MMEventCallback) if n.startswith("on")}
 MMCallbackRelay = type(
     "MMCallbackRelay",
     (_MMCallbackRelay,),
-    {
-        n: _MMCallbackRelay.make_reemitter(n)
-        for n in dir(pymmcore.MMEventCallback)
-        if n.startswith("on")
-    },
+    {n: _MMCallbackRelay.make_reemitter(n) for n in MMCORE_SIGNAL_NAMES},
 )
