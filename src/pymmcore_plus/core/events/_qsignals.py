@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Optional
 
 from qtpy.QtCore import QObject, Signal
 
+from ._deprecated import DeprecatedSignalProxy
 from ._prop_event_mixin import _PropertySignal
 
 if TYPE_CHECKING:
@@ -25,17 +26,23 @@ class QCoreSignaler(QObject):
     SLMExposureChanged = Signal(str, float)
     sLMExposureChanged = SLMExposureChanged  # alias
 
+    # https://github.com/micro-manager/mmCoreAndDevices/pull/659
+    imageSnapped = Signal(str)  # on snapImage()
+    # when (Continuous)SequenceAcquisition is stopped
+    sequenceAcquisitionStopped = Signal(str)
+    if TYPE_CHECKING:  # see deprecated impl below
+        sequenceAcquisitionStarted = Signal(str)
+
     # added for CMMCorePlus
-    imageSnapped = Signal()  # on snapImage()
     mdaEngineRegistered = Signal(object, object)  # new engine, old engine
     # when continuousSequenceAcquisition is started
     continuousSequenceAcquisitionStarting = Signal()
     continuousSequenceAcquisitionStarted = Signal()
-    # when SequenceAcquisition is started
-    sequenceAcquisitionStarting = Signal(str, int, float, bool)
-    sequenceAcquisitionStarted = Signal(str, int, float, bool)
-    # when (Continuous)SequenceAcquisition is stopped
-    sequenceAcquisitionStopped = Signal(str)
+
+    if TYPE_CHECKING:
+        # when SequenceAcquisition is started
+        sequenceAcquisitionStarting = Signal(str)
+
     autoShutterSet = Signal(bool)
     configGroupDeleted = Signal(str)
     configDeleted = Signal(str, str)
@@ -77,3 +84,24 @@ class QCoreSignaler(QObject):
         """
         # type ignored: can't use _DevicePropertyEventMixin due to metaclass conflict
         return _PropertySignal(self, device, property)
+
+    if not TYPE_CHECKING:
+        _sequenceAcquisitionStarting = Signal(str)
+        _sequenceAcquisitionStarted = Signal(str)
+
+        # Deprecated signal wrappers for backwards compatibility
+        @property
+        def sequenceAcquisitionStarting(self):
+            return DeprecatedSignalProxy(
+                self._sequenceAcquisitionStarting,
+                current_n_args=1,
+                deprecated_posargs=(-1, 0, False),
+            )
+
+        @property
+        def sequenceAcquisitionStarted(self):
+            return DeprecatedSignalProxy(
+                self._sequenceAcquisitionStarted,
+                current_n_args=1,
+                deprecated_posargs=(-1, 0, False),
+            )

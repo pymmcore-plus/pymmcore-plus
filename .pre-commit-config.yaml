@@ -13,7 +13,7 @@ repos:
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.11.12
     hooks:
-      - id: ruff
+      - id: ruff-check
         args: [--fix, --unsafe-fixes]
       - id: ruff-format
 
@@ -28,7 +28,7 @@ repos:
       - id: mypy
         files: "^src/"
         additional_dependencies:
-          - pymmcore >=10.7.0.71.0
+          - pymmcore >=11.6.0.73.0
           - useq-schema >= 0.6.2
           - psygnal
           - typer

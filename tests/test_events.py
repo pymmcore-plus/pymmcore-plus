@@ -193,16 +193,16 @@ def test_sequence_acquisition_events(core: CMMCorePlus) -> None:
 
     # without camera label
     core.startSequenceAcquisition(5, 100.0, True)
-    mock2a.assert_any_call(core.getCameraDevice(), 5, 100.0, True)
-    mock2b.assert_any_call(core.getCameraDevice(), 5, 100.0, True)
+    mock2a.assert_any_call(core.getCameraDevice())
+    mock2b.assert_any_call(core.getCameraDevice())
     core.stopSequenceAcquisition()
     mock3.assert_any_call(core.getCameraDevice())
 
     # with camera label
     cam = core.getCameraDevice()
     core.startSequenceAcquisition(cam, 5, 100.0, True)
-    mock2a.assert_any_call(cam, 5, 100.0, True)
-    mock2b.assert_any_call(cam, 5, 100.0, True)
+    mock2a.assert_any_call(cam)
+    mock2b.assert_any_call(cam)
     core.stopSequenceAcquisition(cam)
     mock3.assert_any_call(cam)
 
@@ -306,3 +306,84 @@ def test_set_focus_device(core: CMMCorePlus) -> None:
     core.setFocusDevice("Z")
     assert core.getFocusDevice() == "Z"
     mock.assert_any_call("Core", "Focus", "Z")
+
+
+SIGNATURES: list[tuple[str, tuple[type, ...]]] = [
+    ("propertiesChanged", ()),
+    ("propertyChanged", (str, str, str)),
+    ("channelGroupChanged", (str,)),
+    ("configGroupChanged", (str, str)),
+    ("systemConfigurationLoaded", ()),
+    ("pixelSizeChanged", (float,)),
+    ("pixelSizeAffineChanged", (float, float, float, float, float, float)),
+    ("stagePositionChanged", (str, float)),
+    ("XYStagePositionChanged", (str, float, float)),
+    ("exposureChanged", (str, float)),
+    ("SLMExposureChanged", (str, float)),
+    ("configSet", (str, str)),
+    ("imageSnapped", (str,)),
+    ("mdaEngineRegistered", (object, object)),
+    ("continuousSequenceAcquisitionStarting", ()),
+    ("continuousSequenceAcquisitionStarted", ()),
+    ("sequenceAcquisitionStarting", (str,)),  # NEW
+    ("sequenceAcquisitionStarted", (str,)),  # NEW
+    ("sequenceAcquisitionStopped", (str,)),
+    ("autoShutterSet", (bool,)),
+    ("configGroupDeleted", (str,)),
+    ("configDeleted", (str, str)),
+    ("configDefined", (str, str, str, str, str)),
+    ("roiSet", (str, int, int, int, int)),
+]
+
+
+@pytest.mark.parametrize("name, signature", SIGNATURES)
+def test_event_signatures(
+    core: CMMCorePlus, name: str, signature: tuple[type, ...]
+) -> None:
+    """Test connecting to events with expected signatures."""
+    # create callback expecting the exact number of arguments in signature
+    num_args = len(signature)
+    sig_str = ", ".join(f"a{i}" for i in range(num_args))
+    ns: dict = {}
+
+    exec(f"def func({sig_str}): ...", ns)
+    full_func = ns["func"]
+    assert callable(full_func), "Function is not callable"
+
+    signal = getattr(core.events, name)
+    assert isinstance(signal, PSignalInstance)
+    signal.connect(full_func)
+    signal.emit(*[t() for t in signature])  # emit with dummy values
+
+    # min-func
+    signal.disconnect(full_func)
+    signal.connect(lambda: None)
+    signal.emit(*[t() for t in signature])  # emit with dummy values
+
+
+DEPRECATED_SIGNATURES: list[tuple[str, tuple[type, ...], tuple[type, ...]]] = [
+    ("sequenceAcquisitionStarting", (str,), (str, int, float, bool)),  # DEPRECATED
+    ("sequenceAcquisitionStarted", (str,), (str, int, float, bool)),  # DEPRECATED
+]
+
+
+@pytest.mark.parametrize("name, new, old", DEPRECATED_SIGNATURES)
+def test_deprecated_event_signatures(
+    core: CMMCorePlus, name: str, new: tuple[type, ...], old: tuple[type, ...]
+) -> None:
+    """Test connecting to events with expected signatures."""
+    # create callback expecting the exact number of arguments in signature
+    num_args = len(old)
+    sig_str = ", ".join(f"a{i}" for i in range(num_args))
+    ns: dict = {}
+
+    exec(f"def func({sig_str}): ...", ns)
+    full_func = ns["func"]
+    assert callable(full_func), "Function is not callable"
+
+    signal = getattr(core.events, name)
+    assert isinstance(signal, PSignalInstance)
+    with pytest.warns(FutureWarning, match="Callback 'func' requires"):
+        signal.connect(full_func)
+
+    signal.emit(*[t() for t in new])  # emit with dummy values

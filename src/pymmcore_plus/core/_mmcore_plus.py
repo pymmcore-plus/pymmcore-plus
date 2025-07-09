@@ -335,7 +335,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
         try:
-            super().registerCallback(None)  # type: ignore
+            super().registerCallback(None)
             self.reset()
             # clean up logging
             self.setPrimaryLogFile("")
@@ -1626,7 +1626,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
         try:
             self._do_snap_image()
-            self.events.imageSnapped.emit()
+            self.events.imageSnapped.emit(self.getCameraDevice())
         finally:
             if autoshutter:
                 self.events.propertyChanged.emit(
@@ -2385,8 +2385,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         try:
             before = [self.getProperty(device, p) for p in properties]
         except Exception as e:
-            logger.error(
-                "Error getting properties %s on %s: %s. Cannot ensure signal emission",
+            logger.warning(
+                "Error getting properties %s on %s: %s. "
+                "Cannot ensure propertyChanged signal emission",
                 properties,
                 device,
                 e,
@@ -2563,12 +2564,9 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         return reemit
 
 
+MMCORE_SIGNAL_NAMES = {n for n in dir(pymmcore.MMEventCallback) if n.startswith("on")}
 MMCallbackRelay = type(
     "MMCallbackRelay",
     (_MMCallbackRelay,),
-    {
-        n: _MMCallbackRelay.make_reemitter(n)
-        for n in dir(pymmcore.MMEventCallback)
-        if n.startswith("on")
-    },
+    {n: _MMCallbackRelay.make_reemitter(n) for n in MMCORE_SIGNAL_NAMES},
 )
