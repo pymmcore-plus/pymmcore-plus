@@ -109,7 +109,7 @@ class PCoreSignaler(Protocol):
     propertiesChanged: ClassVar[PSignal]
     """Emits with no arguments when properties have changed."""
     propertyChanged: ClassVar[PSignal]
-    """Emits `(name: str, : propName: str, propValue: str)` when a specific property has changed."""  # noqa: E501
+    """Emits `(name: str, propName: str, propValue: str)` when a specific property has changed."""  # noqa: E501
     channelGroupChanged: ClassVar[PSignal]
     """Emits `(newChannelGroupName: str)` when a channel group has changed."""
     configGroupChanged: ClassVar[PSignal]
@@ -159,15 +159,25 @@ class PCoreSignaler(Protocol):
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
     sequenceAcquisitionStarting: ClassVar[PSignal]
-    """Emits `(str, int, float, bool)` *before* sequence acquisition is started.
+    """Emits `(str,)` *before* sequence acquisition is started.
 
-    (cameraLabel, numImages, intervalMs, stopOnOverflow)
+    !!! critical "Breaking Change"
+        In `pymmcore-plus` version 0.16.0, the `sequenceAcquisitionStarting` signal
+        was *reduced* from `(str, int, float, bool)` to `(str,)` to match the signature
+        emitted by the C++ MMCore library.
+
+    `(cameraLabel,)`
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
     sequenceAcquisitionStarted: ClassVar[PSignal]
-    """Emits `(str, int, float, bool)` *after* sequence acquisition has started.
+    """Emits `(str)` *after* sequence acquisition has started.
 
-    (cameraLabel, numImages, intervalMs, stopOnOverflow)
+    !!! critical "Breaking Change"
+        In `pymmcore-plus` version 0.16.0, the `sequenceAcquisitionStarted` signal
+        was *reduced* from `(str, int, float, bool)` to `(str,)` to match the signature
+        emitted by the C++ MMCore library.
+
+    (cameraLabel,)
     > :sparkles: This signal is unique to `pymmcore-plus`.
     """
     sequenceAcquisitionStopped: ClassVar[PSignal]
