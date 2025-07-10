@@ -142,6 +142,8 @@ class DeviceType(IntEnum):
     SLMDevice = pymmcore.SLMDevice
     HubDevice = pymmcore.HubDevice
     GalvoDevice = pymmcore.GalvoDevice
+    PressurePumpDevice = pymmcore.PressurePumpDevice
+    VolumetricPumpDevice = pymmcore.VolumetricPumpDevice
     # aliases for clearer naming (e.g. `DeviceType.Camera`)
     Unknown = UnknownType
     Any = AnyType
@@ -160,6 +162,8 @@ class DeviceType(IntEnum):
     SLM = SLMDevice
     Hub = HubDevice
     Galvo = GalvoDevice
+    PressurePump = PressurePumpDevice
+    VolumetricPump = VolumetricPumpDevice
 
     def __str__(self) -> str:
         return str(self.name).replace("Type", "").replace("Device", "")
