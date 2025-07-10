@@ -115,37 +115,37 @@ DEVICE_COMPLETERS: dict[tuple[str, int], CoreCompleter] = {
     ("startXYStageSequence", 0): lambda core: _dev_labels(core, DeviceType.XYStage),
     ("stopXYStageSequence", 0): lambda core: _dev_labels(core, DeviceType.XYStage),
     # --------------------
-    ("detectDevice", 0): lambda core: _dev_labels(core),
-    ("deviceBusy", 0): lambda core: _dev_labels(core),
-    ("getAllowedPropertyValues", 0): lambda core: _dev_labels(core),
-    ("getDeviceDelayMs", 0): lambda core: _dev_labels(core),
-    ("getDeviceDescription", 0): lambda core: _dev_labels(core),
-    ("getDeviceInitializationState", 0): lambda core: _dev_labels(core),
-    ("getDeviceLibrary", 0): lambda core: _dev_labels(core),
-    ("getDeviceName", 0): lambda core: _dev_labels(core),
-    ("getDevicePropertyNames", 0): lambda core: _dev_labels(core),
-    ("getDeviceType", 0): lambda core: _dev_labels(core),
-    ("getParentLabel", 0): lambda core: _dev_labels(core),
-    ("getProperty", 0): lambda core: _dev_labels(core),
-    ("getPropertyFromCache", 0): lambda core: _dev_labels(core),
-    ("getPropertyLowerLimit", 0): lambda core: _dev_labels(core),  # ?
-    ("getPropertySequenceMaxLength", 0): lambda core: _dev_labels(core),  # ?
-    ("getPropertyType", 0): lambda core: _dev_labels(core),
-    ("getPropertyUpperLimit", 0): lambda core: _dev_labels(core),  # ?
-    ("hasProperty", 0): lambda core: _dev_labels(core),
-    ("hasPropertyLimits", 0): lambda core: _dev_labels(core),
-    ("initializeDevice", 0): lambda core: _dev_labels(core),
-    ("isPropertyPreInit", 0): lambda core: _dev_labels(core),
-    ("isPropertyReadOnly", 0): lambda core: _dev_labels(core),
-    ("isPropertySequenceable", 0): lambda core: _dev_labels(core),
-    ("loadPropertySequence", 0): lambda core: _dev_labels(core),  # ?
-    ("setDeviceDelayMs", 0): lambda core: _dev_labels(core),
-    ("setParentLabel", 0): lambda core: _dev_labels(core),
-    ("setProperty", 0): lambda core: _dev_labels(core),
-    ("startPropertySequence", 0): lambda core: _dev_labels(core),  # ?
-    ("unloadDevice", 0): lambda core: _dev_labels(core),
-    ("usesDeviceDelay", 0): lambda core: _dev_labels(core),
-    ("waitForDevice", 0): lambda core: _dev_labels(core),
+    ("detectDevice", 0): _dev_labels,
+    ("deviceBusy", 0): _dev_labels,
+    ("getAllowedPropertyValues", 0): _dev_labels,
+    ("getDeviceDelayMs", 0): _dev_labels,
+    ("getDeviceDescription", 0): _dev_labels,
+    ("getDeviceInitializationState", 0): _dev_labels,
+    ("getDeviceLibrary", 0): _dev_labels,
+    ("getDeviceName", 0): _dev_labels,
+    ("getDevicePropertyNames", 0): _dev_labels,
+    ("getDeviceType", 0): _dev_labels,
+    ("getParentLabel", 0): _dev_labels,
+    ("getProperty", 0): _dev_labels,
+    ("getPropertyFromCache", 0): _dev_labels,
+    ("getPropertyLowerLimit", 0): _dev_labels,  # ?
+    ("getPropertySequenceMaxLength", 0): _dev_labels,  # ?
+    ("getPropertyType", 0): _dev_labels,
+    ("getPropertyUpperLimit", 0): _dev_labels,  # ?
+    ("hasProperty", 0): _dev_labels,
+    ("hasPropertyLimits", 0): _dev_labels,
+    ("initializeDevice", 0): _dev_labels,
+    ("isPropertyPreInit", 0): _dev_labels,
+    ("isPropertyReadOnly", 0): _dev_labels,
+    ("isPropertySequenceable", 0): _dev_labels,
+    ("loadPropertySequence", 0): _dev_labels,  # ?
+    ("setDeviceDelayMs", 0): _dev_labels,
+    ("setParentLabel", 0): _dev_labels,
+    ("setProperty", 0): _dev_labels,
+    ("startPropertySequence", 0): _dev_labels,  # ?
+    ("unloadDevice", 0): _dev_labels,
+    ("usesDeviceDelay", 0): _dev_labels,
+    ("waitForDevice", 0): _dev_labels,
     # --------------------
     ("displaySLMImage", 0): lambda core: _dev_labels(core, DeviceType.SLM),
     ("getSLMBytesPerPixel", 0): lambda core: _dev_labels(core, DeviceType.SLM),
@@ -228,25 +228,25 @@ def _get_prop_names(core: CMMCorePlus, device: str) -> Sequence[SimpleCompletion
 # fmt: off
 # Map of (method_name, arg_index) -> (device arg idx, function that returns prop names)
 PROP_COMPLETERS: dict[tuple[str, int], tuple[int, CoreDeviceCompleter]] = {
-    ("define", 3): (2, lambda core, device: _get_prop_names(core, device)),
-    ("definePixelSizeConfig", 2): (1, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("deleteConfig", 3): (2, lambda core, device: _get_prop_names(core, device)),
-    ("getAllowedPropertyValues", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("getProperty", 1): (0, lambda core, device: _get_prop_names(core, device)),
-    ("getPropertyFromCache", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("getPropertyLowerLimit", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("getPropertySequenceMaxLength", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("getPropertyType", 1): (0, lambda core, device: _get_prop_names(core, device)),
-    ("getPropertyUpperLimit", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("hasProperty", 1): (0, lambda core, device: _get_prop_names(core, device)),
-    ("hasPropertyLimits", 1): (0, lambda core, device: _get_prop_names(core, device)),
-    ("isPropertyPreInit", 1): (0, lambda core, device: _get_prop_names(core, device)),
-    ("isPropertyReadOnly", 1): (0, lambda core, device: _get_prop_names(core, device)),
-    ("isPropertySequenceable", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("loadPropertySequence", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("setProperty", 1): (0, lambda core, device: _get_prop_names(core, device)),
-    ("startPropertySequence", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
-    ("stopPropertySequence", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("define", 3): (2, _get_prop_names),
+    ("definePixelSizeConfig", 2): (1, _get_prop_names),
+    ("deleteConfig", 3): (2, _get_prop_names),
+    ("getAllowedPropertyValues", 1): (0, _get_prop_names),
+    ("getProperty", 1): (0, _get_prop_names),
+    ("getPropertyFromCache", 1): (0, _get_prop_names),
+    ("getPropertyLowerLimit", 1): (0, _get_prop_names),
+    ("getPropertySequenceMaxLength", 1): (0, _get_prop_names),
+    ("getPropertyType", 1): (0, _get_prop_names),
+    ("getPropertyUpperLimit", 1): (0, _get_prop_names),
+    ("hasProperty", 1): (0, _get_prop_names),
+    ("hasPropertyLimits", 1): (0, _get_prop_names),
+    ("isPropertyPreInit", 1): (0, _get_prop_names),
+    ("isPropertyReadOnly", 1): (0, _get_prop_names),
+    ("isPropertySequenceable", 1): (0, _get_prop_names),
+    ("loadPropertySequence", 1): (0, _get_prop_names),
+    ("setProperty", 1): (0, _get_prop_names),
+    ("startPropertySequence", 1): (0, _get_prop_names),
+    ("stopPropertySequence", 1): (0, _get_prop_names),
 }
 # fmt: on
 
