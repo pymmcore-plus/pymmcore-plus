@@ -66,7 +66,7 @@ class SequencedEvent(MDAEvent):
     slm_sequence: tuple[bytes, ...] = Field(default_factory=tuple)
 
     # re-defining this from MDAEvent to circumvent a strange issue with pydantic 2.11
-    sequence: Optional[MDASequence] = Field(default=None, repr=False)  # noqa: UP007
+    sequence: Optional[MDASequence] = Field(default=None, repr=False)  # noqa: UP045
 
     # all other property sequences
     property_sequences: dict[tuple[str, str], list[str]] = Field(default_factory=dict)
