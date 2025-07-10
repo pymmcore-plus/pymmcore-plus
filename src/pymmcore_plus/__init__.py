@@ -71,7 +71,7 @@ def _install_ipy_completer() -> None:  # pragma: no cover
     import os
     import sys
 
-    if os.getenv("PYMMCORE_PLUS_DISABLE_IPYTHON_COMPLETIONS", "0") == "1":
+    if os.getenv("PYMM_DISABLE_IPYTHON_COMPLETIONS", "0") == "1":
         return
     try:
         if (IPython := sys.modules.get("IPython")) and (shell := IPython.get_ipython()):

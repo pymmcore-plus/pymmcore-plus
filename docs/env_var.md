@@ -15,3 +15,4 @@ The following environment variables may be used to configure pymmcore-plus globa
 | **`PYMM_LOG_FILE`**   | Logfile location. | `pymmcore_plus.log` in the pymmcore-plus [log directory](./guides/logging.md#customizing-logging) |
 | **`MICROMANAGER_PATH`**   | Override location of Micro-Manager directory (with device adapters) | User-directory, described [here](./install.md#set-the-active-micro-manager-installation)   |
 | **`PYMM_SIGNALS_BACKEND`** | The event backend to use. Must be one of `'qt'`, `'psygnal'`, or `'auto'`  | `auto` (Qt if `QApplication` exists, otherwise psygnal) |
+| **`PYMM_DISABLE_IPYTHON_COMPLETIONS`**  | Disable [Tab autocompletion for IPython](./guides/ipython_completion.md)  | `"0"`  (enabled) |
