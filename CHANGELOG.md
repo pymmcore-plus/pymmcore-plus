@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.15.2](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.2) (2025-07-10)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.1...v0.15.2)
+
+**Implemented enhancements:**
+
+- feat: support property names and config groups and presets in ipython  tab autocompletion [\#483](https://github.com/pymmcore-plus/pymmcore-plus/pull/483) ([tlambert03](https://github.com/tlambert03))
+
 ## [v0.15.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.1) (2025-07-10)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.0...v0.15.1)
