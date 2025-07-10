@@ -1,5 +1,28 @@
 # Changelog
 
+## [v0.15.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.1) (2025-07-10)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.0...v0.15.1)
+
+**Implemented enhancements:**
+
+- feat: add IPython completion for device labels [\#482](https://github.com/pymmcore-plus/pymmcore-plus/pull/482) ([tlambert03](https://github.com/tlambert03))
+- feat: add pressure pump to deviceType enum [\#477](https://github.com/pymmcore-plus/pymmcore-plus/pull/477) ([tlambert03](https://github.com/tlambert03))
+- feat: add Unicore ShutterDevice [\#474](https://github.com/pymmcore-plus/pymmcore-plus/pull/474) ([tlambert03](https://github.com/tlambert03))
+- feat: add unicore Generic device [\#473](https://github.com/pymmcore-plus/pymmcore-plus/pull/473) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix: fix for new MMCore events [\#481](https://github.com/pymmcore-plus/pymmcore-plus/pull/481) ([tlambert03](https://github.com/tlambert03))
+- fix: camera fixes [\#471](https://github.com/pymmcore-plus/pymmcore-plus/pull/471) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- ci\(pre-commit.ci\): autoupdate [\#480](https://github.com/pymmcore-plus/pymmcore-plus/pull/480) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+- refactor: demote propertyChanged logger error to warning [\#479](https://github.com/pymmcore-plus/pymmcore-plus/pull/479) ([tlambert03](https://github.com/tlambert03))
+- docs: add unicore docs [\#476](https://github.com/pymmcore-plus/pymmcore-plus/pull/476) ([tlambert03](https://github.com/tlambert03))
+- refactor: rename Camera to CameraDevice [\#472](https://github.com/pymmcore-plus/pymmcore-plus/pull/472) ([tlambert03](https://github.com/tlambert03))
+
 ## [v0.15.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.0) (2025-06-10)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.14.0...v0.15.0)
