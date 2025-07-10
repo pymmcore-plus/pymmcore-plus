@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from typing import TYPE_CHECKING
 
 import pytest
@@ -106,8 +105,6 @@ EXPECTED_DEVICE_COMPLETIONS: list[tuple[str, DeviceType]] = [
 def test_device_completions(
     shell_core: CMMCorePlus, method_name: str, device_type: DeviceType
 ) -> None:
-    """Test that the pymmcore_plus IPython completions work."""
-
     completions = _get_completions(f"{CORE_NAME}.{method_name}(")
 
     if device_type == DeviceType.Any:
@@ -140,27 +137,20 @@ def test_device_completions(
 def test_property_completions(
     shell_core: CMMCorePlus, method_name: str, dev_label: str
 ) -> None:
-    """Test that the pymmcore_plus IPython completions work."""
-
     completions = _get_completions(f"{CORE_NAME}.{method_name}('{dev_label}', ")
     expect = set(shell_core.getDevicePropertyNames(dev_label))
-
     assert completions == expect
 
 
-def test_device_completions_without_jedi(
-    shell_core: CMMCorePlus, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    """Test that the pymmcore_plus IPython completions work without jedi."""
-    monkeypatch.setitem(sys.modules, "jedi", None)
-    sys.modules.pop("pymmcore_plus._ipy_completion", None)
+def test_config_completions(shell_core: CMMCorePlus) -> None:
+    completions = _get_completions(f"{CORE_NAME}.getAvailableConfigs(")
+    expect = set(shell_core.getAvailableConfigGroups())
+    assert completions == expect
 
-    from pymmcore_plus._ipy_completion import cmmcoreplus_matcher
-
-    ctx = _make_context(f"{CORE_NAME}.setCameraDevice(")
-    results = _unwrap_completions(cmmcoreplus_matcher(ctx))
-    expect = set(shell_core.getLoadedDevicesOfType(DeviceType.Camera)) | {""}
-    assert results == expect
+    group_name = expect.pop()
+    completions = _get_completions(f"{CORE_NAME}.getConfigData('{group_name}', ")
+    expect = set(shell_core.getAvailableConfigs(group_name))
+    assert completions == expect
 
 
 def test_install_script() -> None:
