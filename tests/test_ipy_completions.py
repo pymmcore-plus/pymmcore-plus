@@ -123,6 +123,31 @@ def test_device_completions(
     assert completions == expect
 
 
+@pytest.mark.parametrize(
+    "method_name, dev_label",
+    [
+        ("getProperty", "Camera"),
+        ("getProperty", "XY"),
+        ("getProperty", "Objective"),
+        ("getAllowedPropertyValues", "Camera"),
+        ("getPropertyFromCache", "Camera"),
+        ("getPropertyLowerLimit", "Camera"),
+        ("getPropertySequenceMaxLength", "Camera"),
+        ("getPropertyType", "Z"),
+        ("hasProperty", "XY"),
+    ],
+)
+def test_property_completions(
+    shell_core: CMMCorePlus, method_name: str, dev_label: str
+) -> None:
+    """Test that the pymmcore_plus IPython completions work."""
+
+    completions = _get_completions(f"{CORE_NAME}.{method_name}('{dev_label}', ")
+    expect = set(shell_core.getDevicePropertyNames(dev_label))
+
+    assert completions == expect
+
+
 def test_device_completions_without_jedi(
     shell_core: CMMCorePlus, monkeypatch: pytest.MonkeyPatch
 ) -> None:

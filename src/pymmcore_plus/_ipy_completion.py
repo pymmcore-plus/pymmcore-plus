@@ -18,6 +18,7 @@ if TYPE_CHECKING:
     from IPython.core.interactiveshell import InteractiveShell
 
     CoreCompleter = Callable[[CMMCorePlus], Sequence[SimpleCompletion]]
+    CoreDeviceCompleter = Callable[[CMMCorePlus, str], Sequence[SimpleCompletion]]
 
 try:
     import jedi
@@ -70,7 +71,7 @@ def _dev_labels(
 
 # fmt: off
 # map of (method_name, arg_index) -> function that returns possible completions
-SUGGESTION_MAP: dict[tuple[str, int], CoreCompleter] = {
+DEVICE_COMPLETERS: dict[tuple[str, int], CoreCompleter] = {
     # ROLES -----------------------------------------------------------------------
     ("setAutoFocusDevice", 0): lambda core: _dev_labels(core, DeviceType.AutoFocus, with_null=True),  # noqa
     ("setCameraDevice", 0): lambda core: _dev_labels(core, DeviceType.Camera, with_null=True),  # noqa
@@ -208,6 +209,44 @@ SUGGESTION_MAP: dict[tuple[str, int], CoreCompleter] = {
     ("getSerialPortAnswer", 0): lambda core: _dev_labels(core, DeviceType.Serial),
     ("readFromSerialPort", 0): lambda core: _dev_labels(core, DeviceType.Serial),
     ("setParentLabel", 1): lambda core: _dev_labels(core, DeviceType.Hub),
+    # ----------------- PROPERTY COMPLETIONS --------------------
+}
+# fmt: on
+
+
+def _get_prop_names(core: CMMCorePlus, device: str) -> Sequence[SimpleCompletion]:
+    """Get the property names for a given device."""
+    try:
+        return [
+            SimpleCompletion(f'"{prop}"')
+            for prop in core.getDevicePropertyNames(device)
+        ]
+    except Exception:  # pragma: no cover
+        return []
+
+
+# fmt: off
+# Map of (method_name, arg_index) -> (device arg idx, function that returns prop names)
+PROP_COMPLETERS: dict[tuple[str, int], tuple[int, CoreDeviceCompleter]] = {
+    ("define", 3): (2, lambda core, device: _get_prop_names(core, device)),
+    ("definePixelSizeConfig", 2): (1, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("deleteConfig", 3): (2, lambda core, device: _get_prop_names(core, device)),
+    ("getAllowedPropertyValues", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("getProperty", 1): (0, lambda core, device: _get_prop_names(core, device)),
+    ("getPropertyFromCache", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("getPropertyLowerLimit", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("getPropertySequenceMaxLength", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("getPropertyType", 1): (0, lambda core, device: _get_prop_names(core, device)),
+    ("getPropertyUpperLimit", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("hasProperty", 1): (0, lambda core, device: _get_prop_names(core, device)),
+    ("hasPropertyLimits", 1): (0, lambda core, device: _get_prop_names(core, device)),
+    ("isPropertyPreInit", 1): (0, lambda core, device: _get_prop_names(core, device)),
+    ("isPropertyReadOnly", 1): (0, lambda core, device: _get_prop_names(core, device)),
+    ("isPropertySequenceable", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("loadPropertySequence", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("setProperty", 1): (0, lambda core, device: _get_prop_names(core, device)),
+    ("startPropertySequence", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
+    ("stopPropertySequence", 1): (0, lambda core, device: _get_prop_names(core, device)),  # noqa
 }
 # fmt: on
 
@@ -244,12 +283,34 @@ def cmmcoreplus_matcher(ctx: CompletionContext) -> SimpleMatcherResult:
     # ── 1. Use Jedi to understand where we are ────────────────────────────────
     arg_index = _get_argument_index(src_to_cursor, ns)
 
-    if (method_name, arg_index) in SUGGESTION_MAP:
+    key = (method_name, arg_index)
+    if (dev_getter := DEVICE_COMPLETERS.get(key)) and (completions := dev_getter(obj)):
         # If we have a specific suggestion for this method and arg_index, use it.
-        if completions := SUGGESTION_MAP[(method_name, arg_index)](obj):
-            return {"completions": completions, "suppress": True}
+        return {"completions": completions, "suppress": True}
+
+    if info := PROP_COMPLETERS.get(key):
+        dev_idx, getter = info
+        if dev_label := _get_argument(src_to_cursor, dev_idx):
+            if completions := getter(obj, dev_label):
+                return {"completions": completions, "suppress": True}
 
     return _null(ctx)
+
+
+def _get_argument(src: str, index: int) -> str:
+    """Parse the argument at the given index from a method call string.
+
+    For example:
+    >>> _get_argument("core.getProperty('Camera', ", 0)
+    'Camera'
+    """
+    p0 = src.find("(") + 1
+    p1 = src.rfind(")") if ")" in src else None
+    if inner := src[slice(p0, p1)].strip():
+        args = inner.split(",")
+        if index < len(args):
+            return args[index].strip().strip("'\"")
+    return ""  # pragma: no cover
 
 
 def install_pymmcore_ipy_completion(shell: InteractiveShell | None = None) -> None:
