@@ -1,40 +1,71 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
-from typing import Callable, cast
+from typing import TYPE_CHECKING, Callable, cast
 
-import jedi
 from IPython import get_ipython  # pyright: ignore
-from IPython.core.completer import (
-    CompletionContext,
-    IPCompleter,
-    SimpleCompletion,
-    context_matcher,
-)
+from IPython.core.completer import SimpleCompletion, context_matcher
 
 from pymmcore_plus import CMMCorePlus, DeviceType
 
-CoreCompleter = Callable[[CMMCorePlus], Sequence[SimpleCompletion]]
+if TYPE_CHECKING:
+    from collections.abc import Sequence
+
+    from IPython.core.completer import (
+        CompletionContext,
+        SimpleMatcherResult,
+    )
+    from IPython.core.interactiveshell import InteractiveShell
+
+    CoreCompleter = Callable[[CMMCorePlus], Sequence[SimpleCompletion]]
+
+try:
+    import jedi
+
+    def _get_argument_index(src: str, ns: dict[str, object]) -> int:
+        script = jedi.Interpreter(src, [ns])
+        if not (sigs := script.get_signatures()):  # not inside a call
+            # unlikely to ever hit due to the OBJ_METHOD_RE check above
+            return -1  # pragma: no cover
+        return cast("int", sigs[-1].index)
+
+except ImportError:
+
+    def _get_argument_index(src: str, ns: dict[str, object]) -> int:
+        p0 = src.rfind("(") + 1
+        p1 = src.rfind(")") if ")" in src else None
+        if inner := src[slice(p0, p1)].strip():
+            # split on commas that are not inside quotes
+            return len(inner.split(",")) - 1  # 0-based
+        return 0
 
 
-def _null(ctx: CompletionContext) -> dict:
+# matches "obj.attr(" ... note trailing paren
+OBJ_METHOD_RE = re.compile(r"(?P<obj>[A-Za-z_][\w\.]*)\s*\.\s*(?P<attr>\w+)\s*\(")
+
+
+def _null(ctx: CompletionContext) -> SimpleMatcherResult:
     return {"completions": [], "matched_fragment": "", "suppress": False}
 
 
 def _dev_labels(
     core: CMMCorePlus, *dev_types: DeviceType, with_null: bool = False
 ) -> Sequence[SimpleCompletion]:
-    if not dev_types:
-        labels = list(core.getLoadedDevices())
-    else:
-        labels = [
-            d for dev_type in dev_types for d in core.getLoadedDevicesOfType(dev_type)
-        ]
-    completions = [SimpleCompletion(f'"{lbl}"') for lbl in labels]
-    if with_null:
-        completions.append(SimpleCompletion("''"))
-    return completions
+    try:
+        if not dev_types:
+            labels = list(core.getLoadedDevices())
+        else:
+            labels = [
+                d
+                for dev_type in dev_types
+                for d in core.getLoadedDevicesOfType(dev_type)
+            ]
+        completions = [SimpleCompletion(f'"{lbl}"') for lbl in labels]
+        if with_null:
+            completions.append(SimpleCompletion("''"))
+        return completions
+    except Exception:  # pragma: no cover
+        return []
 
 
 # fmt: off
@@ -182,7 +213,7 @@ SUGGESTION_MAP: dict[tuple[str, int], CoreCompleter] = {
 
 
 @context_matcher()  # type: ignore[misc]
-def cmmcoreplus_matcher(ctx: CompletionContext) -> dict:
+def cmmcoreplus_matcher(ctx: CompletionContext) -> SimpleMatcherResult:
     """
     Offer string completions for CMMCorePlus calls such as.
 
@@ -190,17 +221,18 @@ def cmmcoreplus_matcher(ctx: CompletionContext) -> dict:
         core.setProperty("CAM", <TAB>)
     """
     if not (ip := get_ipython()):
-        return _null(ctx)
+        return _null(ctx)  # pragma: no cover
     ns = ip.user_ns  # live user namespace
 
+    # e.g.: 'core.setCameraDevice('
     src_to_cursor = ctx.full_text[: ctx.cursor_position]
 
     # Extract the object expression and the *real* attribute name syntactically.
-    m = re.search(r"([A-Za-z_][\w\.]*)\.(\w+)\s*\(", src_to_cursor)
-    if not m:
+    if not (m := OBJ_METHOD_RE.search(src_to_cursor)):
         return _null(ctx)
-    var_expr, method_name = m.groups()
 
+    # e.g. ('core', 'setCameraDevice')
+    var_expr, method_name = m.group("obj"), m.group("attr")
     try:
         obj = eval(var_expr, ns)
     except Exception:
@@ -210,55 +242,20 @@ def cmmcoreplus_matcher(ctx: CompletionContext) -> dict:
         return _null(ctx)
 
     # ── 1. Use Jedi to understand where we are ────────────────────────────────
-    script = jedi.Interpreter(src_to_cursor, [ns])
-    sigs = script.get_signatures()
-
-    if not sigs:  # not inside a call
-        return _null(ctx)
-
-    sig = sigs[-1]
-    arg_index = sig.index  # 0-based argument index
+    arg_index = _get_argument_index(src_to_cursor, ns)
 
     if (method_name, arg_index) in SUGGESTION_MAP:
         # If we have a specific suggestion for this method and arg_index, use it.
-        completions = SUGGESTION_MAP[(method_name, arg_index)](obj)
-        return {"completions": completions, "suppress": True}
-
-    # elif method_name == "setProperty":
-    #     # naive parsing of args already typed inside the parens
-    #     arg_list = [
-    #         p.strip().strip("\"'")
-    #         for p in src_to_cursor[src_to_cursor.rfind("(") + 1 :].split(",")
-    #     ]
-
-    #     if arg_index == 0:  # want a device label
-    #         completions = [SimpleCompletion(lbl) for lbl in obj.getLoadedDevices()]
-
-    #     elif arg_index == 1 and arg_list:
-    #         label = arg_list[0]
-    #         if label in obj.getLoadedDevices():
-    #             props = obj.getDevicePropertyNames(label)
-    #             completions = [SimpleCompletion(p) for p in props]
-
-    #     elif arg_index == 2 and len(arg_list) >= 2:
-    #         label, prop = arg_list[0], arg_list[1]
-    #         if label in obj.getLoadedDevices() and obj.hasProperty(label, prop):
-    #             vals = obj.getAllowedPropertyValues(label, prop)
-    #             completions = [SimpleCompletion(v) for v in vals]
+        if completions := SUGGESTION_MAP[(method_name, arg_index)](obj):
+            return {"completions": completions, "suppress": True}
 
     return _null(ctx)
 
 
-def install_pymmcore_ipy_completion() -> None:
+def install_pymmcore_ipy_completion(shell: InteractiveShell | None = None) -> None:
     """Install the CMMCorePlus completion matcher in the current IPython session."""
-    ip = get_ipython()
-    if not ip:
-        return
-    completer = cast("IPCompleter", ip.Completer)
-    if cmmcoreplus_matcher not in completer.custom_matchers:
-        completer.custom_matchers.append(cmmcoreplus_matcher)
+    if shell is None and not (shell := get_ipython()):
+        return  # pragma: no cover
 
-
-install_pymmcore_ipy_completion()
-core = CMMCorePlus()
-core.loadSystemConfiguration()
+    if cmmcoreplus_matcher not in shell.Completer.custom_matchers:
+        shell.Completer.custom_matchers.append(cmmcoreplus_matcher)
