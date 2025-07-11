@@ -2541,6 +2541,13 @@ for name in (
         ).strip()
     )
 
+MMCORE_SIGNAL_NAMES = {n for n in dir(pymmcore.MMEventCallback) if n.startswith("on")}
+_SKIP = {
+    "onImageSnapped",
+    "onSequenceAcquisitionStopped",
+    "onSequenceAcquisitionStarted",
+}
+
 
 class _MMCallbackRelay(pymmcore.MMEventCallback):
     """Relays MMEventCallback methods to CMMCorePlus.signal."""
@@ -2551,6 +2558,11 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
 
     @staticmethod
     def make_reemitter(name: str) -> Callable[..., None]:
+        # until we debug issues passing signals emitted on other threads into Qt,
+        # we skip these signals (which already had their own pymmcore-plus emitters)
+        if name in _SKIP:
+            return lambda self, *args: None
+
         sig_name = name[2].lower() + name[3:]
 
         def reemit(self: _MMCallbackRelay, *args: Any) -> None:
@@ -2564,7 +2576,6 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         return reemit
 
 
-MMCORE_SIGNAL_NAMES = {n for n in dir(pymmcore.MMEventCallback) if n.startswith("on")}
 MMCallbackRelay = type(
     "MMCallbackRelay",
     (_MMCallbackRelay,),

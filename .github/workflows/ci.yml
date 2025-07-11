@@ -101,6 +101,7 @@ jobs:
       matrix:
         # note: hard-coding pymmcore-plus/ org for now
         repo: ["pymmcore-widgets", "pymmcore-gui"]
+        qt: ["PyQt6", "PySide6"]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -122,9 +123,17 @@ jobs:
         uses: pymmcore-plus/setup-mm-test-adapters@main
 
       - name: Install dependencies
+        if: matrix.qt == 'PyQt6'
         run: |
           uv sync --no-dev --group test
           uv pip install PyQt6
+          uv pip install ./pymmcore-plus
+          uv pip list
+
+      - name: Install dependencies
+        if: matrix.qt == 'PySide6'
+        run: |
+          uv sync --no-dev --group test --group PySide6 --no-install-package PyQt6 --no-install-package PyQt6Ads
           uv pip install ./pymmcore-plus
           uv pip list
 
