@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import abc
 import sys
+import weakref
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar
@@ -202,7 +203,7 @@ class DeviceAccumulator(abc.ABC, Generic[DT]):
         mmcore = mmcore or CMMCorePlus.instance()
         cache_key = (id(mmcore), device)
         device_type = mmcore.getDeviceType(device)
-        if cache_key not in DeviceAccumulator._CACHE:
+        if cache_key not in cls._CACHE:
             if device_type == cls._device_type():
                 cls._CACHE[cache_key] = cls(device_label=device, mmcore=mmcore)
             else:
@@ -215,6 +216,7 @@ class DeviceAccumulator(abc.ABC, Generic[DT]):
                         "No matching DeviceTypeMixin subclass found for device type "
                         f"{device_type.name} (for device {device!r})."
                     )
+            weakref.finalize(mmcore, cls._CACHE.pop, cache_key, None)
         obj = cls._CACHE[cache_key]
         if not isinstance(obj, cls):
             raise TypeError(

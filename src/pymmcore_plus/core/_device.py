@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ._constants import DeviceType, FocusDirection, Keyword
@@ -82,17 +83,18 @@ class Device:
         if mmcore is None:
             from ._mmcore_plus import CMMCorePlus
 
-            self._mmc = CMMCorePlus.instance()
+            mmcore = CMMCorePlus.instance()
         else:
-            self._mmc = mmcore
+            mmcore = mmcore
 
+        self._mmc_ref = weakref.ref(mmcore)
         self._label = device_label
         self._type = None
         if self.isLoaded():
-            adapter_name = self._mmc.getDeviceLibrary(device_label)
-            device_name = self._mmc.getDeviceName(device_label)
-            description = self._mmc.getDeviceDescription(device_label)
-            type = self._mmc.getDeviceType(device_label)  # noqa: A001
+            adapter_name = mmcore.getDeviceLibrary(device_label)
+            device_name = mmcore.getDeviceName(device_label)
+            description = mmcore.getDeviceDescription(device_label)
+            type = mmcore.getDeviceType(device_label)  # noqa: A001
             if self.type() != type:
                 raise TypeError(
                     f"Cannot create loaded device with label {device_label!r} and type "
@@ -103,7 +105,18 @@ class Device:
         self._device_name = device_name
         self._type = type
         self._description = description
-        self.propertyChanged = _DevicePropValueSignal(device_label, None, self._mmc)
+        self.propertyChanged = _DevicePropValueSignal(device_label, None, mmcore)
+
+    @property
+    def _mmc(self) -> CMMCorePlus:
+        """Return the `CMMCorePlus` instance to which this Device is bound."""
+        mmc = self._mmc_ref()
+        if mmc is None:
+            raise RuntimeError(
+                "The CMMCorePlus instance to which this Device "
+                "is bound has been garbage collected."
+            )
+        return mmc
 
     @property
     def label(self) -> str:
