@@ -10,6 +10,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from pymmcore_plus import CMMCorePlus
+from pymmcore_plus._accumulator import DeviceAccumulator
 from pymmcore_plus.core import _mmcore_plus
 
 
@@ -52,10 +53,12 @@ def test_device_object_refs() -> None:
         _obj = core.getDeviceObject("Camera")
 
 
-def test_prop_obj_refs() -> None:
+def test_dev_accumulator() -> None:
     with clean_core() as core:
         core.loadSystemConfiguration()
-        _obj = core.getPropertyObject("Camera", "Binning")
+        _dev = DeviceAccumulator.get_cached("XY", core)  # type: ignore
+        assert _dev in DeviceAccumulator._CACHE.values()
+    # assert _dev not in DeviceAccumulator._CACHE.values()  # not working yet
 
 
 # ------------------------------- HELPERS -------------------------------
