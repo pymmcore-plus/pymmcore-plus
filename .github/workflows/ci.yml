@@ -90,8 +90,8 @@ jobs:
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
 
-  test-dependents:
-    name: ${{ matrix.repo }}
+  test-pymmcore-widgets:
+    name: test pymmcore-widgets
     runs-on: macos-13
     env:
       UV_MANAGED_PYTHON: "1"
@@ -99,13 +99,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # note: hard-coding pymmcore-plus/ org for now
-        repo: ["pymmcore-widgets", "pymmcore-gui"]
-        qt: ["PyQt6", "PySide6"]
+        qt: [PySide6, PyQt6]
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: pymmcore-plus/${{ matrix.repo }}
+          repository: pymmcore-plus/pymmcore-widgets
           fetch-depth: 0
       - uses: actions/checkout@v4
         with:
@@ -123,21 +121,55 @@ jobs:
         uses: pymmcore-plus/setup-mm-test-adapters@main
 
       - name: Install dependencies
-        if: matrix.qt == 'PyQt6'
         run: |
-          uv sync --no-dev --group test
-          uv pip install PyQt6
+          uv sync --no-dev --group test --extra ${{ matrix.qt }}
           uv pip install ./pymmcore-plus
           uv pip list
+
+      - run: uv run pytest -v --color=yes -W ignore
+
+  test-pymmcore-gui:
+    name: test pymmcore-gui
+    runs-on: macos-13
+    env:
+      UV_MANAGED_PYTHON: "1"
+      UV_NO_SYNC: "1"
+    strategy:
+      fail-fast: false
+      matrix:
+        qt: [PySide6, PyQt6]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: pymmcore-plus/pymmcore-gui
+          fetch-depth: 0
+      - uses: actions/checkout@v4
+        with:
+          path: pymmcore-plus
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+      - uses: pyvista/setup-headless-display-action@v4
+        with:
+          qt: true
+
+      - name: Setup MM test adapters
+        uses: pymmcore-plus/setup-mm-test-adapters@main
 
       - name: Install dependencies
-        if: matrix.qt == 'PySide6'
+        shell: bash
         run: |
-          uv sync --no-dev --group test --group PySide6 --no-install-package PyQt6 --no-install-package PyQt6Ads
+          if [[ "${{ matrix.qt }}" == "PySide6" ]]; then
+            uv sync --group PySide6 --no-install-package PyQt6 --no-install-package PyQt6Ads
+          else
+            uv sync
+          fi
           uv pip install ./pymmcore-plus
           uv pip list
 
-      - run: uv run --no-sync pytest -v --color=yes -W ignore
+      - run: uv run pytest -v --color=yes -W ignore
 
   benchmarks:
     runs-on: ubuntu-latest
