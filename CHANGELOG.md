@@ -1,5 +1,13 @@
 # Changelog
 
+## [v0.15.3](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.3) (2025-07-11)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.2...v0.15.3)
+
+**Merged pull requests:**
+
+- fix: fallback to old signal behavior for new image/sequence events [\#484](https://github.com/pymmcore-plus/pymmcore-plus/pull/484) ([tlambert03](https://github.com/tlambert03))
+
 ## [v0.15.2](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.2) (2025-07-10)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.1...v0.15.2)
