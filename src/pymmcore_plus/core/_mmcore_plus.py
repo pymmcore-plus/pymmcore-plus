@@ -335,11 +335,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
 
-        # Break circular reference: CMMCorePlus -> MDARunner -> MDAEngine -> CMMCorePlus
-        if hasattr(self, "_mda_runner") and self._mda_runner is not None:
-            if hasattr(self._mda_runner, "_engine"):
-                self._mda_runner._engine = None  # noqa: SLF001
-
         try:
             super().registerCallback(None)
             self.reset()
