@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import weakref
 from queue import Queue
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, Mock, patch
@@ -165,7 +166,7 @@ def test_autofocus_relative_z_plan(
     # mock the engine core snap to store the z position
     mock_core = MagicMock(wraps=core)
     mock_core.snapImage.side_effect = _snap
-    core.mda.engine._mmc = mock_core
+    core.mda.engine._mmcore_ref = weakref.ref(mock_core)
     core.mda.run(mda)
 
     # the mock_fullfocus fixture nudges the focus upward by 50
