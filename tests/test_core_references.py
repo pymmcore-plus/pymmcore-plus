@@ -31,7 +31,9 @@ def clean_core() -> Iterator[CMMCorePlus]:
         _mmcore_plus._instance = None
 
     del core
-    while not gc.collect():
+    for _i in range(10):
+        if gc.collect() == 0:
+            break
         time.sleep(0.1)  # wait for the GC to settle
 
     if core_ref() is not None:
