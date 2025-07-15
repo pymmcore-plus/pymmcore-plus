@@ -155,7 +155,9 @@ def test_config_completions(shell_core: CMMCorePlus) -> None:
 
 def test_install_script() -> None:
     # CREATE a new ipython shell instance
-    shell = InteractiveShell.instance()
+    from IPython.testing.globalipapp import get_ipython
+
+    shell = get_ipython()
     try:
         assert shell
         install_pymmcore_ipy_completion()
