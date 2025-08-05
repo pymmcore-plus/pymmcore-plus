@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from functools import cached_property
 from typing import TYPE_CHECKING, Any, TypedDict
 
@@ -58,29 +59,34 @@ class DeviceProperty:
     ) -> None:
         self.device = device_label
         self.name = property_name
-        self._mmc = mmcore
-
-    @cached_property
-    def valueChanged(self) -> _DevicePropValueSignal:
-        return _DevicePropValueSignal(self.device, self.name, self._mmc)
-
-    def isValid(self) -> bool:
-        """Return `True` if device is loaded and has a property by this name."""
-        return self.isLoaded() and self._mmc.hasProperty(self.device, self.name)
-
-    def isLoaded(self) -> bool:
-        """Return true if the device name is loaded."""
-        return self._mmc is not None and self.device in self._mmc.getLoadedDevices()
+        self._mmc_ref = weakref.ref(mmcore)
 
     @property
     def core(self) -> CMMCorePlus:
         """Return the `CMMCorePlus` instance to which this Property is bound."""
-        return self._mmc
+        if (mmc := self._mmc_ref()) is None:
+            raise RuntimeError(
+                "The CMMCorePlus instance to which this Property "
+                "is bound has been deleted."
+            )
+        return mmc
+
+    @cached_property
+    def valueChanged(self) -> _DevicePropValueSignal:
+        return _DevicePropValueSignal(self.device, self.name, self.core)
+
+    def isValid(self) -> bool:
+        """Return `True` if device is loaded and has a property by this name."""
+        return self.isLoaded() and self.core.hasProperty(self.device, self.name)
+
+    def isLoaded(self) -> bool:
+        """Return true if the device name is loaded."""
+        return self.core is not None and self.device in self.core.getLoadedDevices()
 
     @property
     def value(self) -> Any:
         """Return current property value, cast to appropriate type if applicable."""
-        v = self._mmc.getProperty(self.device, self.name)
+        v = self.core.getProperty(self.device, self.name)
         if type_ := self.type().to_python():
             v = type_(v)
         return v
@@ -92,7 +98,7 @@ class DeviceProperty:
 
     def fromCache(self) -> Any:
         """Return cached property value."""
-        return self._mmc.getPropertyFromCache(self.device, self.name)
+        return self.core.getPropertyFromCache(self.device, self.name)
 
     def setValue(self, val: Any) -> None:
         """Functional alternate to property setter."""
@@ -103,7 +109,7 @@ class DeviceProperty:
                 f"'{self.device}::{self.name}' is a read-only property.", stacklevel=2
             )
         try:
-            self._mmc.setProperty(self.device, self.name, val)
+            self.core.setProperty(self.device, self.name, val)
         except RuntimeError as e:
             msg = str(e)
             if allowed := self.allowedValues():
@@ -112,23 +118,23 @@ class DeviceProperty:
 
     def isReadOnly(self) -> bool:
         """Return `True` if property is read only."""
-        return self._mmc.isPropertyReadOnly(self.device, self.name)
+        return self.core.isPropertyReadOnly(self.device, self.name)
 
     def isPreInit(self) -> bool:
         """Return `True` if property must be defined prior to initialization."""
-        return self._mmc.isPropertyPreInit(self.device, self.name)
+        return self.core.isPropertyPreInit(self.device, self.name)
 
     def hasLimits(self) -> bool:
         """Return `True` if property has limits."""
-        return self._mmc.hasPropertyLimits(self.device, self.name)
+        return self.core.hasPropertyLimits(self.device, self.name)
 
     def lowerLimit(self) -> float:
         """Return lower limit if property has limits, or 0 otherwise."""
-        return self._mmc.getPropertyLowerLimit(self.device, self.name)
+        return self.core.getPropertyLowerLimit(self.device, self.name)
 
     def upperLimit(self) -> float:
         """Return upper limit if property has limits, or 0 otherwise."""
-        return self._mmc.getPropertyUpperLimit(self.device, self.name)
+        return self.core.getPropertyUpperLimit(self.device, self.name)
 
     def range(self) -> tuple[float, float]:
         """Return (lowerLimit, upperLimit) range tuple."""
@@ -136,31 +142,31 @@ class DeviceProperty:
 
     def type(self) -> PropertyType:
         """Return `PropertyType` of this property."""
-        return self._mmc.getPropertyType(self.device, self.name)
+        return self.core.getPropertyType(self.device, self.name)
 
     def deviceType(self) -> DeviceType:
         """Return `DeviceType` of the device owning this property."""
-        return self._mmc.getDeviceType(self.device)
+        return self.core.getDeviceType(self.device)
 
     def allowedValues(self) -> tuple[str, ...]:
         """Return allowed values for this property, if contstrained."""
         # https://github.com/micro-manager/mmCoreAndDevices/issues/172
-        allowed = self._mmc.getAllowedPropertyValues(self.device, self.name)
+        allowed = self.core.getAllowedPropertyValues(self.device, self.name)
         if not allowed and self.deviceType() is DeviceType.StateDevice:
             if self.name == Keyword.State:
-                n_states = self._mmc.getNumberOfStates(self.device)
+                n_states = self.core.getNumberOfStates(self.device)
                 allowed = tuple(str(i) for i in range(n_states))
             elif self.name == Keyword.Label:
-                allowed = self._mmc.getStateLabels(self.device)
+                allowed = self.core.getStateLabels(self.device)
         return allowed
 
     def isSequenceable(self) -> bool:
         """Return `True` if property can be used in a sequence."""
-        return self._mmc.isPropertySequenceable(self.device, self.name)
+        return self.core.isPropertySequenceable(self.device, self.name)
 
     def sequenceMaxLength(self) -> int:
         """Return maximum number of property events that can be put in a sequence."""
-        return self._mmc.getPropertySequenceMaxLength(self.device, self.name)
+        return self.core.getPropertySequenceMaxLength(self.device, self.name)
 
     def loadSequence(self, eventSequence: Sequence[str]) -> None:
         """Transfer a sequence of events/states/whatever to the device.
@@ -171,15 +177,15 @@ class DeviceProperty:
             The sequence of events/states that the device will execute in response
             to external triggers
         """
-        self._mmc.loadPropertySequence(self.device, self.name, eventSequence)
+        self.core.loadPropertySequence(self.device, self.name, eventSequence)
 
     def startSequence(self) -> None:
         """Start an ongoing sequence of triggered events in a property."""
-        self._mmc.startPropertySequence(self.device, self.name)
+        self.core.startPropertySequence(self.device, self.name)
 
     def stopSequence(self) -> None:
         """Stop an ongoing sequence of triggered events in a property."""
-        self._mmc.stopPropertySequence(self.device, self.name)
+        self.core.stopPropertySequence(self.device, self.name)
 
     def dict(self) -> InfoDict:
         """Return dict of info about this Property.
@@ -224,5 +230,5 @@ class DeviceProperty:
 
     def __repr__(self) -> str:
         v = f"value={self.value!r}" if self.isValid() else "INVALID"
-        core = repr(self._mmc).strip("<>")
+        core = repr(self.core).strip("<>")
         return f"<Property '{self.device}::{self.name}' on {core}: {v}>"

@@ -2,6 +2,7 @@
 
 import logging
 from importlib.metadata import PackageNotFoundError, version
+from typing import Any
 
 try:
     __version__ = version("pymmcore-plus")
@@ -67,6 +68,21 @@ __all__ = [
 ]
 
 
+def __getattr__(name: str) -> Any:
+    """Lazy import for compatibility with pymmcore."""
+    if name == "install_pymmcore_ipy_completion":
+        try:
+            from ._ipy_completion import install_pymmcore_ipy_completion
+        except ImportError as e:
+            raise ImportError(
+                f"Error importing IPython completion for pymmcore-plus: {e}"
+            ) from None
+
+        return install_pymmcore_ipy_completion
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'. ")
+
+
+# install the IPython completer when imported, if running in an IPython environment
 def _install_ipy_completer() -> None:  # pragma: no cover
     import os
     import sys
