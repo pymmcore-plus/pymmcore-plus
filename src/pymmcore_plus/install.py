@@ -68,6 +68,7 @@ DOWNLOADS_URL = f"{BASE_URL}/nightly/2.0/{plat}/"
 # generally running `mmcore install -r <some_date>` will bring in devices with
 # the NEW interface.
 INTERFACES: dict[int, str] = {
+    74: "20250815",
     73: "20250318",
     72: "20250318",
     71: "20221031",
