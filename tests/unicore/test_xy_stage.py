@@ -52,6 +52,7 @@ def test_unicore_xy_stage():
     # print status of C-side XY stage device
     assert core.getXYStageDevice() == "XY"
     core.setXYPosition(100, 200)
+    core.waitForDevice("XY")
     x, y = core.getXYPosition()
     assert (round(x), round(y)) == (100, 200)
 
@@ -75,6 +76,7 @@ def test_unicore_xy_stage():
     # can still set and query the C-side device directly
     core.waitForDevice("XY")
     core.setXYPosition("XY", 1.5, 3.7)
+    core.waitForDevice("XY")
     x, y = core.getXYPosition("XY")
     assert (round(x, 1), round(y, 1)) == (1.5, 3.7)
     assert core.getXYPosition(XYDEV) == NEW_POS

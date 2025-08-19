@@ -3,10 +3,10 @@ from __future__ import annotations
 from collections import defaultdict
 from collections.abc import Iterable
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, TypeVar
+from typing import TYPE_CHECKING, Any, Optional, TypeVar
 
 from pydantic import Field, model_validator
-from useq import AcquireImage, MDAEvent
+from useq import AcquireImage, MDAEvent, MDASequence
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
 
@@ -64,6 +64,9 @@ class SequencedEvent(MDAEvent):
     y_sequence: tuple[float, ...] = Field(default_factory=tuple)
     z_sequence: tuple[float, ...] = Field(default_factory=tuple)
     slm_sequence: tuple[bytes, ...] = Field(default_factory=tuple)
+
+    # re-defining this from MDAEvent to circumvent a strange issue with pydantic 2.11
+    sequence: Optional[MDASequence] = Field(default=None, repr=False)  # noqa: UP045
 
     # all other property sequences
     property_sequences: dict[tuple[str, str], list[str]] = Field(default_factory=dict)

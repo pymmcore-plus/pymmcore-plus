@@ -17,26 +17,14 @@ jobs:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.x
-      - run: |
-          pip install -e .[docs]
-          # bugfix until https://github.com/mkdocstrings/griffe/pull/115
-          pip install git+https://github.com/tlambert03/griffe@recursion#egg=griffe -U
-      - run: mkdocs build --strict
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --group docs mkdocs build --strict
 
   deploy:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: 3.x
-      - run: |
-          pip install -e .[docs]
-          # bugfix until https://github.com/mkdocstrings/griffe/pull/115
-          pip install git+https://github.com/tlambert03/griffe@recursion#egg=griffe -U
-      - run: mkdocs gh-deploy --force
+      - uses: actions/checkout@v5
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --group docs mkdocs gh-deploy --strict --force

@@ -6,6 +6,10 @@ from ._protocol import PCoreSignaler
 from ._psygnal import CMMCoreSignaler
 from ._qsignals import QCoreSignaler
 
+if TYPE_CHECKING:
+    from ._qsignals import QCoreSignaler
+
+
 __all__ = [
     "CMMCoreSignaler",
     "PCoreSignaler",

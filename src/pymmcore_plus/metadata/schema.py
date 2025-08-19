@@ -331,10 +331,29 @@ class PixelSizeConfigPreset(ConfigPreset):
         corrected for binning and known magnification devices. The affine transform
         consists of the first two rows of a 3x3 matrix, the third row is always assumed
         to be 0.0 0.0 1.0.
+
+    pixel_size_dxdz : float
+        *Not Required*. The angle between the camera's x axis and the axis (direction)
+        of the z drive for the given pixel size configuration. This angle is
+        dimensionless (i.e. the ratio of the translation in x caused by a translation
+        in z, i.e. dx / dz). If missing, assume 0.0.
+    pixel_size_dydz : float
+        *Not Required*. The angle between the camera's y axis and the axis (direction)
+        of the z drive for the given pixel size configuration. This angle is
+        dimensionless (i.e. the ratio of the translation in y caused by a translation
+        in z, i.e. dy / dz). If missing, assume 0.0.
+    pixel_size_optimal_z_um : float
+        *Not Required*. User-defined optimal Z step size is for this pixel size config.
+        If missing, assume 0.0.
     """
 
     pixel_size_um: float
     pixel_size_affine: NotRequired[AffineTuple]
+
+    # added in MMCore v 11.5
+    pixel_size_dxdz: NotRequired[float]  # default 0.0
+    pixel_size_dydz: NotRequired[float]  # default 0.0
+    pixel_size_optimal_z_um: NotRequired[float]  # default 0.0
 
 
 class ConfigGroup(TypedDict):

@@ -31,6 +31,9 @@ class PixelSizePreset(ConfigPreset):
 
     pixel_size_um: float = 0.0
     affine: AffineTuple = DEFAULT_AFFINE
+    angle_dxdz: float = 0.0
+    angle_dydz: float = 0.0
+    optimalz_um: float = 0.0
 
     @classmethod
     def from_metadata(cls, meta: PixelSizeConfigPreset) -> Self:  # type: ignore [override]
@@ -38,6 +41,12 @@ class PixelSizePreset(ConfigPreset):
         obj.pixel_size_um = meta["pixel_size_um"]
         if "pixel_size_affine" in meta:
             obj.affine = meta["pixel_size_affine"]
+        if "pixel_size_dxdz" in meta:
+            obj.angle_dxdz = meta["pixel_size_dxdz"]
+        if "pixel_size_dydz" in meta:
+            obj.angle_dydz = meta["pixel_size_dydz"]
+        if "pixel_size_optimal_z_um" in meta:
+            obj.optimalz_um = meta["pixel_size_optimal_z_um"]
         return obj
 
     def __rich_repr__(self, *, defaults: bool = False) -> Iterable[tuple[str, Any]]:

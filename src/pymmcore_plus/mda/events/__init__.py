@@ -8,6 +8,10 @@ from ._protocol import PMDASignaler
 from ._psygnal import MDASignaler
 from ._qsignals import QMDASignaler
 
+if TYPE_CHECKING:
+    from ._qsignals import QMDASignaler
+
+
 __all__ = [
     "MDASignaler",
     "PMDASignaler",
@@ -23,7 +27,7 @@ def _get_auto_MDA_callback_class() -> type[PMDASignaler]:
         return QMDASignaler
 
     # (not sure why this type ignore is needed... apparently isn't matching protocol)
-    return MDASignaler  # type: ignore
+    return MDASignaler
 
 
 def __dir__() -> list[str]:  # pragma: no cover

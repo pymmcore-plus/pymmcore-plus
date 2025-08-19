@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
-from typing import get_args
 from unittest.mock import Mock, call
 
 import pytest
 
 from pymmcore_plus import CMMCorePlus, Keyword
-from pymmcore_plus._util import MMCORE_PLUS_SIGNALS_BACKEND
+from pymmcore_plus._util import PYMM_SIGNALS_BACKEND
 from pymmcore_plus.core.events import CMMCoreSignaler, PCoreSignaler
+from pymmcore_plus.core.events._protocol import PSignal, PSignalInstance
 
 Signalers = [CMMCoreSignaler]
 try:
@@ -38,7 +38,7 @@ def test_signal_backend_selection(
 
         _ = QApplication.instance() or QApplication([])
 
-    monkeypatch.setenv(MMCORE_PLUS_SIGNALS_BACKEND, env_var)
+    monkeypatch.setenv(PYMM_SIGNALS_BACKEND, env_var)
     ctx = (
         pytest.warns(UserWarning)
         if (env_var == "nonsense" or (env_var == "qt" and QCoreSignaler is None))
@@ -59,11 +59,12 @@ def test_events_protocols(cls):
             f"{name!r} does not implement the CoreSignaler Protocol. "
             f"Missing attributes: {required - set(dir(obj))!r}"
         )
-    for attr, value in PCoreSignaler.__annotations__.items():
+    for attr in PCoreSignaler.__annotations__:
         m = getattr(obj, attr)
-        if not isinstance(m, get_args(value) or value):
+        if not isinstance(m, (PSignal, PSignalInstance)):
             raise AssertionError(
-                f"'{name}.{attr}' expected type {value.__name__!r}, got {type(m)}"
+                f"'{name}.{attr}' expected type "
+                f"{(PSignal, PSignalInstance)!r}, got {type(m)}"
             )
 
 
@@ -192,16 +193,16 @@ def test_sequence_acquisition_events(core: CMMCorePlus) -> None:
 
     # without camera label
     core.startSequenceAcquisition(5, 100.0, True)
-    mock2a.assert_any_call(core.getCameraDevice(), 5, 100.0, True)
-    mock2b.assert_any_call(core.getCameraDevice(), 5, 100.0, True)
+    mock2a.assert_any_call(core.getCameraDevice())
+    mock2b.assert_any_call(core.getCameraDevice())
     core.stopSequenceAcquisition()
     mock3.assert_any_call(core.getCameraDevice())
 
     # with camera label
     cam = core.getCameraDevice()
     core.startSequenceAcquisition(cam, 5, 100.0, True)
-    mock2a.assert_any_call(cam, 5, 100.0, True)
-    mock2b.assert_any_call(cam, 5, 100.0, True)
+    mock2a.assert_any_call(cam)
+    mock2b.assert_any_call(cam)
     core.stopSequenceAcquisition(cam)
     mock3.assert_any_call(cam)
 
@@ -305,3 +306,84 @@ def test_set_focus_device(core: CMMCorePlus) -> None:
     core.setFocusDevice("Z")
     assert core.getFocusDevice() == "Z"
     mock.assert_any_call("Core", "Focus", "Z")
+
+
+SIGNATURES: list[tuple[str, tuple[type, ...]]] = [
+    ("propertiesChanged", ()),
+    ("propertyChanged", (str, str, str)),
+    ("channelGroupChanged", (str,)),
+    ("configGroupChanged", (str, str)),
+    ("systemConfigurationLoaded", ()),
+    ("pixelSizeChanged", (float,)),
+    ("pixelSizeAffineChanged", (float, float, float, float, float, float)),
+    ("stagePositionChanged", (str, float)),
+    ("XYStagePositionChanged", (str, float, float)),
+    ("exposureChanged", (str, float)),
+    ("SLMExposureChanged", (str, float)),
+    ("configSet", (str, str)),
+    ("imageSnapped", (str,)),
+    ("mdaEngineRegistered", (object, object)),
+    ("continuousSequenceAcquisitionStarting", ()),
+    ("continuousSequenceAcquisitionStarted", ()),
+    ("sequenceAcquisitionStarting", (str,)),  # NEW
+    ("sequenceAcquisitionStarted", (str,)),  # NEW
+    ("sequenceAcquisitionStopped", (str,)),
+    ("autoShutterSet", (bool,)),
+    ("configGroupDeleted", (str,)),
+    ("configDeleted", (str, str)),
+    ("configDefined", (str, str, str, str, str)),
+    ("roiSet", (str, int, int, int, int)),
+]
+
+
+@pytest.mark.parametrize("name, signature", SIGNATURES)
+def test_event_signatures(
+    core: CMMCorePlus, name: str, signature: tuple[type, ...]
+) -> None:
+    """Test connecting to events with expected signatures."""
+    # create callback expecting the exact number of arguments in signature
+    num_args = len(signature)
+    sig_str = ", ".join(f"a{i}" for i in range(num_args))
+    ns: dict = {}
+
+    exec(f"def func({sig_str}): ...", ns)
+    full_func = ns["func"]
+    assert callable(full_func), "Function is not callable"
+
+    signal = getattr(core.events, name)
+    assert isinstance(signal, PSignalInstance)
+    signal.connect(full_func)
+    signal.emit(*[t() for t in signature])  # emit with dummy values
+
+    # min-func
+    signal.disconnect(full_func)
+    signal.connect(lambda: None)
+    signal.emit(*[t() for t in signature])  # emit with dummy values
+
+
+DEPRECATED_SIGNATURES: list[tuple[str, tuple[type, ...], tuple[type, ...]]] = [
+    ("sequenceAcquisitionStarting", (str,), (str, int, float, bool)),  # DEPRECATED
+    ("sequenceAcquisitionStarted", (str,), (str, int, float, bool)),  # DEPRECATED
+]
+
+
+@pytest.mark.parametrize("name, new, old", DEPRECATED_SIGNATURES)
+def test_deprecated_event_signatures(
+    core: CMMCorePlus, name: str, new: tuple[type, ...], old: tuple[type, ...]
+) -> None:
+    """Test connecting to events with expected signatures."""
+    # create callback expecting the exact number of arguments in signature
+    num_args = len(old)
+    sig_str = ", ".join(f"a{i}" for i in range(num_args))
+    ns: dict = {}
+
+    exec(f"def func({sig_str}): ...", ns)
+    full_func = ns["func"]
+    assert callable(full_func), "Function is not callable"
+
+    signal = getattr(core.events, name)
+    assert isinstance(signal, PSignalInstance)
+    with pytest.warns(FutureWarning, match="Callback 'func' requires"):
+        signal.connect(full_func)
+
+    signal.emit(*[t() for t in new])  # emit with dummy values
