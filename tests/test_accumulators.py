@@ -85,7 +85,7 @@ def test_xystage_position_accumulator() -> None:
     assert accum.target is None
 
 
-def test_invalid_type():
+def test_device_accumulator() -> None:
     core = CMMCorePlus()
     core.loadSystemConfiguration()
     obj1 = DeviceAccumulator.get_cached("XY", core)  # type: ignore
