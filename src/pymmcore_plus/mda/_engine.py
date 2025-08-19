@@ -75,10 +75,10 @@ class MDAEngine(PMDAEngine):
     """
 
     def __init__(
-        self, 
-        mmc: CMMCorePlus, 
-        use_hardware_sequencing: bool = True, 
-        restore_initial_state: bool = False
+        self,
+        mmc: CMMCorePlus,
+        use_hardware_sequencing: bool = True,
+        restore_initial_state: bool = False,
     ) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing: bool = use_hardware_sequencing
@@ -386,7 +386,7 @@ class MDAEngine(PMDAEngine):
     def _capture_initial_state(self) -> None:
         """Capture the current hardware state for later restoration."""
         self._initial_state.clear()
-        
+
         try:
             # capture XY position
             if self._mmc.getXYStageDevice():
@@ -395,7 +395,7 @@ class MDAEngine(PMDAEngine):
                 self._initial_state["xy_position"] = (x_pos, y_pos)
         except Exception as e:
             logger.warning("Failed to capture XY position: %s", e)
-        
+
         try:
             # capture Z position
             if self._mmc.getFocusDevice():
@@ -403,14 +403,14 @@ class MDAEngine(PMDAEngine):
                 self._initial_state["z_position"] = z_pos
         except Exception as e:
             logger.warning("Failed to capture Z position: %s", e)
-        
+
         try:
             # capture exposure setting
             exposure = self._mmc.getExposure()
             self._initial_state["exposure"] = exposure
         except Exception as e:
             logger.warning("Failed to capture exposure setting: %s", e)
-            
+
         # capture config group states
         try:
             config_groups = self._mmc.getAvailableConfigGroups()
@@ -427,7 +427,7 @@ class MDAEngine(PMDAEngine):
         """Restore the hardware state that was captured before the sequence."""
         if not self._initial_state:
             return
-            
+
         # restore XY position
         if "xy_position" in self._initial_state:
             try:
@@ -437,7 +437,7 @@ class MDAEngine(PMDAEngine):
                     self._mmc.waitForSystem()
             except Exception as e:
                 logger.warning("Failed to restore XY position: %s", e)
-        
+
         # restore Z position
         if "z_position" in self._initial_state:
             try:
@@ -447,7 +447,7 @@ class MDAEngine(PMDAEngine):
                     self._mmc.waitForSystem()
             except Exception as e:
                 logger.warning("Failed to restore Z position: %s", e)
-        
+
         # restore exposure
         if "exposure" in self._initial_state:
             try:
@@ -455,7 +455,7 @@ class MDAEngine(PMDAEngine):
                 self._mmc.setExposure(exposure)
             except Exception as e:
                 logger.warning("Failed to restore exposure setting: %s", e)
-        
+
         # restore config group states
         for key, value in self._initial_state.items():
             if key.startswith("config_group_"):
@@ -463,8 +463,10 @@ class MDAEngine(PMDAEngine):
                 try:
                     self._mmc.setConfig(group, value)
                 except Exception as e:
-                    logger.warning("Failed to restore config group %s to %s: %s", group, value, e)
-        
+                    logger.warning(
+                        "Failed to restore config group %s to %s: %s", group, value, e
+                    )
+
         # clear the state after restoration
         self._initial_state.clear()
 
