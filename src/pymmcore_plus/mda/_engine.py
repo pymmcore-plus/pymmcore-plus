@@ -67,9 +67,19 @@ class MDAEngine(PMDAEngine):
         reports that the events can be sequenced. This can be set after instantiation.
         By default, this is `True`, however in various testing and demo scenarios, you
         may wish to set it to `False` in order to avoid unexpected behavior.
+    restore_initial_state : bool
+        Whether to restore the initial hardware state after the MDA sequence completes.
+        If `True`, the engine will capture the initial state (positions, config groups,
+        exposure settings) before the sequence starts and restore it after completion.
+        By default, this is `False` to maintain backwards compatibility.
     """
 
-    def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = True) -> None:
+    def __init__(
+        self, 
+        mmc: CMMCorePlus, 
+        use_hardware_sequencing: bool = True, 
+        restore_initial_state: bool = False
+    ) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing: bool = use_hardware_sequencing
         # if True, always set XY position, even if the commanded position is the same
@@ -80,6 +90,9 @@ class MDAEngine(PMDAEngine):
         # whether to include position metadata when fetching on-frame metadata
         # omitted by default when performing triggered acquisition because it's slow.
         self._include_frame_position_metadata: IncludePositionArg = "unsequenced-only"
+
+        # whether to restore the initial hardware state after sequence completion
+        self.restore_initial_state: bool = restore_initial_state
 
         # used to check if the hardware autofocus is engaged when the sequence begins.
         # if it is, we will re-engage it after the autofocus action (if successful).
@@ -98,6 +111,9 @@ class MDAEngine(PMDAEngine):
 
         self._last_config: tuple[str, str] = ("", "")
         self._last_xy_pos: tuple[float | None, float | None] = (None, None)
+
+        # stored initial state for restoration (if restore_initial_state is True)
+        self._initial_state: dict[str, tuple[float, float] | float | str | None] = {}
 
         # -----
         # The following values are stored during setup_sequence simply to speed up
@@ -139,6 +155,10 @@ class MDAEngine(PMDAEngine):
         self._update_config_device_props()
         # get if the autofocus is engaged at the start of the sequence
         self._af_was_engaged = self._mmc.isContinuousFocusLocked()
+
+        # capture initial state if restoration is enabled
+        if self.restore_initial_state:
+            self._capture_initial_state()
 
         if px_size := self._mmc.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
@@ -359,7 +379,94 @@ class MDAEngine(PMDAEngine):
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
-        pass
+        # restore initial state if enabled and state was captured
+        if self.restore_initial_state and self._initial_state:
+            self._restore_initial_state()
+
+    def _capture_initial_state(self) -> None:
+        """Capture the current hardware state for later restoration."""
+        self._initial_state.clear()
+        
+        try:
+            # capture XY position
+            if self._mmc.getXYStageDevice():
+                x_pos = self._mmc.getXPosition()
+                y_pos = self._mmc.getYPosition()
+                self._initial_state["xy_position"] = (x_pos, y_pos)
+        except Exception as e:
+            logger.warning("Failed to capture XY position: %s", e)
+        
+        try:
+            # capture Z position
+            if self._mmc.getFocusDevice():
+                z_pos = self._mmc.getZPosition()
+                self._initial_state["z_position"] = z_pos
+        except Exception as e:
+            logger.warning("Failed to capture Z position: %s", e)
+        
+        try:
+            # capture exposure setting
+            exposure = self._mmc.getExposure()
+            self._initial_state["exposure"] = exposure
+        except Exception as e:
+            logger.warning("Failed to capture exposure setting: %s", e)
+            
+        # capture config group states
+        try:
+            config_groups = self._mmc.getAvailableConfigGroups()
+            for group in config_groups:
+                try:
+                    current_config = self._mmc.getCurrentConfig(group)
+                    self._initial_state[f"config_group_{group}"] = current_config
+                except Exception as e:
+                    logger.warning("Failed to capture config group %s: %s", group, e)
+        except Exception as e:
+            logger.warning("Failed to get available config groups: %s", e)
+
+    def _restore_initial_state(self) -> None:
+        """Restore the hardware state that was captured before the sequence."""
+        if not self._initial_state:
+            return
+            
+        # restore XY position
+        if "xy_position" in self._initial_state:
+            try:
+                x_pos, y_pos = self._initial_state["xy_position"]
+                if self._mmc.getXYStageDevice():
+                    self._mmc.setXYPosition(x_pos, y_pos)
+                    self._mmc.waitForSystem()
+            except Exception as e:
+                logger.warning("Failed to restore XY position: %s", e)
+        
+        # restore Z position
+        if "z_position" in self._initial_state:
+            try:
+                z_pos = self._initial_state["z_position"]
+                if self._mmc.getFocusDevice():
+                    self._mmc.setZPosition(z_pos)
+                    self._mmc.waitForSystem()
+            except Exception as e:
+                logger.warning("Failed to restore Z position: %s", e)
+        
+        # restore exposure
+        if "exposure" in self._initial_state:
+            try:
+                exposure = self._initial_state["exposure"]
+                self._mmc.setExposure(exposure)
+            except Exception as e:
+                logger.warning("Failed to restore exposure setting: %s", e)
+        
+        # restore config group states
+        for key, value in self._initial_state.items():
+            if key.startswith("config_group_"):
+                group = key.replace("config_group_", "")
+                try:
+                    self._mmc.setConfig(group, value)
+                except Exception as e:
+                    logger.warning("Failed to restore config group %s to %s: %s", group, value, e)
+        
+        # clear the state after restoration
+        self._initial_state.clear()
 
     # ===================== Sequenced Events =====================
 
