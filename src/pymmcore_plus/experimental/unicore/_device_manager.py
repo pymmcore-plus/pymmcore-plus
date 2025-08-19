@@ -7,7 +7,7 @@ from typing import TYPE_CHECKING, TypeVar, cast
 
 from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
 
-from .devices._device import Device
+from .devices._device_base import Device
 
 if TYPE_CHECKING:
     from collections.abc import Iterator

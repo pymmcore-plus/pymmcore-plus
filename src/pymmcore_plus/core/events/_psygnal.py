@@ -1,7 +1,10 @@
+from typing import TYPE_CHECKING
+
 from psygnal import Signal, SignalGroup, SignalInstance
 
 from pymmcore_plus.mda import MDAEngine
 
+from ._deprecated import DeprecatedSignalProxy
 from ._prop_event_mixin import _DevicePropertyEventMixin
 
 
@@ -21,15 +24,21 @@ class CMMCoreSignaler(SignalGroup, _DevicePropertyEventMixin):
     XYStagePositionChanged = Signal(str, float, float)
     exposureChanged = Signal(str, float)
     SLMExposureChanged = Signal(str, float)
+    shutterOpenChanged = Signal(str, bool)
+
+    # https://github.com/micro-manager/mmCoreAndDevices/pull/659
+    imageSnapped = Signal(str)  # on snapImage()
+    # when (Continuous)SequenceAcquisition is stopped
+    sequenceAcquisitionStopped = Signal(str)
+    if TYPE_CHECKING:  # see deprecated impl below
+        sequenceAcquisitionStarted = Signal(str)
 
     # added for CMMCorePlus
-    imageSnapped = Signal()  # whenever snapImage is called
     mdaEngineRegistered = Signal(MDAEngine, MDAEngine)
     continuousSequenceAcquisitionStarting = Signal()
     continuousSequenceAcquisitionStarted = Signal()
-    sequenceAcquisitionStarting = Signal(str, int, float, bool)
-    sequenceAcquisitionStarted = Signal(str, int, float, bool)
-    sequenceAcquisitionStopped = Signal(str)
+    if TYPE_CHECKING:
+        sequenceAcquisitionStarting = Signal(str)
     autoShutterSet = Signal(bool)
     configGroupDeleted = Signal(str)
     configDeleted = Signal(str, str)
@@ -38,9 +47,30 @@ class CMMCoreSignaler(SignalGroup, _DevicePropertyEventMixin):
 
     # aliases for lower casing
     @property
-    def xYStagePositionChanged(self) -> SignalInstance:  # type: ignore
+    def xYStagePositionChanged(self) -> SignalInstance:
         return self.XYStagePositionChanged
 
     @property
-    def sLMExposureChanged(self) -> SignalInstance:  # type: ignore
+    def sLMExposureChanged(self) -> SignalInstance:
         return self.SLMExposureChanged
+
+    if not TYPE_CHECKING:
+        _sequenceAcquisitionStarting = Signal(str)
+        _sequenceAcquisitionStarted = Signal(str)
+
+        # Deprecated signal wrappers for backwards compatibility
+        @property
+        def sequenceAcquisitionStarting(self) -> SignalInstance:
+            return DeprecatedSignalProxy(
+                self._sequenceAcquisitionStarting,
+                current_n_args=1,
+                deprecated_posargs=(-1, 0, False),
+            )
+
+        @property
+        def sequenceAcquisitionStarted(self) -> SignalInstance:
+            return DeprecatedSignalProxy(
+                self._sequenceAcquisitionStarted,
+                current_n_args=1,
+                deprecated_posargs=(-1, 0, False),
+            )

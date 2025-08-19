@@ -22,7 +22,7 @@ environments**.
   [CMMCorePlus
   documentation](https://pymmcore-plus.github.io/pymmcore-plus/api/cmmcoreplus/)
   for details.
-- `pymmcore-plus` includes an [acquisition engine](https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_engine/) 
+- `pymmcore-plus` includes an [acquisition engine](https://pymmcore-plus.github.io/pymmcore-plus/guides/mda_engine/)
   that drives micro-manager for conventional multi-dimensional experiments. It accepts an
   [MDASequence](https://pymmcore-plus.github.io/useq-schema/schema/sequence/)
   from [useq-schema](https://pymmcore-plus.github.io/useq-schema/) for
@@ -35,7 +35,7 @@ environments**.
 
 ## Documentation
 
-https://pymmcore-plus.github.io/pymmcore-plus/
+<https://pymmcore-plus.github.io/pymmcore-plus/>
 
 ## Why not just use `pymmcore` directly?
 
@@ -62,20 +62,22 @@ python users are accustomed to. This library:
 
 ## How does this relate to `Pycro-Manager`?
 
-[Pycro-Manager](https://github.com/micro-manager/pycro-manager) is an impressive
-library written by Henry Pinkard designed to make it easier to work with and
-control the Java Micro-manager application using python. As such, it requires
-Java to be installed and running in the background (either via the micro-manager
-GUI application directly, or via a headless process). The python half
-communicates with the Java half using ZeroMQ messaging.
+[Pycro-Manager](https://github.com/micro-manager/pycro-manager) is designed to
+make it easier to work with and control the Java Micro-manager application
+(MMStudio) using python. As such, it requires Java to be installed and for
+MMStudio to be running a server in another process. The python half communicates
+with the Java half using ZeroMQ messaging.
 
 **In brief**: while `Pycro-Manager` provides a python API to control the Java
 Micro-manager application (which in turn controls the C++ core), `pymmcore-plus`
 provides a python API to control the C++ core directly, without the need for
-Java in the loop.  Each has its own advantages and disadvantages!  With
-pycro-manager you immediately get the entire existing micro-manager ecosystem
-and GUI application. With pymmcore-plus you don't need to install Java, and you
-have direct access to the memory buffers used by the C++ core.
+Java in the loop. Each has its own advantages and disadvantages! With
+pycro-manager you retain the entire existing micro-manager ecosystem
+and GUI application. With pymmcore-plus, the entire thing is python: you
+don't need to install Java, and you have direct access to the memory buffers
+used by the C++ core.  Work on recreating the gui application in python
+being done in [`pymmcore-widgets`](https://github.com/pymmcore-plus/pymmcore-widgets)
+and [`pymmcore-gui`](https://github.com/pymmcore-plus/pymmcore-gui).
 
 ## Quickstart
 
@@ -114,7 +116,7 @@ mmcore install
 
 (you can also download these manually from [micro-manager.org](https://micro-manager.org/Micro-Manager_Nightly_Builds))
 
-_See [installation documentation ](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details._
+_See [installation documentation](https://pymmcore-plus.github.io/pymmcore-plus/install/) for more details._
 
 ### Usage
 

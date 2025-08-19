@@ -1,3 +1,6 @@
+import os
+import platform
+from collections.abc import Iterator
 from contextlib import suppress
 from math import prod
 from typing import cast
@@ -42,6 +45,7 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     engine = MDAEngine(mmc=core_mock)
 
     engine.use_hardware_sequencing = False
+    engine.force_set_xy_position = False
     assert len(list(engine.event_iterator(mda))) == NLOOPS * 2 * 2
 
     engine.use_hardware_sequencing = True
@@ -66,7 +70,7 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     expected_exposure = [call(5), call(10)] * 2
     assert core_mock.setExposure.call_args_list == expected_exposure
 
-    expected_pos = [call(0, 0), call(0, 0), call(1, 1), call(1, 1)]
+    expected_pos = [call(0, 0), call(1, 1)]
     assert core_mock.setXYPosition.call_args_list == expected_pos
 
 
@@ -122,7 +126,7 @@ def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:
 
 
 @pytest.fixture
-def sequence_tester() -> CMMCorePlus:
+def sequence_tester() -> Iterator[CMMCorePlus]:
     core = CMMCorePlus()
     try:
         core.loadDevice("THub", "SequenceTester", "THub")
@@ -140,6 +144,10 @@ def sequence_tester() -> CMMCorePlus:
     yield core
 
 
+@pytest.mark.skipif(
+    bool(os.getenv("CI") and platform.machine() == "arm64"),
+    reason="macos-latest having issues with SequenceTester on CI",
+)
 def test_sequence_tester_decoding(sequence_tester: CMMCorePlus) -> None:
     core = sequence_tester
     core.startContinuousSequenceAcquisition(3)

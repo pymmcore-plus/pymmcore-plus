@@ -21,7 +21,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import Self, TypeAlias
 
-    from ._device import Device
+    from ._device_base import Device
 
     PropArg: TypeAlias = (
         PropertyType | type | Literal["float", "integer", "string", "boolean"] | None
@@ -75,6 +75,13 @@ class PropertyInfo(Generic[TProp]):
     allowed_values: Sequence[TProp] | None = None
     is_read_only: bool | None = None
     is_pre_init: bool = False
+
+    @property
+    def number_of_allowed_values(self) -> int:
+        """Return the number of allowed values."""
+        if self.allowed_values is None:
+            return 0
+        return len(self.allowed_values)
 
     @property
     def is_sequenceable(self) -> bool:
@@ -173,7 +180,7 @@ class PropertyController(Generic[TDev, TProp]):
                     f"of property {self.property.name!r}: {self.property.limits}."
                 ) from e
             min_, max_ = self.property.limits
-            if not min_ <= cast(float, value) <= max_:
+            if not min_ <= cast("float", value) <= max_:
                 raise ValueError(
                     f"Value {value!r} is not within the allowed range of property "
                     f"{self.property.name!r}: {self.property.limits}."
@@ -291,7 +298,7 @@ def pymm_property(
     is_pre_init: bool = ...,
     name: str | None = ...,
     property_type: PropArg = ...,
-) -> Callable[[Callable[[TDev], TLim]], PropertyController[TDev, TLim]]: ...
+) -> Callable[[Callable[[TDev], TProp]], PropertyController[TDev, TProp]]: ...
 def pymm_property(
     fget: Callable[[TDev], TProp] | None = None,
     *,

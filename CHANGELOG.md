@@ -1,12 +1,138 @@
 # Changelog
 
-## [v0.13.5](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.5) (2025-02-16)
+## [v0.15.4](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.4) (2025-08-19)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.3...v0.15.4)
+
+**Merged pull requests:**
+
+- ci: update setup-mm-test-adapters version scheme [\#490](https://github.com/pymmcore-plus/pymmcore-plus/pull/490) ([tlambert03](https://github.com/tlambert03))
+- feat: Add dates for Device Interface Version 74 [\#489](https://github.com/pymmcore-plus/pymmcore-plus/pull/489) ([marktsuchida](https://github.com/marktsuchida))
+- ci\(dependabot\): bump actions/checkout from 4 to 5 [\#488](https://github.com/pymmcore-plus/pymmcore-plus/pull/488) ([dependabot[bot]](https://github.com/apps/dependabot))
+- ci\(pre-commit.ci\): autoupdate [\#487](https://github.com/pymmcore-plus/pymmcore-plus/pull/487) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+
+## [v0.15.3](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.3) (2025-07-11)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.2...v0.15.3)
+
+**Merged pull requests:**
+
+- fix: fallback to old signal behavior for new image/sequence events [\#484](https://github.com/pymmcore-plus/pymmcore-plus/pull/484) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.15.2](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.2) (2025-07-10)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.1...v0.15.2)
+
+**Implemented enhancements:**
+
+- feat: support property names and config groups and presets in ipython  tab autocompletion [\#483](https://github.com/pymmcore-plus/pymmcore-plus/pull/483) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.15.1](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.1) (2025-07-10)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.0...v0.15.1)
+
+**Implemented enhancements:**
+
+- feat: add IPython completion for device labels [\#482](https://github.com/pymmcore-plus/pymmcore-plus/pull/482) ([tlambert03](https://github.com/tlambert03))
+- feat: add pressure pump to deviceType enum [\#477](https://github.com/pymmcore-plus/pymmcore-plus/pull/477) ([tlambert03](https://github.com/tlambert03))
+- feat: add Unicore ShutterDevice [\#474](https://github.com/pymmcore-plus/pymmcore-plus/pull/474) ([tlambert03](https://github.com/tlambert03))
+- feat: add unicore Generic device [\#473](https://github.com/pymmcore-plus/pymmcore-plus/pull/473) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix: fix for new MMCore events [\#481](https://github.com/pymmcore-plus/pymmcore-plus/pull/481) ([tlambert03](https://github.com/tlambert03))
+- fix: camera fixes [\#471](https://github.com/pymmcore-plus/pymmcore-plus/pull/471) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- ci\(pre-commit.ci\): autoupdate [\#480](https://github.com/pymmcore-plus/pymmcore-plus/pull/480) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+- refactor: demote propertyChanged logger error to warning [\#479](https://github.com/pymmcore-plus/pymmcore-plus/pull/479) ([tlambert03](https://github.com/tlambert03))
+- docs: add unicore docs [\#476](https://github.com/pymmcore-plus/pymmcore-plus/pull/476) ([tlambert03](https://github.com/tlambert03))
+- refactor: rename Camera to CameraDevice [\#472](https://github.com/pymmcore-plus/pymmcore-plus/pull/472) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.15.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.0) (2025-06-10)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.14.0...v0.15.0)
+
+**Implemented enhancements:**
+
+- feat: add Unicore camera implementation [\#468](https://github.com/pymmcore-plus/pymmcore-plus/pull/468) ([tlambert03](https://github.com/tlambert03))
+- feat: Unicore StateDevice [\#420](https://github.com/pymmcore-plus/pymmcore-plus/pull/420) ([tlambert03](https://github.com/tlambert03))
+- feat: Unicore SLMDevice [\#414](https://github.com/pymmcore-plus/pymmcore-plus/pull/414) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix: dangling callback during core deletion, and disallow `registerCallback` [\#467](https://github.com/pymmcore-plus/pymmcore-plus/pull/467) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- ci\(dependabot\): bump pyvista/setup-headless-display-action from 3 to 4 [\#470](https://github.com/pymmcore-plus/pymmcore-plus/pull/470) ([dependabot[bot]](https://github.com/apps/dependabot))
+- ci\(pre-commit.ci\): autoupdate [\#469](https://github.com/pymmcore-plus/pymmcore-plus/pull/469) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+
+## [v0.14.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.14.0) (2025-05-05)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.7...v0.14.0)
+
+**Implemented enhancements:**
+
+- feat: add ChangeAccumulator pattern, for sharing control of a slow target value [\#462](https://github.com/pymmcore-plus/pymmcore-plus/pull/462) ([tlambert03](https://github.com/tlambert03))
+- feat: extend object-oriented device API [\#437](https://github.com/pymmcore-plus/pymmcore-plus/pull/437) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix: tensorstore - make sure metadata written [\#461](https://github.com/pymmcore-plus/pymmcore-plus/pull/461) ([wl-stepp](https://github.com/wl-stepp))
+
+**Merged pull requests:**
+
+- test: add uv lockfile and test with uv \(including minimum deps\) [\#424](https://github.com/pymmcore-plus/pymmcore-plus/pull/424) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.13.7](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.7) (2025-04-11)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.6...v0.13.7)
+
+**Fixed bugs:**
+
+- chore: revert mm-device-adapters usage in tests [\#460](https://github.com/pymmcore-plus/pymmcore-plus/pull/460) ([tlambert03](https://github.com/tlambert03))
+- fix: Change to MM directory for `mmcore mmstudio` [\#459](https://github.com/pymmcore-plus/pymmcore-plus/pull/459) ([marktsuchida](https://github.com/marktsuchida))
+
+**Merged pull requests:**
+
+- ci\(pre-commit.ci\): autoupdate [\#458](https://github.com/pymmcore-plus/pymmcore-plus/pull/458) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+
+## [v0.13.6](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.6) (2025-03-31)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.5...v0.13.6)
+
+**Implemented enhancements:**
+
+- feat: Support mm-device-adapters [\#455](https://github.com/pymmcore-plus/pymmcore-plus/pull/455) ([tlambert03](https://github.com/tlambert03))
+
+**Fixed bugs:**
+
+- fix: fix for pydantic v2.11 [\#453](https://github.com/pymmcore-plus/pymmcore-plus/pull/453) ([tlambert03](https://github.com/tlambert03))
+
+**Tests & CI:**
+
+- test: fixes for pymmcore v11.5 [\#451](https://github.com/pymmcore-plus/pymmcore-plus/pull/451) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- docs: clarify device interface versions, and simplify mmcore install [\#454](https://github.com/pymmcore-plus/pymmcore-plus/pull/454) ([tlambert03](https://github.com/tlambert03))
+- docs: pin mkdocs-autorefs [\#452](https://github.com/pymmcore-plus/pymmcore-plus/pull/452) ([tlambert03](https://github.com/tlambert03))
+- docs: better doc env vars, and add a few more [\#450](https://github.com/pymmcore-plus/pymmcore-plus/pull/450) ([tlambert03](https://github.com/tlambert03))
+
+## [v0.13.5](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.5) (2025-03-18)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.13.4...v0.13.5)
 
 **Fixed bugs:**
 
+- fix: pin tensorstore [\#443](https://github.com/pymmcore-plus/pymmcore-plus/pull/443) ([tlambert03](https://github.com/tlambert03))
 - fix: Fix missing metadata in popNextImageAndMD [\#436](https://github.com/pymmcore-plus/pymmcore-plus/pull/436) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- refactor: call setConfig in MDAEngine only when different from previous call [\#448](https://github.com/pymmcore-plus/pymmcore-plus/pull/448) ([tlambert03](https://github.com/tlambert03))
 
 ## [v0.13.4](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.13.4) (2025-02-11)
 

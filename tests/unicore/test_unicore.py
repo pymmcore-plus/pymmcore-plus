@@ -5,8 +5,8 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pymmcore_plus import DeviceInitializationState, DeviceType, PropertyType
-from pymmcore_plus.experimental.unicore import Device, UniMMCore, pymm_property
+from pymmcore_plus import DeviceInitializationState, DeviceType, PropertyType, _pymmcore
+from pymmcore_plus.experimental.unicore import GenericDevice, UniMMCore, pymm_property
 
 DOC = """Example generic device."""
 PROP_A = "propA"  # must match below
@@ -20,7 +20,7 @@ MAX_LEN = 4
 class RandomClass: ...
 
 
-class MyDevice(Device):
+class MyDevice(GenericDevice):
     @pymm_property
     def propA(self) -> str:
         """Some property."""
@@ -64,7 +64,7 @@ class MyDevice(Device):
         self._prop_stopped = True
 
 
-class BadDevice(Device):
+class BadDevice(GenericDevice):
     def initialize(self):
         raise ERR
 
@@ -91,7 +91,7 @@ def test_device_load_unload():
     assert PYDEV in core.getLoadedDevices()
     assert core.getDeviceLibrary(PYDEV) == __name__  # because it's in this module
     assert core.getDeviceName(PYDEV) == MyDevice.__name__
-    assert core.getDeviceType(PYDEV) == DeviceType.Unknown
+    assert core.getDeviceType(PYDEV) == DeviceType.GenericDevice
     assert core.getDeviceDescription(PYDEV) == DOC  # docstring
 
     assert (
@@ -153,7 +153,12 @@ def test_device_load_from_module():
 
     # If we gave a proper library name, but a bad device name...
     # it should raise the usual error
-    with pytest.raises(RuntimeError, match="Failed to load device"):
+    msg = (
+        "failed to instantiate device"
+        if _pymmcore.version_info >= (11, 5)
+        else "Failed to load device"
+    )
+    with pytest.raises(RuntimeError, match=msg):
         core.loadDevice("newdev", "DemoCamera", "NoSuchDevice")
 
     # Then we fallback to checking python modules

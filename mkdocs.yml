@@ -22,6 +22,8 @@ nav:
           - guides/custom_engine.md
           - guides/event_driven_acquisition.md
           - guides/logging.md
+          - guides/unicore.md
+          - guides/ipython_completion.md
       - Examples:
           - examples/mda.md
           - examples/integration-with-qt.md
@@ -38,7 +40,9 @@ nav:
           - api/constants.md
           - Metadata: api/metadata.md
           - Utilities: api/utils.md
+          - api/unicore.md
       - metadata.md
+      - env_var.md
       - cli.md
       - troubleshooting.md
       - profiling.md

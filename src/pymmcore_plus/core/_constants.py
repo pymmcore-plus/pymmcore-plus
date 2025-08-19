@@ -13,6 +13,7 @@ import pymmcore_plus._pymmcore as pymmcore
 class Keyword(str, Enum):
     Name = pymmcore.g_Keyword_Name
     Description = pymmcore.g_Keyword_Description
+
     CameraName = pymmcore.g_Keyword_CameraName
     CameraID = pymmcore.g_Keyword_CameraID
     CameraChannelName = pymmcore.g_Keyword_CameraChannelName
@@ -31,6 +32,7 @@ class Keyword(str, Enum):
     Offset = pymmcore.g_Keyword_Offset
     CCDTemperature = pymmcore.g_Keyword_CCDTemperature
     CCDTemperatureSetPoint = pymmcore.g_Keyword_CCDTemperatureSetPoint
+
     State = pymmcore.g_Keyword_State
     Label = pymmcore.g_Keyword_Label
     Position = pymmcore.g_Keyword_Position
@@ -69,12 +71,15 @@ class Keyword(str, Enum):
     HubID = pymmcore.g_Keyword_HubID
 
     # image annotations
-    Meatdata_Exposure = pymmcore.g_Keyword_Meatdata_Exposure
-    Metadata_Score = pymmcore.g_Keyword_Metadata_Score
+    Metadata_CameraLabel = pymmcore.g_Keyword_Metadata_CameraLabel
+    Metadata_Exposure = pymmcore.g_Keyword_Metadata_Exposure
+    Metadata_Height = pymmcore.g_Keyword_Metadata_Height
     Metadata_ImageNumber = pymmcore.g_Keyword_Metadata_ImageNumber
     Metadata_ROI_X = pymmcore.g_Keyword_Metadata_ROI_X
     Metadata_ROI_Y = pymmcore.g_Keyword_Metadata_ROI_Y
+    Metadata_Score = pymmcore.g_Keyword_Metadata_Score
     Metadata_TimeInCore = pymmcore.g_Keyword_Metadata_TimeInCore
+    Metadata_Width = pymmcore.g_Keyword_Metadata_Width
 
     def __str__(self) -> str:
         return str(self.value)
@@ -94,6 +99,14 @@ class CFGCommand(str, Enum):
     PixelSizeAffine = pymmcore.g_CFGCommand_PixelSizeAffine
     ParentID = pymmcore.g_CFGCommand_ParentID
     FocusDirection = pymmcore.g_CFGCommand_FocusDirection
+
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizedxdz"):
+        PixelSize_dxdz = pymmcore.g_CFGCommand_PixelSizedxdz
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizedydz"):
+        PixelSize_dydz = pymmcore.g_CFGCommand_PixelSizedydz
+    if hasattr(pymmcore, "g_CFGCommand_PixelSizeOptimalZUm"):
+        PixelSize_OptimalZUm = pymmcore.g_CFGCommand_PixelSizeOptimalZUm
+
     #
     FieldDelimiters = pymmcore.g_FieldDelimiters
 
@@ -129,6 +142,8 @@ class DeviceType(IntEnum):
     SLMDevice = pymmcore.SLMDevice
     HubDevice = pymmcore.HubDevice
     GalvoDevice = pymmcore.GalvoDevice
+    PressurePumpDevice = pymmcore.PressurePumpDevice
+    VolumetricPumpDevice = pymmcore.VolumetricPumpDevice
     # aliases for clearer naming (e.g. `DeviceType.Camera`)
     Unknown = UnknownType
     Any = AnyType
@@ -147,6 +162,8 @@ class DeviceType(IntEnum):
     SLM = SLMDevice
     Hub = HubDevice
     Galvo = GalvoDevice
+    PressurePump = PressurePumpDevice
+    VolumetricPump = VolumetricPumpDevice
 
     def __str__(self) -> str:
         return str(self.name).replace("Type", "").replace("Device", "")
@@ -157,7 +174,9 @@ class PropertyType(IntEnum):
     String = pymmcore.String
     Float = pymmcore.Float
     Integer = pymmcore.Integer
+
     Boolean = auto()  # not supported in pymmcore
+    Enum = auto()  # not supported in pymmcore
 
     def to_python(self) -> type | None:
         return {0: None, 1: str, 2: float, 3: int}[self]
@@ -175,7 +194,16 @@ class PropertyType(IntEnum):
         if value is None:
             return PropertyType.Undef
         if isinstance(value, str):
-            return PropertyType[value.lower().capitalize()]
+            if value.lower() in ("int", "integer"):
+                return PropertyType.Integer
+            if value.lower() in ("float", "double"):
+                return PropertyType.Float
+            if value.lower() in ("bool", "boolean"):
+                return PropertyType.Boolean
+            if value.lower() in ("string", "str"):
+                return PropertyType.String
+            if value.lower() in ("enum", "enumeration"):
+                return PropertyType.Enum
         if isinstance(value, type):
             if value is float:
                 return PropertyType.Float
@@ -185,6 +213,8 @@ class PropertyType(IntEnum):
                 return PropertyType.String
             elif value is bool:
                 return PropertyType.Boolean
+            elif issubclass(value, Enum):
+                return PropertyType.Enum
 
         raise TypeError(
             f"Property type must be a PropertyType enum member, "

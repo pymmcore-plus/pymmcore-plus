@@ -4,7 +4,7 @@ from typing import ClassVar, Literal
 from pymmcore_plus.core import DeviceType
 from pymmcore_plus.core._constants import Keyword
 
-from ._device import SeqT, SequenceableDevice
+from ._device_base import SeqT, SequenceableDevice
 
 __all__ = ["_BaseStage"]
 
