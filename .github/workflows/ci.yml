@@ -64,10 +64,16 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
+          
+      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution ${{ matrix.resolution || 'highest'}}
+
+      - name: Get pymmcore version (env)
+        run: |
+          echo "PYMM_VERSION=$(uv run python -c 'import pymmcore;print(pymmcore.__version__.split(\".\")[3])')" >> $GITHUB_ENV
 
       - uses: pymmcore-plus/setup-mm-test-adapters@main
-
-      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution ${{ matrix.resolution || 'highest'}}
+        with:
+          version: ${{ env.PYMM_VERSION }}
 
       - if: matrix.nano != ''
         run: |
