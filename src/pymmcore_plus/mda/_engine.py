@@ -436,10 +436,10 @@ class MDAEngine(PMDAEngine):
             return None
 
         return create_ome_metadata(
-            self._sequence,
             self._sequence_summary_metadata,
             self._collected_frame_metadata,
             target_format="model",
+            mda_sequence=self._sequence,
         )
 
     def get_collected_frame_metadata(self) -> list[FrameMetaV1]:

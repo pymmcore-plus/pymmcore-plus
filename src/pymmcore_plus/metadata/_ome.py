@@ -4,6 +4,7 @@ import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
+import useq
 from ome_types import model as ome_model
 from ome_types import to_xml
 from ome_types.model import (
@@ -24,12 +25,215 @@ from ome_types.model import (
 from .serialize import to_builtins
 
 if TYPE_CHECKING:
-    import useq
-
     from .schema import FrameMetaV1, SummaryMetaV1
 
 
-def summary_metadata_to_ome(
+def create_ome_metadata(
+    summary_metadata: SummaryMetaV1,
+    frame_metadata_list: list[FrameMetaV1],
+    *,
+    target_format: Literal["model", "xml", "json"] = "model",
+    mda_sequence: useq.MDASequence | None = None,
+) -> OME | str | None:
+    """Create enhanced OME metadata from summary and frame metadata collections.
+
+    This function organizes frame metadata by position and creates separate
+    Image elements for each stage position with proper plane information.
+
+    Parameters
+    ----------
+    summary_metadata : SummaryMetaV1
+        The summary metadata from sequence setup
+    frame_metadata_list : list[FrameMetaV1]
+        List of frame metadata collected during acquisition
+    target_format : Literal["model", "xml", "json"]
+        The target format for the output, ome-types object ("model"),
+        OME-XML string ("xml"), or OME-JSON string ("json").
+    mda_sequence : useq.MDASequence | None
+        Optional. The MDA sequence used for the acquisition
+    """
+    # Start with base OME from summary metadata
+    base_ome = _summary_metadata_to_ome(summary_metadata, target_format="model")
+
+    # Check if we have an OME model object
+    if base_ome is None or not isinstance(base_ome, OME):
+        return None
+
+    # If no frame metadata collected, return base OME
+    if not frame_metadata_list:
+        return _to_ome_format(base_ome, target_format)
+
+    # Organize frames by position
+    frames_by_pos = _group_frames_by_position(frame_metadata_list)
+
+    # Calculate dimensions per position
+    if not frames_by_pos:
+        return _to_ome_format(base_ome, target_format)
+
+    mda_sequence = (
+        _get_mda_sequence(summary_metadata, frame_metadata_list[0])
+        if mda_sequence is None
+        else mda_sequence
+    )
+
+    # Analyze dimensions from first position
+    first_pos_frames = next(iter(frames_by_pos.values()))
+    max_z = max_c = max_t = 0
+
+    for frame_meta in first_pos_frames:
+        mda_event = frame_meta.get("mda_event")
+        if mda_event:
+            max_z = max(max_z, (mda_event.index.get("z", 0) or 0) + 1)
+            max_c = max(max_c, (mda_event.index.get("c", 0) or 0) + 1)
+            max_t = max(max_t, (mda_event.index.get("t", 0) or 0) + 1)
+
+    # Create images for each position
+    images = []
+    for key in sorted(frames_by_pos.keys()):
+        p_name, p_index = key.split("_")
+        position_frames = frames_by_pos[key]
+
+        # Create image for this position
+        image_id = f"Image:{p_index}"
+        image_name = f"{p_name}"
+
+        # Create pixels with proper dimensions
+        pixels_template = base_ome.images[0].pixels if base_ome.images else None
+        if not pixels_template:
+            continue
+
+        pixels = Pixels(
+            id=f"Pixels:{p_index}",
+            dimension_order=pixels_template.dimension_order,
+            type=pixels_template.type,
+            size_x=pixels_template.size_x,
+            size_y=pixels_template.size_y,
+            size_z=max_z,
+            size_c=max_c,
+            size_t=max_t,
+            physical_size_x=pixels_template.physical_size_x,
+            physical_size_x_unit=pixels_template.physical_size_x_unit,
+            physical_size_y=pixels_template.physical_size_y,
+            physical_size_y_unit=pixels_template.physical_size_y_unit,
+        )
+
+        # Copy channels from base OME
+        if pixels_template.channels:
+            pixels.channels = []
+            for i, base_channel in enumerate(pixels_template.channels):
+                channel = base_channel.model_copy()
+                channel.id = f"Channel:{p_index}:{i}"
+                pixels.channels.append(channel)
+
+        # Create planes for this position using _create_plane_from_frame
+        planes = []
+        for frame_meta in position_frames:
+            mda_event = frame_meta.get("mda_event")
+            if mda_event and hasattr(mda_event, "index"):
+                the_z = mda_event.index.get("z", 0) or 0
+                the_c = mda_event.index.get("c", 0) or 0
+                the_t = mda_event.index.get("t", 0) or 0
+
+                # Use the helper function to create plane with full metadata
+                plane = _create_plane_from_frame(
+                    to_builtins(frame_meta), the_z=the_z, the_c=the_c, the_t=the_t
+                )
+
+                if plane:
+                    # Add position coordinates from MDA event if available
+                    if hasattr(mda_event, "x_pos") and mda_event.x_pos is not None:
+                        plane.position_x = mda_event.x_pos
+                        plane.position_x_unit = UnitsLength.MICROMETER
+                    if hasattr(mda_event, "y_pos") and mda_event.y_pos is not None:
+                        plane.position_y = mda_event.y_pos
+                        plane.position_y_unit = UnitsLength.MICROMETER
+                    if hasattr(mda_event, "z_pos") and mda_event.z_pos is not None:
+                        plane.position_z = mda_event.z_pos
+                        plane.position_z_unit = UnitsLength.MICROMETER
+
+                    planes.append(plane)
+
+        pixels.planes = planes
+
+        # Create the image
+        image_kwargs = {
+            "id": image_id,
+            "name": image_name,
+            "pixels": pixels,
+        }
+
+        # Add acquisition date from base OME
+        if base_ome.images and base_ome.images[0].acquisition_date:
+            image_kwargs["acquisition_date"] = base_ome.images[0].acquisition_date
+
+        # Get position coordinates
+        if mda_sequence is not None:
+            stage_positions = mda_sequence.stage_positions
+            try:
+                stage_pos = stage_positions[int(p_index)]
+            except IndexError:
+                stage_pos = None
+            if stage_pos:
+                x_pos = stage_pos.x or 0.0
+                y_pos = stage_pos.y or 0.0
+                z_pos = stage_pos.z or 0.0
+                stage_label = StageLabel(x=x_pos, y=y_pos, z=z_pos, name=f"P{p_index}")
+                image_kwargs["stage_label"] = stage_label
+
+        image = Image(**image_kwargs)
+        images.append(image)
+
+    # Update the base OME with new images
+    if hasattr(base_ome, "images"):
+        base_ome.images = images
+
+    # Return in requested format
+    return _to_ome_format(base_ome, target_format)
+
+
+def _group_frames_by_position(
+    frame_metadata_list: list[FrameMetaV1],
+) -> dict[str, list[FrameMetaV1]]:
+    """Reorganize frame metadata by stage position index in a dictionary."""
+    frames_by_position: dict[str, list[FrameMetaV1]] = {}
+    for frame_meta in frame_metadata_list:
+        mda_event = frame_meta.get("mda_event")
+        if mda_event:
+            p_index = mda_event.index.get("p", 0) or 0
+            p_name = mda_event.index.get("pos_name", f"Pos{p_index:04d}")
+            key = f"{p_name}_{p_index}"
+            if key not in frames_by_position:
+                frames_by_position[key] = []
+            frames_by_position[key].append(frame_meta)
+    return frames_by_position
+
+
+def _to_ome_format(
+    model: OME, model_format: Literal["model", "xml", "json"]
+) -> OME | str:
+    if model_format == "model":
+        return model
+    elif model_format == "xml":
+        return to_xml(model)
+    elif model_format == "json":
+        return model.model_dump_json()
+    else:
+        raise ValueError(f"Unsupported model_format: {model_format}")
+
+
+def _get_mda_sequence(
+    summary_metadata: SummaryMetaV1, one_frame_metadata: FrameMetaV1
+) -> useq.MDASequence | None:
+    # get the mda_sequence from summary metadata
+    seq = summary_metadata.get("mda_sequence")
+    if seq:
+        return seq
+    # if is not there try form one_frame_metadata useq.MDAEvent
+    ev = one_frame_metadata.get("mda_event", useq.MDAEvent())
+    return ev.sequence
+
+
+def _summary_metadata_to_ome(
     metadata: SummaryMetaV1,
     *,
     target_format: Literal["model", "xml", "json"] = "model",
@@ -51,15 +255,7 @@ def summary_metadata_to_ome(
         The converted OME metadata in the requested format.
     """
     ome = _summary_to_ome(to_builtins(metadata))
-
-    if target_format == "model":
-        return ome
-    elif target_format == "xml":
-        return to_xml(ome)
-    elif target_format == "json":
-        return ome.model_dump_json()
-    else:
-        raise ValueError(f"Unsupported target_format: {target_format}")
+    return _to_ome_format(ome, target_format)
 
 
 def _summary_to_ome(summary_meta: dict) -> OME:
@@ -103,10 +299,6 @@ def _summary_to_ome(summary_meta: dict) -> OME:
                 samples_per_pixel=1,
             )
             channels.append(channel)
-
-    # If no channels found, create a default one
-    # if not channels:
-    #     channels = [Channel(id="Channel:0", name="Channel_0", samples_per_pixel=1)]
 
     # Create instrument information
     instrument = None
@@ -200,20 +392,17 @@ def _create_plane_from_frame(
     Returns
     -------
     Plane | None
-        Plane object with timing and position information, or None if no plane data
+        Plane object with timing and position information, or None if no frame metadata
     """
-    runner_time_ms = frame_meta.get("runner_time_ms", 0.0)
-    exposure_ms = frame_meta.get("exposure_ms")
-
-    # Only create plane if we have timing or position info
-    if not (runner_time_ms > 0 or exposure_ms or frame_meta.get("position")):
-        return None
-
+    # Always create a plane for the logical coordinates
     plane = Plane(
         the_z=the_z,
         the_c=the_c,
         the_t=the_t,
     )
+
+    runner_time_ms = frame_meta.get("runner_time_ms", 0.0)
+    exposure_ms = frame_meta.get("exposure_ms")
 
     # Add timing information
     if runner_time_ms > 0:
@@ -237,184 +426,3 @@ def _create_plane_from_frame(
                 plane.position_z_unit = UnitsLength.MICROMETER
 
     return plane
-
-
-def create_ome_metadata(
-    mda_sequence: useq.MDASequence,
-    summary_metadata: SummaryMetaV1,
-    frame_metadata_list: list[FrameMetaV1],
-    *,
-    target_format: Literal["model", "xml", "json"] = "model",
-) -> OME | str | None:
-    """Create enhanced OME metadata from summary and frame metadata collections.
-
-    This function organizes frame metadata by position and creates separate
-    Image elements for each stage position with proper plane information.
-
-    Parameters
-    ----------
-    mda_sequence : useq.MDASequence
-        The MDA sequence used for the acquisition
-    summary_metadata : SummaryMetaV1
-        The summary metadata from sequence setup
-    frame_metadata_list : list[FrameMetaV1]
-        List of frame metadata collected during acquisition
-    target_format : Literal["model", "xml", "json"]
-        The target format for the output, ome-types object ("model"),
-        OME-XML string ("xml"), or OME-JSON string ("json").
-    """
-    # Start with base OME from summary metadata
-    base_ome = summary_metadata_to_ome(summary_metadata, target_format="model")
-
-    # Check if we have an OME model object
-    if base_ome is None or isinstance(base_ome, str):
-        return None
-
-    # If no frame metadata collected, return base OME
-    if not frame_metadata_list:
-        if target_format == "model":
-            return base_ome
-        elif target_format == "xml":
-            return to_xml(base_ome)
-        elif target_format == "json":
-            return base_ome.model_dump_json()
-
-    # Organize frames by position
-    frames_by_position: dict[int, list[FrameMetaV1]] = {}
-    stage_positions = mda_sequence.stage_positions
-
-    for frame_meta in frame_metadata_list:
-        mda_event = frame_meta.get("mda_event")
-        if mda_event:
-            p_index = mda_event.index.get("p", 0) or 0
-            if p_index not in frames_by_position:
-                frames_by_position[p_index] = []
-            frames_by_position[p_index].append(frame_meta)
-
-    # Calculate dimensions per position
-    if not frames_by_position:
-        if target_format == "model":
-            return base_ome
-        elif target_format == "xml":
-            return to_xml(base_ome)
-        elif target_format == "json":
-            return base_ome.model_dump_json()
-
-    # Analyze dimensions from first position
-    first_pos_frames = next(iter(frames_by_position.values()))
-    max_z = max_c = max_t = 0
-
-    for frame_meta in first_pos_frames:
-        mda_event = frame_meta.get("mda_event")
-        if mda_event:
-            max_z = max(max_z, (mda_event.index.get("z", 0) or 0) + 1)
-            max_c = max(max_c, (mda_event.index.get("c", 0) or 0) + 1)
-            max_t = max(max_t, (mda_event.index.get("t", 0) or 0) + 1)
-
-    # Create images for each position
-    images = []
-    for p_index in sorted(frames_by_position.keys()):
-        position_frames = frames_by_position[p_index]
-
-        # Create image for this position
-        image_id = f"Image:{p_index}"
-        image_name = f"Position_{p_index}"
-
-        # Create pixels with proper dimensions
-        pixels_template = base_ome.images[0].pixels if base_ome.images else None
-        if not pixels_template:
-            continue
-
-        pixels = Pixels(
-            id=f"Pixels:{p_index}",
-            dimension_order=pixels_template.dimension_order,
-            type=pixels_template.type,
-            size_x=pixels_template.size_x,
-            size_y=pixels_template.size_y,
-            size_z=max_z,
-            size_c=max_c,
-            size_t=max_t,
-            physical_size_x=pixels_template.physical_size_x,
-            physical_size_x_unit=pixels_template.physical_size_x_unit,
-            physical_size_y=pixels_template.physical_size_y,
-            physical_size_y_unit=pixels_template.physical_size_y_unit,
-        )
-
-        # Copy channels from base OME
-        if pixels_template.channels:
-            pixels.channels = []
-            for i, base_channel in enumerate(pixels_template.channels):
-                channel = base_channel.model_copy()
-                channel.id = f"Channel:{p_index}:{i}"
-                pixels.channels.append(channel)
-
-        # Create planes for this position using _create_plane_from_frame
-        planes = []
-        for frame_meta in position_frames:
-            mda_event = frame_meta.get("mda_event")
-            if mda_event and hasattr(mda_event, "index"):
-                the_z = mda_event.index.get("z", 0) or 0
-                the_c = mda_event.index.get("c", 0) or 0
-                the_t = mda_event.index.get("t", 0) or 0
-
-                # Use the helper function to create plane with full metadata
-                plane = _create_plane_from_frame(
-                    to_builtins(frame_meta), the_z=the_z, the_c=the_c, the_t=the_t
-                )
-
-                if plane:
-                    # Add position coordinates from MDA event if available
-                    if hasattr(mda_event, "x_pos") and mda_event.x_pos is not None:
-                        plane.position_x = mda_event.x_pos
-                        plane.position_x_unit = UnitsLength.MICROMETER
-                    if hasattr(mda_event, "y_pos") and mda_event.y_pos is not None:
-                        plane.position_y = mda_event.y_pos
-                        plane.position_y_unit = UnitsLength.MICROMETER
-                    if hasattr(mda_event, "z_pos") and mda_event.z_pos is not None:
-                        plane.position_z = mda_event.z_pos
-                        plane.position_z_unit = UnitsLength.MICROMETER
-
-                    planes.append(plane)
-
-        pixels.planes = planes
-
-        # Create the image
-        image_kwargs = {
-            "id": image_id,
-            "name": image_name,
-            "pixels": pixels,
-        }
-
-        # Add acquisition date from base OME
-        if base_ome.images and base_ome.images[0].acquisition_date:
-            image_kwargs["acquisition_date"] = base_ome.images[0].acquisition_date
-
-        # Get position coordinates
-        stage_pos = None
-        if p_index < len(stage_positions):
-            stage_pos = stage_positions[p_index]
-
-        # Add stage label if position coordinates available
-        if stage_pos:
-            x_pos = stage_pos.x or 0.0
-            y_pos = stage_pos.y or 0.0
-            z_pos = stage_pos.z or 0.0
-            stage_label = StageLabel(x=x_pos, y=y_pos, z=z_pos, name=f"P{p_index}")
-            image_kwargs["stage_label"] = stage_label
-
-        image = Image(**image_kwargs)
-        images.append(image)
-
-    # Update the base OME with new images
-    if hasattr(base_ome, "images"):
-        base_ome.images = images
-
-    # Return in requested format
-    if target_format == "model":
-        return base_ome
-    elif target_format == "xml":
-        return to_xml(base_ome)
-    elif target_format == "json":
-        return base_ome.model_dump_json()
-    else:
-        raise ValueError(f"Unsupported target_format: {target_format}")

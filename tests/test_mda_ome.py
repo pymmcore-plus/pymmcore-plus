@@ -44,6 +44,7 @@ def test_enhanced_ome_generation():
     ome_xml = mmc.mda.engine.get_sequence_ome_metadata(target_format="xml")
 
     if ome_xml:
+        print()
         print(ome_xml)
 
 
