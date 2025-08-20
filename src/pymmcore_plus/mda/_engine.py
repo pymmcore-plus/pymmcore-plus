@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
 import numpy as np
 import useq
+from ome_types import OME
 from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
@@ -20,6 +21,7 @@ from pymmcore_plus.metadata import (
     frame_metadata,
     summary_metadata,
 )
+from pymmcore_plus.metadata._ome import create_ome_metadata
 
 from ._protocol import PMDAEngine
 
@@ -106,6 +108,11 @@ class MDAEngine(PMDAEngine):
         # in the channel group.
         self._config_device_props: dict[str, Sequence[tuple[str, str]]] = {}
 
+        # OME metadata collection
+        self._sequence: MDASequence | None = None
+        self._sequence_summary_metadata: SummaryMetaV1 | None = None
+        self._collected_frame_metadata: list[FrameMetaV1] = []
+
     @property
     def include_frame_position_metadata(self) -> IncludePositionArg:
         return self._include_frame_position_metadata
@@ -131,6 +138,11 @@ class MDAEngine(PMDAEngine):
         # clear z_correction for new sequence
         self._z_correction.clear()
 
+        # clear OME metadata collection for new sequence
+        self._collected_frame_metadata.clear()
+        self._sequence = None
+        self._sequence_summary_metadata = None
+
         if not self._mmc:  # pragma: no cover
             from pymmcore_plus.core import CMMCorePlus
 
@@ -144,7 +156,12 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = self._mmc.getAutoShutter()
-        return self.get_summary_metadata(mda_sequence=sequence)
+
+        # Store summary metadata for OME generation
+        self._sequence = sequence
+        summary_meta = self.get_summary_metadata(mda_sequence=sequence)
+        self._sequence_summary_metadata = summary_meta
+        return summary_meta
 
     def get_summary_metadata(self, mda_sequence: MDASequence | None) -> SummaryMetaV1:
         return summary_metadata(self._mmc, mda_sequence=mda_sequence)
@@ -311,6 +328,8 @@ class MDAEngine(PMDAEngine):
                 camera_device=self._mmc.getPhysicalCameraDevice(cam),
                 include_position=self._include_frame_position_metadata is not False,
             )
+            # Store frame metadata for OME generation
+            self._collected_frame_metadata.append(meta)
             # Note, the third element is actually a MutableMapping, but mypy doesn't
             # see TypedDict as a subclass of MutableMapping yet.
             # https://github.com/python/mypy/issues/4976
@@ -356,6 +375,83 @@ class MDAEngine(PMDAEngine):
                 core.stopStageSequence(core.getFocusDevice())
             for dev, prop in event.property_sequences:
                 core.stopPropertySequence(dev, prop)
+
+    def get_sequence_ome_metadata(
+        self, target_format: Literal["model", "xml", "json"] = "model"
+    ) -> str | object | None:
+        """Generate OME metadata for the entire sequence.
+
+        This method combines the summary metadata from sequence setup with all
+        collected frame metadata to create a comprehensive OME representation
+        of the acquisition.
+
+        Parameters
+        ----------
+        target_format : Literal["model", "xml", "json"], optional
+            The format to return the OME metadata in:
+            - "model": Returns the OME model object
+            - "xml": Returns OME-XML as a string
+            - "json": Returns OME as JSON string
+            By default "model".
+
+        Returns
+        -------
+        str | object | None
+            The OME metadata in the requested format, or None if no metadata
+            was collected during the sequence.
+        """
+        if not self._sequence_summary_metadata or self._sequence is None:
+            return None
+
+        # Create enhanced OME with frame plane information
+        ome_metadata = self._create_ome_from_sequence()
+
+        if ome_metadata is None:
+            return None
+
+        if target_format == "model":
+            assert isinstance(ome_metadata, OME)
+            return ome_metadata  # type: ignore
+        elif target_format == "xml":
+            from ome_types import to_xml
+
+            assert isinstance(ome_metadata, OME)
+            return to_xml(ome_metadata)  # type: ignore
+        elif target_format == "json":
+            assert isinstance(ome_metadata, OME)
+            return ome_metadata.model_dump_json()  # type: ignore
+        else:
+            raise ValueError(f"Unsupported target_format: {target_format}")
+
+    def _create_ome_from_sequence(self) -> OME | str | None:
+        """Create enhanced OME metadata with separate images per position.
+
+        Returns
+        -------
+        OME | None
+            The OME metadata object with separate Image elements for each
+            stage position and proper plane information.
+        """
+        if not self._sequence_summary_metadata or self._sequence is None:
+            return None
+
+        return create_ome_metadata(
+            self._sequence,
+            self._sequence_summary_metadata,
+            self._collected_frame_metadata,
+            target_format="model",
+        )
+
+    def get_collected_frame_metadata(self) -> list[FrameMetaV1]:
+        """Get all frame metadata collected during the sequence.
+
+        Returns
+        -------
+        list[FrameMetaV1]
+            List of frame metadata collected during the acquisition sequence.
+            Each entry corresponds to one acquired image.
+        """
+        return self._collected_frame_metadata.copy()
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
@@ -562,6 +658,9 @@ class MDAEngine(PMDAEngine):
         meta["hardware_triggered"] = True
         meta["images_remaining_in_buffer"] = remaining
         meta["camera_metadata"] = dict(mm_meta)
+
+        # Store frame metadata for OME generation
+        self._collected_frame_metadata.append(meta)
 
         # https://github.com/python/mypy/issues/4976
         return ImagePayload(img, event, meta)  # type: ignore[return-value]
