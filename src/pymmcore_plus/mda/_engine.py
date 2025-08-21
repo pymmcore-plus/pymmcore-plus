@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
 import numpy as np
 import useq
-from ome_types import OME
 from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
@@ -376,7 +375,7 @@ class MDAEngine(PMDAEngine):
             for dev, prop in event.property_sequences:
                 core.stopPropertySequence(dev, prop)
 
-    def get_sequence_ome_metadata(
+    def get_ome_metadata(
         self, target_format: Literal["model", "xml", "json"] = "model"
     ) -> str | object | None:
         """Generate OME metadata for the entire sequence.
@@ -403,43 +402,10 @@ class MDAEngine(PMDAEngine):
         if not self._sequence_summary_metadata or self._sequence is None:
             return None
 
-        # Create enhanced OME with frame plane information
-        ome_metadata = self._create_ome_from_sequence()
-
-        if ome_metadata is None:
-            return None
-
-        if target_format == "model":
-            assert isinstance(ome_metadata, OME)
-            return ome_metadata  # type: ignore
-        elif target_format == "xml":
-            from ome_types import to_xml
-
-            assert isinstance(ome_metadata, OME)
-            return to_xml(ome_metadata)  # type: ignore
-        elif target_format == "json":
-            assert isinstance(ome_metadata, OME)
-            return ome_metadata.model_dump_json()  # type: ignore
-        else:
-            raise ValueError(f"Unsupported target_format: {target_format}")
-
-    def _create_ome_from_sequence(self) -> OME | str | None:
-        """Create enhanced OME metadata with separate images per position.
-
-        Returns
-        -------
-        OME | None
-            The OME metadata object with separate Image elements for each
-            stage position and proper plane information.
-        """
-        if not self._sequence_summary_metadata or self._sequence is None:
-            return None
-
         return create_ome_metadata(
             self._sequence_summary_metadata,
             self._collected_frame_metadata,
-            target_format="model",
-            mda_sequence=self._sequence,
+            target_format,
         )
 
     def get_collected_frame_metadata(self) -> list[FrameMetaV1]:
