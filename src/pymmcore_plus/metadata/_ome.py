@@ -5,14 +5,14 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Literal
 
 import useq
-from ome_types import model as ome_model
 from ome_types import to_xml
 from ome_types.model import (
     OME,
     Channel,
     Image,
-    Instrument,
-    Microscope,
+    # InstrumentRef,
+    # Instrument,
+    # Microscope,
     Pixels,
     Pixels_DimensionOrder,
     PixelType,
@@ -26,6 +26,32 @@ from .serialize import to_builtins
 
 if TYPE_CHECKING:
     from .schema import FrameMetaV1, SummaryMetaV1
+
+# SummaryMetaV1
+DATETIME = "datetime"
+DEVICES = "devices"
+SYSTEM_INFO = "system_info"
+IMAGE_INFOS = "image_infos"
+CAMERA_LABEL = "camera_label"
+HEIGHT = "height"
+WIDTH = "width"
+DTYPE = "dtype"
+PIXEL_SIZE_UM = "pixel_size_um"
+MDA_SEQUENCE = "mda_sequence"
+DEV_TYPE = "type"
+
+CHANNELS = "channels"
+ROI = "roi"
+PIXEL_TYPE = "pixel_type"
+
+# Frame-level fields
+MDA_EVENT = "mda_event"
+RUNNER_TIME_MS = "runner_time_ms"
+EXPOSURE_MS = "exposure_ms"
+POSITION = "position"
+STAGE_POSITIONS = "stage_positions"
+DEVICE = "device"
+POSITION_VALUE = "position"
 
 
 def create_ome_metadata(
@@ -129,7 +155,7 @@ def create_ome_metadata(
         planes = []
         for frame_meta in position_frames:
             mda_event = frame_meta.get("mda_event")
-            if mda_event and hasattr(mda_event, "index"):
+            if mda_event:
                 the_z = mda_event.index.get("z", 0) or 0
                 the_c = mda_event.index.get("c", 0) or 0
                 the_t = mda_event.index.get("t", 0) or 0
@@ -141,13 +167,13 @@ def create_ome_metadata(
 
                 if plane:
                     # Add position coordinates from MDA event if available
-                    if hasattr(mda_event, "x_pos") and mda_event.x_pos is not None:
+                    if mda_event.x_pos is not None:
                         plane.position_x = mda_event.x_pos
                         plane.position_x_unit = UnitsLength.MICROMETER
-                    if hasattr(mda_event, "y_pos") and mda_event.y_pos is not None:
+                    if mda_event.y_pos is not None:
                         plane.position_y = mda_event.y_pos
                         plane.position_y_unit = UnitsLength.MICROMETER
-                    if hasattr(mda_event, "z_pos") and mda_event.z_pos is not None:
+                    if mda_event.z_pos is not None:
                         plane.position_z = mda_event.z_pos
                         plane.position_z_unit = UnitsLength.MICROMETER
 
@@ -245,7 +271,7 @@ def _summary_metadata_to_ome(
     metadata : FrameMetaV1 | SummaryMetaV1
         The pymmcore-plus metadata to convert. Can be either summary metadata
         (from sequenceStarted) or frame metadata (from frameReady).
-    target_format : Literal["model", "xml", "json"]
+    target_format : Literal["model", "xml", "json2221"]
         The target format. "model" returns the OME model object,
         "xml" returns OME-XML as a string, "json" returns OME-JSON as a string.
 
@@ -254,87 +280,69 @@ def _summary_metadata_to_ome(
     OME | str
         The converted OME metadata in the requested format.
     """
-    ome = _summary_to_ome(to_builtins(metadata))
+    ome = _summary_to_ome(metadata)
     return _to_ome_format(ome, target_format)
 
 
-def _summary_to_ome(summary_meta: dict) -> OME:
+def _summary_to_ome(summary_meta: SummaryMetaV1) -> OME:
     """Convert summary metadata to OME model."""
     ome = OME(uuid=f"urn:uuid:{uuid.uuid4()}")
 
     # Extract image information
-    image_infos = summary_meta.get("image_infos", [])
-    if not image_infos:
-        # Create a default image info if none present
-        image_infos = [{"roi": (0, 0, 512, 512), "pixel_type": "uint16"}]
+    image_infos = summary_meta[IMAGE_INFOS]
 
-    # Get pixel size from image_infos, pixel_size_configs, or use default
-    pixel_size_um = 1.0
+    breakpoint()
+
+    pixel_size_um = 0.0
 
     # First try to get pixel size from image_infos (most direct)
-    if image_infos and image_infos[0].get("pixel_size_um"):
-        pixel_size_um = image_infos[0]["pixel_size_um"]
-    else:
-        # Fallback to pixel_size_configs
-        pixel_size_configs = summary_meta.get("pixel_size_configs", [])
-        if pixel_size_configs and pixel_size_configs[0].get("pixel_size_um"):
-            pixel_size_um = pixel_size_configs[0]["pixel_size_um"]
+    if image_infos and image_infos[0][PIXEL_SIZE_UM]:
+        pixel_size_um = image_infos[0][PIXEL_SIZE_UM]
 
     # Extract channel information from mda_sequence (actual channels used)
     channels = []
-    mda_sequence = summary_meta.get("mda_sequence")
+    mda_sequence: useq.MDASequence = summary_meta.get(MDA_SEQUENCE, useq.MDASequence())
 
-    if mda_sequence and "channels" in mda_sequence:
-        seq_channels = mda_sequence["channels"]
+    if mda_sequence and (seq_channels := mda_sequence.channels) is not None:
         # Use actual channels from the MDA sequence
         for i, seq_channel in enumerate(seq_channels):
-            channel_name = (
-                seq_channel.get("config", f"Channel_{i}")
-                if isinstance(seq_channel, dict)
-                else f"Channel_{i}"
-            )
             channel = Channel(
                 id=f"Channel:{i}",
-                name=channel_name,
+                name=seq_channel.config,
                 samples_per_pixel=1,
             )
             channels.append(channel)
 
+    # TODO: use devices to get info about microscope
     # Create instrument information
-    instrument = None
-    devices = summary_meta.get("devices", [])
-    microscope_device = None
-    camera_device = None
+    # instrument = None
+    # microscope_device = None
+    # camera_device = None
 
-    for device in devices:
-        if device.get("type") == "Core":
-            microscope_device = device
-        elif device.get("type") == "Camera":
-            camera_device = device
+    # devices = summary_meta[DEVICES]
+    # for device in devices:
+    #     if ...
+    #        microscope_device = ...
+    #     if ...
 
-    if microscope_device or camera_device:
-        microscope = None
-        if microscope_device:
-            microscope = Microscope(
-                manufacturer=microscope_device.get("description", "Unknown"),
-                model="Micro-Manager System",
-            )
-
-        instrument = Instrument(
-            id="Instrument:0",
-            microscope=microscope,
-        )
-        ome.instruments.append(instrument)
+    # if microscope_device:
+    #     microscope = Microscope(
+    #             manufacturer=microscope_device.get("description", "Unknown"),
+    #             model="Micro-Manager System",
+    #         )
+    #     instrument = Instrument(
+    #         id="Instrument:0",
+    #         microscope=microscope,
+    #     )
+    #     ome.instruments.append(instrument)
 
     # Create image for the current system state
+    if image_infos is None:
+        return ome
+
     for i, img_info in enumerate(image_infos):
-        roi = img_info.get("roi", (0, 0, 512, 512))
-        x, y, width, height = roi
-
-        # Map pixel type string to OME enum
-        pixel_type_str = img_info.get("pixel_type", "uint16")
-        pixel_type = getattr(PixelType, pixel_type_str.upper(), PixelType.UINT16)
-
+        pixel_type_str = img_info[DTYPE]
+        width, height = img_info[WIDTH], img_info[HEIGHT]
         pixels = Pixels(
             id=f"Pixels:{i}",
             dimension_order=Pixels_DimensionOrder.XYCZT,
@@ -343,7 +351,7 @@ def _summary_to_ome(summary_meta: dict) -> OME:
             size_z=1,
             size_c=len(channels),
             size_t=1,
-            type=pixel_type,
+            type=PixelType(pixel_type_str),
             physical_size_x=pixel_size_um,
             physical_size_x_unit=UnitsLength.MICROMETER,
             physical_size_y=pixel_size_um,
@@ -358,19 +366,19 @@ def _summary_to_ome(summary_meta: dict) -> OME:
         )
 
         # Add acquisition date if available
-        if "datetime" in summary_meta:
+        if DATETIME in summary_meta:
             try:
                 # Parse ISO format datetime string
                 acq_date = datetime.fromisoformat(
-                    summary_meta["datetime"].replace("Z", "+00:00")
+                    summary_meta[DATETIME].replace("Z", "+00:00")
                 )
                 image.acquisition_date = acq_date
             except (ValueError, AttributeError):
                 pass
 
         # Link to instrument if available
-        if instrument:
-            image.instrument_ref = ome_model.InstrumentRef(id=instrument.id)
+        # if instrument:
+        #     image.instrument_ref = InstrumentRef(id=instrument.id)
 
         ome.images.append(image)
 
