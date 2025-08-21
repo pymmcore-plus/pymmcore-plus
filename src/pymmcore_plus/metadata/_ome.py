@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from ast import In
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
@@ -15,6 +16,7 @@ from ome_types.model import (
     Plane,
     UnitsLength,
     UnitsTime,
+    Instrument
 )
 
 if TYPE_CHECKING:
@@ -48,16 +50,9 @@ def create_ome_metadata(
     # create OME model
     ome = OME(uuid=f"urn:uuid:{uuid.uuid4()}")
 
-    # add acquisition date if available
-    acquisition_date = None
-    if (acq_time := summary_metadata.get("datetime")) is not None:
-        try:
-            # parse ISO format datetime string
-            acquisition_date = datetime.fromisoformat(acq_time.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            pass
+    acquisition_date = _get_acquisition_date(summary_metadata)
 
-    ome = _add_ome_instrument_info(ome, summary_metadata)
+    ome.instruments = _add_ome_instrument_info(summary_metadata)
 
     # if no frame metadata has been collected, return the OME model as it is
     if not frame_metadata_list:
@@ -172,7 +167,18 @@ def _to_ome_format(
         raise ValueError(f"Unsupported model_format: {model_format}")
 
 
-def _add_ome_instrument_info(ome: OME, summary_meta: SummaryMetaV1) -> OME:
+def _get_acquisition_date(summary_metadata: SummaryMetaV1) -> datetime | None:
+    acquisition_date = None
+    if (acq_time := summary_metadata.get("datetime")) is not None:
+        try:
+            # parse ISO format datetime string
+            acquisition_date = datetime.fromisoformat(acq_time.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            pass
+    return acquisition_date
+
+
+def _add_ome_instrument_info(summary_meta: SummaryMetaV1) -> list[Instrument]:
     """Add instrument information to the OME model based on summary metadata."""
     # TODO: use devices to get info about microscope
     # Create instrument information
@@ -197,8 +203,7 @@ def _add_ome_instrument_info(ome: OME, summary_meta: SummaryMetaV1) -> OME:
     #     )
     #     ome.instruments.append(instrument)
     # ...
-
-    return ome
+    return []
 
 
 def _group_frames_by_position(
