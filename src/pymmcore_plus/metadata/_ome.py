@@ -93,7 +93,7 @@ def create_ome_metadata(
             # Pixels object cannot be created without a valid dimension order
             continue
 
-        if sequence is  None or isinstance(sequence, GeneratorMDASequence):
+        if sequence is None or isinstance(sequence, GeneratorMDASequence):
             (max_t, max_z, max_c), channels = _get_pixels_info(position_frames)
         else:
             (max_t, max_z, max_c), channels = _get_pixels_info_from_sequence(sequence)
