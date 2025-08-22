@@ -1,22 +1,22 @@
 from __future__ import annotations
 
-from ast import In
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
-
+from pymmcore_plus.mda._runner import GeneratorMDASequence
+import useq
 from ome_types import to_xml
 from ome_types.model import (
     OME,
     Channel,
     Image,
+    Instrument,
     Pixels,
     Pixels_DimensionOrder,
     PixelType,
     Plane,
     UnitsLength,
     UnitsTime,
-    Instrument
 )
 
 if TYPE_CHECKING:
@@ -50,8 +50,6 @@ def create_ome_metadata(
     # create OME model
     ome = OME(uuid=f"urn:uuid:{uuid.uuid4()}")
 
-    acquisition_date = _get_acquisition_date(summary_metadata)
-
     ome.instruments = _add_ome_instrument_info(summary_metadata)
 
     # if no frame metadata has been collected, return the OME model as it is
@@ -76,19 +74,29 @@ def create_ome_metadata(
     if dtype is None:
         return _to_ome_format(ome, target_format)
 
+    acquisition_date = _get_acquisition_date(summary_metadata)
+
+    sequence = _get_mda_sequence(summary_metadata, frame_metadata_list[0])
+
     positions_map = _group_frames_by_position(frame_metadata_list)
 
     for key in positions_map:
         p_name, p_index = key.split("_")
         position_frames = positions_map[key]
 
-        dimension_order = _get_dimension_order(position_frames)
+        if sequence is not None:
+            dimension_order = _get_dimension_order_from_sequence(sequence)
+        else:
+            dimension_order = _get_dimension_order(position_frames)
 
         if not dimension_order:
             # Pixels object cannot be created without a valid dimension order
             continue
 
-        (max_t, max_z, max_c), channels = _get_pixels_info(position_frames)
+        if sequence is  None or isinstance(sequence, GeneratorMDASequence):
+            (max_t, max_z, max_c), channels = _get_pixels_info(position_frames)
+        else:
+            (max_t, max_z, max_c), channels = _get_pixels_info_from_sequence(sequence)
 
         pixels = Pixels(
             id=f"Pixels:{p_index}",
@@ -167,17 +175,6 @@ def _to_ome_format(
         raise ValueError(f"Unsupported model_format: {model_format}")
 
 
-def _get_acquisition_date(summary_metadata: SummaryMetaV1) -> datetime | None:
-    acquisition_date = None
-    if (acq_time := summary_metadata.get("datetime")) is not None:
-        try:
-            # parse ISO format datetime string
-            acquisition_date = datetime.fromisoformat(acq_time.replace("Z", "+00:00"))
-        except (ValueError, AttributeError):
-            pass
-    return acquisition_date
-
-
 def _add_ome_instrument_info(summary_meta: SummaryMetaV1) -> list[Instrument]:
     """Add instrument information to the OME model based on summary metadata."""
     # TODO: use devices to get info about microscope
@@ -206,6 +203,17 @@ def _add_ome_instrument_info(summary_meta: SummaryMetaV1) -> list[Instrument]:
     return []
 
 
+def _get_acquisition_date(summary_metadata: SummaryMetaV1) -> datetime | None:
+    acquisition_date = None
+    if (acq_time := summary_metadata.get("datetime")) is not None:
+        try:
+            # parse ISO format datetime string
+            acquisition_date = datetime.fromisoformat(acq_time.replace("Z", "+00:00"))
+        except (ValueError, AttributeError):
+            pass
+    return acquisition_date
+
+
 def _group_frames_by_position(
     frame_metadata_list: list[FrameMetaV1],
 ) -> dict[str, list[FrameMetaV1]]:
@@ -221,6 +229,23 @@ def _group_frames_by_position(
                 frames_by_position[key] = []
             frames_by_position[key].append(frame_meta)
     return frames_by_position
+
+
+def _get_pixels_info_from_sequence(
+    sequence: useq.MDASequence,
+) -> tuple[tuple[int, int, int], list[Channel]]:
+    max_t = sequence.sizes.get("t", 1)
+    max_z = sequence.sizes.get("z", 1)
+    channels = []
+    for idx, ch in enumerate(sequence.channels):
+        channels.append(
+            Channel(
+                id=f"Channel:{idx}",
+                name=ch.config,
+                samples_per_pixel=1,
+            )
+        )
+    return (max_t, max_z, len(channels)), channels
 
 
 def _get_pixels_info(
@@ -250,6 +275,24 @@ def _get_pixels_info(
                         samples_per_pixel=1,
                     )
     return (max_t + 1, max_z + 1, max_c + 1), list(channels.values())
+
+
+def _get_dimension_order_from_sequence(sequence: useq.MDASequence) -> str:
+    """
+    Get axis order (fastest -> slowest) from a useq.MDASequence.
+
+    Returns
+    -------
+    A string representing the dimension order compatible with OME standards
+    (e.g., "XYCZT").
+    """
+    ordered_axes = [ax for ax in sequence.axis_order if ax not in {"p", "g"}]
+    dimension_order = "XY" + "".join(ordered_axes[::1]).upper()
+    # if there are axis missing, add them
+    if len(dimension_order) != 5:
+        missing = [a for a in "XYCZT" if a not in dimension_order]
+        dimension_order += "".join(missing)
+    return dimension_order
 
 
 def _get_dimension_order(frames: Iterable[FrameMetaV1]) -> str:
@@ -312,14 +355,14 @@ def _get_dimension_order(frames: Iterable[FrameMetaV1]) -> str:
     return dimension_order
 
 
-# def _get_mda_sequence(
-#     summary_metadata: SummaryMetaV1, single_frame_metadata: FrameMetaV1
-# ) -> useq.MDASequence | None:
-#     """Get the MDA sequence from summary metadata or frame metadata."""
-#     # get the mda_sequence from summary metadata
-#     seq = summary_metadata.get("mda_sequence")
-#     if seq:
-#         return seq
-#     # if is not there try form single_frame_metadata useq.MDAEvent
-#     ev = single_frame_metadata.get(MDA_EVENT, useq.MDAEvent())
-#     return ev.sequence
+def _get_mda_sequence(
+    summary_metadata: SummaryMetaV1, single_frame_metadata: FrameMetaV1
+) -> useq.MDASequence | None:
+    """Get the MDA sequence from summary metadata or frame metadata."""
+    # get the mda_sequence from summary metadata
+    seq = summary_metadata.get("mda_sequence")
+    if seq:
+        return seq
+    # if is not there try form single_frame_metadata useq.MDAEvent
+    ev = single_frame_metadata.get(MDA_EVENT, useq.MDAEvent())
+    return ev.sequence

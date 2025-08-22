@@ -19,32 +19,31 @@ def test_enhanced_ome_generation():
 
     mmc.setExposure(20)
 
-    sequence = useq.MDASequence(
-        axis_order="tpgcz",
-        time_plan={"interval": 0.5, "loops": 2},  # 2 timepoints
-        stage_positions=[
-            {"x": 100, "y": 100, "name": "Pos0"},  # Position 1
-            {"x": 200, "y": 200, "name": "Pos1"},  # Position 2
-        ],
-        z_plan={"range": 3.0, "step": 1.0},  # 4 z-slices: -1.5, -0.5, 0.5, 1.5
-        channels=[
-            {"config": "DAPI"},
-            {"config": "FITC"},
-            {"config": "DAPI"},
-        ],  # 2 channels
-        # grid_plan=useq.GridRowsColumns(rows=2, columns=2),  # 2 rows, 2 columns
-    )
-
-    # sequence = MDASequence(
-    #     axis_order="tpzgc",
+    # sequence = useq.MDASequence(
+    #     axis_order="tpgzc",
+    #     time_plan={"interval": 0.5, "loops": 2},
     #     stage_positions=[
-    #         {"x": 100, "y": 100, "name": "Pos0"},  # Position 1
-    #         {"x": 200, "y": 200, "name": "Pos1"},  # Position 2
+    #         {"x": 100, "y": 100, "name": "Pos0"},
+    #         useq.AbsolutePosition(
+    #             x=200,
+    #             y=200,
+    #             name="Pos1",
+    #         )
     #     ],
-    #     # z_plan={"range": 3.0, "step": 1.0},  # 4 z-slices: -1.5, -0.5, 0.5, 1.5
-    #     grid_plan=useq.GridRowsColumns(rows=2, columns=2),  # 2 rows, 2 columns
-    #     channels=[{"config": "DAPI"}, {"config": "FITC"}],  # 2 channels
+    #     z_plan={"range": 3.0, "step": 1.0},
+    #     channels=[
+    #         {"config": "DAPI"},
+    #         {"config": "FITC"},
+    #         {"config": "DAPI"},
+    #     ],  # 2 channels
+    #     # grid_plan=useq.GridRowsColumns(rows=2, columns=2),
     # )
+
+    sequence = [
+        useq.MDAEvent(x_pos=10, y_pos=3, pos_name="p0", channel={"config":"DAPI", "exposure":10}),
+        useq.MDAEvent(x_pos=11, y_pos=3, pos_name="p0", channel={"config":"FITC", "exposure":10}),
+        useq.MDAEvent(x_pos=12, y_pos=3, pos_name="p0", channel={"config":"DAPI", "exposure":10})
+    ]
 
     mmc.mda.run(sequence)
 
