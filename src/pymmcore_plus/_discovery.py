@@ -148,7 +148,11 @@ def discover_mm() -> Iterator[DiscoveredMM]:
         if existing is None:
             candidate._populate_info()  # noqa: SLF001
             # only cache and consider entries that look like real installs
-            if candidate.device_interface is None:
+            # If the discovery came from an explicit environment variable, keep
+            # the entry even if it doesn't currently contain device adapter
+            # libraries. This allows users (and tests) to point to a path that
+            # may be populated later or is intentionally empty.
+            if candidate.device_interface is None and candidate.env_var is None:
                 continue
             _DISCOVERED_MMS[key] = existing = candidate
         else:
@@ -204,6 +208,18 @@ def find_micromanager(return_first: bool = True) -> str | None | list[str]:
 
     for discovered_mm in discover_mm():
         if return_first:
+            # If the path was explicitly provided via the MICROMANAGER_PATH
+            # environment variable, prefer it even if it doesn't currently
+            # contain device adapter libraries. This allows users (and tests)
+            # to point to a path that will be used as-is.
+            if discovered_mm.env_var is not None:
+                logger.debug(
+                    "Using Micro-Manager path from %s: %s",
+                    discovered_mm.env_var,
+                    discovered_mm.path,
+                )
+                return str(discovered_mm.path)
+
             if discovered_mm.div_compatible:
                 logger.debug(
                     "Using Micro-Manager path: %s (device interface %s)",
