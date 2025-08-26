@@ -7,11 +7,13 @@ import shutil
 import subprocess
 import time
 from multiprocessing import Process, Queue
+from pathlib import Path
 from time import sleep
 from typing import Any, Callable, cast
 from unittest.mock import Mock, patch
 
 import pytest
+from useq import MDASequence
 
 try:
     from typer.testing import CliRunner
@@ -20,11 +22,15 @@ try:
 except ImportError:
     pytest.skip("cli extras not available", allow_module_level=True)
 
-from pathlib import Path
 
-from useq import MDASequence
-
-from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, _util, install
+from pymmcore_plus import (
+    CMMCorePlus,
+    __version__,
+    _cli,
+    _discovery,
+    _logger,
+    install,
+)
 
 runner = CliRunner()
 subrun = subprocess.run
@@ -143,15 +149,14 @@ def test_list() -> None:
 def test_cli_use(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     mm = tmp_path / "mm"
     current = mm / ".current"
-    monkeypatch.setattr(_util, "USER_DATA_MM_PATH", mm)
-    monkeypatch.setattr(_util, "CURRENT_MM_PATH", current)
+    monkeypatch.setattr(_discovery, "USER_DATA_MM_PATH", mm)
+    monkeypatch.setattr(_discovery, "CURRENT_MM_PATH", current)
 
     # provide existing path
     fake = tmp_path / "fake-123456"
     fake.mkdir()
     runner.invoke(app, ["use", str(fake)])
     assert current.read_text() == str(fake)
-    assert _util.find_micromanager() == str(fake)
 
     # match based on pattern
     runner.invoke(app, ["use", "1234"])

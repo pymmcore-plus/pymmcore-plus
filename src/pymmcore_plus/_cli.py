@@ -9,7 +9,6 @@ from contextlib import suppress
 from pathlib import Path
 from typing import Optional, Union, cast
 
-from pymmcore_plus._util import get_device_interface_version
 from pymmcore_plus.core._device import Device
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
@@ -103,32 +102,44 @@ def clean(
 
 @app.command(name="list")
 def _list() -> None:
-    """Show all Micro-Manager installs downloaded by pymmcore-plus."""
+    """Show all discovered Micro-Manager installations."""
+    from pymmcore_plus import _discovery
+
     configure_logging(stderr_level="CRITICAL")
-    found: dict[Path, list[str]] = {}
+    found: dict[Path, list[tuple[str, _discovery.DiscoveredMM]]] = {}
     with suppress(Exception):
-        for p in pymmcore_plus.find_micromanager(return_first=False):
-            pth = Path(p)
-            found.setdefault(pth.parent, []).append(pth.name)
+        for dm in _discovery.discover_mm():
+            pth = Path(dm.path)
+            found.setdefault(pth.parent, []).append((pth.name, dm))
+
+    active_mm = _discovery.find_micromanager(return_first=True)
+    required_div = _discovery.PYMMCORE_DIV
 
     if found:
-        first = True
+        print(f"[magenta]Required pymmcore device interface version: {required_div}")
         for parent, items in found.items():
-            print(f":file_folder:[bold green] {parent}")
-            for item in items:
-                version = ""
-                for _lib in (parent / item).glob("*_dal_*"):
-                    with suppress(Exception):
-                        div = get_device_interface_version(_lib)
-                        version = f" (Dev. Interface {div})"
-                        break
-                bullet = "   [bold yellow]*" if first else "   •"
-                using = " [bold blue](active)" if first else ""
-                print(f"{bullet} [cyan]{item}{version}{using}")
-                first = False
+            print(f"\n:file_folder:[bold green] {parent}")
+            for item_name, dm in items:
+                version = f" (DIV {dm.device_interface})" if dm.device_interface else ""
+                is_active = str(dm.path) == active_mm
+                is_compatible = dm.div_compatible
+
+                # Choose bullet and status
+                bullet = "   •"
+                status = ""
+                if is_active:
+                    bullet = "   [bold yellow]➤"
+                    if is_compatible:
+                        status = " [bold blue](active)[/bold blue]"
+                    else:
+                        status = " [bold red](active, incompatible!)[/bold red]"
+                else:
+                    status = " [red](incompatible)[/red]"
+
+                print(f"{bullet} [cyan]{item_name}{version}{status}")
     else:
-        print(":x: [bold red]There are no pymmcore-plus Micro-Manager files.")
-        print("[magenta]run `mmcore install` to install a version of Micro-Manager")
+        print(":x: [bold red]No Micro-Manager installations found.")
+        print("[magenta]Run `mmcore install` to install a version of Micro-Manager")
 
 
 @app.command()
@@ -414,7 +425,7 @@ def use(
     ),
 ) -> None:
     """Change the currently used Micro-manager version/path."""
-    from pymmcore_plus._util import use_micromanager
+    from pymmcore_plus._discovery import use_micromanager
 
     _pth = Path(pattern)
     if _pth.exists():
