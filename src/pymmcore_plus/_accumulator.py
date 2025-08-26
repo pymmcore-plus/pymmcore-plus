@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import abc
 import sys
-import weakref
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, Literal, TypeVar
@@ -167,10 +166,9 @@ class DeviceAccumulator(abc.ABC, Generic[DT]):
         mmcore: CMMCorePlus | None = None,
         **kwargs: Any,
     ) -> None:
-        core = mmcore or CMMCorePlus.instance()
-        self._mmcore_ref = weakref.ref(core)
+        self._mmcore = mmcore or CMMCorePlus.instance()
         dev_type = self._device_type()
-        if not core.getDeviceType(device_label) == dev_type:  # pragma: no cover
+        if not self._mmcore.getDeviceType(device_label) == dev_type:  # pragma: no cover
             raise ValueError(
                 f"Cannot create {self.__class__.__name__}. "
                 f"Device {device_label!r} is not a {dev_type.name}. "
@@ -178,16 +176,6 @@ class DeviceAccumulator(abc.ABC, Generic[DT]):
 
         self._device_label = device_label
         super().__init__(**kwargs)
-
-    @property
-    def _mmcore(self) -> CMMCorePlus:
-        """Get the CMMCorePlus instance for this accumulator."""
-        if (mmcore := self._mmcore_ref()) is None:
-            raise RuntimeError(
-                f"The CMMCorePlus instance for this {self.__class__.__name__!r} has "
-                "been garbage collected."
-            )
-        return mmcore
 
     def _is_busy(self) -> bool:
         return self._mmcore.deviceBusy(self._device_label)
@@ -214,7 +202,7 @@ class DeviceAccumulator(abc.ABC, Generic[DT]):
         mmcore = mmcore or CMMCorePlus.instance()
         cache_key = (id(mmcore), device)
         device_type = mmcore.getDeviceType(device)
-        if cache_key not in cls._CACHE:
+        if cache_key not in DeviceAccumulator._CACHE:
             if device_type == cls._device_type():
                 cls._CACHE[cache_key] = cls(device_label=device, mmcore=mmcore)
             else:
@@ -227,7 +215,6 @@ class DeviceAccumulator(abc.ABC, Generic[DT]):
                         "No matching DeviceTypeMixin subclass found for device type "
                         f"{device_type.name} (for device {device!r})."
                     )
-            weakref.finalize(mmcore, cls._CACHE.pop, cache_key, None)
         obj = cls._CACHE[cache_key]
         if not isinstance(obj, cls):
             raise TypeError(
