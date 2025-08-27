@@ -35,14 +35,14 @@ from pymmcore_plus import (
 runner = CliRunner()
 subrun = subprocess.run
 
-skipif_no_drivers_available = pytest.mark.skipif(
+skipif_no_nightly_available = pytest.mark.skipif(
     platform.system() == "Linux"
     or (platform.system() == "Darwin" and platform.machine() == "arm64"),
-    reason="Drivers not available on Linux or macOS ARM64",
+    reason="Nightly builds not available on Linux or macOS ARM64",
 )
 
 
-def _mock_urlretrieve(url: str, filename: str, reporthook=None) -> None:
+def _mock_urlretrieve(url: str, filename: str, reporthook: Callable) -> None:
     """fake urlretrieve that writes a fake file."""
     with open(filename, "w") as f:
         f.write("test")
@@ -80,18 +80,19 @@ def _mock_run(dest: Path) -> Callable:
     return runner
 
 
-@skipif_no_drivers_available
+@skipif_no_nightly_available
 def test_install_app(tmp_path: Path) -> None:
-    patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
+    patch_download = patch.object(install, "urlretrieve", wraps=_mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
 
-    with patch_download, patch_run:
+    with patch_download as mock_dl, patch_run:
         result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
+    mock_dl.assert_called_once()
     assert (tmp_path / "Micro-Manager-2.0.0" / "ImageJ.app").exists()
     assert result.exit_code == 0
 
 
-@skipif_no_drivers_available
+@skipif_no_nightly_available
 def test_basic_install(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
@@ -103,7 +104,7 @@ def test_basic_install(tmp_path: Path) -> None:
     assert mock.call_args_list[-1][0][0].startswith("Installed")
 
 
-@skipif_no_drivers_available
+@skipif_no_nightly_available
 def test_available_versions() -> None:
     """installing with an erroneous version should fail and show available versions."""
     result = runner.invoke(app, ["install", "-r", "xxxx"])

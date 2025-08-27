@@ -7,6 +7,7 @@ import sys
 import time
 from contextlib import suppress
 from pathlib import Path
+from platform import system
 from typing import Optional, Union, cast
 
 from pymmcore_plus.core._device import Device
@@ -25,9 +26,9 @@ import pymmcore_plus
 from pymmcore_plus._build import DEFAULT_PACKAGES, build
 from pymmcore_plus._logger import configure_logging
 from pymmcore_plus._util import USER_DATA_MM_PATH
-from pymmcore_plus.install import PLATFORM
 
 app = typer.Typer(name="mmcore", no_args_is_help=True)
+PLATFORM = system()
 
 
 def _show_version_and_exit(value: bool) -> None:
@@ -185,18 +186,24 @@ def install(
         help="Do not use rich output. Useful for scripting.",
         show_default=False,
     ),
+    test_adapters: bool = typer.Option(
+        False,
+        "--test-adapters",
+        help="Install only test adapters (e.g. DemoCamera and others for testing).",
+    ),
 ) -> None:
     """Install Micro-Manager Device adapters from <https://download.micro-manager.org>."""
     import pymmcore_plus.install
 
+    kwargs = {}
     if plain_output:
 
         def _log_msg(text: str, color: str = "", emoji: str = "") -> None:
             print(text)
 
-        pymmcore_plus.install.install(dest, release, log_msg=_log_msg)
-    else:
-        pymmcore_plus.install.install(dest, release)
+        kwargs["log_msg"] = _log_msg
+
+    pymmcore_plus.install.install(dest, release, test_adapters=test_adapters, **kwargs)
 
 
 @app.command()
