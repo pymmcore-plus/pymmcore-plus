@@ -1622,16 +1622,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** to emit the `imageSnapped` event after snapping an image.
         and to emit shutter property changes if `getAutoShutter` is `True`.
         """
-        if autoshutter := self.getAutoShutter():
-            self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
+        if (autoshutter := self.getAutoShutter()) and (
+            shutter := self.getShutterDevice()
+        ):
+            self.events.propertyChanged.emit(shutter, "State", True)
         try:
             self._do_snap_image()
             self.events.imageSnapped.emit(self.getCameraDevice())
         finally:
-            if autoshutter:
-                self.events.propertyChanged.emit(
-                    self.getShutterDevice(), "State", False
-                )
+            if autoshutter and shutter:
+                self.events.propertyChanged.emit(shutter, "State", False)
 
     @property
     def mda(self) -> MDARunner:
