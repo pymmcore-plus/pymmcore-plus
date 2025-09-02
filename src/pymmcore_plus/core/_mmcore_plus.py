@@ -334,6 +334,7 @@ class CMMCorePlus(pymmcore.CMMCore):
     def __del__(self) -> None:
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
+
         try:
             super().registerCallback(None)
             self.reset()
