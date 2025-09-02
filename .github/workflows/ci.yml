@@ -72,17 +72,10 @@ jobs:
           uv pip install pymmcore-nano
           uv pip uninstall pymmcore
 
-      - if: matrix.nano == ''
-        name: Get pymmcore version (env)
+      - name: Get pymmcore version (env)
         shell: bash
         run: |
-          ver=$(uv run python -c 'import pymmcore;print(pymmcore.__version__.split(".")[3])')
-          echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
-      - if: matrix.nano != ''
-        name: Get pymmcore version (env)
-        shell: bash
-        run: |
-          ver=$(uv run python -c 'import pymmcore_nano;print(pymmcore_nano.__version__.split(".")[3])')
+          uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)'
           echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
 
       - uses: pymmcore-plus/setup-mm-test-adapters@main
@@ -141,7 +134,7 @@ jobs:
       - name: Get pymmcore version (env)
         shell: bash
         run: |
-          ver=$(uv run python -c 'import pymmcore;print(pymmcore.__version__.split(".")[3])')
+          uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)'
           echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
 
       - name: Setup MM test adapters
@@ -192,7 +185,7 @@ jobs:
       - name: Get pymmcore version (env)
         shell: bash
         run: |
-          ver=$(uv run python -c 'import pymmcore;print(pymmcore.__version__.split(".")[3])')
+          uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)'
           echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
 
       - name: Setup MM test adapters
