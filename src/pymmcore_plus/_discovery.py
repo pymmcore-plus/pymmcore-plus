@@ -310,7 +310,7 @@ def use_micromanager(
 
 def _iter_device_paths(folder: Path) -> Iterator[Path]:
     """Iterate over device shared library paths in `folder`."""
-    valid_extensions = {".dll", ".so.0", ""}
+    valid_extensions = {".dll", ".0", "", ".so", ".dylib"}
     for lib_path in folder.glob("*mmgr_dal*"):
         if lib_path.suffix in valid_extensions:
             yield lib_path
