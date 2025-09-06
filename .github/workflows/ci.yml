@@ -75,7 +75,7 @@ jobs:
       - name: Get pymmcore version (env)
         shell: bash
         run: |
-          uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)'
+          ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
           echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
 
       - uses: pymmcore-plus/setup-mm-test-adapters@main
@@ -134,7 +134,7 @@ jobs:
       - name: Get pymmcore version (env)
         shell: bash
         run: |
-          uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)'
+          ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
           echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
 
       - name: Setup MM test adapters
@@ -185,7 +185,7 @@ jobs:
       - name: Get pymmcore version (env)
         shell: bash
         run: |
-          uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)'
+          ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
           echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
 
       - name: Setup MM test adapters
