@@ -37,7 +37,7 @@ if TYPE_CHECKING:
     IncludePositionArg: TypeAlias = Literal[True, False, "unsequenced-only"]
 
     class StateDict(TypedDict, total=False):
-        xy_position: tuple[float, float]
+        xy_position: Sequence[float]
         z_position: float
         exposure: float
         config_groups: dict[str, str]
@@ -397,24 +397,19 @@ class MDAEngine(PMDAEngine):
         try:
             # capture XY position
             if self._mmc.getXYStageDevice():
-                x_pos = self._mmc.getXPosition()
-                y_pos = self._mmc.getYPosition()
-                self._initial_state["xy_position"] = (x_pos, y_pos)
+                self._initial_state["xy_position"] = self._mmc.getXYPosition()
         except Exception as e:
             logger.warning("Failed to capture XY position: %s", e)
 
         try:
             # capture Z position
             if self._mmc.getFocusDevice():
-                z_pos = self._mmc.getZPosition()
-                self._initial_state["z_position"] = z_pos
+                self._initial_state["z_position"] = self._mmc.getZPosition()
         except Exception as e:
             logger.warning("Failed to capture Z position: %s", e)
 
         try:
-            # capture exposure setting
-            exposure = self._mmc.getExposure()
-            self._initial_state["exposure"] = exposure
+            self._initial_state["exposure"] = self._mmc.getExposure()
         except Exception as e:
             logger.warning("Failed to capture exposure setting: %s", e)
 
@@ -422,11 +417,8 @@ class MDAEngine(PMDAEngine):
         try:
             config_groups = self._mmc.getAvailableConfigGroups()
             for group in config_groups:
-                try:
-                    current_config = self._mmc.getCurrentConfig(group)
+                if current_config := self._mmc.getCurrentConfig(group):
                     self._initial_state["config_groups"][group] = current_config
-                except Exception as e:
-                    logger.warning("Failed to capture config group %s: %s", group, e)
         except Exception as e:
             logger.warning("Failed to get available config groups: %s", e)
 
@@ -438,26 +430,23 @@ class MDAEngine(PMDAEngine):
         # restore XY position
         if "xy_position" in self._initial_state:
             try:
-                x_pos, y_pos = self._initial_state["xy_position"]
                 if self._mmc.getXYStageDevice():
-                    self._mmc.setXYPosition(x_pos, y_pos)
+                    self._mmc.setXYPosition(*self._initial_state["xy_position"])
             except Exception as e:
                 logger.warning("Failed to restore XY position: %s", e)
 
         # restore Z position
         if "z_position" in self._initial_state:
             try:
-                z_pos = self._initial_state["z_position"]
                 if self._mmc.getFocusDevice():
-                    self._mmc.setZPosition(z_pos)
+                    self._mmc.setZPosition(self._initial_state["z_position"])
             except Exception as e:
                 logger.warning("Failed to restore Z position: %s", e)
 
         # restore exposure
         if "exposure" in self._initial_state:
             try:
-                exposure = self._initial_state["exposure"]
-                self._mmc.setExposure(exposure)
+                self._mmc.setExposure(self._initial_state["exposure"])
             except Exception as e:
                 logger.warning("Failed to restore exposure setting: %s", e)
 
