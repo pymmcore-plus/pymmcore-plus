@@ -58,14 +58,12 @@ jobs:
     env:
       UV_NO_SYNC: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
-
-      - uses: pymmcore-plus/setup-mm-test-adapters@main
 
       - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution ${{ matrix.resolution || 'highest'}}
 
@@ -73,6 +71,16 @@ jobs:
         run: |
           uv pip install pymmcore-nano
           uv pip uninstall pymmcore
+
+      - name: Get pymmcore version (env)
+        shell: bash
+        run: |
+          ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
+          echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
+
+      - uses: pymmcore-plus/setup-mm-test-adapters@main
+        with:
+          version: ${{ env.PYMM_VERSION }}
 
       - run: uv run coverage run -p -m pytest -v --color=yes ${{ matrix.resolution == 'lowest-direct' && '-W ignore' || '' }}
 
@@ -102,11 +110,11 @@ jobs:
         os: [macos-latest, windows-latest]
         qt: [PySide6, PyQt6]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: pymmcore-plus/pymmcore-widgets
           fetch-depth: 0
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: pymmcore-plus
           fetch-depth: 0
@@ -118,14 +126,22 @@ jobs:
         with:
           qt: true
 
-      - name: Setup MM test adapters
-        uses: pymmcore-plus/setup-mm-test-adapters@main
-
       - name: Install dependencies
         run: |
           uv sync --no-dev --group test --extra ${{ matrix.qt }}
           uv pip install ./pymmcore-plus
           uv pip list
+
+      - name: Get pymmcore version (env)
+        shell: bash
+        run: |
+          ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
+          echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
+
+      - name: Setup MM test adapters
+        uses: pymmcore-plus/setup-mm-test-adapters@main
+        with:
+          version: ${{ env.PYMM_VERSION }}
 
       - run: uv run pytest -v --color=yes -W ignore
 
@@ -140,11 +156,11 @@ jobs:
       matrix:
         qt: [PySide6, PyQt6]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           repository: pymmcore-plus/pymmcore-gui
           fetch-depth: 0
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           path: pymmcore-plus
           fetch-depth: 0
@@ -155,9 +171,6 @@ jobs:
       - uses: pyvista/setup-headless-display-action@v4
         with:
           qt: true
-
-      - name: Setup MM test adapters
-        uses: pymmcore-plus/setup-mm-test-adapters@main
 
       - name: Install dependencies
         shell: bash
@@ -170,6 +183,17 @@ jobs:
           uv pip install ./pymmcore-plus
           uv pip list
 
+      - name: Get pymmcore version (env)
+        shell: bash
+        run: |
+          ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
+          echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
+
+      - name: Setup MM test adapters
+        uses: pymmcore-plus/setup-mm-test-adapters@main
+        with:
+          version: ${{ env.PYMM_VERSION }}
+
       - run: uv run pytest -v --color=yes -W ignore
 
   benchmarks:
@@ -177,7 +201,7 @@ jobs:
     env:
       UV_NO_SYNC: "1"
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: astral-sh/setup-uv@v6
         with:
           python-version: "3.12"
@@ -191,7 +215,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: ~/.local/share/pymmcore-plus/
-          key: ${{ runner.os }}-mmbuild-73-${{ hashFiles('src/pymmcore_plus/_build.py') }}
+          key: ${{ runner.os }}-mmbuild-74-${{ hashFiles('src/pymmcore_plus/_build.py') }}
 
       - name: Build Micro-Manager
         if: steps.cache-mm-build.outputs.cache-hit != 'true'
@@ -210,7 +234,7 @@ jobs:
       id-token: write
       contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
 

@@ -131,6 +131,9 @@ class PCoreSignaler(Protocol):
     """Emits `(name: str, newExposure: float)` when the exposure of the SLM device changes."""  # noqa: E501
     sLMExposureChanged: ClassVar[PSignal]  # alias
 
+    shutterOpenChanged: ClassVar[PSignal]
+    """Emits `(name: str, isOpen: bool)` when the shutter open state has changed."""
+
     # added for CMMCorePlus
     configSet: ClassVar[PSignal]
     """Emits `(str, str)` when a config has been set.

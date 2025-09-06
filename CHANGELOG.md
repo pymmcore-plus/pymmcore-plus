@@ -1,5 +1,16 @@
 # Changelog
 
+## [v0.15.4](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.4) (2025-08-19)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.3...v0.15.4)
+
+**Merged pull requests:**
+
+- ci: update setup-mm-test-adapters version scheme [\#490](https://github.com/pymmcore-plus/pymmcore-plus/pull/490) ([tlambert03](https://github.com/tlambert03))
+- feat: Add dates for Device Interface Version 74 [\#489](https://github.com/pymmcore-plus/pymmcore-plus/pull/489) ([marktsuchida](https://github.com/marktsuchida))
+- ci\(dependabot\): bump actions/checkout from 4 to 5 [\#488](https://github.com/pymmcore-plus/pymmcore-plus/pull/488) ([dependabot[bot]](https://github.com/apps/dependabot))
+- ci\(pre-commit.ci\): autoupdate [\#487](https://github.com/pymmcore-plus/pymmcore-plus/pull/487) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+
 ## [v0.15.3](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.3) (2025-07-11)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.2...v0.15.3)

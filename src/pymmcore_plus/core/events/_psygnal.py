@@ -24,6 +24,7 @@ class CMMCoreSignaler(SignalGroup, _DevicePropertyEventMixin):
     XYStagePositionChanged = Signal(str, float, float)
     exposureChanged = Signal(str, float)
     SLMExposureChanged = Signal(str, float)
+    shutterOpenChanged = Signal(str, bool)
 
     # https://github.com/micro-manager/mmCoreAndDevices/pull/659
     imageSnapped = Signal(str)  # on snapImage()
