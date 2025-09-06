@@ -10,8 +10,8 @@ except PackageNotFoundError:  # pragma: no cover
 
 
 from ._accumulator import AbstractChangeAccumulator
+from ._discovery import find_micromanager, use_micromanager
 from ._logger import configure_logging
-from ._util import find_micromanager, use_micromanager
 from .core import (
     ActionType,
     CFGCommand,
