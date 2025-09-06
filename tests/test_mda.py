@@ -500,126 +500,97 @@ def test_custom_action(core: CMMCorePlus) -> None:
 
 def test_restore_initial_state(core: CMMCorePlus) -> None:
     """Test that initial hardware state is restored after MDA completion."""
-    from pymmcore_plus.mda import MDAEngine
 
-    # Create an engine with state restoration enabled
-    engine = MDAEngine(core, restore_initial_state=True)
-    original_engine = core.mda.engine
-    core.mda.set_engine(engine)
+    # Set initial state
+    initial_x, initial_y = 100.0, 200.0
+    initial_z = 50.0
+    initial_exposure = 10.0
 
-    try:
-        # Set initial state
-        initial_x, initial_y = 100.0, 200.0
-        initial_z = 50.0
-        initial_exposure = 10.0
+    core.setXYPosition(initial_x, initial_y)
+    core.setZPosition(initial_z)
+    core.setExposure(initial_exposure)
+    core.waitForSystem()
 
-        core.setXYPosition(initial_x, initial_y)
-        core.setZPosition(initial_z)
-        core.setExposure(initial_exposure)
-        core.waitForSystem()
+    # Set initial config - use "Channel" group if available
+    initial_config = None
+    configs = core.getAvailableConfigs("Channel")
+    if configs:
+        initial_config = configs[0]
+        core.setConfig("Channel", initial_config)
 
-        # Set initial config - use "Channel" group if available
-        initial_config = None
-        if "Channel" in core.getAvailableConfigGroups():
-            configs = core.getAvailableConfigs("Channel")
-            if configs:
-                initial_config = configs[0]
-                core.setConfig("Channel", initial_config)
+    # Create an MDA sequence that changes the state
+    changed_x, changed_y = 300.0, 400.0
+    changed_z = 100.0
+    changed_exposure = 20.0
 
-        # Create an MDA sequence that changes the state
-        changed_x, changed_y = 300.0, 400.0
-        changed_z = 100.0
-        changed_exposure = 20.0
-
-        events = [
-            MDAEvent(
-                x_pos=changed_x,
-                y_pos=changed_y,
-                z_pos=changed_z,
-                exposure=changed_exposure,
-                channel="Cy5"
-                if "Channel" in core.getAvailableConfigGroups()
-                and "Cy5" in core.getAvailableConfigs("Channel")
-                else None,
-            )
-        ]
-
-        # Run the MDA
-        core.mda.run(events)
-
-        # Verify state was restored
-        restored_x, restored_y = core.getXYPosition()
-        restored_z = core.getZPosition()
-        restored_exposure = core.getExposure()
-
-        # Allow for small floating point differences
-        assert abs(restored_x - initial_x) < 0.1, (
-            f"X position not restored: {restored_x} != {initial_x}"
+    events = [
+        MDAEvent(
+            x_pos=changed_x,
+            y_pos=changed_y,
+            z_pos=changed_z,
+            exposure=changed_exposure,
+            channel="Cy5",
         )
-        assert abs(restored_y - initial_y) < 0.1, (
-            f"Y position not restored: {restored_y} != {initial_y}"
-        )
-        assert abs(restored_z - initial_z) < 0.1, (
-            f"Z position not restored: {restored_z} != {initial_z}"
-        )
-        assert abs(restored_exposure - initial_exposure) < 0.1, (
-            f"Exposure not restored: {restored_exposure} != {initial_exposure}"
-        )
+    ]
 
-        # Check config group restoration if we set one
-        if initial_config and "Channel" in core.getAvailableConfigGroups():
-            restored_config = core.getCurrentConfig("Channel")
-            assert restored_config == initial_config, (
-                f"Config not restored: {restored_config} != {initial_config}"
-            )
+    # Run the MDA
+    core.mda.run(events)
 
-    finally:
-        # Restore original engine
-        core.mda.set_engine(original_engine)
+    # Verify state was restored
+    restored_x, restored_y = core.getXYPosition()
+    restored_z = core.getZPosition()
+    restored_exposure = core.getExposure()
+
+    # Allow for small floating point differences
+    assert abs(restored_x - initial_x) < 0.1, (
+        f"X position not restored: {restored_x} != {initial_x}"
+    )
+    assert abs(restored_y - initial_y) < 0.1, (
+        f"Y position not restored: {restored_y} != {initial_y}"
+    )
+    assert abs(restored_z - initial_z) < 0.1, (
+        f"Z position not restored: {restored_z} != {initial_z}"
+    )
+    assert abs(restored_exposure - initial_exposure) < 0.1, (
+        f"Exposure not restored: {restored_exposure} != {initial_exposure}"
+    )
+
+    # Check config group restoration if we set one
+    if initial_config and "Channel" in core.getAvailableConfigGroups():
+        restored_config = core.getCurrentConfig("Channel")
+        assert restored_config == initial_config, (
+            f"Config not restored: {restored_config} != {initial_config}"
+        )
 
 
 def test_restore_initial_state_enabled_by_default(core: CMMCorePlus) -> None:
     """Test that state restoration is enabled by default."""
-    from pymmcore_plus.mda import MDAEngine
 
-    # Create an engine with default settings (should restore state)
-    engine = MDAEngine(core)
-    original_engine = core.mda.engine
-    core.mda.set_engine(engine)
+    # Set initial state
+    initial_x, initial_y = 100.0, 200.0
+    initial_z = 50.0
 
-    try:
-        # Set initial state
-        initial_x, initial_y = 100.0, 200.0
-        initial_z = 50.0
+    core.setXYPosition(initial_x, initial_y)
+    core.setZPosition(initial_z)
+    core.waitForSystem()
 
-        core.setXYPosition(initial_x, initial_y)
-        core.setZPosition(initial_z)
-        core.waitForSystem()
+    # Create an MDA sequence that changes the state
+    events = [MDAEvent(x_pos=300, y_pos=400, z_pos=100)]
 
-        # Create an MDA sequence that changes the state
-        changed_x, changed_y = 300.0, 400.0
-        changed_z = 100.0
+    # Run the MDA
+    core.mda.run(events)
 
-        events = [MDAEvent(x_pos=changed_x, y_pos=changed_y, z_pos=changed_z)]
+    # Verify state WAS restored (back to initial values)
+    final_x, final_y = core.getXYPosition()
+    final_z = core.getZPosition()
 
-        # Run the MDA
-        core.mda.run(events)
-
-        # Verify state WAS restored (back to initial values)
-        final_x, final_y = core.getXYPosition()
-        final_z = core.getZPosition()
-
-        # State should be restored to the initial values
-        assert abs(final_x - initial_x) < 0.1, (
-            f"X position not restored: {final_x} != {initial_x}"
-        )
-        assert abs(final_y - initial_y) < 0.1, (
-            f"Y position not restored: {final_y} != {initial_y}"
-        )
-        assert abs(final_z - initial_z) < 0.1, (
-            f"Z position not restored: {final_z} != {initial_z}"
-        )
-
-    finally:
-        # Restore original engine
-        core.mda.set_engine(original_engine)
+    # State should be restored to the initial values
+    assert abs(final_x - initial_x) < 0.1, (
+        f"X position not restored: {final_x} != {initial_x}"
+    )
+    assert abs(final_y - initial_y) < 0.1, (
+        f"Y position not restored: {final_y} != {initial_y}"
+    )
+    assert abs(final_z - initial_z) < 0.1, (
+        f"Z position not restored: {final_z} != {initial_z}"
+    )
