@@ -545,7 +545,7 @@ def test_restore_initial_state(core: CMMCorePlus) -> None:
         ]
 
         # Run the MDA
-        core.mda.run(events).join()
+        core.mda.run(events)
 
         # Verify state was restored
         restored_x, restored_y = core.getXYPosition()
@@ -578,11 +578,11 @@ def test_restore_initial_state(core: CMMCorePlus) -> None:
         core.mda.set_engine(original_engine)
 
 
-def test_restore_initial_state_disabled_by_default(core: CMMCorePlus) -> None:
-    """Test that state restoration is disabled by default."""
+def test_restore_initial_state_enabled_by_default(core: CMMCorePlus) -> None:
+    """Test that state restoration is enabled by default."""
     from pymmcore_plus.mda import MDAEngine
 
-    # Create an engine with default settings (should NOT restore state)
+    # Create an engine with default settings (should restore state)
     engine = MDAEngine(core)
     original_engine = core.mda.engine
     core.mda.set_engine(engine)
@@ -603,21 +603,21 @@ def test_restore_initial_state_disabled_by_default(core: CMMCorePlus) -> None:
         events = [MDAEvent(x_pos=changed_x, y_pos=changed_y, z_pos=changed_z)]
 
         # Run the MDA
-        core.mda.run(events).join()
+        core.mda.run(events)
 
-        # Verify state was NOT restored (remains at changed values)
+        # Verify state WAS restored (back to initial values)
         final_x, final_y = core.getXYPosition()
         final_z = core.getZPosition()
 
-        # State should remain at the changed values
-        assert abs(final_x - changed_x) < 0.1, (
-            f"X position should remain changed: {final_x} != {changed_x}"
+        # State should be restored to the initial values
+        assert abs(final_x - initial_x) < 0.1, (
+            f"X position not restored: {final_x} != {initial_x}"
         )
-        assert abs(final_y - changed_y) < 0.1, (
-            f"Y position should remain changed: {final_y} != {changed_y}"
+        assert abs(final_y - initial_y) < 0.1, (
+            f"Y position not restored: {final_y} != {initial_y}"
         )
-        assert abs(final_z - changed_z) < 0.1, (
-            f"Z position should remain changed: {final_z} != {changed_z}"
+        assert abs(final_z - initial_z) < 0.1, (
+            f"Z position not restored: {final_z} != {initial_z}"
         )
 
     finally:
