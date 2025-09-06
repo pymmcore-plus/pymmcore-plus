@@ -28,12 +28,19 @@ if TYPE_CHECKING:
     from typing import TypeAlias
 
     from numpy.typing import NDArray
+    from typing_extensions import TypedDict
 
     from pymmcore_plus.core import CMMCorePlus
 
     from ._protocol import PImagePayload
 
     IncludePositionArg: TypeAlias = Literal[True, False, "unsequenced-only"]
+
+    class StateDict(TypedDict, total=False):
+        xy_position: tuple[float, float]
+        z_position: float
+        exposure: float
+        config_groups: dict[str, str]
 
 
 # these are SLM devices that have a known pixel_on_value.
@@ -69,16 +76,17 @@ class MDAEngine(PMDAEngine):
         may wish to set it to `False` in order to avoid unexpected behavior.
     restore_initial_state : bool
         Whether to restore the initial hardware state after the MDA sequence completes.
-        If `True`, the engine will capture the initial state (positions, config groups,
-        exposure settings) before the sequence starts and restore it after completion.
-        By default, this is `False` to maintain backwards compatibility.
+        If `True` (the default), the engine will capture the initial state (positions,
+        config groups, exposure settings) before the sequence starts and restore it
+        after completion.
     """
 
     def __init__(
         self,
         mmc: CMMCorePlus,
+        *,
         use_hardware_sequencing: bool = True,
-        restore_initial_state: bool = False,
+        restore_initial_state: bool = True,
     ) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing: bool = use_hardware_sequencing
@@ -93,6 +101,8 @@ class MDAEngine(PMDAEngine):
 
         # whether to restore the initial hardware state after sequence completion
         self.restore_initial_state: bool = restore_initial_state
+        # stored initial state for restoration (if restore_initial_state is True)
+        self._initial_state: StateDict = {}
 
         # used to check if the hardware autofocus is engaged when the sequence begins.
         # if it is, we will re-engage it after the autofocus action (if successful).
@@ -111,9 +121,6 @@ class MDAEngine(PMDAEngine):
 
         self._last_config: tuple[str, str] = ("", "")
         self._last_xy_pos: tuple[float | None, float | None] = (None, None)
-
-        # stored initial state for restoration (if restore_initial_state is True)
-        self._initial_state: dict[str, tuple[float, float] | float | str | None] = {}
 
         # -----
         # The following values are stored during setup_sequence simply to speed up
@@ -385,7 +392,7 @@ class MDAEngine(PMDAEngine):
 
     def _capture_initial_state(self) -> None:
         """Capture the current hardware state for later restoration."""
-        self._initial_state.clear()
+        self._initial_state = {"config_groups": {}}
 
         try:
             # capture XY position
@@ -417,7 +424,7 @@ class MDAEngine(PMDAEngine):
             for group in config_groups:
                 try:
                     current_config = self._mmc.getCurrentConfig(group)
-                    self._initial_state[f"config_group_{group}"] = current_config
+                    self._initial_state["config_groups"][group] = current_config
                 except Exception as e:
                     logger.warning("Failed to capture config group %s: %s", group, e)
         except Exception as e:
@@ -434,7 +441,6 @@ class MDAEngine(PMDAEngine):
                 x_pos, y_pos = self._initial_state["xy_position"]
                 if self._mmc.getXYStageDevice():
                     self._mmc.setXYPosition(x_pos, y_pos)
-                    self._mmc.waitForSystem()
             except Exception as e:
                 logger.warning("Failed to restore XY position: %s", e)
 
@@ -444,7 +450,6 @@ class MDAEngine(PMDAEngine):
                 z_pos = self._initial_state["z_position"]
                 if self._mmc.getFocusDevice():
                     self._mmc.setZPosition(z_pos)
-                    self._mmc.waitForSystem()
             except Exception as e:
                 logger.warning("Failed to restore Z position: %s", e)
 
@@ -457,18 +462,17 @@ class MDAEngine(PMDAEngine):
                 logger.warning("Failed to restore exposure setting: %s", e)
 
         # restore config group states
-        for key, value in self._initial_state.items():
-            if key.startswith("config_group_"):
-                group = key.replace("config_group_", "")
-                try:
-                    self._mmc.setConfig(group, value)
-                except Exception as e:
-                    logger.warning(
-                        "Failed to restore config group %s to %s: %s", group, value, e
-                    )
+        for key, value in self._initial_state.get("config_groups", {}).items():
+            try:
+                self._mmc.setConfig(key, value)
+            except Exception as e:
+                logger.warning(
+                    "Failed to restore config group %s to %s: %s", key, value, e
+                )
 
+        self._mmc.waitForSystem()
         # clear the state after restoration
-        self._initial_state.clear()
+        self._initial_state = {}
 
     # ===================== Sequenced Events =====================
 
