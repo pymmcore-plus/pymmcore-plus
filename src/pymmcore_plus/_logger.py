@@ -24,7 +24,7 @@ if "PYTEST_RUNNING" in os.environ:
 elif PYMM_LOG_FILE not in ("", "0", "false", "no", "none"):
     LOG_FILE = Path(PYMM_LOG_FILE).expanduser().resolve()
 else:
-    from ._util import USER_DATA_DIR
+    from ._discovery import USER_DATA_DIR
 
     LOG_FILE = USER_DATA_DIR / "logs" / "pymmcore-plus.log"
 

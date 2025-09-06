@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from pymmcore_plus import CMMCorePlus, DeviceType, find_micromanager
+from pymmcore_plus._discovery import discover_mm
 from pymmcore_plus.metadata import summary_metadata
 from pymmcore_plus.model import CoreDevice, Device, Microscope
 
@@ -64,7 +65,14 @@ def non_empty_lines(path: Path) -> list[str]:
 
 
 if not (mm_path := find_micromanager()):
-    raise RuntimeError("Could not find Micro-Manager, please run `mmcore install`")
+    if avail := [x.path for x in discover_mm()]:
+        avail_str = f" Found: {avail}."
+    else:
+        avail_str = ""
+    raise RuntimeError(
+        f"Could not find compatible Micro-Manager devices.{avail_str}\n"
+        "please run `mmcore install`"
+    )
 
 
 @pytest.mark.parametrize(

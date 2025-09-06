@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import re
 import shutil
@@ -7,6 +8,7 @@ import ssl
 import subprocess
 import sys
 import tempfile
+import zipfile
 from contextlib import contextmanager, nullcontext
 from functools import cache
 from pathlib import Path
@@ -16,6 +18,7 @@ from urllib.request import urlopen, urlretrieve
 
 import typer
 
+from pymmcore_plus import _pymmcore
 from pymmcore_plus._util import USER_DATA_MM_PATH
 
 if TYPE_CHECKING:
@@ -62,11 +65,12 @@ MACH = machine()
 BASE_URL = "https://download.micro-manager.org"
 plat = {"Darwin": "Mac", "Windows": "Windows", "Linux": "Linux"}.get(PLATFORM)
 DOWNLOADS_URL = f"{BASE_URL}/nightly/2.0/{plat}/"
-
+TEST_ADAPTERS_REPO = "micro-manager/mm-test-adapters"
+PYMMCORE_DIV = _pymmcore.version_info.device_interface
 
 # Dates of release for each interface version.
 # generally running `mmcore install -r <some_date>` will bring in devices with
-# the NEW interface.
+# the NEW interface, introduced that day.
 INTERFACES: dict[int, str] = {
     74: "20250815",
     73: "20250318",
@@ -173,17 +177,141 @@ def _mac_install(dmg: Path, dest: Path, log_msg: _MsgLogger) -> None:
 
 @cache
 def available_versions() -> dict[str, str]:
-    """Return a map of version -> url available for download."""
+    """Return a map of version -> url available for download.
+
+    Returns a dict like:
+    {
+        '20220906': 'https://download.micro-manager.org/nightly/2.0/Mac/Micro-Manager-2.0.1-20220906.dmg',
+        '20220901': 'https://download.micro-manager.org/nightly/2.0/Mac/Micro-Manager-2.0.1-20220901.dmg',
+        '20220823': 'https://download.micro-manager.org/nightly/2.0/Mac/Micro-Manager-2.0.1-20220823.dmg',
+    }
+    """
     with urlopen(DOWNLOADS_URL) as resp:
         html = resp.read().decode("utf-8")
 
-    all_links = re.findall(r"href=\"([^\"]+)\"", html)
+    all_links = re.findall(r'href="([^"]+)"', html)
     delim = "_" if PLATFORM == "Windows" else "-"
     return {
         ref.rsplit(delim, 1)[-1].split(".")[0]: BASE_URL + ref
         for ref in all_links
         if ref != "/" and "32bit" not in ref
     }
+
+
+@cache
+def _available_test_adapter_releases() -> dict[str, str]:
+    """Get available releases from GitHub mm-test-adapters repository.
+
+    Returns a dict like:
+    {
+        '20250825': '74.20250825',
+        ...
+    }
+    """
+    github_api_url = f"https://api.github.com/repos/{TEST_ADAPTERS_REPO}/releases"
+
+    with urlopen(github_api_url) as resp:
+        releases = json.loads(resp.read().decode("utf-8"))
+
+    release_map = {}
+    for release in releases:
+        tag_name = release["tag_name"]  # e.g., "74.20250825"
+        if "." in tag_name:
+            _, date_part = tag_name.split(".", 1)  # Extract YYYYMMDD part
+            release_map[date_part] = tag_name
+
+    return release_map
+
+
+def _get_platform_arch_string() -> str:
+    """Get platform and architecture string for GitHub releases."""
+    if PLATFORM == "Darwin":
+        arch = "ARM64" if MACH == "arm64" else "X64"
+        return f"macOS-{arch}"
+    elif PLATFORM == "Windows":
+        return "Windows-X64"
+    elif PLATFORM == "Linux":
+        return "Linux-X64"
+    else:  # pragma: no cover
+        raise ValueError(f"Unsupported platform: {PLATFORM}")
+
+
+def _test_dev_install(
+    dest: Path | str = USER_DATA_MM_PATH,
+    release: str = "latest",
+) -> None:
+    """Install just the test devices into dest.
+
+    From https://github.com/micro-manager/mm-test-adapters/releases/latest
+    (Releases on github are versioned as: DIV.YYYYMMDD)
+
+    If release is `latest-compatible`, it will install the latest compatible version
+    of the test devices for the current device interface version.
+
+    Parameters
+    ----------
+    dest : Path | str, optional
+        Where to install Micro-Manager, by default will install to a pymmcore-plus
+        folder in the user's data directory: `appdirs.user_data_dir()`.
+    release : str, optional
+        Which release to install, by default "latest-compatible". Should be a date
+        in the form YYYYMMDD, "latest" to install the latest nightly release, or
+        "latest-compatible" to install the latest nightly release that is
+        compatible with the device interface version of the current pymmcore version.
+    """
+    dest = Path(dest).expanduser().resolve()
+    dest.mkdir(parents=True, exist_ok=True)
+
+    # Get available GitHub releases
+    if not (github_releases := _available_test_adapter_releases()):  # pragma: no cover
+        raise ValueError("No test device releases found on GitHub")
+
+    # Build download URL
+    filename = f"mm-test-adapters-{_get_platform_arch_string()}.zip"
+    base_url = f"https://github.com/{TEST_ADAPTERS_REPO}/releases"
+    if release == "latest-compatible":
+        # Find the latest release compatible with the current device interface
+        # this is easier with test devices because their version starts with the DIV
+        available = sorted(github_releases.values(), reverse=True)
+        for version in available:
+            if version.startswith(f"{PYMMCORE_DIV}."):
+                # Found a compatible version
+                download_url = f"{base_url}/download/{version}/{filename}"
+                tag_name = version
+                break
+        else:  # pragma: no cover
+            raise ValueError(
+                f"No compatible releases found for device interface {PYMMCORE_DIV}.  "
+                f"Found: {available}"
+            )
+    elif release == "latest":
+        download_url = f"{base_url}/latest/download/{filename}"
+        tag_name = sorted(github_releases.values(), reverse=True)[0]
+    else:
+        if release not in github_releases:
+            _available = ", ".join(sorted(github_releases.keys(), reverse=True))
+            raise ValueError(
+                f"Release {release!r} not found. Available releases: {_available}"
+            )
+        tag_name = github_releases[release]
+        download_url = f"{base_url}/download/{tag_name}/{filename}"
+
+    _dest = dest / f"Micro-Manager-{tag_name}"
+    with tempfile.TemporaryDirectory() as tmpdir:
+        # Download the zip file
+        zip_path = Path(tmpdir) / filename
+        _download_url(
+            url=download_url, output_path=zip_path, show_progress=progress is not None
+        )
+
+        # Extract the zip file
+        with zipfile.ZipFile(zip_path, "r") as zip_ref:
+            zip_ref.extractall(_dest)
+
+        # On macOS, remove quarantine attribute
+        if PLATFORM == "Darwin":
+            cmd = ["xattr", "-r", "-d", "com.apple.quarantine", str(_dest)]
+            subprocess.run(cmd, check=False)  # Don't fail if xattr fails
 
 
 def _download_url(url: str, output_path: Path, show_progress: bool = True) -> None:
@@ -219,6 +347,7 @@ def install(
     dest: Path | str = USER_DATA_MM_PATH,
     release: str = "latest-compatible",
     log_msg: _MsgLogger = _pretty_print,
+    test_adapters: bool = False,
 ) -> None:
     """Install Micro-Manager to `dest`.
 
@@ -236,30 +365,32 @@ def install(
         Callback to log messages, must have signature:
         `def logger(text: str, color: str = "", emoji: str = ""): ...`
         May ignore color and emoji.
+    test_adapters : bool, optional
+        Whether to install test adapters, by default False.
     """
+    if test_adapters:
+        _test_dev_install(dest=dest, release=release)
+        return
+
     if PLATFORM not in ("Darwin", "Windows") or (
         PLATFORM == "Darwin" and MACH == "arm64"
-    ):  # pragma: no cover
+    ):
         log_msg(
-            f"Unsupported platform/architecture: {PLATFORM}/{MACH}", "bold red", ":x:"
+            f"Unsupported platform/architecture for nightly build: {PLATFORM}/{MACH}\n"
+            "   (Downloading just test adapters) ...",
+            "bold magenta",
+            ":exclamation:",
         )
-        log_msg(
-            "Consider building from source (mmcore build-dev).",
-            "bold yellow",
-            ":light_bulb:",
-        )
-        raise sys.exit(1)
+        _test_dev_install(dest=dest, release=release)
+        return
 
     if release == "latest-compatible":
-        from pymmcore_plus import _pymmcore
-
-        div = _pymmcore.version_info.device_interface
         # date when the device interface version FOLLOWING the version that this
         # pymmcore supports was released.
-        next_div_date = INTERFACES.get(div + 1, None)
+        next_div_date = INTERFACES.get(PYMMCORE_DIV + 1, None)
 
         # if div is equal to the greatest known interface version, use latest
-        if div == max(INTERFACES.keys()) or next_div_date is None:
+        if PYMMCORE_DIV == max(INTERFACES.keys()) or next_div_date is None:
             release = "latest"
         else:  # pragma: no cover
             # otherwise, find the date of the release in available_versions() that
@@ -273,7 +404,7 @@ def install(
                 # fallback to latest if no compatible versions found
                 raise ValueError(
                     "Unable to find a compatible release for device interface"
-                    f"{div} at {DOWNLOADS_URL} "
+                    f"{PYMMCORE_DIV} at {DOWNLOADS_URL} "
                 )
 
     if release == "latest":
