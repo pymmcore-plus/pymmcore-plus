@@ -7,11 +7,13 @@ import shutil
 import subprocess
 import time
 from multiprocessing import Process, Queue
+from pathlib import Path
 from time import sleep
 from typing import Any, Callable, cast
 from unittest.mock import Mock, patch
 
 import pytest
+from useq import MDASequence
 
 try:
     from typer.testing import CliRunner
@@ -20,23 +22,27 @@ try:
 except ImportError:
     pytest.skip("cli extras not available", allow_module_level=True)
 
-from pathlib import Path
 
-from useq import MDASequence
-
-from pymmcore_plus import CMMCorePlus, __version__, _cli, _logger, _util, install
+from pymmcore_plus import (
+    CMMCorePlus,
+    __version__,
+    _cli,
+    _discovery,
+    _logger,
+    install,
+)
 
 runner = CliRunner()
 subrun = subprocess.run
 
-skipif_no_drivers_available = pytest.mark.skipif(
+skipif_no_nightly_available = pytest.mark.skipif(
     platform.system() == "Linux"
     or (platform.system() == "Darwin" and platform.machine() == "arm64"),
-    reason="Drivers not available on Linux or macOS ARM64",
+    reason="Nightly builds not available on Linux or macOS ARM64",
 )
 
 
-def _mock_urlretrieve(url: str, filename: str, reporthook=None) -> None:
+def _mock_urlretrieve(url: str, filename: str, reporthook: Callable) -> None:
     """fake urlretrieve that writes a fake file."""
     with open(filename, "w") as f:
         f.write("test")
@@ -74,18 +80,19 @@ def _mock_run(dest: Path) -> Callable:
     return runner
 
 
-@skipif_no_drivers_available
+@skipif_no_nightly_available
 def test_install_app(tmp_path: Path) -> None:
-    patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
+    patch_download = patch.object(install, "urlretrieve", wraps=_mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
 
-    with patch_download, patch_run:
+    with patch_download as mock_dl, patch_run:
         result = runner.invoke(app, ["install", "--dest", str(tmp_path)])
+    mock_dl.assert_called_once()
     assert (tmp_path / "Micro-Manager-2.0.0" / "ImageJ.app").exists()
     assert result.exit_code == 0
 
 
-@skipif_no_drivers_available
+@skipif_no_nightly_available
 def test_basic_install(tmp_path: Path) -> None:
     patch_download = patch.object(install, "urlretrieve", _mock_urlretrieve)
     patch_run = patch.object(subprocess, "run", _mock_run(tmp_path))
@@ -97,7 +104,7 @@ def test_basic_install(tmp_path: Path) -> None:
     assert mock.call_args_list[-1][0][0].startswith("Installed")
 
 
-@skipif_no_drivers_available
+@skipif_no_nightly_available
 def test_available_versions() -> None:
     """installing with an erroneous version should fail and show available versions."""
     result = runner.invoke(app, ["install", "-r", "xxxx"])
@@ -143,15 +150,14 @@ def test_list() -> None:
 def test_cli_use(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     mm = tmp_path / "mm"
     current = mm / ".current"
-    monkeypatch.setattr(_util, "USER_DATA_MM_PATH", mm)
-    monkeypatch.setattr(_util, "CURRENT_MM_PATH", current)
+    monkeypatch.setattr(_discovery, "USER_DATA_MM_PATH", mm)
+    monkeypatch.setattr(_discovery, "CURRENT_MM_PATH", current)
 
     # provide existing path
     fake = tmp_path / "fake-123456"
     fake.mkdir()
     runner.invoke(app, ["use", str(fake)])
     assert current.read_text() == str(fake)
-    assert _util.find_micromanager() == str(fake)
 
     # match based on pattern
     runner.invoke(app, ["use", "1234"])
