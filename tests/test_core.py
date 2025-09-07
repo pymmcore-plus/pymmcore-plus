@@ -7,7 +7,6 @@ from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 import psygnal
-import psygnal.testing
 import pytest
 from useq import MDASequence
 
