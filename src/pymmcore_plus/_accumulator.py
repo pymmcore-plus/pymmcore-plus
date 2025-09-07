@@ -182,7 +182,7 @@ class DeviceAccumulator(abc.ABC, Generic[DT]):
     @property
     def _mmcore(self) -> CMMCorePlus:
         """Get the CMMCorePlus instance for this accumulator."""
-        if (mmcore := self._mmcore_ref()) is None:
+        if (mmcore := self._mmcore_ref()) is None:  # pragma: no cover
             raise RuntimeError(
                 f"The CMMCorePlus instance for this {self.__class__.__name__!r} has "
                 "been garbage collected."

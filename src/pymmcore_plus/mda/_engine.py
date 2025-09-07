@@ -123,9 +123,9 @@ class MDAEngine(PMDAEngine):
     @property
     def mmcore(self) -> CMMCorePlus:
         """The `CMMCorePlus` instance to use for hardware control."""
-        if mmc := self._mmcore_ref():
-            return mmc
-        raise RuntimeError("The CMMCorePlus instance has been garbage collected.")
+        if (mmc := self._mmcore_ref()) is None:  # pragma: no cover
+            raise RuntimeError("The CMMCorePlus instance has been garbage collected.")
+        return mmc
 
     # ===================== Protocol Implementation =====================
 

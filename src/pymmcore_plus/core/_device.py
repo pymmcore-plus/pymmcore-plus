@@ -111,7 +111,7 @@ class Device:
     def _mmc(self) -> CMMCorePlus:
         """Return the `CMMCorePlus` instance to which this Device is bound."""
         mmc = self._mmc_ref()
-        if mmc is None:
+        if mmc is None:  # pragma: no cover
             raise RuntimeError(
                 "The CMMCorePlus instance to which this Device "
                 "is bound has been garbage collected."

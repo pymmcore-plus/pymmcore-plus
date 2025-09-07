@@ -19,7 +19,7 @@ class _DevicePropValueSignal:
 
     @property
     def _mmc(self) -> CMMCorePlus:
-        if (mmc := self._mmc_ref()) is None:
+        if (mmc := self._mmc_ref()) is None:  # pragma: no cover
             raise RuntimeError("CMMCorePlus instance has been garbage collected.")
         return mmc
 

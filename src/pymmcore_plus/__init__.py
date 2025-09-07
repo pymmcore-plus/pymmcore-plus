@@ -2,13 +2,15 @@
 
 import logging
 from importlib.metadata import PackageNotFoundError, version
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 try:
     __version__ = version("pymmcore-plus")
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
+if TYPE_CHECKING:
+    from ._ipy_completion import install_pymmcore_ipy_completion
 
 from ._accumulator import AbstractChangeAccumulator
 from ._discovery import find_micromanager, use_micromanager
@@ -64,6 +66,7 @@ __all__ = [
     "__version__",
     "configure_logging",
     "find_micromanager",
+    "install_pymmcore_ipy_completion",
     "use_micromanager",
 ]
 
@@ -73,7 +76,7 @@ def __getattr__(name: str) -> Any:
     if name == "install_pymmcore_ipy_completion":
         try:
             from ._ipy_completion import install_pymmcore_ipy_completion
-        except ImportError as e:
+        except ImportError as e:  # pragma: no cover
             raise ImportError(
                 f"Error importing IPython completion for pymmcore-plus: {e}"
             ) from None

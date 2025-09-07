@@ -64,7 +64,7 @@ class DeviceProperty:
     @property
     def core(self) -> CMMCorePlus:
         """Return the `CMMCorePlus` instance to which this Property is bound."""
-        if (mmc := self._mmc_ref()) is None:
+        if (mmc := self._mmc_ref()) is None:  # pragma: no cover
             raise RuntimeError(
                 "The CMMCorePlus instance to which this Property "
                 "is bound has been deleted."
