@@ -337,12 +337,19 @@ class CMMCorePlus(pymmcore.CMMCore):
             atexit.unregister(self._weak_clean)
 
         try:
+            print("\nsuper().registerCallback(None)")
             super().registerCallback(None)
+
+            print("call reset")
             self.reset()
+            print("reset complete, call setPrimaryLogFile")
             # clean up logging
             self.setPrimaryLogFile("")
         except Exception as e:
+            print("Exception in __del__", e)
             logger.exception("Error during CMMCorePlus.__del__(): %s", e)
+        else:
+            print("__del__ complete without error")
 
     # Re-implemented methods from the CMMCore API
 
