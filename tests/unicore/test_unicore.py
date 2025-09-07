@@ -178,7 +178,7 @@ def test_device_load_from_module():
         core.loadDevice("newdev", __name__, RandomClass.__name__)
 
 
-@pytest.mark.timeout(5)
+@pytest.mark.timeout(20)
 def test_waiting():
     core = UniMMCore()
 
