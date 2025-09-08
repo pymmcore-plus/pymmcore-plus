@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING
@@ -22,6 +23,7 @@ from pymmcore_plus.mda._runner import GeneratorMDASequence
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from pathlib import Path
 
     from .schema import FrameMetaV1, SummaryMetaV1
 
@@ -29,7 +31,9 @@ MDA_EVENT = "mda_event"
 
 
 def create_ome_metadata(
-    summary_metadata: SummaryMetaV1, frame_metadata_list: list[FrameMetaV1]
+    summary_metadata: SummaryMetaV1,
+    frame_metadata_list: list[FrameMetaV1],
+    # path: Path | str,
 ) -> OME:
     """Create enhanced OME metadata from summary and frame metadata collections.
 
@@ -48,6 +52,9 @@ def create_ome_metadata(
     OME
         The OME metadata as an `ome_types.OME` object.
     """
+    # if isinstance(path, str):
+    #     path = Path(path)
+
     # create OME model
     ome = OME(uuid=f"urn:uuid:{uuid.uuid4()}")
 

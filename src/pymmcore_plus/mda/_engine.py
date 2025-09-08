@@ -3,6 +3,7 @@ from __future__ import annotations
 import time
 from contextlib import suppress
 from itertools import product
+from pathlib import Path
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
 import numpy as np
@@ -10,7 +11,7 @@ import useq
 from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
-from pymmcore_plus._util import retry
+from pymmcore_plus._util import USER_DATA_MM_PATH, retry
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent, iter_sequenced_events
 from pymmcore_plus.metadata import (
@@ -160,6 +161,11 @@ class MDAEngine(PMDAEngine):
         # Store summary metadata for OME generation
         self._sequence = sequence
         summary_meta = self.get_summary_metadata(mda_sequence=sequence)
+        # save to user data path for later use for OME generation
+        path = Path(USER_DATA_MM_PATH) / "ome_meta"
+        path.mkdir(exist_ok=True, parents=True)
+        with open(path / f"summary_meta_{sequence.uid}.json", "w") as f:
+            f.write(str(summary_meta))
         self._sequence_summary_metadata = summary_meta
         return summary_meta
 
