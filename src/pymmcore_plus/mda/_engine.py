@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import time
+import warnings
 from contextlib import suppress
+from functools import cache
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
@@ -11,7 +13,7 @@ from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
-from pymmcore_plus.core._constants import Keyword
+from pymmcore_plus.core._constants import FocusDirection, Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent, iter_sequenced_events
 from pymmcore_plus.metadata import (
     FrameMetaV1,
@@ -436,21 +438,55 @@ class MDAEngine(PMDAEngine):
         if not self._initial_state:
             return
 
-        # restore XY position
-        if "xy_position" in self._initial_state:
-            try:
-                if self._mmc.getXYStageDevice():
-                    self._mmc.setXYPosition(*self._initial_state["xy_position"])
-            except Exception as e:
-                logger.warning("Failed to restore XY position: %s", e)
+        # !!! We need to be careful about the order of Z and XY restoration:
+        #
+        # If FocusDirection is Unknown, we cannot safely restore Z *or* XY stage
+        # positions: we simply refuse and warn.
+        #
+        # If focus_dir is TowardSample, and we are restoring a Z-position that is
+        # *lower* than the current position or
+        # if focus_dir is AwayFromSample, and we are restoring a Z-position that is
+        # *higher* than the current position, then we need to move Z *before* moving XY,
+        # otherwise we may crash the objective into the sample.
+        # Otherwise, we should move XY first, then Z.
+        target_z = self._initial_state.get("z_position")
+        move_z_first = False
+        focus_dir = FocusDirection.Unknown
+        if target_z is not None and (focus_device := self._mmc.getFocusDevice()):
+            focus_dir = self._mmc.getFocusDirection(focus_device)
+            cur_z = self._mmc.getZPosition()
+            # focus_dir TowardSample => increasing position brings obj. closer to sample
+            if cur_z > target_z:
+                if focus_dir == FocusDirection.TowardSample:
+                    move_z_first = True
+            elif focus_dir == FocusDirection.AwayFromSample:
+                move_z_first = True
 
-        # restore Z position
-        if "z_position" in self._initial_state:
-            try:
-                if self._mmc.getFocusDevice():
-                    self._mmc.setZPosition(self._initial_state["z_position"])
-            except Exception as e:
-                logger.warning("Failed to restore Z position: %s", e)
+        if focus_dir == FocusDirection.Unknown:
+            _warn_focus_dir(focus_device)
+        else:
+
+            def _move_z() -> None:
+                if target_z is not None:
+                    try:
+                        if self._mmc.getFocusDevice():
+                            self._mmc.setZPosition(target_z)
+                    except Exception as e:
+                        logger.warning("Failed to restore Z position: %s", e)
+
+            if move_z_first:
+                _move_z()
+
+            # restore XY position
+            if "xy_position" in self._initial_state:
+                try:
+                    if self._mmc.getXYStageDevice():
+                        self._mmc.setXYPosition(*self._initial_state["xy_position"])
+                except Exception as e:
+                    logger.warning("Failed to restore XY position: %s", e)
+
+            if not move_z_first:
+                _move_z()
 
         # restore exposure
         if "exposure" in self._initial_state:
@@ -851,3 +887,15 @@ class ImagePayload(NamedTuple):
     image: NDArray
     event: MDAEvent
     metadata: FrameMetaV1 | SummaryMetaV1
+
+
+@cache
+def _warn_focus_dir(focus_device: str) -> None:
+    warnings.warn(
+        "Focus direction is unknown: refusing to restore initial XYZ position "
+        "for safety reasons. Please set FocusDirection in your config file:\n\n"
+        f"  FocusDirection,{focus_device},<1 or -1>\n\n"
+        "Or use the `Hardware Configuration Wizard > Stage Focus Direction`",
+        stacklevel=3,
+        category=RuntimeWarning,
+    )
