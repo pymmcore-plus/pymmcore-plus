@@ -2,10 +2,9 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import useq
-from ome_types import to_xml
 from ome_types.model import (
     OME,
     Channel,
@@ -30,10 +29,8 @@ MDA_EVENT = "mda_event"
 
 
 def create_ome_metadata(
-    summary_metadata: SummaryMetaV1,
-    frame_metadata_list: list[FrameMetaV1],
-    target_format: Literal["model", "xml", "json"] = "model",
-) -> OME | str:
+    summary_metadata: SummaryMetaV1, frame_metadata_list: list[FrameMetaV1]
+) -> OME:
     """Create enhanced OME metadata from summary and frame metadata collections.
 
     This function organizes frame metadata by position and creates separate
@@ -45,9 +42,11 @@ def create_ome_metadata(
         The summary metadata from sequence setup
     frame_metadata_list : list[FrameMetaV1]
         List of frame metadata collected during acquisition
-    target_format : Literal["model", "xml", "json"]
-        The target format for the output, ome-types object ("model"),
-        OME-XML string ("xml"), or OME-JSON string ("json").
+
+    Returns
+    -------
+    OME
+        The OME metadata as an `ome_types.OME` object.
     """
     # create OME model
     ome = OME(uuid=f"urn:uuid:{uuid.uuid4()}")
@@ -56,13 +55,13 @@ def create_ome_metadata(
 
     # if no frame metadata has been collected, return the OME model as it is
     if not frame_metadata_list:
-        return _to_ome_format(ome, target_format)
+        return ome
 
     # extract image information
     image_infos = summary_metadata.get("image_infos")
 
     if image_infos is None:
-        return _to_ome_format(ome, target_format)
+        return ome
 
     # get pixel size from image_infos
     pixel_size_um = 1.0
@@ -74,7 +73,7 @@ def create_ome_metadata(
         width, height = img_info.get("width", 0), img_info.get("height", 0)
 
     if dtype is None:
-        return _to_ome_format(ome, target_format)
+        return ome
 
     acquisition_date = _get_acquisition_date(summary_metadata)
 
@@ -97,6 +96,8 @@ def create_ome_metadata(
 
         if sequence is None or isinstance(sequence, GeneratorMDASequence):
             (max_t, max_z, max_c), channels = _get_pixels_info(position_frames)
+            print(max_t, max_z, max_c, channels)
+
         else:
             (max_t, max_z, max_c), channels = _get_pixels_info_from_sequence(sequence)
 
@@ -161,20 +162,7 @@ def create_ome_metadata(
 
         ome.images.append(image)
 
-    return _to_ome_format(ome, target_format)
-
-
-def _to_ome_format(
-    model: OME, model_format: Literal["model", "xml", "json"]
-) -> OME | str:
-    if model_format == "model":
-        return model
-    elif model_format == "xml":
-        return to_xml(model)
-    elif model_format == "json":
-        return model.model_dump_json()
-    else:
-        raise ValueError(f"Unsupported model_format: {model_format}")
+    return ome
 
 
 def _add_ome_instrument_info(summary_meta: SummaryMetaV1) -> list[Instrument]:

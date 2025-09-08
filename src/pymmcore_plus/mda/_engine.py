@@ -29,6 +29,7 @@ if TYPE_CHECKING:
     from typing import TypeAlias
 
     from numpy.typing import NDArray
+    from ome_types import OME
 
     from pymmcore_plus.core import CMMCorePlus
 
@@ -375,9 +376,7 @@ class MDAEngine(PMDAEngine):
             for dev, prop in event.property_sequences:
                 core.stopPropertySequence(dev, prop)
 
-    def get_ome_metadata(
-        self, target_format: Literal["model", "xml", "json"] = "model"
-    ) -> str | object | None:
+    def get_ome_metadata(self) -> OME | None:
         """Generate OME metadata for the entire sequence.
 
         This method combines the summary metadata from sequence setup with all
@@ -403,9 +402,7 @@ class MDAEngine(PMDAEngine):
             return None
 
         return create_ome_metadata(
-            self._sequence_summary_metadata,
-            self._collected_frame_metadata,
-            target_format,
+            self._sequence_summary_metadata, self._collected_frame_metadata
         )
 
     def get_collected_frame_metadata(self) -> list[FrameMetaV1]:
@@ -671,7 +668,10 @@ class MDAEngine(PMDAEngine):
             return
 
         # Retrieve the last commanded XY position.
-        last_x, last_y = self._mmc._last_xy_position.get(None) or (None, None)  # noqa: SLF001
+        last_x, last_y = self._mmc._last_xy_position.get(None) or (
+            None,
+            None,
+        )
         if (
             not self.force_set_xy_position
             and (event_x is None or event_x == last_x)
