@@ -77,11 +77,12 @@ class MDAEngine(PMDAEngine):
         reports that the events can be sequenced. This can be set after instantiation.
         By default, this is `True`, however in various testing and demo scenarios, you
         may wish to set it to `False` in order to avoid unexpected behavior.
-    restore_initial_state : bool
+    restore_initial_state : bool | None
         Whether to restore the initial hardware state after the MDA sequence completes.
-        If `True` (the default), the engine will capture the initial state (positions,
+        If `True`, the engine will capture the initial state (positions,
         config groups, exposure settings) before the sequence starts and restore it
-        after completion.
+        after completion.  If `None` (the default), `restore_initial_state` will
+        be set to `True` if FocusDirection is known (i.e. not Unknown).
     """
 
     def __init__(
@@ -89,7 +90,7 @@ class MDAEngine(PMDAEngine):
         mmc: CMMCorePlus,
         *,
         use_hardware_sequencing: bool = True,
-        restore_initial_state: bool = True,
+        restore_initial_state: bool | None = None,
     ) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing: bool = use_hardware_sequencing
@@ -103,7 +104,8 @@ class MDAEngine(PMDAEngine):
         self._include_frame_position_metadata: IncludePositionArg = "unsequenced-only"
 
         # whether to restore the initial hardware state after sequence completion
-        self.restore_initial_state: bool = restore_initial_state
+        self.restore_initial_state: bool | None = restore_initial_state
+
         # stored initial state for restoration (if restore_initial_state is True)
         self._initial_state: StateDict = {}
 
@@ -167,6 +169,13 @@ class MDAEngine(PMDAEngine):
         self._af_was_engaged = self._mmc.isContinuousFocusLocked()
 
         # capture initial state if restoration is enabled
+        if self.restore_initial_state is None:
+            fd = self._mmc.getFocusDevice()
+            self.restore_initial_state = (
+                fd is not None
+                and self._mmc.getFocusDirection(fd) != FocusDirection.Unknown
+            )
+
         if self.restore_initial_state:
             self._initial_state = self._capture_state()
 

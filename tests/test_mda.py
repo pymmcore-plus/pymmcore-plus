@@ -513,6 +513,8 @@ def test_restore_initial_state(
 
     _warn_focus_dir.cache_clear()
 
+    assert core.mda.engine
+    core.mda.engine.restore_initial_state = True
     core.setFocusDirection(core.getFocusDevice(), focus_direction)
     core.setXYPosition(initial_x, initial_y)
     core.setZPosition(initial_z)
