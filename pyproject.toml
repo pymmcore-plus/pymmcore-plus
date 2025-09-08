@@ -201,6 +201,7 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@overload",
     "except ImportError",
+    "except Exception as e:",  # ok not to cover bare exception catches in tests
     "raise AssertionError",
     "\\.\\.\\.",
     "if __name__ == .__main__.:",
