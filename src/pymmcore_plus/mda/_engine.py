@@ -40,6 +40,7 @@ if TYPE_CHECKING:
         xy_position: Sequence[float]
         z_position: float
         exposure: float
+        autoshutter: bool
         config_groups: dict[str, str]
 
 
@@ -165,7 +166,7 @@ class MDAEngine(PMDAEngine):
 
         # capture initial state if restoration is enabled
         if self.restore_initial_state:
-            self._capture_initial_state()
+            self._initial_state = self._capture_state()
 
         if px_size := self._mmc.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
@@ -390,37 +391,45 @@ class MDAEngine(PMDAEngine):
         if self.restore_initial_state and self._initial_state:
             self._restore_initial_state()
 
-    def _capture_initial_state(self) -> None:
+    def _capture_state(self) -> StateDict:
         """Capture the current hardware state for later restoration."""
-        self._initial_state = {"config_groups": {}}
+        state: StateDict = {}
 
         try:
             # capture XY position
             if self._mmc.getXYStageDevice():
-                self._initial_state["xy_position"] = self._mmc.getXYPosition()
+                state["xy_position"] = self._mmc.getXYPosition()
         except Exception as e:
             logger.warning("Failed to capture XY position: %s", e)
 
         try:
             # capture Z position
             if self._mmc.getFocusDevice():
-                self._initial_state["z_position"] = self._mmc.getZPosition()
+                state["z_position"] = self._mmc.getZPosition()
         except Exception as e:
             logger.warning("Failed to capture Z position: %s", e)
 
         try:
-            self._initial_state["exposure"] = self._mmc.getExposure()
+            state["exposure"] = self._mmc.getExposure()
         except Exception as e:
             logger.warning("Failed to capture exposure setting: %s", e)
 
         # capture config group states
         try:
-            config_groups = self._mmc.getAvailableConfigGroups()
-            for group in config_groups:
+            state_groups = state.setdefault("config_groups", {})
+            for group in self._mmc.getAvailableConfigGroups():
                 if current_config := self._mmc.getCurrentConfig(group):
-                    self._initial_state["config_groups"][group] = current_config
+                    state_groups[group] = current_config
         except Exception as e:
             logger.warning("Failed to get available config groups: %s", e)
+
+        # capture autoshutter state
+        try:
+            state["autoshutter"] = self._mmc.getAutoShutter()
+        except Exception as e:
+            logger.warning("Failed to capture autoshutter state: %s", e)
+
+        return state
 
     def _restore_initial_state(self) -> None:
         """Restore the hardware state that was captured before the sequence."""
@@ -458,6 +467,13 @@ class MDAEngine(PMDAEngine):
                 logger.warning(
                     "Failed to restore config group %s to %s: %s", key, value, e
                 )
+
+        # restore autoshutter state
+        if "autoshutter" in self._initial_state:
+            try:
+                self._mmc.setAutoShutter(self._initial_state["autoshutter"])
+            except Exception as e:
+                logger.warning("Failed to restore autoshutter state: %s", e)
 
         self._mmc.waitForSystem()
         # clear the state after restoration
