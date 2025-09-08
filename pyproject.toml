@@ -177,6 +177,7 @@ filterwarnings = [
     "ignore:Failed to disconnect::pytestqt",
     "ignore:numpy.core.multiarray is deprecated",
     "ignore:Failing to pass a value to the 'type_params' parameter",
+    "ignore:Focus direction is unknown"
 ]
 markers = ["run_last: mark a test to run last"]
 
@@ -204,6 +205,7 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@overload",
     "except ImportError",
+    "except Exception as e:",  # ok not to cover bare exception catches in tests
     "raise AssertionError",
     "\\.\\.\\.",
     "if __name__ == .__main__.:",

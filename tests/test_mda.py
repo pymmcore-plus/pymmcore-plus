@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+from contextlib import nullcontext
 from queue import Queue
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, Mock, patch
@@ -9,7 +10,8 @@ import pytest
 import useq
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
-from pymmcore_plus import CMMCorePlus
+from pymmcore_plus import CMMCorePlus, FocusDirection
+from pymmcore_plus.mda._engine import _warn_focus_dir
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
@@ -496,3 +498,117 @@ def test_custom_action(core: CMMCorePlus) -> None:
     """Make sure we can handle custom actions gracefully"""
 
     core.mda.run([MDAEvent(action=useq.CustomAction())])
+
+
+@pytest.mark.parametrize("focus_direction", list(FocusDirection), ids=repr)
+def test_restore_initial_state(
+    core: CMMCorePlus, focus_direction: FocusDirection
+) -> None:
+    """Test that initial hardware state is restored after MDA completion."""
+
+    # Set initial state
+    initial_x, initial_y = 100.0, 200.0
+    initial_z = 0
+    initial_exposure = 10.0
+
+    _warn_focus_dir.cache_clear()
+
+    assert core.mda.engine
+    core.mda.engine.restore_initial_state = True
+    core.setFocusDirection(core.getFocusDevice(), focus_direction)
+    core.setXYPosition(initial_x, initial_y)
+    core.setZPosition(initial_z)
+    core.setExposure(initial_exposure)
+    core.waitForSystem()
+
+    # Set initial config - use "Channel" group if available
+    initial_config = None
+    configs = core.getAvailableConfigs("Channel")
+    if configs:
+        initial_config = configs[0]
+        core.setConfig("Channel", initial_config)
+
+    # Create an MDA sequence that changes the state
+    changed_x, changed_y, changed_z = 300.0, 400.0, 100.0
+    changed_exposure = 20.0
+
+    events = [
+        MDAEvent(
+            x_pos=changed_x,
+            y_pos=changed_y,
+            z_pos=changed_z,
+            exposure=changed_exposure,
+            channel="Cy5",
+        )
+    ]
+
+    # Run the MDA
+    with (
+        pytest.warns(RuntimeWarning, match="Focus direction is unknown")
+        if focus_direction == FocusDirection.Unknown
+        else nullcontext()
+    ):
+        core.mda.run(events)
+
+    # Verify state was restored
+    restored_x, restored_y = core.getXYPosition()
+    restored_z = core.getZPosition()
+    restored_exposure = core.getExposure()
+
+    if focus_direction != FocusDirection.Unknown:
+        # Allow for small floating point differences
+        assert abs(restored_x - initial_x) < 0.1
+        assert abs(restored_y - initial_y) < 0.1
+        assert abs(restored_z - initial_z) < 0.1
+    else:
+        # If focus direction is unknown, XYZ should NOT be restored
+        assert abs(restored_z - changed_z) < 0.1
+        assert abs(restored_x - changed_x) < 0.1
+        assert abs(restored_y - changed_y) < 0.1
+
+    assert abs(restored_exposure - initial_exposure) < 0.1
+
+    # Check config group restoration if we set one
+    if initial_config and "Channel" in core.getAvailableConfigGroups():
+        restored_config = core.getCurrentConfig("Channel")
+        assert restored_config == initial_config, (
+            f"Config not restored: {restored_config} != {initial_config}"
+        )
+
+
+@pytest.mark.parametrize("focus_direction", list(FocusDirection))
+def test_restore_initial_state_enabled_by_default(
+    core: CMMCorePlus, focus_direction: FocusDirection
+) -> None:
+    """Test that state restoration is enabled by default."""
+
+    # Set initial state
+    initial_x, initial_y = 100.0, 200.0
+    initial_z = 0
+
+    core.setFocusDirection(core.getFocusDevice(), focus_direction)
+    core.setXYPosition(initial_x, initial_y)
+    core.setZPosition(initial_z)
+    core.waitForSystem()
+
+    # Create an MDA sequence that changes the state
+    changed_x, changed_y, changed_z = 300.0, 400.0, 100.0
+    events = [MDAEvent(x_pos=changed_x, y_pos=changed_y, z_pos=changed_z)]
+
+    # Run the MDA
+    core.mda.run(events)
+
+    # Verify state WAS restored (back to initial values)
+    final_x, final_y = core.getXYPosition()
+    final_z = core.getZPosition()
+
+    # State should be restored to the initial values
+    if focus_direction != FocusDirection.Unknown:
+        assert abs(final_x - initial_x) < 0.1
+        assert abs(final_y - initial_y) < 0.1
+        assert abs(final_z - initial_z) < 0.1
+    else:
+        # If focus direction is unknown, XYZ should NOT be restored
+        assert abs(final_x - changed_x) < 0.1
+        assert abs(final_y - changed_y) < 0.1
+        assert abs(final_z - changed_z) < 0.1

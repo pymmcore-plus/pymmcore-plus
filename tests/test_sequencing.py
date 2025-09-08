@@ -42,7 +42,7 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     EXPECTED_SEQUENCES = 4  # timeseries at each of 2 positions, 2 channels
 
     core_mock = cast("CMMCorePlus", MagicMock(wraps=core))  # so we can spy on all_calls
-    engine = MDAEngine(mmc=core_mock)
+    engine = MDAEngine(mmc=core_mock, restore_initial_state=False)
 
     engine.use_hardware_sequencing = False
     engine.force_set_xy_position = False
