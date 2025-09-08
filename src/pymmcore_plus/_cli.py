@@ -7,9 +7,9 @@ import sys
 import time
 from contextlib import suppress
 from pathlib import Path
+from platform import system
 from typing import Optional, Union, cast
 
-from pymmcore_plus._util import get_device_interface_version
 from pymmcore_plus.core._device import Device
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
@@ -26,9 +26,9 @@ import pymmcore_plus
 from pymmcore_plus._build import DEFAULT_PACKAGES, build
 from pymmcore_plus._logger import configure_logging
 from pymmcore_plus._util import USER_DATA_MM_PATH
-from pymmcore_plus.install import PLATFORM
 
 app = typer.Typer(name="mmcore", no_args_is_help=True)
+PLATFORM = system()
 
 
 def _show_version_and_exit(value: bool) -> None:
@@ -103,32 +103,44 @@ def clean(
 
 @app.command(name="list")
 def _list() -> None:
-    """Show all Micro-Manager installs downloaded by pymmcore-plus."""
+    """Show all discovered Micro-Manager installations."""
+    from pymmcore_plus import _discovery
+
     configure_logging(stderr_level="CRITICAL")
-    found: dict[Path, list[str]] = {}
+    found: dict[Path, list[tuple[str, _discovery.DiscoveredMM]]] = {}
     with suppress(Exception):
-        for p in pymmcore_plus.find_micromanager(return_first=False):
-            pth = Path(p)
-            found.setdefault(pth.parent, []).append(pth.name)
+        for dm in _discovery.discover_mm():
+            pth = Path(dm.path)
+            found.setdefault(pth.parent, []).append((pth.name, dm))
+
+    active_mm = _discovery.find_micromanager(return_first=True)
+    required_div = _discovery.PYMMCORE_DIV
 
     if found:
-        first = True
+        print(f"[magenta]Required pymmcore device interface version: {required_div}")
         for parent, items in found.items():
-            print(f":file_folder:[bold green] {parent}")
-            for item in items:
-                version = ""
-                for _lib in (parent / item).glob("*_dal_*"):
-                    with suppress(Exception):
-                        div = get_device_interface_version(_lib)
-                        version = f" (Dev. Interface {div})"
-                        break
-                bullet = "   [bold yellow]*" if first else "   •"
-                using = " [bold blue](active)" if first else ""
-                print(f"{bullet} [cyan]{item}{version}{using}")
-                first = False
+            print(f"\n:file_folder:[bold green] {parent}")
+            for item_name, dm in items:
+                version = f" (DIV {dm.device_interface})" if dm.device_interface else ""
+                is_active = str(dm.path) == active_mm
+                is_compatible = dm.div_compatible
+
+                # Choose bullet and status
+                bullet = "   •"
+                status = ""
+                if is_active:
+                    bullet = "   [bold yellow]➤"
+                    if is_compatible:
+                        status = " [bold blue](active)[/bold blue]"
+                    else:
+                        status = " [bold red](active, incompatible!)[/bold red]"
+                else:
+                    status = " [red](incompatible)[/red]"
+
+                print(f"{bullet} [cyan]{item_name}{version}{status}")
     else:
-        print(":x: [bold red]There are no pymmcore-plus Micro-Manager files.")
-        print("[magenta]run `mmcore install` to install a version of Micro-Manager")
+        print(":x: [bold red]No Micro-Manager installations found.")
+        print("[magenta]Run `mmcore install` to install a version of Micro-Manager")
 
 
 @app.command()
@@ -174,18 +186,24 @@ def install(
         help="Do not use rich output. Useful for scripting.",
         show_default=False,
     ),
+    test_adapters: bool = typer.Option(
+        False,
+        "--test-adapters",
+        help="Install only test adapters (e.g. DemoCamera and others for testing).",
+    ),
 ) -> None:
     """Install Micro-Manager Device adapters from <https://download.micro-manager.org>."""
     import pymmcore_plus.install
 
+    kwargs = {}
     if plain_output:
 
         def _log_msg(text: str, color: str = "", emoji: str = "") -> None:
             print(text)
 
-        pymmcore_plus.install.install(dest, release, log_msg=_log_msg)
-    else:
-        pymmcore_plus.install.install(dest, release)
+        kwargs["log_msg"] = _log_msg
+
+    pymmcore_plus.install.install(dest, release, test_adapters=test_adapters, **kwargs)
 
 
 @app.command()
@@ -414,7 +432,7 @@ def use(
     ),
 ) -> None:
     """Change the currently used Micro-manager version/path."""
-    from pymmcore_plus._util import use_micromanager
+    from pymmcore_plus._discovery import use_micromanager
 
     _pth = Path(pattern)
     if _pth.exists():
