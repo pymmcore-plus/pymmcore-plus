@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import datetime
 from typing import TYPE_CHECKING, Literal
-from pymmcore_plus.mda._runner import GeneratorMDASequence
+
 import useq
 from ome_types import to_xml
 from ome_types.model import (
@@ -18,6 +18,8 @@ from ome_types.model import (
     UnitsLength,
     UnitsTime,
 )
+
+from pymmcore_plus.mda._runner import GeneratorMDASequence
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
