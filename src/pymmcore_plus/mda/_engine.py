@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import time
+import warnings
 from contextlib import suppress
+from functools import cache
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
@@ -11,7 +13,7 @@ from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
-from pymmcore_plus.core._constants import Keyword
+from pymmcore_plus.core._constants import FocusDirection, Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent, iter_sequenced_events
 from pymmcore_plus.metadata import (
     FrameMetaV1,
@@ -28,12 +30,20 @@ if TYPE_CHECKING:
     from typing import TypeAlias
 
     from numpy.typing import NDArray
+    from typing_extensions import TypedDict
 
     from pymmcore_plus.core import CMMCorePlus
 
     from ._protocol import PImagePayload
 
     IncludePositionArg: TypeAlias = Literal[True, False, "unsequenced-only"]
+
+    class StateDict(TypedDict, total=False):
+        xy_position: Sequence[float]
+        z_position: float
+        exposure: float
+        autoshutter: bool
+        config_groups: dict[str, str]
 
 
 # these are SLM devices that have a known pixel_on_value.
@@ -67,9 +77,21 @@ class MDAEngine(PMDAEngine):
         reports that the events can be sequenced. This can be set after instantiation.
         By default, this is `True`, however in various testing and demo scenarios, you
         may wish to set it to `False` in order to avoid unexpected behavior.
+    restore_initial_state : bool | None
+        Whether to restore the initial hardware state after the MDA sequence completes.
+        If `True`, the engine will capture the initial state (positions,
+        config groups, exposure settings) before the sequence starts and restore it
+        after completion.  If `None` (the default), `restore_initial_state` will
+        be set to `True` if FocusDirection is known (i.e. not Unknown).
     """
 
-    def __init__(self, mmc: CMMCorePlus, use_hardware_sequencing: bool = True) -> None:
+    def __init__(
+        self,
+        mmc: CMMCorePlus,
+        *,
+        use_hardware_sequencing: bool = True,
+        restore_initial_state: bool | None = None,
+    ) -> None:
         self._mmc = mmc
         self.use_hardware_sequencing: bool = use_hardware_sequencing
         # if True, always set XY position, even if the commanded position is the same
@@ -80,6 +102,12 @@ class MDAEngine(PMDAEngine):
         # whether to include position metadata when fetching on-frame metadata
         # omitted by default when performing triggered acquisition because it's slow.
         self._include_frame_position_metadata: IncludePositionArg = "unsequenced-only"
+
+        # whether to restore the initial hardware state after sequence completion
+        self.restore_initial_state: bool | None = restore_initial_state
+
+        # stored initial state for restoration (if restore_initial_state is True)
+        self._initial_state: StateDict = {}
 
         # used to check if the hardware autofocus is engaged when the sequence begins.
         # if it is, we will re-engage it after the autofocus action (if successful).
@@ -139,6 +167,17 @@ class MDAEngine(PMDAEngine):
         self._update_config_device_props()
         # get if the autofocus is engaged at the start of the sequence
         self._af_was_engaged = self._mmc.isContinuousFocusLocked()
+
+        # capture initial state if restoration is enabled
+        if self.restore_initial_state is None:
+            fd = self._mmc.getFocusDevice()
+            self.restore_initial_state = (
+                fd is not None
+                and self._mmc.getFocusDirection(fd) != FocusDirection.Unknown
+            )
+
+        if self.restore_initial_state:
+            self._initial_state = self._capture_state()
 
         if px_size := self._mmc.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
@@ -359,7 +398,131 @@ class MDAEngine(PMDAEngine):
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
-        pass
+        # restore initial state if enabled and state was captured
+        if self.restore_initial_state and self._initial_state:
+            self._restore_initial_state()
+
+    def _capture_state(self) -> StateDict:
+        """Capture the current hardware state for later restoration."""
+        state: StateDict = {}
+
+        try:
+            # capture XY position
+            if self._mmc.getXYStageDevice():
+                state["xy_position"] = self._mmc.getXYPosition()
+        except Exception as e:
+            logger.warning("Failed to capture XY position: %s", e)
+
+        try:
+            # capture Z position
+            if self._mmc.getFocusDevice():
+                state["z_position"] = self._mmc.getZPosition()
+        except Exception as e:
+            logger.warning("Failed to capture Z position: %s", e)
+
+        try:
+            state["exposure"] = self._mmc.getExposure()
+        except Exception as e:
+            logger.warning("Failed to capture exposure setting: %s", e)
+
+        # capture config group states
+        try:
+            state_groups = state.setdefault("config_groups", {})
+            for group in self._mmc.getAvailableConfigGroups():
+                if current_config := self._mmc.getCurrentConfig(group):
+                    state_groups[group] = current_config
+        except Exception as e:
+            logger.warning("Failed to get available config groups: %s", e)
+
+        # capture autoshutter state
+        try:
+            state["autoshutter"] = self._mmc.getAutoShutter()
+        except Exception as e:
+            logger.warning("Failed to capture autoshutter state: %s", e)
+
+        return state
+
+    def _restore_initial_state(self) -> None:
+        """Restore the hardware state that was captured before the sequence."""
+        if not self._initial_state:
+            return
+
+        # !!! We need to be careful about the order of Z and XY restoration:
+        #
+        # If FocusDirection is Unknown, we cannot safely restore Z *or* XY stage
+        # positions: we simply refuse and warn.
+        #
+        # If focus_dir is TowardSample, and we are restoring a Z-position that is
+        # *lower* than the current position or
+        # if focus_dir is AwayFromSample, and we are restoring a Z-position that is
+        # *higher* than the current position, then we need to move Z *before* moving XY,
+        # otherwise we may crash the objective into the sample.
+        # Otherwise, we should move XY first, then Z.
+        target_z = self._initial_state.get("z_position")
+        move_z_first = False
+        focus_dir = FocusDirection.Unknown
+        if target_z is not None and (focus_device := self._mmc.getFocusDevice()):
+            focus_dir = self._mmc.getFocusDirection(focus_device)
+            cur_z = self._mmc.getZPosition()
+            # focus_dir TowardSample => increasing position brings obj. closer to sample
+            if cur_z > target_z:
+                if focus_dir == FocusDirection.TowardSample:
+                    move_z_first = True
+            elif focus_dir == FocusDirection.AwayFromSample:
+                move_z_first = True
+
+        if focus_dir == FocusDirection.Unknown:
+            _warn_focus_dir(focus_device)
+        else:
+
+            def _move_z() -> None:
+                if target_z is not None:
+                    try:
+                        if self._mmc.getFocusDevice():
+                            self._mmc.setZPosition(target_z)
+                    except Exception as e:
+                        logger.warning("Failed to restore Z position: %s", e)
+
+            if move_z_first:
+                _move_z()
+
+            # restore XY position
+            if "xy_position" in self._initial_state:
+                try:
+                    if self._mmc.getXYStageDevice():
+                        self._mmc.setXYPosition(*self._initial_state["xy_position"])
+                except Exception as e:
+                    logger.warning("Failed to restore XY position: %s", e)
+
+            if not move_z_first:
+                _move_z()
+
+        # restore exposure
+        if "exposure" in self._initial_state:
+            try:
+                self._mmc.setExposure(self._initial_state["exposure"])
+            except Exception as e:
+                logger.warning("Failed to restore exposure setting: %s", e)
+
+        # restore config group states
+        for key, value in self._initial_state.get("config_groups", {}).items():
+            try:
+                self._mmc.setConfig(key, value)
+            except Exception as e:
+                logger.warning(
+                    "Failed to restore config group %s to %s: %s", key, value, e
+                )
+
+        # restore autoshutter state
+        if "autoshutter" in self._initial_state:
+            try:
+                self._mmc.setAutoShutter(self._initial_state["autoshutter"])
+            except Exception as e:
+                logger.warning("Failed to restore autoshutter state: %s", e)
+
+        self._mmc.waitForSystem()
+        # clear the state after restoration
+        self._initial_state = {}
 
     # ===================== Sequenced Events =====================
 
@@ -733,3 +896,15 @@ class ImagePayload(NamedTuple):
     image: NDArray
     event: MDAEvent
     metadata: FrameMetaV1 | SummaryMetaV1
+
+
+@cache
+def _warn_focus_dir(focus_device: str) -> None:
+    warnings.warn(
+        "Focus direction is unknown: refusing to restore initial XYZ position "
+        "for safety reasons. Please set FocusDirection in your config file:\n\n"
+        f"  FocusDirection,{focus_device},<1 or -1>\n\n"
+        "Or use the `Hardware Configuration Wizard > Stage Focus Direction`",
+        stacklevel=3,
+        category=RuntimeWarning,
+    )
