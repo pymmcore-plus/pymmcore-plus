@@ -23,10 +23,11 @@ logger = logging.getLogger(__name__)
 class PyDeviceManager:
     """Manages loaded Python devices."""
 
-    __slots__ = ("_devices",)
+    __slots__ = ("_devices", "_executor")
 
     def __init__(self) -> None:
         self._devices: dict[str, Device] = {}
+        self._executor = ThreadPoolExecutor()
 
     def load(self, label: str, device: Device, proxy: CMMCoreProxy) -> None:
         """Load a device and assign it a label."""
@@ -52,11 +53,9 @@ class PyDeviceManager:
             return  # pragma: no cover
 
         # Initialize all devices in parallel
-        with ThreadPoolExecutor() as executor:
-            for future in as_completed(
-                executor.submit(self.initialize, label) for label in labels
-            ):
-                future.result()
+        futures = [self._executor.submit(self.initialize, label) for label in labels]
+        for future in as_completed(futures):
+            future.result()
 
     def wait_for(
         self, label: str, timeout_ms: float = 5000, polling_interval: float = 0.01
@@ -75,16 +74,21 @@ class PyDeviceManager:
                 )
             time.sleep(polling_interval)
 
-    def wait_for_device_type(self, dev_type: int, timeout_ms: float = 5000) -> None:
+    def wait_for_device_type(
+        self, dev_type: int, timeout_ms: float = 5000, *, parallel: bool = True
+    ) -> None:
         if not (labels := self.get_labels_of_type(dev_type)):
             return  # pragma: no cover
-        # Wait for all python devices of the given type in parallel
-        with ThreadPoolExecutor() as executor:
+        if not parallel:
+            for lbl in labels:
+                self.wait_for(lbl, timeout_ms)
+        else:
+            # Wait for all python devices of the given type in parallel
             # it's critical that this be a list comprehension,
             # not a generator expression, otherwise the executor may be shut down
             # before any tasks are actually submitted
             futures = [
-                executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
+                self._executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
             ]
             for future in as_completed(futures):
                 future.result()  # Raises any exceptions from wait_for_device
@@ -173,3 +177,6 @@ class PyDeviceManager:
             for label, device in self._devices.items()
             if dev_type == DeviceType.Any or device.type() == dev_type
         )
+
+    def __del__(self) -> None:
+        self._executor.shutdown(wait=False)
