@@ -5,6 +5,7 @@ import useq
 from rich import print
 
 from pymmcore_plus import CMMCorePlus
+from ome_types import validate_xml
 
 
 def test_ome_generation():
@@ -19,24 +20,41 @@ def test_ome_generation():
 
     mmc.setExposure(20)
 
+    # sequence = useq.MDASequence(
+    #     axis_order="tpgzc",
+    #     time_plan={"interval": 0.5, "loops": 2},
+    #     stage_positions=[
+    #         {"x": 100, "y": 100, "name": "FirstPosition"},
+    #         useq.AbsolutePosition(
+    #             x=200,
+    #             y=200,
+    #         )
+    #     ],
+    #     # z_plan={"range": 3.0, "step": 1.0},
+    #     channels=[
+    #         {"config": "DAPI"},
+    #         {"config": "FITC"},
+    #         {"config": "DAPI"},
+    #     ],  # 2 channels
+    #     grid_plan=useq.GridRowsColumns(rows=2, columns=2),
+    # )
+
     sequence = useq.MDASequence(
         axis_order="tpgzc",
-        time_plan={"interval": 0.5, "loops": 2},
-        stage_positions=[
-            {"x": 100, "y": 100, "name": "FirstPosition"},
-            useq.AbsolutePosition(
-                x=200,
-                y=200,
-            )
-        ],
+        # time_plan={"interval": 0.5, "loops": 2},
+        stage_positions=useq.WellPlatePlan(
+            plate=useq.WellPlate.from_str("96-well"),
+            a1_center_xy=(0, 0),
+            selected_wells=((0, 0, 0), (0, 1, 2)),
+            ),
         # z_plan={"range": 3.0, "step": 1.0},
         channels=[
             {"config": "DAPI"},
             {"config": "FITC"},
-            {"config": "DAPI"},
         ],  # 2 channels
-        grid_plan=useq.GridRowsColumns(rows=2, columns=2),
     )
+
+
 
     # sequence = [
     #     useq.MDAEvent(
@@ -70,7 +88,7 @@ def test_ome_generation():
     if ome:
         print()
         print(ome.to_xml())
-
+        validate_xml(ome.to_xml())
 
 if __name__ == "__main__":
     test_ome_generation()
