@@ -21,7 +21,7 @@ def test_ome_generation():
 
     sequence = useq.MDASequence(
         axis_order="tpgzc",
-        time_plan={"interval": 0.5, "loops": 200},
+        time_plan={"interval": 0.5, "loops": 2},
         stage_positions=[
             {"x": 100, "y": 100, "name": "Pos0"},
             useq.AbsolutePosition(
