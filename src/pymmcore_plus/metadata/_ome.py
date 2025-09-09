@@ -88,6 +88,12 @@ def create_ome_metadata(
     # group frames by position (handling 'g' axis if present)
     positions_map = _group_frames_by_position(frame_metadata_list)
 
+    # create a mapping from position index to image ID
+    position_to_image_id: dict[int, str] = {}
+    plate_plan: useq.WellPlatePlan | None = None
+    if (plate_plan := _get_plate_plan(sequence)) is not None:
+        position_to_image_id = _positions_to_image_ids(positions_map)
+
     # get acquisition date from summary metadata
     acquisition_date = _get_acquisition_date(summary_metadata)
 
@@ -106,9 +112,15 @@ def create_ome_metadata(
             continue
 
         if sequence is None or isinstance(sequence, GeneratorMDASequence):
-            (max_t, max_z, max_c), channels = _get_pixels_info(position_frames)
+            (max_t, max_z, max_c), channels = _get_pixels_info(
+                position_frames, image_id
+            )
         else:
-            (max_t, max_z, max_c), channels = _get_pixels_info_from_sequence(sequence)
+            (max_t, max_z, max_c), channels = _get_pixels_info_from_sequence(
+                sequence, image_id
+            )
+
+        from ome_types.model import MetadataOnly
 
         pixels = Pixels(
             id=f"Pixels:{image_id}",
@@ -124,9 +136,9 @@ def create_ome_metadata(
             physical_size_y=pixel_size_um,
             physical_size_y_unit=UnitsLength.MICROMETER,
             channels=channels,
+            metadata_only=MetadataOnly(),
+            planes=_get_planes(position_frames),
         )
-
-        pixels.planes = _get_planes(position_frames)
 
         image = Image(
             acquisition_date=acquisition_date,
@@ -138,14 +150,45 @@ def create_ome_metadata(
         ome.images.append(image)
 
     # add plate information if available
-    if (
-        sequence is not None
-        and (stage_pos := sequence.stage_positions)
-        and isinstance(stage_pos, useq.WellPlatePlan)
-    ):
-        ome.plates = [_get_plate(stage_pos)]
+    if plate_plan is not None:
+        ome.plates = [_get_plate(plate_plan, position_to_image_id)]
 
     return ome
+
+
+def _get_plate_plan(
+    sequence: useq.MDASequence | dict | None,
+) -> useq.WellPlatePlan | None:
+    """Return the plate plan from the MDA sequence if it exists."""
+    if sequence is None:
+        return
+    if isinstance(sequence, dict):
+        sequence = useq.MDASequence(**sequence)
+    if (stage_pos := sequence.stage_positions) is not None and isinstance(
+        stage_pos, useq.WellPlatePlan
+    ):
+        return stage_pos
+    return
+
+
+def _positions_to_image_ids(
+    positions_map: dict[str, list[FrameMetaV1]],
+) -> dict[int, str]:
+    """Create a mapping from position index to image ID."""
+    position_to_image_id: dict[int, str] = {}
+
+    for key in positions_map:
+        # parse position key to extract name and indices
+        position_name, image_id = _parse_position_key(key)
+        position_frames = positions_map[key]
+
+        # extract position index from the first frame
+        if position_frames:
+            mda_event = _get_mda_event(position_frames[0])
+            if mda_event is not None:
+                pos_index = mda_event.index.get("p", 0)
+                position_to_image_id[pos_index] = image_id
+    return position_to_image_id
 
 
 def _load_summary_metadata(metadata_path: Path | str) -> SummaryMetaV1:
@@ -217,7 +260,9 @@ def _get_mda_sequence(
     return ev.sequence
 
 
-def _get_plate(plate_plan: useq.WellPlatePlan) -> Plate:
+def _get_plate(
+    plate_plan: useq.WellPlatePlan, position_to_image_id: dict[int, str]
+) -> Plate:
     """Create a Plate object from a useq.WellPlatePlan."""
     wells: list[Well] = []
 
@@ -241,6 +286,8 @@ def _get_plate(plate_plan: useq.WellPlatePlan) -> Plate:
         # create WellSample objects for each acquisition in this well
         well_samples = []
         for acq_index in acquisition_indices:
+            # Use the actual image ID from the mapping
+            image_id = position_to_image_id.get(acq_index, str(acq_index))
             well_samples.append(
                 WellSample(
                     id=f"WellSample:{acq_index}",
@@ -249,7 +296,7 @@ def _get_plate(plate_plan: useq.WellPlatePlan) -> Plate:
                     position_x_unit=UnitsLength.MICROMETER,
                     position_y_unit=UnitsLength.MICROMETER,
                     index=acq_index,
-                    image_ref=ImageRef(id=f"Image:{acq_index - 1}"),
+                    image_ref=ImageRef(id=f"Image:{image_id}"),
                 )
             )
 
@@ -410,6 +457,7 @@ def _get_mda_event(frame_meta: FrameMetaV1) -> useq.MDAEvent | None:
 
 def _get_pixels_info(
     pos_metadata: list[FrameMetaV1],
+    image_id: str,
 ) -> tuple[tuple[int, int, int], list[Channel]]:
     """Get the position information from position metadata.
 
@@ -434,10 +482,10 @@ def _get_pixels_info(
         max_z = max(max_z, z_idx)
         max_c = max(max_c, c_idx)
 
-        # create channel if not exists
+        # create channel if not exists - use image_id to make globally unique
         if c_idx not in channels and (ch := mda_event.channel) is not None:
             channels[c_idx] = Channel(
-                id=f"Channel:{c_idx}",
+                id=f"Channel:{image_id}:{c_idx}",
                 name=ch.config,
                 samples_per_pixel=1,
             )
@@ -449,6 +497,7 @@ def _get_pixels_info(
 
 def _get_pixels_info_from_sequence(
     sequence: useq.MDASequence | dict,
+    image_id: str,
 ) -> tuple[tuple[int, int, int], list[Channel]]:
     """Get the position information from a useq.MDASequence."""
     if isinstance(sequence, dict):
@@ -459,7 +508,7 @@ def _get_pixels_info_from_sequence(
     for idx, ch in enumerate(sequence.channels):
         channels.append(
             Channel(
-                id=f"Channel:{idx}",
+                id=f"Channel:{image_id}:{idx}",
                 name=ch.config,
                 samples_per_pixel=1,
             )

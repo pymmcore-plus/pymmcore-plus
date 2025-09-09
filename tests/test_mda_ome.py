@@ -20,67 +20,81 @@ def test_ome_generation():
 
     mmc.setExposure(20)
 
-    # sequence = useq.MDASequence(
-    #     axis_order="tpgzc",
-    #     time_plan={"interval": 0.5, "loops": 2},
-    #     stage_positions=[
-    #         {"x": 100, "y": 100, "name": "FirstPosition"},
-    #         useq.AbsolutePosition(
-    #             x=200,
-    #             y=200,
-    #         )
-    #     ],
-    #     # z_plan={"range": 3.0, "step": 1.0},
-    #     channels=[
-    #         {"config": "DAPI"},
-    #         {"config": "FITC"},
-    #         {"config": "DAPI"},
-    #     ],  # 2 channels
-    #     grid_plan=useq.GridRowsColumns(rows=2, columns=2),
-    # )
-
-    sequence = useq.MDASequence(
+    sequence1 = useq.MDASequence(
         axis_order="tpgzc",
-        # time_plan={"interval": 0.5, "loops": 2},
+        time_plan={"interval": 0.5, "loops": 2},
+        stage_positions=[
+            {"x": 100, "y": 100, "name": "FirstPosition"},
+            useq.AbsolutePosition(
+                x=200,
+                y=200,
+            )
+        ],
+        z_plan={"range": 3.0, "step": 1.0},
+        channels=[
+            {"config": "DAPI"},
+            {"config": "FITC"},
+            {"config": "DAPI"},
+        ],  # 2 channels
+    )
+
+    sequence2 = useq.MDASequence(
+        axis_order="tpgzc",
+        time_plan={"interval": 0.5, "loops": 2},
+        stage_positions=[
+            {"x": 100, "y": 100, "name": "FirstPosition"},
+            useq.AbsolutePosition(
+                x=200,
+                y=200,
+            )
+        ],
+        channels=[
+            {"config": "DAPI"},
+            {"config": "FITC"},
+            {"config": "DAPI"},
+        ],  # 2 channels
+        grid_plan=useq.GridRowsColumns(rows=2, columns=2),
+    )
+
+    sequence3 = useq.MDASequence(
+        axis_order="tpgzc",
         stage_positions=useq.WellPlatePlan(
             plate=useq.WellPlate.from_str("96-well"),
             a1_center_xy=(0, 0),
             selected_wells=((0, 0, 0), (0, 1, 2)),
             ),
-        # z_plan={"range": 3.0, "step": 1.0},
+        z_plan={"range": 3.0, "step": 1.0},
         channels=[
             {"config": "DAPI"},
             {"config": "FITC"},
         ],  # 2 channels
     )
 
+    sequence4 = [
+        useq.MDAEvent(
+            x_pos=10,
+            y_pos=3,
+            pos_name="p0",
+            channel={"config": "DAPI", "exposure": 10},
+            index={"c": 0},
+        ),
+        useq.MDAEvent(
+            x_pos=11,
+            y_pos=3,
+            pos_name="p0",
+            channel={"config": "FITC", "exposure": 10},
+            index={"c": 1},
+        ),
+        useq.MDAEvent(
+            x_pos=12,
+            y_pos=3,
+            pos_name="p0",
+            channel={"config": "DAPI", "exposure": 10},
+            index={"c": 0},
+        ),
+    ]
 
-
-    # sequence = [
-    #     useq.MDAEvent(
-    #         x_pos=10,
-    #         y_pos=3,
-    #         pos_name="p0",
-    #         channel={"config": "DAPI", "exposure": 10},
-    #         index={"c": 0},
-    #     ),
-    #     useq.MDAEvent(
-    #         x_pos=11,
-    #         y_pos=3,
-    #         pos_name="p0",
-    #         channel={"config": "FITC", "exposure": 10},
-    #         index={"c": 1},
-    #     ),
-    #     useq.MDAEvent(
-    #         x_pos=12,
-    #         y_pos=3,
-    #         pos_name="p0",
-    #         channel={"config": "DAPI", "exposure": 10},
-    #         index={"c": 0},
-    #     ),
-    # ]
-
-    mmc.mda.run(sequence)
+    mmc.mda.run(sequence4)
 
     assert mmc.mda.engine
     ome = mmc.mda.engine.get_ome_metadata()
