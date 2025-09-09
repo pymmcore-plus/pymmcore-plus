@@ -19,49 +19,49 @@ def test_ome_generation():
 
     mmc.setExposure(20)
 
-    # sequence = useq.MDASequence(
-    #     axis_order="tpgzc",
-    #     time_plan={"interval": 0.5, "loops": 2},
-    #     stage_positions=[
-    #         {"x": 100, "y": 100, "name": "Pos0"},
-    #         useq.AbsolutePosition(
-    #             x=200,
-    #             y=200,
-    #             name="Pos1",
-    #         )
-    #     ],
-    #     z_plan={"range": 3.0, "step": 1.0},
-    #     channels=[
-    #         {"config": "DAPI"},
-    #         {"config": "FITC"},
-    #         {"config": "DAPI"},
-    #     ],  # 2 channels
-    #     # grid_plan=useq.GridRowsColumns(rows=2, columns=2),
-    # )
+    sequence = useq.MDASequence(
+        axis_order="tpgzc",
+        time_plan={"interval": 0.5, "loops": 200},
+        stage_positions=[
+            {"x": 100, "y": 100, "name": "Pos0"},
+            useq.AbsolutePosition(
+                x=200,
+                y=200,
+                name="Pos1",
+            )
+        ],
+        z_plan={"range": 3.0, "step": 1.0},
+        channels=[
+            {"config": "DAPI"},
+            {"config": "FITC"},
+            {"config": "DAPI"},
+        ],  # 2 channels
+        # grid_plan=useq.GridRowsColumns(rows=2, columns=2),
+    )
 
-    sequence = [
-        useq.MDAEvent(
-            x_pos=10,
-            y_pos=3,
-            pos_name="p0",
-            channel={"config": "DAPI", "exposure": 10},
-            index={"c": 0},
-        ),
-        useq.MDAEvent(
-            x_pos=11,
-            y_pos=3,
-            pos_name="p0",
-            channel={"config": "FITC", "exposure": 10},
-            index={"c": 1},
-        ),
-        useq.MDAEvent(
-            x_pos=12,
-            y_pos=3,
-            pos_name="p0",
-            channel={"config": "DAPI", "exposure": 10},
-            index={"c": 0},
-        ),
-    ]
+    # sequence = [
+    #     useq.MDAEvent(
+    #         x_pos=10,
+    #         y_pos=3,
+    #         pos_name="p0",
+    #         channel={"config": "DAPI", "exposure": 10},
+    #         index={"c": 0},
+    #     ),
+    #     useq.MDAEvent(
+    #         x_pos=11,
+    #         y_pos=3,
+    #         pos_name="p0",
+    #         channel={"config": "FITC", "exposure": 10},
+    #         index={"c": 1},
+    #     ),
+    #     useq.MDAEvent(
+    #         x_pos=12,
+    #         y_pos=3,
+    #         pos_name="p0",
+    #         channel={"config": "DAPI", "exposure": 10},
+    #         index={"c": 0},
+    #     ),
+    # ]
 
     mmc.mda.run(sequence)
 

@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 import numpy as np
 import useq
 from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
-
+from pymmcore_plus.metadata.serialize import json_dumps
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import USER_DATA_MM_PATH, retry
 from pymmcore_plus.core._constants import Keyword
@@ -48,6 +48,11 @@ _SLM_DEVICES_PIXEL_ON_VALUES: dict[str, int] = {
     "Mosaic3": 1,
     "GenericSLM": 255,
 }
+
+# create ome_meta folder if it doesn't exist to store OME metadata while the
+# acquisition is running. This will be used to then create ome metadata.
+OME_PATH = Path(USER_DATA_MM_PATH) / "ome_meta"
+OME_PATH.mkdir(exist_ok=True, parents=True)
 
 
 class MDAEngine(PMDAEngine):
@@ -113,6 +118,7 @@ class MDAEngine(PMDAEngine):
         self._sequence: MDASequence | None = None
         self._sequence_summary_metadata: SummaryMetaV1 | None = None
         self._collected_frame_metadata: list[FrameMetaV1] = []
+        self._ome_path: Path | None = None
 
     @property
     def include_frame_position_metadata(self) -> IncludePositionArg:
@@ -161,15 +167,18 @@ class MDAEngine(PMDAEngine):
         # Store summary metadata for OME generation
         self._sequence = sequence
         summary_meta = self.get_summary_metadata(mda_sequence=sequence)
+
+        # create a folder to store OME metadata for this sequence
+        self._ome_path = OME_PATH / f"{sequence.uid}"
+        self._ome_path.mkdir(exist_ok=True, parents=True)
         # save to user data path for later use for OME generation
-        path = Path(USER_DATA_MM_PATH) / "ome_meta"
-        path.mkdir(exist_ok=True, parents=True)
-        with open(path / f"summary_meta_{sequence.uid}.json", "w") as f:
-            f.write(str(summary_meta))
+        with open(self._ome_path / "summary_metadata.json", "w") as f:
+            f.write(json_dumps(summary_meta).decode('utf-8'))
         self._sequence_summary_metadata = summary_meta
         return summary_meta
 
     def get_summary_metadata(self, mda_sequence: MDASequence | None) -> SummaryMetaV1:
+        """Get summary metadata for the sequence."""
         return summary_metadata(self._mmc, mda_sequence=mda_sequence)
 
     def _update_grid_fov_sizes(self, px_size: float, sequence: MDASequence) -> None:
@@ -334,8 +343,12 @@ class MDAEngine(PMDAEngine):
                 camera_device=self._mmc.getPhysicalCameraDevice(cam),
                 include_position=self._include_frame_position_metadata is not False,
             )
-            # Store frame metadata for OME generation
+            # store frame metadata for OME generation
             self._collected_frame_metadata.append(meta)
+            assert self._ome_path is not None
+            # append to single JSONL file
+            with open(self._ome_path / "frames_metadata.jsonl", "a") as f:
+                f.write(json_dumps(meta).decode('utf-8') + '\n')
             # Note, the third element is actually a MutableMapping, but mypy doesn't
             # see TypedDict as a subclass of MutableMapping yet.
             # https://github.com/python/mypy/issues/4976
@@ -407,20 +420,12 @@ class MDAEngine(PMDAEngine):
         if not self._sequence_summary_metadata or self._sequence is None:
             return None
 
+        assert self._ome_path is not None
         return create_ome_metadata(
-            self._sequence_summary_metadata, self._collected_frame_metadata
+            # self._sequence_summary_metadata,
+            # self._collected_frame_metadata,
+            self._ome_path,
         )
-
-    def get_collected_frame_metadata(self) -> list[FrameMetaV1]:
-        """Get all frame metadata collected during the sequence.
-
-        Returns
-        -------
-        list[FrameMetaV1]
-            List of frame metadata collected during the acquisition sequence.
-            Each entry corresponds to one acquired image.
-        """
-        return self._collected_frame_metadata.copy()
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""
@@ -617,10 +622,11 @@ class MDAEngine(PMDAEngine):
 
         # TODO: determine whether we want to try to populate changing property values
         # during the course of a triggered sequence
+        runner_time_ms = event_t0 + seq_time
         meta = self.get_frame_metadata(
             event,
             prop_values=(),
-            runner_time_ms=event_t0 + seq_time,
+            runner_time_ms=runner_time_ms,
             camera_device=camera_device,
             include_position=self._include_frame_position_metadata is True,
         )
@@ -628,8 +634,12 @@ class MDAEngine(PMDAEngine):
         meta["images_remaining_in_buffer"] = remaining
         meta["camera_metadata"] = dict(mm_meta)
 
-        # Store frame metadata for OME generation
+        # store frame metadata for OME generation
         self._collected_frame_metadata.append(meta)
+        # append to single JSONL file
+        assert self._ome_path is not None
+        with open(self._ome_path / "frames_metadata.jsonl", "a") as f:
+            f.write(json_dumps(meta).decode('utf-8') + '\n')
 
         # https://github.com/python/mypy/issues/4976
         return ImagePayload(img, event, meta)  # type: ignore[return-value]

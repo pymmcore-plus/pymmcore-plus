@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+import json
+import tempfile
 import uuid
 from datetime import datetime
-from pathlib import Path
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 import useq
 from ome_types.model import (
@@ -20,10 +21,10 @@ from ome_types.model import (
 )
 
 from pymmcore_plus.mda._runner import GeneratorMDASequence
-from pymmcore_plus.metadata.serialize import json_loads
 
 if TYPE_CHECKING:
     from collections.abc import Iterable
+    from pathlib import Path
 
     from .schema import FrameMetaV1, SummaryMetaV1
 
@@ -31,7 +32,8 @@ MDA_EVENT = "mda_event"
 
 
 def create_ome_metadata(
-    metadata_path: Path | str,
+    summary_metadata: SummaryMetaV1,
+    frame_metadata_list: list[FrameMetaV1],
 ) -> OME:
     """Create enhanced OME metadata from summary and frame metadata collections.
 
@@ -40,28 +42,24 @@ def create_ome_metadata(
 
     Parameters
     ----------
-    metadata_path : Path | str
-        Path to the directory containing `summary_metadata.json` and
-        `frame_metadata.jsonl` files.
+    summary_metadata : SummaryMetaV1
+        The summary metadata from sequence setup
+    frame_metadata_list : list[FrameMetaV1]
+        List of frame metadata collected during acquisition
 
     Returns
     -------
     OME
         The OME metadata as an `ome_types.OME` object.
     """
-    if isinstance(metadata_path, str):
-        metadata_path = Path(metadata_path)
-
-    # load summary metadata
-    summary_metadata = _load_summary_metadata(metadata_path)
-
-    # load all frame metadata from JSONL file
-    frame_metadata_list = _load_all_frame_metadata(metadata_path)
-
     # create OME model
     ome = OME(uuid=f"urn:uuid:{uuid.uuid4()}")
 
     ome.instruments = _add_ome_instrument_info(summary_metadata)
+
+    # if no frame metadata has been collected, return the OME model as it is
+    if not frame_metadata_list:
+        return ome
 
     # extract image information
     image_infos = summary_metadata.get("image_infos")
@@ -125,7 +123,8 @@ def create_ome_metadata(
 
         planes = []
         for frame_meta in position_frames:
-            mda_event = _get_mda_event(frame_meta)
+            mda_event = frame_meta.get(MDA_EVENT)
+
             if mda_event is None:
                 continue
 
@@ -168,35 +167,6 @@ def create_ome_metadata(
         ome.images.append(image)
 
     return ome
-
-
-def _load_summary_metadata(metadata_path: Path | str) -> SummaryMetaV1:
-    """Load summary metadata from a JSON file."""
-    if isinstance(metadata_path, str):
-        metadata_path = Path(metadata_path)
-
-    summary_metadata_file = metadata_path / "summary_metadata.json"
-    if not summary_metadata_file.exists():
-        return {}  # type: ignore[return-value]
-
-    with open(summary_metadata_file) as f:
-        return cast("SummaryMetaV1", json_loads(f.read()))
-
-
-def _load_all_frame_metadata(metadata_path: Path | str) -> list[FrameMetaV1]:
-    """Load all frame metadata from a JSONL file."""
-    if isinstance(metadata_path, str):
-        metadata_path = Path(metadata_path)
-
-    frame_metadata_file = metadata_path / "frames_metadata.jsonl"
-    if not frame_metadata_file.exists():
-        return []
-
-    frame_metadata_list: list[FrameMetaV1] = []
-    with open(frame_metadata_file) as f:
-        for line in f:
-            frame_metadata_list.append(cast("FrameMetaV1", json_loads(line.strip())))
-    return frame_metadata_list
 
 
 def _add_ome_instrument_info(summary_meta: SummaryMetaV1) -> list[Instrument]:
@@ -244,23 +214,20 @@ def _group_frames_by_position(
     """Reorganize frame metadata by stage position index in a dictionary."""
     frames_by_position: dict[str, list[FrameMetaV1]] = {}
     for frame_meta in frame_metadata_list:
-        mda_event = _get_mda_event(frame_meta)
-        if mda_event is None:
-            continue
-        p_index = mda_event.index.get("p", 0) or 0
-        p_name = mda_event.index.get("pos_name", f"Pos{p_index:04d}")
-        key = f"{p_name}_{p_index}"
-        if key not in frames_by_position:
-            frames_by_position[key] = []
-        frames_by_position[key].append(frame_meta)
+        mda_event = frame_meta.get(MDA_EVENT)
+        if mda_event:
+            p_index = mda_event.index.get("p", 0) or 0
+            p_name = mda_event.index.get("pos_name", f"Pos{p_index:04d}")
+            key = f"{p_name}_{p_index}"
+            if key not in frames_by_position:
+                frames_by_position[key] = []
+            frames_by_position[key].append(frame_meta)
     return frames_by_position
 
 
 def _get_pixels_info_from_sequence(
-    sequence: useq.MDASequence | dict,
+    sequence: useq.MDASequence,
 ) -> tuple[tuple[int, int, int], list[Channel]]:
-    if isinstance(sequence, dict):
-        sequence = useq.MDASequence(**sequence)
     max_t = sequence.sizes.get("t", 1)
     max_z = sequence.sizes.get("z", 1)
     channels = []
@@ -287,34 +254,24 @@ def _get_pixels_info(
     max_t, max_z, max_c = 0, 0, 0
     channels: dict[str, Channel] = {}
     for frame_meta in pos_metadata:
-        mda_event = _get_mda_event(frame_meta)
-        if mda_event is None:
-            continue
-        max_t = max(max_t, mda_event.index.get("t", 0))
-        max_z = max(max_z, mda_event.index.get("z", 0))
-        max_c = max(max_c, mda_event.index.get("c", 0))
-        if (ch := mda_event.channel) is not None:
-            if (
-                ch_name := f"{ch.config}_{mda_event.index.get('c', 0)}"
-            ) not in channels:
-                channels[ch_name] = Channel(
-                    id=f"Channel:{mda_event.index.get('c', 0)}",
-                    name=ch.config,
-                    samples_per_pixel=1,
-                )
+        mda_event = frame_meta.get(MDA_EVENT)
+        if mda_event:
+            max_t = max(max_t, mda_event.index.get("t", 0))
+            max_z = max(max_z, mda_event.index.get("z", 0))
+            max_c = max(max_c, mda_event.index.get("c", 0))
+            if (ch := mda_event.channel) is not None:
+                if (
+                    ch_name := f"{ch.config}_{mda_event.index.get('c', 0)}"
+                ) not in channels:
+                    channels[ch_name] = Channel(
+                        id=f"Channel:{mda_event.index.get('c', 0)}",
+                        name=ch.config,
+                        samples_per_pixel=1,
+                    )
     return (max_t + 1, max_z + 1, max_c + 1), list(channels.values())
 
 
-def _get_mda_event(frame_meta: FrameMetaV1) -> useq.MDAEvent | None:
-    mda_event = frame_meta.get(MDA_EVENT)
-    if mda_event is None:
-        return None
-    if not isinstance(mda_event, useq.MDAEvent):
-        mda_event = useq.MDAEvent(**mda_event)
-    return mda_event
-
-
-def _get_dimension_order_from_sequence(sequence: useq.MDASequence | dict) -> str:
+def _get_dimension_order_from_sequence(sequence: useq.MDASequence) -> str:
     """
     Get axis order (fastest -> slowest) from a useq.MDASequence.
 
@@ -323,8 +280,6 @@ def _get_dimension_order_from_sequence(sequence: useq.MDASequence | dict) -> str
     A string representing the dimension order compatible with OME standards
     (e.g., "XYCZT").
     """
-    if isinstance(sequence, dict):
-        sequence = useq.MDASequence(**sequence)
     ordered_axes = [ax for ax in sequence.axis_order if ax not in {"p", "g"}]
     dimension_order = "XY" + "".join(ordered_axes[::1]).upper()
     # if there are axis missing, add them
@@ -346,7 +301,7 @@ def _get_dimension_order(frames: Iterable[FrameMetaV1]) -> str:
     # extract index dicts (list of dicts mapping axis->int)
     idx_list: list[dict[str, int]] = []
     for f in frames:
-        if (ev := _get_mda_event(f)) is None:
+        if (ev := f.get(MDA_EVENT)) is None:
             continue
         idx_list.append({k: int(v) for k, v in ev.index.items() if k not in {"p"}})
 
@@ -403,7 +358,5 @@ def _get_mda_sequence(
     if seq:
         return seq
     # if is not there try form single_frame_metadata useq.MDAEvent
-    ev = _get_mda_event(single_frame_metadata)
-    if ev is None:
-        return None
+    ev = single_frame_metadata.get(MDA_EVENT, useq.MDAEvent())
     return ev.sequence
