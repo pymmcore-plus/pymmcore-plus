@@ -27,7 +27,6 @@ class PyDeviceManager:
 
     def __init__(self) -> None:
         self._devices: dict[str, Device] = {}
-        self._executor = ThreadPoolExecutor()
 
     def load(self, label: str, device: Device, proxy: CMMCoreProxy) -> None:
         """Load a device and assign it a label."""
@@ -53,9 +52,10 @@ class PyDeviceManager:
             return  # pragma: no cover
 
         # Initialize all devices in parallel
-        futures = [self._executor.submit(self.initialize, label) for label in labels]
-        for future in as_completed(futures):
-            future.result()
+        with ThreadPoolExecutor() as executor:
+            futures = [executor.submit(self.initialize, label) for label in labels]
+            for future in as_completed(futures):
+                future.result()
 
     def wait_for(
         self, label: str, timeout_ms: float = 5000, polling_interval: float = 0.01
@@ -87,11 +87,12 @@ class PyDeviceManager:
             # it's critical that this be a list comprehension,
             # not a generator expression, otherwise the executor may be shut down
             # before any tasks are actually submitted
-            futures = [
-                self._executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
-            ]
-            for future in as_completed(futures):
-                future.result()  # Raises any exceptions from wait_for_device
+            with ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
+                ]
+                for future in as_completed(futures):
+                    future.result()  # Raises any exceptions from wait_for_device
 
     def get_initialization_state(self, label: str) -> DeviceInitializationState:
         """Return the initialization state of the device with the given label."""
@@ -177,6 +178,3 @@ class PyDeviceManager:
             for label, device in self._devices.items()
             if dev_type == DeviceType.Any or device.type() == dev_type
         )
-
-    def __del__(self) -> None:
-        self._executor.shutdown(wait=False)
