@@ -78,12 +78,14 @@ class PyDeviceManager:
     def wait_for_device_type(self, dev_type: int, timeout_ms: float = 5000) -> None:
         if not (labels := self.get_labels_of_type(dev_type)):
             return  # pragma: no cover
-
         # Wait for all python devices of the given type in parallel
         with ThreadPoolExecutor() as executor:
-            futures = (
+            # it's critical that this be a list comprehension,
+            # not a generator expression, otherwise the executor may be shut down
+            # before any tasks are actually submitted
+            futures = [
                 executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
-            )
+            ]
             for future in as_completed(futures):
                 future.result()  # Raises any exceptions from wait_for_device
 

@@ -130,7 +130,7 @@ class UniMMCore(CMMCorePlus):
 
     def reset(self) -> None:
         with suppress(TimeoutError):
-            self.waitForSystem()
+            self.waitForDeviceType(DeviceType.AnyType)
         self.unloadAllDevices()
         self._pycore.reset_current()
         super().reset()
