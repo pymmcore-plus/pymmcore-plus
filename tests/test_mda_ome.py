@@ -2,10 +2,10 @@
 """Test enhanced OME generation with proper Plane elements."""
 
 import useq
+from ome_types import validate_xml
 from rich import print
 
 from pymmcore_plus import CMMCorePlus
-from ome_types import validate_xml
 
 
 def test_ome_generation():
@@ -20,7 +20,7 @@ def test_ome_generation():
 
     mmc.setExposure(20)
 
-    sequence1 = useq.MDASequence(
+    sequence_1 = useq.MDASequence(
         axis_order="tpgzc",
         time_plan={"interval": 0.5, "loops": 2},
         stage_positions=[
@@ -28,7 +28,7 @@ def test_ome_generation():
             useq.AbsolutePosition(
                 x=200,
                 y=200,
-            )
+            ),
         ],
         z_plan={"range": 3.0, "step": 1.0},
         channels=[
@@ -38,7 +38,7 @@ def test_ome_generation():
         ],  # 2 channels
     )
 
-    sequence2 = useq.MDASequence(
+    sequence_2 = useq.MDASequence(
         axis_order="tpgzc",
         time_plan={"interval": 0.5, "loops": 2},
         stage_positions=[
@@ -46,7 +46,7 @@ def test_ome_generation():
             useq.AbsolutePosition(
                 x=200,
                 y=200,
-            )
+            ),
         ],
         channels=[
             {"config": "DAPI"},
@@ -56,13 +56,13 @@ def test_ome_generation():
         grid_plan=useq.GridRowsColumns(rows=2, columns=2),
     )
 
-    sequence3 = useq.MDASequence(
+    sequence_3 = useq.MDASequence(
         axis_order="tpgzc",
         stage_positions=useq.WellPlatePlan(
             plate=useq.WellPlate.from_str("96-well"),
             a1_center_xy=(0, 0),
             selected_wells=((0, 0, 0), (0, 1, 2)),
-            ),
+        ),
         z_plan={"range": 3.0, "step": 1.0},
         channels=[
             {"config": "DAPI"},
@@ -70,7 +70,7 @@ def test_ome_generation():
         ],  # 2 channels
     )
 
-    sequence4 = [
+    sequence_4 = [
         useq.MDAEvent(
             x_pos=10,
             y_pos=3,
@@ -94,15 +94,18 @@ def test_ome_generation():
         ),
     ]
 
-    mmc.mda.run(sequence4)
+    for idx, s in enumerate([sequence_1, sequence_2, sequence_3, sequence_4]):
+        mmc.mda.run(s)
 
-    assert mmc.mda.engine
-    ome = mmc.mda.engine.get_ome_metadata()
+        assert mmc.mda.engine
+        ome = mmc.mda.engine.get_ome_metadata()
 
-    if ome:
-        print()
-        print(ome.to_xml())
-        validate_xml(ome.to_xml())
+        if ome:
+            print(f"\n-----------------SEQUENCE_{idx + 1}--------------------")
+            print(ome.to_xml())
+            validate_xml(ome.to_xml())
+            print("-------------------------------------\n")
+
 
 if __name__ == "__main__":
     test_ome_generation()
