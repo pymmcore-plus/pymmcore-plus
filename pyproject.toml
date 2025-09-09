@@ -78,6 +78,7 @@ test = [
     "ipython>=8.18.0",
     "pytest >=8",
     "xarray >=2024.1",
+    "lxml",
 ]
 test-codspeed = [{ include-group = "test" }, "pytest-codspeed >=3.2.0"]
 test-qt = [{ include-group = 'test' }, "pytest-qt ==4.4", "qtpy >=2"]

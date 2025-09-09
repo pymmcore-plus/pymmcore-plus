@@ -9,7 +9,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 import numpy as np
 import useq
 from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
-from pymmcore_plus.metadata.serialize import json_dumps
+
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import USER_DATA_MM_PATH, retry
 from pymmcore_plus.core._constants import Keyword
@@ -22,6 +22,7 @@ from pymmcore_plus.metadata import (
     summary_metadata,
 )
 from pymmcore_plus.metadata._ome import create_ome_metadata
+from pymmcore_plus.metadata.serialize import json_dumps
 
 from ._protocol import PMDAEngine
 

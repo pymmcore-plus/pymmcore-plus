@@ -11,13 +11,17 @@ from ome_types.model import (
     OME,
     Channel,
     Image,
+    ImageRef,
     Instrument,
     Pixels,
     Pixels_DimensionOrder,
     PixelType,
     Plane,
+    Plate,
     UnitsLength,
     UnitsTime,
+    Well,
+    WellSample,
 )
 
 from pymmcore_plus.mda._runner import GeneratorMDASequence
@@ -133,6 +137,14 @@ def create_ome_metadata(
 
         ome.images.append(image)
 
+    # add plate information if available
+    if (
+        sequence is not None
+        and (stage_pos := sequence.stage_positions)
+        and isinstance(stage_pos, useq.WellPlatePlan)
+    ):
+        ome.plates = [_get_plate(stage_pos)]
+
     return ome
 
 
@@ -186,6 +198,79 @@ def _load_frames_metadata(metadata_path: Path | str) -> list[FrameMetaV1]:
         return []
 
     return frame_metadata_list
+
+
+def _get_mda_sequence(
+    summary_metadata: SummaryMetaV1, single_frame_metadata: FrameMetaV1
+) -> useq.MDASequence | None:
+    """Get the MDA sequence from summary metadata or frame metadata."""
+    # get the mda_sequence from summary metadata
+    seq = summary_metadata.get("mda_sequence")
+    if seq is not None:
+        if not isinstance(seq, useq.MDASequence):
+            seq = useq.MDASequence(**seq)
+        return seq
+    # if is not there try form single_frame_metadata useq.MDAEvent
+    ev = _get_mda_event(single_frame_metadata)
+    if ev is None:
+        return None
+    return ev.sequence
+
+
+def _get_plate(plate_plan: useq.WellPlatePlan) -> Plate:
+    """Create a Plate object from a useq.WellPlatePlan."""
+    wells: list[Well] = []
+
+    # create a mapping from well name to acquisition indices
+    well_acquisition_map: dict[str, list[int]] = {}
+    for acquisition_index, position in enumerate(plate_plan.image_positions):
+        well_name = position.name
+        if well_name is not None:
+            if well_name not in well_acquisition_map:
+                well_acquisition_map[well_name] = []
+            well_acquisition_map[well_name].append(acquisition_index)
+
+    for (row, col), name, pos in zip(
+        plate_plan.selected_well_indices,
+        plate_plan.selected_well_names,
+        plate_plan.selected_well_positions,
+    ):
+        # get all acquisition indices for this well
+        acquisition_indices = well_acquisition_map.get(name, [])
+
+        # create WellSample objects for each acquisition in this well
+        well_samples = []
+        for acq_index in acquisition_indices:
+            well_samples.append(
+                WellSample(
+                    id=f"WellSample:{acq_index}",
+                    position_x=pos.x,
+                    position_y=pos.y,
+                    position_x_unit=UnitsLength.MICROMETER,
+                    position_y_unit=UnitsLength.MICROMETER,
+                    index=acq_index,
+                    image_ref=ImageRef(id=f"Image:{acq_index - 1}"),
+                )
+            )
+
+        wells.append(
+            Well(
+                row=row,
+                column=col,
+                well_samples=well_samples,
+            )
+        )
+
+    return Plate(
+        name=plate_plan.plate.name,
+        rows=plate_plan.plate.rows,
+        columns=plate_plan.plate.columns,
+        wells=wells,
+        well_origin_x=plate_plan.a1_center_xy[0],
+        well_origin_x_unit=UnitsLength.MICROMETER,
+        well_origin_y=plate_plan.a1_center_xy[1],
+        well_origin_y_unit=UnitsLength.MICROMETER,
+    )
 
 
 def _add_ome_instrument_info(summary_meta: SummaryMetaV1) -> list[Instrument]:
@@ -365,6 +450,7 @@ def _get_pixels_info(
 def _get_pixels_info_from_sequence(
     sequence: useq.MDASequence | dict,
 ) -> tuple[tuple[int, int, int], list[Channel]]:
+    """Get the position information from a useq.MDASequence."""
     if isinstance(sequence, dict):
         sequence = useq.MDASequence(**sequence)
     max_t = sequence.sizes.get("t", 1)
@@ -500,18 +586,3 @@ def _get_dimension_order_from_frames(frames: Iterable[FrameMetaV1]) -> str:
         dimension_order += "".join(missing)
 
     return dimension_order
-
-
-def _get_mda_sequence(
-    summary_metadata: SummaryMetaV1, single_frame_metadata: FrameMetaV1
-) -> useq.MDASequence | None:
-    """Get the MDA sequence from summary metadata or frame metadata."""
-    # get the mda_sequence from summary metadata
-    seq = summary_metadata.get("mda_sequence")
-    if seq:
-        return seq
-    # if is not there try form single_frame_metadata useq.MDAEvent
-    ev = _get_mda_event(single_frame_metadata)
-    if ev is None:
-        return None
-    return ev.sequence
