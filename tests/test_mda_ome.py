@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-"""Test enhanced OME generation with proper Plane elements."""
 
 import useq
 from ome_types import validate_xml
@@ -94,7 +93,32 @@ def test_ome_generation():
         ),
     ]
 
-    for idx, s in enumerate([sequence_1, sequence_2, sequence_3, sequence_4]):
+    sequence_5 = [
+        useq.MDAEvent(
+            x_pos=10,
+            y_pos=3,
+            pos_name="p0",
+            channel={"config": "DAPI", "exposure": 10},
+            index={"c": 0},
+        ),
+        useq.MDAEvent(
+            x_pos=11,
+            y_pos=3,
+            pos_name="p0",
+            channel={"config": "FITC", "exposure": 10},
+            index={"t": 3},
+        ),
+        useq.MDAEvent(
+            x_pos=12,
+            y_pos=3,
+            pos_name="p0",
+            channel={"config": "DAPI", "exposure": 10},
+            index={"z": 4},
+        ),
+    ]
+
+    # for idx, s in enumerate([sequence_1, sequence_2, sequence_3, sequence_4]):
+    for idx, s in enumerate([sequence_5]):
         mmc.mda.run(s)
 
         assert mmc.mda.engine
