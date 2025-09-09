@@ -23,20 +23,19 @@ def test_ome_generation():
         axis_order="tpgzc",
         time_plan={"interval": 0.5, "loops": 2},
         stage_positions=[
-            {"x": 100, "y": 100, "name": "Pos0"},
+            {"x": 100, "y": 100, "name": "FirstPosition"},
             useq.AbsolutePosition(
                 x=200,
                 y=200,
-                name="Pos1",
             )
         ],
-        z_plan={"range": 3.0, "step": 1.0},
+        # z_plan={"range": 3.0, "step": 1.0},
         channels=[
             {"config": "DAPI"},
             {"config": "FITC"},
             {"config": "DAPI"},
         ],  # 2 channels
-        # grid_plan=useq.GridRowsColumns(rows=2, columns=2),
+        grid_plan=useq.GridRowsColumns(rows=2, columns=2),
     )
 
     # sequence = [

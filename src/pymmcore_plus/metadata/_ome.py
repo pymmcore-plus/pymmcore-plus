@@ -56,7 +56,7 @@ def create_ome_metadata(
     summary_metadata = _load_summary_metadata(metadata_path)
 
     # load all frame metadata from JSONL file
-    frame_metadata_list = _load_all_frame_metadata(metadata_path)
+    frame_metadata_list = _load_frames_metadata(metadata_path)
 
     # create OME model
     ome = OME(uuid=f"urn:uuid:{uuid.uuid4()}")
@@ -83,12 +83,35 @@ def create_ome_metadata(
 
     acquisition_date = _get_acquisition_date(summary_metadata)
 
+    if not frame_metadata_list:
+        return ome
+
     sequence = _get_mda_sequence(summary_metadata, frame_metadata_list[0])
 
     positions_map = _group_frames_by_position(frame_metadata_list)
 
     for key in positions_map:
-        p_name, p_index = key.split("_")
+        # Extract position name and indices from the key
+        # Key format: "PosName_Grid####_p_g" or "PosName_p"
+        if "_Grid" in key:
+            parts = key.split("_")
+            # Find the Grid part
+            grid_idx = next(
+                i for i, part in enumerate(parts) if part.startswith("Grid")
+            )
+            p_name = "_".join(parts[:grid_idx])
+            grid_name = parts[grid_idx]
+            position_name = f"{p_name}_{grid_name}"
+            # Use combined p and g indices as the image ID
+            p_index = parts[-2]
+            g_index = parts[-1]
+            image_id = f"{p_index}_{g_index}"
+        else:
+            # No grid, simple case
+            p_name, p_index = key.rsplit("_", 1)
+            position_name = p_name
+            image_id = p_index
+
         position_frames = positions_map[key]
 
         if sequence is not None:
@@ -108,13 +131,13 @@ def create_ome_metadata(
             (max_t, max_z, max_c), channels = _get_pixels_info_from_sequence(sequence)
 
         pixels = Pixels(
-            id=f"Pixels:{p_index}",
+            id=f"Pixels:{image_id}",
             dimension_order=Pixels_DimensionOrder(dimension_order),
             size_x=width,
             size_y=height,
-            size_z=max_z,
-            size_c=max_c,
-            size_t=max_t,
+            size_z=max(max_z, 1),  # OME requires at least 1
+            size_c=max(max_c, 1),  # OME requires at least 1
+            size_t=max(max_t, 1),  # OME requires at least 1
             type=PixelType(dtype),
             physical_size_x=pixel_size_um,
             physical_size_x_unit=UnitsLength.MICROMETER,
@@ -160,8 +183,8 @@ def create_ome_metadata(
 
         image = Image(
             acquisition_date=acquisition_date,
-            id=f"Image:{p_index}",
-            name=p_name,
+            id=f"Image:{image_id}",
+            name=position_name,
             pixels=pixels,
         )
 
@@ -183,7 +206,7 @@ def _load_summary_metadata(metadata_path: Path | str) -> SummaryMetaV1:
         return cast("SummaryMetaV1", json_loads(f.read()))
 
 
-def _load_all_frame_metadata(metadata_path: Path | str) -> list[FrameMetaV1]:
+def _load_frames_metadata(metadata_path: Path | str) -> list[FrameMetaV1]:
     """Load all frame metadata from a JSONL file."""
     if isinstance(metadata_path, str):
         metadata_path = Path(metadata_path)
@@ -241,17 +264,36 @@ def _get_acquisition_date(summary_metadata: SummaryMetaV1) -> datetime | None:
 def _group_frames_by_position(
     frame_metadata_list: list[FrameMetaV1],
 ) -> dict[str, list[FrameMetaV1]]:
-    """Reorganize frame metadata by stage position index in a dictionary."""
+    """Reorganize frame metadata by stage position index in a dictionary.
+
+    Handles the 'g' axis (grid) by converting it to separate positions,
+    since OME doesn't support the 'g' axis. Each grid position becomes
+    a separate OME Image with names like "Pos0000_Grid0000".
+    """
     frames_by_position: dict[str, list[FrameMetaV1]] = {}
     for frame_meta in frame_metadata_list:
         mda_event = _get_mda_event(frame_meta)
         if mda_event is None:
             continue
+
         p_index = mda_event.index.get("p", 0) or 0
-        p_name = mda_event.index.get("pos_name", f"Pos{p_index:04d}")
-        key = f"{p_name}_{p_index}"
+        g_index = mda_event.index.get("g", None)
+
+        # Get position name from event or generate default
+        if hasattr(mda_event, 'pos_name') and mda_event.pos_name:
+            p_name = mda_event.pos_name
+        else:
+            p_name = f"Pos{p_index:04d}"
+
+        # If grid index exists, include it in the position identifier
+        if g_index is not None:
+            key = f"{p_name}_Grid{g_index:04d}_{p_index}_{g_index}"
+        else:
+            key = f"{p_name}_{p_index}"
+
         if key not in frames_by_position:
             frames_by_position[key] = []
+
         frames_by_position[key].append(frame_meta)
     return frames_by_position
 
