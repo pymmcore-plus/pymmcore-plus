@@ -75,7 +75,7 @@ test = [
     "pymmcore-plus[io]",
     "msgspec >= 0.19",
     "msgpack >=1",
-    "pytest-cov >=5",
+    "pytest-cov >=7",
     "ipython>=8.18.0",
     "pytest >=8",
     "xarray >=2024.1",
@@ -178,6 +178,7 @@ filterwarnings = [
     "ignore:numpy.core.multiarray is deprecated",
     "ignore:Failing to pass a value to the 'type_params' parameter",
     "ignore:Focus direction is unknown"
+    "ignore:'BaseCommand' is deprecated:DeprecationWarning:typer",
 ]
 markers = ["run_last: mark a test to run last"]
 
