@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
@@ -14,7 +15,13 @@ class _DevicePropValueSignal:
     ) -> None:
         self._dev = device_label
         self._prop = property_name
-        self._mmc = mmcore
+        self._mmc_ref = weakref.ref(mmcore)
+
+    @property
+    def _mmc(self) -> CMMCorePlus:
+        if (mmc := self._mmc_ref()) is None:  # pragma: no cover
+            raise RuntimeError("CMMCorePlus instance has been garbage collected.")
+        return mmc
 
     def connect(self, callback: _C) -> _C:
         sig = self._mmc.events.devicePropertyChanged(self._dev, self._prop)

@@ -189,7 +189,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
 def test_mda_pause_cancel(qtbot: "QtBot") -> None:
     """Test signal emission during MDA with cancelation"""
-    core = CMMCorePlus.instance()
+    core = CMMCorePlus()
     core.loadSystemConfiguration()
 
     mda = MDASequence(
