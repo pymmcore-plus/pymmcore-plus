@@ -21,7 +21,6 @@ from pymmcore_plus.metadata import (
     frame_metadata,
     summary_metadata,
 )
-from pymmcore_plus.metadata._ome import create_ome_metadata
 from pymmcore_plus.metadata.serialize import json_dumps
 
 from ._protocol import PMDAEngine
@@ -31,7 +30,6 @@ if TYPE_CHECKING:
     from typing import TypeAlias
 
     from numpy.typing import NDArray
-    from ome_types import OME
 
     from pymmcore_plus.core import CMMCorePlus
 
@@ -384,14 +382,6 @@ class MDAEngine(PMDAEngine):
                 core.stopStageSequence(core.getFocusDevice())
             for dev, prop in event.property_sequences:
                 core.stopPropertySequence(dev, prop)
-
-    def get_ome_metadata(self) -> OME:
-        """Generate OME metadata for the entire sequence.
-
-        Returns a OME metadata model object.
-        """
-        assert self._ome_path is not None
-        return create_ome_metadata(self._ome_path)
 
     def teardown_sequence(self, sequence: MDASequence) -> None:
         """Perform any teardown required after the sequence has been executed."""

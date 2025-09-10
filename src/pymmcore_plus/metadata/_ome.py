@@ -37,12 +37,11 @@ if TYPE_CHECKING:
 MDA_EVENT = "mda_event"
 
 
-def create_ome_metadata(
-    metadata_path: Path | str,
-) -> OME:
-    """Create OME metadata...
+def create_ome_metadata(metadata_path: Path | str) -> OME:
+    """Create OME metadata from metadata saved as json by the core engine.
 
-    ...from summary and frame metadata collections saved as json by the core engine.
+    The metadata path should contain two files, `summary_metadata.json` and
+    `frames_metadata.jsonl`.
 
     Parameters
     ----------
@@ -96,6 +95,29 @@ def create_ome_metadata(
     # get acquisition date from summary metadata
     acquisition_date = _get_acquisition_date(summary_metadata)
 
+    # add OME Images, one per position
+    ome.images = _get_ome_images(
+        pixel_size_um, dtype, height, width, sequence, positions_map, acquisition_date
+    )
+
+    # add plate information if available
+    if plate_plan is not None:
+        ome.plates = [_get_ome_plate(plate_plan, position_to_image_id)]
+
+    return ome
+
+
+def _get_ome_images(
+    pixel_size_um: float,
+    dtype: str,
+    height: int,
+    width: int,
+    sequence: useq.MDASequence | None,
+    positions_map: dict[str, list[FrameMetaV1]],
+    acquisition_date: datetime | None,
+):
+    """Create OME Images from grouped frame metadata by position."""
+    images = []
     for key in positions_map:
         # parse position key to extract name and indices
         position_name, image_id = _parse_position_key(key)
@@ -111,11 +133,11 @@ def create_ome_metadata(
             continue
 
         if sequence is None or isinstance(sequence, GeneratorMDASequence):
-            (max_t, max_z, max_c), channels = _get_pixels_info(
+            (max_t, max_z, max_c), channels = _get_ome_pixels_info_from_frames(
                 position_frames, image_id
             )
         else:
-            (max_t, max_z, max_c), channels = _get_pixels_info_from_sequence(
+            (max_t, max_z, max_c), channels = _get_ome_pixels_info_from_sequence(
                 sequence, image_id
             )
 
@@ -136,7 +158,7 @@ def create_ome_metadata(
             physical_size_y_unit=UnitsLength.MICROMETER,
             channels=channels,
             metadata_only=MetadataOnly(),
-            planes=_get_planes(position_frames),
+            planes=_get_ome_planes(position_frames),
         )
 
         image = Image(
@@ -145,14 +167,8 @@ def create_ome_metadata(
             name=position_name,
             pixels=pixels,
         )
-
-        ome.images.append(image)
-
-    # add plate information if available
-    if plate_plan is not None:
-        ome.plates = [_get_plate(plate_plan, position_to_image_id)]
-
-    return ome
+        images.append(image)
+    return images
 
 
 def _get_plate_plan(
@@ -259,7 +275,7 @@ def _get_mda_sequence(
     return ev.sequence
 
 
-def _get_plate(
+def _get_ome_plate(
     plate_plan: useq.WellPlatePlan, position_to_image_id: dict[int, str]
 ) -> Plate:
     """Create a Plate object from a useq.WellPlatePlan."""
@@ -387,19 +403,19 @@ def _parse_position_key(key: str) -> tuple[str, str]:
         A tuple of (position_name, image_id)
     """
     if "_Grid" in key:
-        # Key format: "PosName_Grid####_p_g"
+        # key format: "PosName_Grid####_p_g"
         parts = key.split("_")
-        # Find the Grid part
+        # find the Grid part
         grid_idx = next(i for i, part in enumerate(parts) if part.startswith("Grid"))
         p_name = "_".join(parts[:grid_idx])
         grid_name = parts[grid_idx]
         position_name = f"{p_name}_{grid_name}"
-        # Use combined p and g indices as the image ID
+        # use combined p and g indices as the image ID
         p_index = parts[-2]
         g_index = parts[-1]
         image_id = f"{p_index}_{g_index}"
     else:
-        # No grid, simple case: "PosName_p"
+        # no grid, simple case: "PosName_p"
         p_name, p_index = key.rsplit("_", 1)
         position_name = p_name
         image_id = p_index
@@ -454,7 +470,7 @@ def _get_mda_event(frame_meta: FrameMetaV1) -> useq.MDAEvent | None:
     return mda_event
 
 
-def _get_pixels_info(
+def _get_ome_pixels_info_from_frames(
     pos_metadata: list[FrameMetaV1],
     image_id: str,
 ) -> tuple[tuple[int, int, int], list[Channel]]:
@@ -465,7 +481,7 @@ def _get_pixels_info(
         A tuple containing the maximum (t, z, c) indices, and a list of channels.
     """
     max_t, max_z, max_c = 0, 0, 0
-    channels: dict[int, Channel] = {}  # Use int keys for better performance
+    channels: dict[int, Channel] = {}
 
     for frame_meta in pos_metadata:
         mda_event = _get_mda_event(frame_meta)
@@ -494,7 +510,7 @@ def _get_pixels_info(
     return (max_t + 1, max_z + 1, max_c + 1), sorted_channels
 
 
-def _get_pixels_info_from_sequence(
+def _get_ome_pixels_info_from_sequence(
     sequence: useq.MDASequence | dict,
     image_id: str,
 ) -> tuple[tuple[int, int, int], list[Channel]]:
@@ -515,7 +531,7 @@ def _get_pixels_info_from_sequence(
     return (max_t, max_z, len(channels)), channels
 
 
-def _get_planes(position_frames: list[FrameMetaV1]) -> list[Plane]:
+def _get_ome_planes(position_frames: list[FrameMetaV1]) -> list[Plane]:
     """Create Plane objects for a list of frame metadata at a specific position."""
     planes = []
     for frame_meta in position_frames:
@@ -595,10 +611,10 @@ def _get_dimension_order_from_frames(frames: Iterable[FrameMetaV1]) -> str:
     if not idx_list:
         return ""
 
-    # Collect all axes seen
+    # collect all axes seen
     axes = sorted({k for d in idx_list for k in d.keys()})
 
-    # Compute unique counts and change counts
+    # compute unique counts and change counts
     uniques: dict[str, set] = {a: set() for a in axes}
     changes: dict[str, int] = dict.fromkeys(axes, 0)
 
@@ -616,16 +632,16 @@ def _get_dimension_order_from_frames(frames: Iterable[FrameMetaV1]) -> str:
     total_transitions = max(len(idx_list) - 1, 1)
     freqs = {a: changes[a] / total_transitions for a in axes}
 
-    # Sort axes: highest change frequency first (fastest-varying).
-    # Tie-breaker: larger unique count first, then axis name
+    # sort axes: highest change frequency first (fastest-varying).
+    # tie-breaker: larger unique count first, then axis name
     ordered_axes = sorted(
         axes,
         key=lambda a: (-freqs[a], -sizes[a], a),
     )
     # remove "g" if present since standard OME does not support it.
-    # TODO: look for a way to handle it
     ordered_axes = [a for a in ordered_axes if a != "g"]
 
+    # create dimension order string including XY
     dimension_order = "XY" + "".join(ordered_axes).upper()
 
     # if there are axis missing, add them
