@@ -41,7 +41,7 @@ dependencies = [
     "numpy >=1.25.2",
     "psygnal >=0.10",
     "pymmcore >=11.10.0.74.0",
-    "typing-extensions >=4",                                   # not actually required at runtime
+    "typing-extensions >=4", # not actually required at runtime
     "useq-schema >=0.7.2",
     "tensorstore >=0.1.71,!=0.1.72; python_version >= '3.13'",
     "tensorstore >=0.1.67,!=0.1.72",
@@ -49,6 +49,7 @@ dependencies = [
     "typer >=0.4.2",
     "rich >=10.2.0",
     "ome-types",
+    "ome-writers>=0.0.1b0",
 ]
 
 # extras
