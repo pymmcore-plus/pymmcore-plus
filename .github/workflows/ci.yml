@@ -222,8 +222,9 @@ jobs:
         run: uv run mmcore build-dev
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v3
+        uses: CodSpeedHQ/action@v4
         with:
+          mode: instrumentation
           run: uv run pytest -W ignore --codspeed -v --color=yes
 
   deploy:
