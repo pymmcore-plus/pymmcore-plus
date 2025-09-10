@@ -6,7 +6,7 @@ from ome_types import from_xml, validate_xml
 from rich import print
 
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.metadata._ome import create_ome_metadata
+from pymmcore_plus.metadata._ome import create_ome_metadata_from_path
 
 SEQ = [
     useq.MDASequence(
@@ -109,7 +109,7 @@ def test_ome_generation():
         mmc.mda.run(s)
 
         assert mmc.mda.engine
-        ome = create_ome_metadata(mmc.mda.engine._ome_path)
+        ome = create_ome_metadata_from_path(mmc.mda.engine._ome_path)
 
         if ome:
             print(f"\n-----------------SEQUENCE_{idx + 1}--------------------")
@@ -125,7 +125,7 @@ def test_ome_tif_example():
     mmc.mda.run(SEQ[0], output="tests/test_multipos.ome.tif")
 
     assert mmc.mda.engine is not None
-    print(create_ome_metadata(mmc.mda.engine._ome_path).to_xml())
+    print(create_ome_metadata_from_path(mmc.mda.engine._ome_path).to_xml())
 
     files = ["tests/test_multipos_p0.ome.tif", "tests/test_multipos_p1.ome.tif"]
 
@@ -159,6 +159,7 @@ def test_ome_tif_example():
 
     # delete test files
     import os
+
     for fname in [*files, "tests/test_multipos.ome.tif"]:
         if os.path.exists(fname):
             os.remove(fname)

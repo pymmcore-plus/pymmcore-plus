@@ -37,7 +37,9 @@ if TYPE_CHECKING:
 MDA_EVENT = "mda_event"
 
 
-def create_ome_metadata(metadata_path: Path | str) -> OME:
+def create_ome_metadata(
+    summary_metadata: SummaryMetaV1, frame_metadata_list: list[FrameMetaV1]
+) -> OME:
     """Create OME metadata from metadata saved as json by the core engine.
 
     The metadata path should contain two files, `summary_metadata.json` and
@@ -54,14 +56,8 @@ def create_ome_metadata(metadata_path: Path | str) -> OME:
     OME
         The OME metadata as an `ome_types.OME` object.
     """
-    if isinstance(metadata_path, str):
-        metadata_path = Path(metadata_path)
-
     # create OME model
     ome = OME(uuid=f"urn:uuid:{uuid.uuid4()}")
-
-    # load summary metadata
-    summary_metadata = _load_summary_metadata(metadata_path)
 
     # get instrument information from summary metadata
     ome.instruments = _add_ome_instrument_info(summary_metadata)
@@ -75,8 +71,6 @@ def create_ome_metadata(metadata_path: Path | str) -> OME:
     if dtype is None:
         return ome
 
-    # load all frame metadata from JSONL file
-    frame_metadata_list = _load_frames_metadata(metadata_path)
     if not frame_metadata_list:
         return ome
 
@@ -194,7 +188,7 @@ def _positions_to_image_ids(
 
     for key in positions_map:
         # parse position key to extract name and indices
-        position_name, image_id = _parse_position_key(key)
+        _position_name, image_id = _parse_position_key(key)
         position_frames = positions_map[key]
 
         # extract position index from the first frame

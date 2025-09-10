@@ -48,7 +48,7 @@ dependencies = [
     # cli requirements included by default for now
     "typer >=0.4.2",
     "rich >=10.2.0",
-    "ome-types"
+    "ome-types",
 ]
 
 # extras
@@ -175,6 +175,7 @@ filterwarnings = [
     "error",
     "ignore:Failed to disconnect::pytestqt",
     "ignore:numpy.core.multiarray is deprecated",
+    "ignore:Failing to pass a value to the 'type_params' parameter",
 ]
 markers = ["run_last: mark a test to run last"]
 

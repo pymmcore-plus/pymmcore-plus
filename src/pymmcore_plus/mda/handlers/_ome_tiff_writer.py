@@ -36,11 +36,10 @@ Non-OME (ImageJ) hyperstack axes MUST be in TZCYXS order
 
 from __future__ import annotations
 
-import warnings
-from typing import TYPE_CHECKING
+from datetime import timedelta
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
-from ome_types.model import OME
 
 from ._5d_writer_base import _NULL, _5DWriterBase
 
@@ -105,12 +104,15 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
         ary.flush()
 
     def new_array(
-        self, position_key: str, dtype: np.dtype, dim_sizes: dict[str, int]
+        self, position_key: str, dtype: np.dtype, sizes: dict[str, int]
     ) -> np.memmap:
         """Create a new tifffile file and memmap for this position."""
         from tifffile import imwrite, memmap
 
-        _, shape = zip(*dim_sizes.items())
+        dims, shape = zip(*sizes.items())
+
+        metadata: dict[str, Any] = self._sequence_metadata()
+        metadata["axes"] = "".join(dims).upper()
 
         # append the position key to the filename if there are multiple positions
         if (seq := self.current_sequence) and seq.sizes.get("p", 1) > 1:
@@ -119,11 +121,14 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
         else:
             fname = self._filename
 
+        # create parent directories if they don't exist
+        # Path(fname).parent.mkdir(parents=True, exist_ok=True)
         # write empty file to disk
         imwrite(
             fname,
             shape=shape,
             dtype=dtype,
+            metadata=metadata,
             imagej=not self._is_ome,
             ome=self._is_ome,
         )
@@ -135,115 +140,38 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
 
         return mmap  # type: ignore
 
-    def finalize_metadata(self) -> None:
-        """Update TIFF files with complete OME metadata after sequence completion."""
-        if not self._is_ome or not self.current_sequence:
-            # Call parent to handle any base class cleanup
-            super().finalize_metadata()
-            return
+    def _sequence_metadata(self) -> dict:
+        """Create metadata for the sequence, when creating a new file."""
+        if not self._is_ome:
+            return {}
 
-        try:
-            from pathlib import Path
+        metadata: dict = {}
+        # see tifffile.tifffile for more metadata options
+        if seq := self.current_sequence:
+            if seq.time_plan and hasattr(seq.time_plan, "interval"):
+                interval = seq.time_plan.interval
+                if isinstance(interval, timedelta):
+                    interval = interval.total_seconds()
+                metadata["TimeIncrement"] = interval
+                metadata["TimeIncrementUnit"] = "s"
+            if seq.z_plan and hasattr(seq.z_plan, "step"):
+                metadata["PhysicalSizeZ"] = seq.z_plan.step
+                metadata["PhysicalSizeZUnit"] = "µm"
+            if seq.channels:
+                metadata["Channel"] = {"Name": [c.config for c in seq.channels]}
 
-            from pymmcore_plus._util import USER_DATA_MM_PATH
-            from pymmcore_plus.metadata._ome import create_ome_metadata
+        # TODO
+        # if acq_date := meta.get("Time"):
+        #     metadata["AcquisitionDate"] = acq_date
+        # if pix := meta.get("PixelSizeUm"):
+        #     metadata["PhysicalSizeX"] = pix
+        #     metadata["PhysicalSizeY"] = pix
+        #     metadata["PhysicalSizeXUnit"] = "µm"
+        #     metadata["PhysicalSizeYUnit"] = "µm"
 
-            # Use the OME metadata path created by the engine
-            ome_path = Path(USER_DATA_MM_PATH) / "ome_meta"
-            sequence_path = ome_path / str(self.current_sequence.uid)
-
-            # Check if the metadata files exist
-            if not sequence_path.exists():
-                warnings.warn(
-                    f"OME metadata path not found: {sequence_path}", stacklevel=2
-                )
-                super().finalize_metadata()
-                return
-
-            # Generate rich OME metadata for the entire sequence
-            ome = create_ome_metadata(sequence_path)
-
-            # Update each TIFF file with position-specific OME metadata
-            self._update_tiff_metadata_by_position(ome)
-
-        except Exception as e:
-            # Don't fail the entire acquisition if metadata update fails
-            print(f"Warning: Failed to update OME metadata: {e}")
-
-        # Call parent to handle any base class cleanup
-        super().finalize_metadata()
-
-    def _update_tiff_metadata_by_position(self, full_ome: OME) -> None:
-        """Update OME-XML metadata in each TIFF file with position-specific metadata."""
-        # Get all the TIFF files that were created
-        for position_key in self.position_arrays:
-            # Extract position index from position_key (e.g., "p0" -> 0)
-            try:
-                # remove 'p' prefix
-                position_index = int(position_key[1:])
-            except (ValueError, IndexError):
-                warnings.warn(
-                    f"Could not parse position index from key: {position_key}",
-                    stacklevel=2,
-                )
-                continue
-
-            # Find the corresponding Image in the full OME metadata
-            position_image = None
-            for image in full_ome.images:
-                # Image IDs are in the format "Image:0", "Image:1", etc.
-                if image.id == f"Image:{position_index}":
-                    position_image = image
-                    break
-
-            if position_image is None:
-                warnings.warn(
-                    f"No OME Image found for position {position_index}", stacklevel=2
-                )
-                continue
-
-            # Create a new OME object containing only this position's image
-            pos_ome = OME(
-                uuid=full_ome.uuid,
-                images=[position_image],
-                instruments=full_ome.instruments,
-                plates=full_ome.plates or [],
-            )
-
-            # Reconstruct the filename for this position
-            if self.current_sequence and self.current_sequence.sizes.get("p", 1) > 1:
-                ext = ".ome.tif" if self._is_ome else ".tif"
-                fname = self._filename.replace(ext, f"_{position_key}{ext}")
-            else:
-                fname = self._filename
-
-            # Try to update the OME metadata
-            self._write_ome_metadata_to_file(fname, pos_ome.to_xml())
-
-    def _write_ome_metadata_to_file(self, fname: str, ome_xml: str) -> None:
-        """Write OME metadata to a TIFF file, handling Unicode properly."""
-        try:
-            import tifffile
-        except ImportError as e:  # pragma: no cover
-            raise ImportError(
-                "tifffile is required to use this handler. "
-                "Please `pip install tifffile`."
-            ) from e
-
-        try:
-            # NOTE: this is VERY WRONG, I'M TEMPORARILY DOING THIS TO MAKE IT WORK BUT
-            # WHEN READING THE METADATA THE UNITS AFRE WRONG SO WE NEED TO FIND A FIX
-            # Convert Unicode characters to ASCII-compatible alternatives
-            ascii_ome_xml = ome_xml.replace("µm", "mm")
-            # Ensure it's ASCII-compatible
-            ascii_ome_xml.encode("ascii")
-
-            # Write the OME-XML
-            tifffile.tiffcomment(fname, ascii_ome_xml)
-
-        except UnicodeEncodeError as e:
-            warnings.warn(
-                f"Failed to write OME metadata to {fname}. Unicode encoding error: {e}",
-                UserWarning,
-                stacklevel=2,
-            )
+        # TODO:
+        # there's a LOT we could still capture, but it comes off the microscope
+        # over the course of the acquisition (such as stage positions, exposure times)
+        # ... one option is to accumulate these things and then use `tifffile.comment`
+        # to update the total metadata in finalize_metadata
+        return metadata
