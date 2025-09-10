@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 class PyDeviceManager:
     """Manages loaded Python devices."""
 
-    __slots__ = ("_devices",)
+    __slots__ = ("_devices", "_executor")
 
     def __init__(self) -> None:
         self._devices: dict[str, Device] = {}
@@ -53,9 +53,8 @@ class PyDeviceManager:
 
         # Initialize all devices in parallel
         with ThreadPoolExecutor() as executor:
-            for future in as_completed(
-                executor.submit(self.initialize, label) for label in labels
-            ):
+            futures = [executor.submit(self.initialize, label) for label in labels]
+            for future in as_completed(futures):
                 future.result()
 
     def wait_for(
@@ -75,17 +74,25 @@ class PyDeviceManager:
                 )
             time.sleep(polling_interval)
 
-    def wait_for_device_type(self, dev_type: int, timeout_ms: float = 5000) -> None:
+    def wait_for_device_type(
+        self, dev_type: int, timeout_ms: float = 5000, *, parallel: bool = True
+    ) -> None:
         if not (labels := self.get_labels_of_type(dev_type)):
             return  # pragma: no cover
-
-        # Wait for all python devices of the given type in parallel
-        with ThreadPoolExecutor() as executor:
-            futures = (
-                executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
-            )
-            for future in as_completed(futures):
-                future.result()  # Raises any exceptions from wait_for_device
+        if not parallel:
+            for lbl in labels:
+                self.wait_for(lbl, timeout_ms)
+        else:
+            # Wait for all python devices of the given type in parallel
+            # it's critical that this be a list comprehension,
+            # not a generator expression, otherwise the executor may be shut down
+            # before any tasks are actually submitted
+            with ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
+                ]
+                for future in as_completed(futures):
+                    future.result()  # Raises any exceptions from wait_for_device
 
     def get_initialization_state(self, label: str) -> DeviceInitializationState:
         """Return the initialization state of the device with the given label."""

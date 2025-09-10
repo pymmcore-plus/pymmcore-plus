@@ -170,8 +170,8 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
         "datetime",
     }
     sf_mock.assert_called_once_with(mda)
-    xystage_mock.assert_called_with("XY", 1.0, 1.0)
-    exp_mock.assert_called_with("Camera", 1.0)
+    xystage_mock.assert_has_calls((call("XY", 1.0, 1.0),))
+    exp_mock.assert_has_calls((call("Camera", 1.0),))
     stage_mock.assert_has_calls(
         [
             call("Z", -0.5),
@@ -189,7 +189,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
 @pytest.mark.skipif(QObject is None, reason="Qt not available.")
 def test_mda_pause_cancel(qtbot: "QtBot") -> None:
     """Test signal emission during MDA with cancelation"""
-    core = CMMCorePlus.instance()
+    core = CMMCorePlus()
     core.loadSystemConfiguration()
 
     mda = MDASequence(
