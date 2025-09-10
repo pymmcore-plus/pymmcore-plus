@@ -10,7 +10,7 @@ from pymmcore_plus.mda._engine import MDAEngine
 def test_slm_image():
     DEV = "slm"
 
-    mmc = CMMCorePlus.instance()
+    mmc = CMMCorePlus()
     mmc.loadSystemConfiguration()
     mock_core = MagicMock(wraps=mmc)
     mock_core.getDeviceName.return_value = "Mosaic3"  # for device name lookup
