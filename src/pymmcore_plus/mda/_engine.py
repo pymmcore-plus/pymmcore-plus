@@ -50,6 +50,7 @@ _SLM_DEVICES_PIXEL_ON_VALUES: dict[str, int] = {
 
 # create ome_meta folder if it doesn't exist to store OME metadata while the
 # acquisition is running. This will be used to then create ome metadata.
+# TODO: where should we save the data??? how to delete them once used???
 OME_PATH = Path(USER_DATA_MM_PATH) / "ome_meta"
 OME_PATH.mkdir(exist_ok=True, parents=True)
 
