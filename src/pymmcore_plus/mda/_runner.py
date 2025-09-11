@@ -445,8 +445,9 @@ class MDARunner:
         if self._check_canceled():
             return True
 
-        while self._paused and not self._request_cancel:
+        if self._paused and not self._request_cancel:
             self._status = RunStatus.PAUSED
+        while self._paused and not self._request_cancel:
             self._paused_time += self._pause_interval  # fixme: be more precise
             time.sleep(self._pause_interval)
 
