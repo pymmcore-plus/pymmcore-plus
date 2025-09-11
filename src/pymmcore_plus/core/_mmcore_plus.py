@@ -520,7 +520,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** The returned [`pymmcore_plus.FocusDirection`][] enum is more
         interpretable than the raw `int` returned by `pymmcore`
         """
-        return FocusDirection(super().getFocusDirection(stageLabel))
+        try:
+            return FocusDirection(super().getFocusDirection(stageLabel))
+        except (ValueError, TypeError):
+            # On some platforms (notably Windows), device adapters may return
+            # invalid values that cannot be converted to FocusDirection enum.
+            return FocusDirection.Unknown
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         """Return the intrinsic property type for a given device and property.
