@@ -48,6 +48,7 @@ dependencies = [
     # cli requirements included by default for now
     "typer >=0.4.2",
     "rich >=10.2.0",
+    "ome-types >=0.6.0",
 ]
 
 # extras
@@ -78,6 +79,7 @@ test = [
     "ipython>=8.18.0",
     "pytest >=8",
     "xarray >=2024.1",
+    "lxml >=6.0",
 ]
 test-codspeed = [{ include-group = "test" }, "pytest-codspeed >=3.2.0"]
 test-qt = [{ include-group = 'test' }, "pytest-qt ==4.4", "qtpy >=2"]
@@ -176,6 +178,7 @@ filterwarnings = [
     "ignore:numpy.core.multiarray is deprecated",
     "ignore:Focus direction is unknown",
     "ignore:'BaseCommand' is deprecated:DeprecationWarning:typer",
+    "ignore:Failing to pass a value to the 'type_params' parameter",
 ]
 markers = ["run_last: mark a test to run last"]
 
@@ -203,7 +206,7 @@ exclude_lines = [
     "if TYPE_CHECKING:",
     "@overload",
     "except ImportError",
-    "except Exception as e:",  # ok not to cover bare exception catches in tests
+    "except Exception as e:",     # ok not to cover bare exception catches in tests
     "raise AssertionError",
     "\\.\\.\\.",
     "if __name__ == .__main__.:",
