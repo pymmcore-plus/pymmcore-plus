@@ -495,28 +495,5 @@ def _build_ome_plate(
 
 def _build_instrument_list(summary_metadata: SummaryMetaV1) -> list[Instrument]:
     """Build instrument list from summary metadata."""
-    # TODO: use devices to get info about microscope
-    # create instrument information
-
-    # instrument = None
-    # microscope_device = None
-    # camera_device = None
-
-    # devices = summary_metadata[DEVICES]
-    # for device in devices:
-    #     if ...
-    #        microscope_device = ...
-    #     if ...
-
-    # if microscope_device:
-    #     microscope = Microscope(
-    #             manufacturer=microscope_device.get("description", "Unknown"),
-    #             model="Micro-Manager System",
-    #         )
-    #     instrument = Instrument(
-    #         id="Instrument:0",
-    #         microscope=microscope,
-    #     )
-    #     ome.instruments.append(instrument)
-    # ...
+    # TODO
     return []
