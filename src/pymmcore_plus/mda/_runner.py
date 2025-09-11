@@ -500,7 +500,7 @@ class MDARunner:
         # This is a hidden type error.
         # The PMDASignaler signaler protocol says that sequenceFinished emits
         # a SummaryMetaV1 and a tuple of FrameMetaV1, but we don't actually
-        # enforce that here (it's up the to runner).
+        # enforce that here (it's up to the runner).
         # This is a general leaking of implementation details of the
         # default engine into the runner, not sure how to fix it.
         self._signals.sequenceFinished.emit(
