@@ -88,6 +88,23 @@ class MDARunner:
     that are available to connect to and when they are emitted).
     """
 
+    __slots__ = (
+        "_engine",
+        "_frame_metadatas",
+        "_handlers",
+        "_pause_interval",
+        "_paused",
+        "_paused_time",
+        "_request_cancel",
+        "_running",
+        "_sequence",
+        "_sequence_t0",
+        "_signals",
+        "_status",
+        "_summary_metadata",
+        "_t0",
+    )
+
     def __init__(self) -> None:
         self._engine: PMDAEngine | None = None
         self._signals = _get_auto_MDA_callback_class()()
