@@ -298,7 +298,8 @@ def _get_dimension_info(
     pixel_size_um = 1.0
     dtype: str | None = None
     width = height = 0
-    if image_infos and (img_info := image_infos[0]):
+    if image_infos:
+        img_info = image_infos[0]
         pixel_size_um = img_info.get("pixel_size_um", 1.0)
         dtype = img_info.get("dtype")
         width, height = img_info.get("width", 0), img_info.get("height", 0)
