@@ -1,6 +1,21 @@
+from enum import Enum
 from typing import ClassVar, Protocol, runtime_checkable
 
 from pymmcore_plus.core.events._protocol import PSignal
+
+
+class RunStatus(str, Enum):
+    """Enumeration of the possible states of the MDA runner."""
+
+    IDLE = "idle"
+    RUNNING = "running"
+    PAUSED = "paused"
+    CANCELED = "canceled"
+    ERROR = "error"
+    COMPLETED = "completed"
+
+    def __str__(self) -> str:
+        return str(self.value)
 
 
 @runtime_checkable
@@ -18,7 +33,14 @@ class PMDASignaler(Protocol):
     sequenceCanceled: ClassVar[PSignal]
     """Emits `(sequence: MDASequence)` when an acquisition sequence is canceled."""
     sequenceFinished: ClassVar[PSignal]
-    """Emits `(sequence: MDASequence)` when an acquisition sequence is finished."""
+    """Emits `(sequence: MDASequence, status: RunStatus, summary_meta: Mapping, frame_metas: tuple[Mapping])` when an acquisition sequence is finished.
+
+    In practice summary_meta will often be of type
+    [`SummaryMetaV1`][pymmcore_plus.metadata.schema.SummaryMetaV1] and frame_metas will
+    often be a tuple of [`FrameMetaV1`][pymmcore_plus.metadata.schema.FrameMetaV1]
+    objects. But that is only true if the [`MDAEngine`][pymmcore_plus.mda.MDAEngine]
+    used in the acquisition produces metadata of those types.
+    """  # noqa: E501
     frameReady: ClassVar[PSignal]
     """Emits `(img: np.ndarray, event: MDAEvent, metadata: dict)` after an image is acquired during an acquisition sequence.
 
