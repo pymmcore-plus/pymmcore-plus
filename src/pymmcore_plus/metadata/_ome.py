@@ -102,7 +102,7 @@ class _PositionKey(NamedTuple):
     def __str__(self) -> str:
         p_name = self.name or f"Pos{self.p_index:04d}"
         if self.g_index is not None:
-            return f"{p_name}_Grid{self.g_index:04d}_{self.p_index}_{self.g_index}"
+            return f"{p_name}_Grid{self.g_index:04d}_{self.p_index}"
         else:
             return f"{p_name}_{self.p_index}"
 
