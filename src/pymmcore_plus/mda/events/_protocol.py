@@ -33,7 +33,7 @@ class PMDASignaler(Protocol):
     sequenceCanceled: ClassVar[PSignal]
     """Emits `(sequence: MDASequence)` when an acquisition sequence is canceled."""
     sequenceFinished: ClassVar[PSignal]
-    """Emits `(sequence: MDASequence, status: RunStatus, summary_meta: Mapping, frame_metas: tuple[Mapping])` when an acquisition sequence is finished.
+    """Emits `(sequence: MDASequence, status: RunStatus, summary_meta: Mapping, frame_metas: tuple[Mapping, ...])` when an acquisition sequence is finished.
 
     In practice summary_meta will often be of type
     [`SummaryMetaV1`][pymmcore_plus.metadata.schema.SummaryMetaV1] and frame_metas will
