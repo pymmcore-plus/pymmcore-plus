@@ -168,6 +168,11 @@ class MDAEngine(PMDAEngine):
             core = CMMCorePlus.instance()
             self._mmcore_ref = weakref.ref(core)
 
+        # just in case a non-programmatic changes have been made in the meantime
+        # https://github.com/pymmcore-plus/pymmcore-plus/issues/503
+        core._last_config = ("", "")  # noqa: SLF001
+        core._last_xy_position.clear()  # noqa: SLF001
+
         self._update_config_device_props()
         # get if the autofocus is engaged at the start of the sequence
         self._af_was_engaged = core.isContinuousFocusLocked()
