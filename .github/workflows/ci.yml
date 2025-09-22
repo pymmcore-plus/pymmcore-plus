@@ -100,13 +100,14 @@ jobs:
 
   test-pymmcore-widgets:
     name: test pymmcore-widgets
-    runs-on: macos-15-intel
+    runs-on: ${{ matrix.os }}
     env:
       UV_MANAGED_PYTHON: "1"
       UV_NO_SYNC: "1"
     strategy:
       fail-fast: false
       matrix:
+        os: [macos-latest, windows-latest]
         qt: [PySide6, PyQt6]
     steps:
       - uses: actions/checkout@v5
@@ -119,7 +120,7 @@ jobs:
           fetch-depth: 0
       - uses: astral-sh/setup-uv@v6
         with:
-          python-version: "3.12"
+          python-version: "3.13"
           enable-cache: true
       - uses: pyvista/setup-headless-display-action@v4
         with:
@@ -146,7 +147,7 @@ jobs:
 
   test-pymmcore-gui:
     name: test pymmcore-gui
-    runs-on: macos-15-intel
+    runs-on: windows-latest
     env:
       UV_MANAGED_PYTHON: "1"
       UV_NO_SYNC: "1"
@@ -221,8 +222,9 @@ jobs:
         run: uv run mmcore build-dev
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v3
+        uses: CodSpeedHQ/action@v4
         with:
+          mode: instrumentation
           run: uv run pytest -W ignore --codspeed -v --color=yes
 
   deploy:
