@@ -17,6 +17,7 @@ from ome_types.model import (
     PixelType,
     Plane,
     Plate,
+    TiffData,
     UnitsLength,
     UnitsTime,
     Well,
@@ -375,8 +376,6 @@ def _build_pixels_object(
     position_frames: list[FrameMetaV1],
 ) -> Pixels:
     """Build a Pixels object with the given parameters."""
-    from ome_types.model import MetadataOnly
-
     return Pixels(
         id=f"Pixels:{image_id}",
         dimension_order=dimension_order,
@@ -391,9 +390,34 @@ def _build_pixels_object(
         physical_size_y=dimension_info.pixel_size_um,
         physical_size_y_unit=UnitsLength.MICROMETER,
         channels=channels,
-        metadata_only=MetadataOnly(),
+        tiff_data_blocks=_build_tiff_data_list(position_frames),
         planes=_build_plane_list(position_frames),
     )
+
+
+def _build_tiff_data_list(position_frames: list[FrameMetaV1]) -> list[TiffData]:
+    """Build TiffData objects for frame metadata at a specific position."""
+    tiff_data_blocks = []
+    for frame_metadata in position_frames:
+        mda_event = _extract_mda_event(frame_metadata)
+        if mda_event is None:  # pragma: no cover
+            continue
+
+        event_index = mda_event.index
+        z_index = event_index.get("z", 0)
+        c_index = event_index.get("c", 0)
+        t_index = event_index.get("t", 0)
+
+        # Create a TiffData block for this plane
+        tiff_data = TiffData(
+            first_z=z_index,
+            first_c=c_index,
+            first_t=t_index,
+            plane_count=1,
+        )
+        tiff_data_blocks.append(tiff_data)
+
+    return tiff_data_blocks
 
 
 def _build_plane_list(position_frames: list[FrameMetaV1]) -> list[Plane]:

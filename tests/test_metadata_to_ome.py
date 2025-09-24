@@ -107,6 +107,17 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     sizes = [v for k, v in seq.sizes.items() if v and k not in {"p", "g"}]
     assert len(ome.images[0].pixels.planes) == prod(sizes)
 
+    pixels = ome.images[0].pixels
+    assert pixels.metadata_only is None
+    assert pixels.tiff_data_blocks is not None
+    assert len(pixels.tiff_data_blocks) == len(pixels.planes)
+
+    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes):
+        assert tiff_data.first_z == plane.the_z
+        assert tiff_data.first_c == plane.the_c
+        assert tiff_data.first_t == plane.the_t
+        assert tiff_data.plane_count == 1
+
     if isinstance((plan := seq.stage_positions), useq.WellPlatePlan):
         assert ome.plates is not None
         plate = ome.plates[0]
@@ -161,6 +172,17 @@ def test_ome_generation_from_events() -> None:
 
     assert len(ome.images) == 1
     assert len(ome.images[0].pixels.planes) == len(events)
+
+    pixels = ome.images[0].pixels
+    assert pixels.metadata_only is None
+    assert pixels.tiff_data_blocks is not None
+    assert len(pixels.tiff_data_blocks) == len(pixels.planes)
+
+    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes):
+        assert tiff_data.first_z == plane.the_z
+        assert tiff_data.first_c == plane.the_c
+        assert tiff_data.first_t == plane.the_t
+        assert tiff_data.plane_count == 1
 
 
 def test_stupidly_empty_metadata() -> None:
