@@ -7,6 +7,7 @@ import pytest
 
 from pymmcore_plus import DeviceInitializationState, DeviceType, PropertyType, _pymmcore
 from pymmcore_plus.experimental.unicore import GenericDevice, UniMMCore, pymm_property
+from pymmcore_plus.experimental.unicore import StateDevice
 
 DOC = """Example generic device."""
 PROP_A = "propA"  # must match below
@@ -289,3 +290,62 @@ def test_waiting():
     core._pydevices = pydev_mock
     core.waitForSystem()
     pydev_mock.wait_for_device_type.assert_called_once_with(DeviceType.Any, 500)
+
+
+def test_config_groups_with_python_state_device():
+    core = UniMMCore()
+
+    class SimStateDevice(StateDevice):
+        def __init__(self, label: str, state_dict: dict[int, str]) -> None:
+            super().__init__(state_dict)
+            self._current_state = 0
+            self._current_label = self._state_to_label.get(self._current_state)
+            self._label = label
+
+        def get_state(self) -> int:
+            return self._current_state
+
+        def set_state(self, position: int | str) -> None:
+            if isinstance(position, str):
+                position = int(position)
+            self._current_state = position
+            self._current_label = self._state_to_label.get(self._current_state)
+
+    core.loadPyDevice("LED", SimStateDevice(label="LED", state_dict={0: "UV", 1: "BLUE"}))
+    core.initializeAllDevices()
+
+    # Define group and config using Python device
+    core.defineConfigGroup("my_group")
+    core.defineConfig("my_group", "uv_cfg", "LED", "Label", "UV")
+
+    # Lists should include python-side groups/configs
+    assert "my_group" in core.getAvailableConfigGroups()
+    assert "uv_cfg" in core.getAvailableConfigs("my_group")
+
+    # Change to BLUE, then apply config back to UV
+    core.setStateLabel("LED", "BLUE")
+    assert core.getStateLabel("LED") == "BLUE"
+    core.setConfig("my_group", "uv_cfg")
+    assert core.getStateLabel("LED") == "UV"
+
+    # Group state fallback (python mapping)
+    state = core.getConfigGroupState("my_group")
+    assert isinstance(state, dict)
+    assert state["LED"]["Label"] == "UV"
+
+    # Native-only should fail for python-defined groups
+    with pytest.raises(Exception):
+        core.getConfigGroupState("my_group", native=True)
+
+    # Rename and delete configs in python store
+    core.renameConfig("my_group", "uv_cfg", "uv_cfg2")
+    assert "uv_cfg2" in core.getAvailableConfigs("my_group")
+    assert "uv_cfg" not in core.getAvailableConfigs("my_group")
+
+    core.deleteConfig("my_group", "uv_cfg2")
+    assert "uv_cfg2" not in core.getAvailableConfigs("my_group")
+
+    # Also support empty two-arg defineConfig
+    core.defineConfig("empty_group", "empty")
+    assert "empty_group" in core.getAvailableConfigGroups()
+pi

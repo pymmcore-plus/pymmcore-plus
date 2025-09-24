@@ -3,6 +3,7 @@ from __future__ import annotations
 import threading
 import warnings
 from collections.abc import Iterator, MutableMapping, Sequence
+from collections import defaultdict
 from contextlib import suppress
 from datetime import datetime
 from itertools import count
@@ -107,6 +108,11 @@ class UniMMCore(CMMCorePlus):
         self._stop_event: threading.Event = threading.Event()
         self._acquisition_thread: AcquisitionThread | None = None  # TODO: implement
         self._seq_buffer = SequenceBuffer(size_mb=_DEFAULT_BUFFER_SIZE_MB)
+
+        # Python-side config-group storage for UniMMCore devices
+        # Structure: { group: { config: [(device, property, value_str), ...] } }
+        self._py_config_store: dict[str, dict[str, list[tuple[str, str, str]]]] = {}
+        self._py_config_lock = threading.Lock()
 
         super().__init__(*args, **kwargs)
 
@@ -441,6 +447,175 @@ class UniMMCore(CMMCorePlus):
                 if dev.busy():
                     return True
         return False
+
+    # ########################################################################
+    # ------------------------ Config Group Methods ------------------------
+    # ########################################################################
+
+    def defineConfigGroup(self, groupName: str) -> None:
+        """Define a configuration group.
+
+        Native-first: attempt the C++ implementation, then ensure the Python-side
+        store contains the group for UniMMCore python devices.
+        """
+        try:
+            return super().defineConfigGroup(groupName)
+        except Exception:
+            # Fall back to python-side store
+            with self._py_config_lock:
+                self._py_config_store.setdefault(groupName, {})
+
+    def defineConfig(
+        self,
+        groupName: str,
+        configName: str,
+        deviceLabel: str | None = None,
+        propName: str | None = None,
+        value: Any | None = None,
+    ) -> None:
+        """Define a config, optionally with a device/property/value entry.
+
+        - Always record in the Python store when a full triplet is provided,
+          so UniMMCore devices are supported.
+        - Attempt the native call (2-arg or 5-arg form) to support C++ devices.
+        """
+        # Record in python-side store if we have a full (device, prop, value)
+        if (deviceLabel is not None) and (propName is not None) and (value is not None):
+            with self._py_config_lock:
+                group = self._py_config_store.setdefault(groupName, {})
+                cfg_list = group.setdefault(configName, [])
+                cfg_list.append((deviceLabel, propName, str(value)))
+        else:
+            # Ensure group exists for 2-arg usage
+            with self._py_config_lock:
+                self._py_config_store.setdefault(groupName, {})
+
+        # Try native implementation
+        try:
+            if (deviceLabel is None) and (propName is None) and (value is None):
+                return super().defineConfig(groupName, configName)
+            return super().defineConfig(
+                groupName, configName, deviceLabel, propName, str(value)
+            )
+        except Exception:
+            # Ignore when native core can't handle python devices
+            return None
+
+    def getAvailableConfigGroups(self) -> tuple[str, ...]:
+        """Return available configuration groups (native + python)."""
+        native: tuple[str, ...]
+        try:
+            native = super().getAvailableConfigGroups()
+        except Exception:
+            native = ()
+        with self._py_config_lock:
+            py_groups = tuple(self._py_config_store.keys())
+        # Deduplicate while preserving order (native first)
+        seen: set[str] = set()
+        out: list[str] = []
+        for g in (*native, *py_groups):
+            if g not in seen:
+                seen.add(g)
+                out.append(g)
+        return tuple(out)
+
+    def getAvailableConfigs(self, groupName: str) -> tuple[str, ...]:
+        """Return available config names for a group (native + python)."""
+        native: tuple[str, ...]
+        try:
+            native = super().getAvailableConfigs(groupName)
+        except Exception:
+            native = ()
+        with self._py_config_lock:
+            py_cfgs = tuple(self._py_config_store.get(groupName, {}).keys())
+        seen: set[str] = set()
+        out: list[str] = []
+        for c in (*native, *py_cfgs):
+            if c not in seen:
+                seen.add(c)
+                out.append(c)
+        return tuple(out)
+
+    def deleteConfig(self, groupName: str, configName: str) -> None:
+        """Delete a configuration in a group (native + python)."""
+        try:
+            super().deleteConfig(groupName, configName)
+        except Exception:
+            # ignore native failures
+            pass
+        with self._py_config_lock:
+            if groupName in self._py_config_store:
+                self._py_config_store[groupName].pop(configName, None)
+
+    def renameConfig(self, groupName: str, oldName: str, newName: str) -> None:
+        """Rename a configuration (native + python)."""
+        try:
+            super().renameConfig(groupName, oldName, newName)
+        except Exception:
+            # ignore native failures
+            pass
+        with self._py_config_lock:
+            group = self._py_config_store.get(groupName)
+            if group and oldName in group and newName != oldName:
+                group[newName] = group.pop(oldName)
+
+    def getConfigGroupState(self, group: str, *, native: bool = False):  # type: ignore[override]
+        """Return the state of devices included in `group`.
+
+        - Prefer native when available. If native fails and native=True, re-raise.
+        - If native is False, and native fails, return a mapping of current properties
+          for devices referenced by this group's python configs.
+        """
+        try:
+            return super().getConfigGroupState(group, native=native)
+        except Exception as e:
+            if native:
+                # Respect contract: if native requested and not available, bubble up
+                raise
+            # Build mapping from python store
+            with self._py_config_lock:
+                group_cfgs = list(self._py_config_store.get(group, {}).values())
+            devices: dict[str, dict[str, Any]] = {}
+            for cfg_items in group_cfgs:
+                for dev, prop, _ in cfg_items:
+                    dev_map = devices.setdefault(dev, {})
+                    try:
+                        dev_map[prop] = self.getProperty(dev, prop)
+                    except Exception:
+                        dev_map[prop] = None
+            return devices
+
+    def setConfig(self, group: str, configName: str) -> None:  # type: ignore[override]
+        """Set the configuration `configName` in `group`.
+
+        Native-first; if native fails, apply python-side stored properties.
+        For state devices, apply via setState/setStateLabel when appropriate.
+        """
+        try:
+            return super().setConfig(group, configName)
+        except Exception:
+            pass
+
+        with self._py_config_lock:
+            cfg_items = list(self._py_config_store.get(group, {}).get(configName, []))
+
+        for dev, prop, val_str in cfg_items:
+            # Heuristics for state devices
+            if prop == str(KW.State) or prop == "State":
+                try:
+                    self.setState(dev, int(val_str))
+                    continue
+                except Exception:
+                    # Fallback to property if setState not applicable
+                    pass
+            if prop == str(KW.Label) or prop == "Label":
+                try:
+                    self.setStateLabel(dev, val_str)
+                    continue
+                except Exception:
+                    pass
+            # Generic property set
+            self.setProperty(dev, prop, val_str)
 
     def getDeviceDelayMs(self, label: DeviceLabel | str) -> float:
         if label not in self._pydevices:  # pragma: no cover
