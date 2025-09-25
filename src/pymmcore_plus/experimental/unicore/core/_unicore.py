@@ -1,9 +1,9 @@
 from __future__ import annotations
 
+import re
 import threading
 import warnings
 from collections.abc import Iterator, MutableMapping, Sequence
-from collections import defaultdict
 from contextlib import suppress
 from datetime import datetime
 from itertools import count
@@ -43,6 +43,8 @@ if TYPE_CHECKING:
     from pymmcore import (
         AdapterName,
         AffineTuple,
+        ConfigGroupName,
+        ConfigPresetName,
         DeviceLabel,
         DeviceName,
         PropertyName,
@@ -68,6 +70,11 @@ CURRENT = {
     KW.CoreSLM: None,
     KW.CoreGalvo: None,
 }
+
+
+_CACHE_MISS_RE = re.compile(
+    r"Property \"(?P<prop>.+?)\" of device \"(?P<dev>.+?)\" not found in cache"
+)
 
 
 class _CoreDevice:
@@ -230,11 +237,52 @@ class UniMMCore(CMMCorePlus):
     def initializeDevice(self, label: DeviceLabel | str) -> None:
         if label not in self._pydevices:  # pragma: no cover
             return super().initializeDevice(label)
-        return self._pydevices.initialize(label)
+        self._pydevices.initialize(label)
+        # For python StateDevices, seed cache for Label/State to support event emission
+        try:
+            with self._pydevices[label] as dev:
+                # seed using Keyword enums to avoid adapter string handling issues
+                try:
+                    self._cache_set(label, KW.Label, dev.get_property_value(KW.Label))
+                except Exception:  # pragma: no cover - defensive
+                    pass
+                try:
+                    self._cache_set(label, KW.State, dev.get_property_value(KW.State))
+                except Exception:  # pragma: no cover - defensive
+                    pass
+        except Exception:  # pragma: no cover - defensive
+            pass
+        return None
 
     def initializeAllDevices(self) -> None:
-        super().initializeAllDevices()
-        return self._pydevices.initialize_all()
+        # Make idempotent: native core may already be initialized (e.g. after
+        # loadSystemConfiguration). Ignore that specific error and proceed to
+        # initialize python devices.
+        try:
+            super().initializeAllDevices()
+        except RuntimeError as e:
+            msg = str(e).lower()
+            if (
+                "already initialized" not in msg
+                and "initialization already attempted" not in msg
+            ):
+                raise
+        # Initialize python devices and seed cache for StateDevices (Label/State only)
+        self._pydevices.initialize_all()
+        for lbl in tuple(self._pydevices):
+            try:
+                with self._pydevices[lbl] as dev:
+                    try:
+                        self._cache_set(lbl, KW.Label, dev.get_property_value(KW.Label))
+                    except Exception:  # pragma: no cover - defensive
+                        pass
+                    try:
+                        self._cache_set(lbl, KW.State, dev.get_property_value(KW.State))
+                    except Exception:  # pragma: no cover - defensive
+                        pass
+            except Exception:  # pragma: no cover - defensive
+                pass
+        return None
 
     def getDeviceInitializationState(self, label: str) -> DeviceInitializationState:
         if label not in self._pydevices:  # pragma: no cover
@@ -270,6 +318,15 @@ class UniMMCore(CMMCorePlus):
 
     # ---------------------------- Properties ---------------------------
 
+    @staticmethod
+    def _prop_key(prop: PropertyName | str | Keyword) -> str:
+        return str(prop)
+
+    def _cache_set(
+        self, device: DeviceLabel | str, prop: PropertyName | str | Keyword, value: Any
+    ) -> None:
+        self._state_cache[(device, self._prop_key(prop))] = value
+
     def getDevicePropertyNames(
         self, label: DeviceLabel | str
     ) -> tuple[PropertyName, ...]:
@@ -292,7 +349,7 @@ class UniMMCore(CMMCorePlus):
             return super().getProperty(label, propName)
         with self._pydevices[label] as dev:
             value = dev.get_property_value(propName)
-            self._state_cache[(label, propName)] = value
+            self._cache_set(label, propName, value)
         return value
 
     def getPropertyFromCache(
@@ -300,16 +357,120 @@ class UniMMCore(CMMCorePlus):
     ) -> Any:
         if deviceLabel not in self._pydevices:  # pragma: no cover
             return super().getPropertyFromCache(deviceLabel, propName)
-        return self._state_cache[(deviceLabel, propName)]
+        key = (deviceLabel, self._prop_key(propName))
+        if key not in self._state_cache:
+            prop_str = self._prop_key(propName)
+            if prop_str in (str(KW.Label), str(KW.State)):
+                try:
+                    state_dev = self._py_state(deviceLabel)
+                except Exception:
+                    state_dev = None
+                if state_dev is not None:
+                    try:
+                        with state_dev:
+                            kw = KW.Label if prop_str == str(KW.Label) else KW.State
+                            value = state_dev.get_property_value(kw)
+                        self._cache_set(deviceLabel, kw, value)
+                    except Exception:
+                        pass
+        return self._state_cache[key]
 
     def setProperty(
         self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
-        if label not in self._pydevices:  # pragma: no cover
+        """Set a property on either a native or python device.
+
+        - For python devices, set directly on the device and update the python-side
+          cache. Use the CMMCorePlus emission helper for consistent signals.
+        - For native devices, pre-seed critical cache entries for python state devices
+          to avoid cache-miss during native-side operations that consult cache, then
+          delegate to the superclass.
+        """
+        if label in self._pydevices:
+            # Python device path
+            # Ensure events.propertyChanged mirrors native behavior
+            with self._property_change_emission_ensured(label, (propName,)):
+                with self._pydevices[label] as dev:
+                    dev.set_property_value(propName, propValue)
+                    self._cache_set(label, propName, propValue)
+            return None
+
+        # Native device path: seed cache for python StateDevices (Label/State)
+        def _seed_state_cache() -> None:
+            for lbl in tuple(self._pydevices):
+                try:
+                    with self._pydevices.get_device_of_type(
+                        lbl, StateDevice
+                    ) as state_dev:
+                        try:
+                            val = state_dev.get_property_value(KW.Label)
+                            self._cache_set(lbl, KW.Label, val)
+                        except Exception:  # pragma: no cover - defensive
+                            pass
+                        try:
+                            val = state_dev.get_property_value(KW.State)
+                            self._cache_set(lbl, KW.State, val)
+                        except Exception:  # pragma: no cover - defensive
+                            pass
+                except Exception:  # pragma: no cover - defensive
+                    continue
+
+        _seed_state_cache()
+        try:
             return super().setProperty(label, propName, propValue)
-        with self._pydevices[label] as dev:
-            dev.set_property_value(propName, propValue)
-            self._state_cache[(label, propName)] = propValue
+        except ValueError as e:
+            # In case native path consulted cache mid-operation before seeding
+            msg = str(e)
+            if "not found in cache" in msg:
+                match = _CACHE_MISS_RE.search(msg)
+                if match:
+                    dev_label = match.group("dev")
+                    prop = match.group("prop")
+                    if dev_label in self._pydevices:
+                        # ensure cache populated for the referenced python state device
+                        if prop == str(KW.Label):
+                            try:
+                                with self._pydevices.get_device_of_type(
+                                    dev_label, StateDevice
+                                ) as sdev:
+                                    self._cache_set(
+                                        dev_label,
+                                        KW.Label,
+                                        sdev.get_property_value(KW.Label),
+                                    )
+                            except Exception:  # pragma: no cover - defensive
+                                pass
+                        elif prop == str(KW.State):
+                            try:
+                                with self._pydevices.get_device_of_type(
+                                    dev_label, StateDevice
+                                ) as sdev:
+                                    self._cache_set(
+                                        dev_label,
+                                        KW.State,
+                                        sdev.get_property_value(KW.State),
+                                    )
+                            except Exception:  # pragma: no cover - defensive
+                                pass
+                        # If native call already set the value, emit event and exit
+                        current_val: Any | None
+                        try:
+                            current_val = self.getProperty(label, propName)
+                        except Exception:
+                            current_val = None
+                        if current_val is not None and str(current_val) == str(
+                            propValue
+                        ):
+                            try:
+                                self.events.propertyChanged.emit(
+                                    label, self._prop_key(propName), current_val
+                                )
+                            except Exception:
+                                pass
+                            return None
+                _seed_state_cache()
+                return super().setProperty(label, propName, propValue)
+            raise
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         if label not in self._pydevices:  # pragma: no cover
@@ -493,17 +654,24 @@ class UniMMCore(CMMCorePlus):
         # Try native implementation
         try:
             if (deviceLabel is None) and (propName is None) and (value is None):
-                return super().defineConfig(groupName, configName)
-            return super().defineConfig(
-                groupName, configName, deviceLabel, propName, str(value)
-            )
-        except Exception:
-            # Ignore when native core can't handle python devices
+                super().defineConfig(groupName, configName)
+            else:
+                assert deviceLabel is not None
+                assert propName is not None
+                super().defineConfig(
+                    groupName,
+                    configName,
+                    deviceLabel,
+                    propName,
+                    str(value),
+                )
+        except Exception:  # pragma: no cover - native may reject python devices
             return None
+        return None
 
-    def getAvailableConfigGroups(self) -> tuple[str, ...]:
+    def getAvailableConfigGroups(self) -> tuple[ConfigGroupName, ...]:
         """Return available configuration groups (native + python)."""
-        native: tuple[str, ...]
+        native: tuple[ConfigGroupName, ...]
         try:
             native = super().getAvailableConfigGroups()
         except Exception:
@@ -517,11 +685,11 @@ class UniMMCore(CMMCorePlus):
             if g not in seen:
                 seen.add(g)
                 out.append(g)
-        return tuple(out)
+        return cast("tuple[ConfigGroupName, ...]", tuple(out))
 
-    def getAvailableConfigs(self, groupName: str) -> tuple[str, ...]:
+    def getAvailableConfigs(self, groupName: str) -> tuple[ConfigPresetName, ...]:
         """Return available config names for a group (native + python)."""
-        native: tuple[str, ...]
+        native: tuple[ConfigPresetName, ...]
         try:
             native = super().getAvailableConfigs(groupName)
         except Exception:
@@ -534,12 +702,21 @@ class UniMMCore(CMMCorePlus):
             if c not in seen:
                 seen.add(c)
                 out.append(c)
-        return tuple(out)
+        return cast("tuple[ConfigPresetName, ...]", tuple(out))
 
-    def deleteConfig(self, groupName: str, configName: str) -> None:
+    def deleteConfig(
+        self,
+        groupName: ConfigGroupName | str,
+        configName: ConfigPresetName | str,
+        deviceLabel: DeviceLabel | str | None = None,
+        propName: PropertyName | str | None = None,
+    ) -> None:
         """Delete a configuration in a group (native + python)."""
         try:
-            super().deleteConfig(groupName, configName)
+            if deviceLabel is not None and propName is not None:
+                super().deleteConfig(groupName, configName, deviceLabel, propName)
+            else:
+                super().deleteConfig(groupName, configName)
         except Exception:
             # ignore native failures
             pass
@@ -559,7 +736,12 @@ class UniMMCore(CMMCorePlus):
             if group and oldName in group and newName != oldName:
                 group[newName] = group.pop(oldName)
 
-    def getConfigGroupState(self, group: str, *, native: bool = False):  # type: ignore[override]
+    def getConfigGroupState(
+        self,
+        group: ConfigGroupName | str,
+        *,
+        native: bool = False,
+    ) -> Any:
         """Return the state of devices included in `group`.
 
         - Prefer native when available. If native fails and native=True, re-raise.
@@ -567,8 +749,10 @@ class UniMMCore(CMMCorePlus):
           for devices referenced by this group's python configs.
         """
         try:
-            return super().getConfigGroupState(group, native=native)
-        except Exception as e:
+            if native:
+                return super().getConfigGroupState(group, native=True)
+            return super().getConfigGroupState(group)
+        except Exception:
             if native:
                 # Respect contract: if native requested and not available, bubble up
                 raise
@@ -585,7 +769,7 @@ class UniMMCore(CMMCorePlus):
                         dev_map[prop] = None
             return devices
 
-    def setConfig(self, group: str, configName: str) -> None:  # type: ignore[override]
+    def setConfig(self, group: str, configName: str) -> None:
         """Set the configuration `configName` in `group`.
 
         Native-first; if native fails, apply python-side stored properties.
@@ -604,6 +788,8 @@ class UniMMCore(CMMCorePlus):
             if prop == str(KW.State) or prop == "State":
                 try:
                     self.setState(dev, int(val_str))
+                    # update cache for cached current-config detection
+                    self._cache_set(dev, prop, val_str)
                     continue
                 except Exception:
                     # Fallback to property if setState not applicable
@@ -611,11 +797,164 @@ class UniMMCore(CMMCorePlus):
             if prop == str(KW.Label) or prop == "Label":
                 try:
                     self.setStateLabel(dev, val_str)
+                    # update cache for cached current-config detection
+                    self._cache_set(dev, prop, val_str)
                     continue
                 except Exception:
                     pass
             # Generic property set
             self.setProperty(dev, prop, val_str)
+
+    # ----------------------------- Config Introspection -----------------------------
+
+    def getConfigState(
+        self,
+        groupName: ConfigGroupName | str,
+        configName: ConfigPresetName | str,
+        *,
+        native: bool = False,
+    ) -> Any:
+        """Return the state for a specific config in a group.
+
+        Native-first. If native fails and native=True, re-raise. Otherwise return a
+        python mapping of {device: {prop: value}} built from the stored config data,
+        reflecting the stored values (not the live values).
+        """
+        try:
+            if native:
+                return super().getConfigState(groupName, configName, native=True)
+            return super().getConfigState(groupName, configName, native=False)
+        except Exception:
+            if native:
+                raise
+            with self._py_config_lock:
+                items = list(
+                    self._py_config_store.get(groupName, {}).get(configName, [])
+                )
+            devices: dict[str, dict[str, Any]] = {}
+            for dev, prop, val in items:
+                devices.setdefault(dev, {})[prop] = val
+            return devices
+
+    def getConfigData(
+        self,
+        groupName: ConfigGroupName | str,
+        configName: ConfigPresetName | str,
+        *,
+        native: bool = False,
+    ) -> Any:
+        """Return the raw config data tuples for a group/config.
+
+        Native-first. Python fallback returns a tuple of (device, property, value)
+        strings from the python-side store.
+        """
+        try:
+            if native:
+                return super().getConfigData(groupName, configName, native=True)
+            return super().getConfigData(groupName, configName, native=False)
+        except Exception:
+            with self._py_config_lock:
+                items = tuple(
+                    self._py_config_store.get(groupName, {}).get(configName, [])
+                )
+            return items
+
+    def _config_matches_current(
+        self, groupName: str, configName: str, *, use_cache: bool
+    ) -> bool:
+        with self._py_config_lock:
+            items = list(self._py_config_store.get(groupName, {}).get(configName, []))
+        for dev, prop, val_str in items:
+            try:
+                key = (dev, self._prop_key(prop))
+                if use_cache and key in self._state_cache:
+                    current_val = self._state_cache[key]
+                else:
+                    current_val = self.getProperty(dev, prop)
+            except Exception:
+                return False
+            if str(current_val) != str(val_str):
+                return False
+        return True
+
+    def getCurrentConfig(
+        self, groupName: ConfigGroupName | str
+    ) -> ConfigPresetName | Literal[""]:
+        """Return the name of the current config in `groupName`.
+
+        Native-first with validation: if native returns a name that doesn't match the
+        python-store criteria (or the group has python-only configs), prefer the
+        python-derived match. Returns an empty string if none match.
+        """
+        native_name: ConfigPresetName | Literal[""] | None = None
+        try:
+            native_name = super().getCurrentConfig(groupName)
+        except Exception:
+            native_name = None
+
+        # Compute python-side match
+        py_match: ConfigPresetName | Literal[""] = ""
+        for cfg_name in self.getAvailableConfigs(groupName):
+            if self._config_matches_current(groupName, cfg_name, use_cache=False):
+                py_match = cfg_name
+                break
+
+        # If we have a python match, prefer it when group has python configs or when
+        # native_name doesn't match current python-observed state
+        with self._py_config_lock:
+            group_has_py = groupName in self._py_config_store and bool(
+                self._py_config_store[groupName]
+            )
+
+        if py_match:
+            if group_has_py:
+                return py_match
+            # If no python configs, but native_name matches python-observed state,
+            # prefer the native answer to avoid surprises.
+            if native_name and native_name == py_match:
+                return native_name
+            return py_match
+
+        # No python-derived match; fall back to native if available
+        if native_name:
+            return native_name
+        return ""
+
+    def getCurrentConfigFromCache(
+        self, groupName: ConfigGroupName | str
+    ) -> ConfigPresetName | Literal[""]:
+        """Return the current config using cached properties when possible.
+
+        Native-first with validation; prefer python-derived match when group has
+        python configs or native result doesn't reflect python-observed state.
+        """
+        native_name: ConfigPresetName | Literal[""] | None = None
+        try:
+            native_name = super().getCurrentConfigFromCache(groupName)
+        except Exception:
+            native_name = None
+
+        py_match: ConfigPresetName | Literal[""] = ""
+        for cfg_name in self.getAvailableConfigs(groupName):
+            if self._config_matches_current(groupName, cfg_name, use_cache=True):
+                py_match = cfg_name
+                break
+
+        with self._py_config_lock:
+            group_has_py = groupName in self._py_config_store and bool(
+                self._py_config_store[groupName]
+            )
+
+        if py_match:
+            if group_has_py:
+                return py_match
+            if native_name and native_name == py_match:
+                return native_name
+            return py_match
+
+        if native_name:
+            return native_name
+        return ""
 
     def getDeviceDelayMs(self, label: DeviceLabel | str) -> float:
         if label not in self._pydevices:  # pragma: no cover
@@ -1711,6 +2050,21 @@ class UniMMCore(CMMCorePlus):
 
         with state_dev:
             state_dev.set_position_or_label(state)
+            # keep cache in sync
+            try:
+                self._cache_set(
+                    stateDeviceLabel,
+                    KW.State,
+                    int(state_dev.get_property_value(KW.State)),
+                )
+            except Exception:
+                pass
+            try:
+                self._cache_set(
+                    stateDeviceLabel, KW.Label, state_dev.get_property_value(KW.Label)
+                )
+            except Exception:
+                pass
 
     # ------------------------------------------------------------------- getState
 
@@ -1744,6 +2098,23 @@ class UniMMCore(CMMCorePlus):
         with state_dev:
             try:
                 state_dev.set_position_or_label(stateLabel)
+                # keep cache in sync
+                try:
+                    self._cache_set(
+                        stateDeviceLabel,
+                        KW.Label,
+                        state_dev.get_property_value(KW.Label),
+                    )
+                except Exception:
+                    pass
+                try:
+                    self._cache_set(
+                        stateDeviceLabel,
+                        KW.State,
+                        int(state_dev.get_property_value(KW.State)),
+                    )
+                except Exception:
+                    pass
             except KeyError as e:
                 raise RuntimeError(str(e)) from e  # convert to RuntimeError
 
