@@ -339,6 +339,13 @@ def test_config_groups_with_python_state_device():
     assert isinstance(state, dict)
     assert state["PyLED"]["Label"] == "UV"
 
+    # Cache-based state should include python values via Configuration
+    cached_state = core.getConfigGroupStateFromCache("my_group")
+    assert ("PyLED", "Label", "UV") in list(cached_state)
+
+    # waiting on a python-only config should not error
+    core.waitForConfig("my_group", "uv_cfg")
+
     # Native-only should fail for python-defined groups
     with pytest.raises(RuntimeError):
         core.getConfigGroupState("my_group", native=True)
@@ -404,6 +411,12 @@ def test_config_group_introspection_with_python_device():
     # Ensure cache path works too
     current_cached = core.getCurrentConfigFromCache("grp")
     assert current_cached == "uv"
+
+    # System state should include python device properties
+    system_state = core.getSystemState()
+    assert ("PyLED", "Label", "UV") in list(system_state)
+    cached_system_state = core.getSystemStateCache()
+    assert ("PyLED", "Label", "UV") in list(cached_system_state)
 
 
 def test_mixed_native_and_python_devices_in_one_config():
@@ -471,3 +484,40 @@ def test_mixed_native_and_python_devices_in_one_config():
         _ = core.getConfigGroupState("mix", native=True)
     except RuntimeError:
         pass
+
+
+def test_rename_and_delete_python_config_group():
+    core = UniMMCore()
+
+    class SimStateDevice(StateDevice):
+        def __init__(self, label: str, state_dict: dict[int, str]) -> None:
+            super().__init__(state_dict)
+            self._current_state = 0
+            self._current_label = self._state_to_label.get(self._current_state)
+            self._label = label
+
+        def get_state(self) -> int:
+            return self._current_state
+
+        def set_state(self, position: int | str) -> None:
+            if isinstance(position, str):
+                position = int(position)
+            self._current_state = position
+            self._current_label = self._state_to_label.get(self._current_state)
+
+    core.loadPyDevice(
+        "PyLED", SimStateDevice(label="PyLED", state_dict={0: "UV", 1: "BLUE"})
+    )
+    core.initializeDevice("PyLED")
+
+    core.defineConfigGroup("py_group")
+    core.defineConfig("py_group", "uv", "PyLED", "Label", "UV")
+
+    core.renameConfigGroup("py_group", "py_group_renamed")
+    groups = core.getAvailableConfigGroups()
+    assert "py_group" not in groups
+    assert "py_group_renamed" in groups
+
+    # Deleting should remove python configs as well
+    core.deleteConfigGroup("py_group_renamed")
+    assert "py_group_renamed" not in core.getAvailableConfigGroups()

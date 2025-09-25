@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 import threading
 import warnings
-from collections.abc import Iterator, MutableMapping, Sequence
+from collections.abc import Iterable, Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from datetime import datetime
 from itertools import count
@@ -23,6 +23,7 @@ import numpy as np
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
 from pymmcore_plus.core import Keyword as KW
+from pymmcore_plus.core._config import Configuration
 from pymmcore_plus.core._constants import PixelType
 from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
@@ -37,6 +38,7 @@ from ._sequence_buffer import SequenceBuffer
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
+    from pathlib import Path
     from typing import Literal, NewType
 
     from numpy.typing import DTypeLike
@@ -284,6 +286,25 @@ class UniMMCore(CMMCorePlus):
                 pass
         return None
 
+    def loadSystemConfiguration(
+        self, fileName: str | Path = "MMConfig_demo.cfg"
+    ) -> None:
+        super().loadSystemConfiguration(fileName)
+        with self._py_config_lock:
+            self._py_config_store.clear()
+
+    def loadSystemState(self, fileName: str) -> None:
+        super().loadSystemState(fileName)
+        with self._py_config_lock:
+            self._py_config_store.clear()
+
+    def onSystemConfigurationLoaded(self) -> None:
+        base = getattr(super(), "onSystemConfigurationLoaded", None)
+        if callable(base):  # pragma: no branch
+            base()
+        with self._py_config_lock:
+            self._py_config_store.clear()
+
     def getDeviceInitializationState(self, label: str) -> DeviceInitializationState:
         if label not in self._pydevices:  # pragma: no cover
             return super().getDeviceInitializationState(label)
@@ -326,6 +347,88 @@ class UniMMCore(CMMCorePlus):
         self, device: DeviceLabel | str, prop: PropertyName | str | Keyword, value: Any
     ) -> None:
         self._state_cache[(device, self._prop_key(prop))] = value
+
+    def _py_config_items(
+        self, groupName: str, configName: str
+    ) -> list[tuple[str, str, str]]:
+        with self._py_config_lock:
+            return list(self._py_config_store.get(groupName, {}).get(configName, []))
+
+    def _py_entries_with_values(
+        self,
+        entries: Iterable[tuple[str, str, str]],
+        *,
+        mode: Literal["stored", "live", "cache"] = "stored",
+    ) -> list[tuple[str, str, str]]:
+        dedup: dict[tuple[str, str], str] = {}
+        for dev, prop, stored in entries:
+            key = (dev, prop)
+            value: Any = stored
+            if mode == "live":
+                try:
+                    value = self.getProperty(dev, prop)
+                except Exception:
+                    value = stored
+            elif mode == "cache":
+                cache_key = (dev, self._prop_key(prop))
+                if cache_key in self._state_cache:
+                    value = self._state_cache[cache_key]
+                else:
+                    value = stored
+            dedup[key] = str(value)
+        return [(dev, prop, val) for (dev, prop), val in dedup.items()]
+
+    def _config_with_py_entries(
+        self,
+        base_cfg: Any | None,
+        entries: list[tuple[str, str, str]],
+        *,
+        native: bool,
+    ) -> Any:
+        if native:
+            cfg = base_cfg if base_cfg is not None else pymmcore.Configuration()
+            for dev, prop, val in entries:
+                cfg.addSetting(pymmcore.PropertySetting(dev, prop, val))
+            return cfg
+
+        if isinstance(base_cfg, Configuration):
+            cfg = Configuration()
+            cfg.extend(base_cfg)
+        elif base_cfg is not None:
+            cfg = Configuration.from_configuration(base_cfg)
+        else:
+            cfg = Configuration()
+        if entries:
+            cfg.extend(entries)
+        return cfg
+
+    def _system_state_py_entries(
+        self, *, use_cache: bool = False
+    ) -> list[tuple[str, str, str]]:
+        entries: list[tuple[str, str, str]] = []
+        for label in tuple(self._pydevices):
+            try:
+                with self._pydevices[label] as dev:
+                    for prop in dev.get_property_names():
+                        value: Any
+                        if use_cache:
+                            key = (label, self._prop_key(prop))
+                            if key in self._state_cache:
+                                value = self._state_cache[key]
+                            else:
+                                try:
+                                    value = dev.get_property_value(prop)
+                                except Exception:
+                                    continue
+                        else:
+                            try:
+                                value = dev.get_property_value(prop)
+                            except Exception:
+                                continue
+                        entries.append((label, str(prop), str(value)))
+            except Exception:
+                continue
+        return entries
 
     def getDevicePropertyNames(
         self, label: DeviceLabel | str
@@ -585,7 +688,21 @@ class UniMMCore(CMMCorePlus):
             return super().waitForDevice(label)
         self._pydevices.wait_for(label, self.getTimeoutMs())
 
-    # def waitForConfig
+    def waitForConfig(self, group: str, configName: str) -> None:
+        """Wait for all devices referenced in `group/configName` to be ready."""
+        try:
+            super().waitForConfig(group, configName)
+        except Exception:
+            # Ignore native errors; python fallback will handle relevant devices
+            pass
+
+        py_items = self._py_config_items(group, configName)
+        for dev, _, _ in py_items:
+            if dev in self._pydevices:
+                try:
+                    self.waitForDevice(dev)
+                except Exception:
+                    continue
 
     # probably only needed because C++ method is not virtual
     def systemBusy(self) -> bool:
@@ -625,6 +742,20 @@ class UniMMCore(CMMCorePlus):
             # Fall back to python-side store
             with self._py_config_lock:
                 self._py_config_store.setdefault(groupName, {})
+
+    def renameConfigGroup(self, oldGroupName: str, newGroupName: str) -> None:
+        """Rename a configuration group, including python-side configs."""
+        try:
+            super().renameConfigGroup(oldGroupName, newGroupName)
+        except Exception:
+            pass
+        if oldGroupName == newGroupName:
+            return
+        with self._py_config_lock:
+            group = self._py_config_store.pop(oldGroupName, None)
+            if group is not None:
+                existing = self._py_config_store.setdefault(newGroupName, {})
+                existing.update(group)
 
     def defineConfig(
         self,
@@ -704,6 +835,12 @@ class UniMMCore(CMMCorePlus):
                 out.append(c)
         return cast("tuple[ConfigPresetName, ...]", tuple(out))
 
+    def isConfigDefined(self, groupName: str, configName: str) -> bool:
+        if super().isConfigDefined(groupName, configName):
+            return True
+        with self._py_config_lock:
+            return configName in self._py_config_store.get(groupName, {})
+
     def deleteConfig(
         self,
         groupName: ConfigGroupName | str,
@@ -723,6 +860,15 @@ class UniMMCore(CMMCorePlus):
         with self._py_config_lock:
             if groupName in self._py_config_store:
                 self._py_config_store[groupName].pop(configName, None)
+
+    def deleteConfigGroup(self, groupName: ConfigGroupName | str) -> None:
+        """Delete an entire configuration group (native + python)."""
+        try:
+            super().deleteConfigGroup(groupName)
+        except Exception:
+            pass
+        with self._py_config_lock:
+            self._py_config_store.pop(groupName, None)
 
     def renameConfig(self, groupName: str, oldName: str, newName: str) -> None:
         """Rename a configuration (native + python)."""
@@ -805,7 +951,64 @@ class UniMMCore(CMMCorePlus):
             # Generic property set
             self.setProperty(dev, prop, val_str)
 
+    def onConfigGroupChanged(self, groupName: str, newConfigName: str) -> None:
+        base = getattr(super(), "onConfigGroupChanged", None)
+        if callable(base):  # pragma: no branch
+            base(groupName, newConfigName)
+        extras = self._py_entries_with_values(
+            self._py_config_items(groupName, newConfigName)
+        )
+        for dev, prop, val in extras:
+            self._cache_set(dev, prop, val)
+
     # ----------------------------- Config Introspection -----------------------------
+
+    def getConfigGroupStateFromCache(
+        self,
+        group: ConfigGroupName | str,
+        *,
+        native: bool = False,
+    ) -> Any:
+        base_cfg_native: pymmcore.Configuration | None = None
+        try:
+            base_cfg_native = super().getConfigGroupStateFromCache(group, native=True)
+        except Exception:
+            base_cfg_native = None
+
+        with self._py_config_lock:
+            group_cfgs = list(self._py_config_store.get(group, {}).values())
+        extras = self._py_entries_with_values(
+            (item for cfg in group_cfgs for item in cfg), mode="cache"
+        )
+
+        if not extras and base_cfg_native is not None:
+            return (
+                base_cfg_native
+                if native
+                else Configuration.from_configuration(base_cfg_native)
+            )
+        if not extras and base_cfg_native is None:
+            if native:
+                raise RuntimeError(
+                    f"Config group {group!r} not available in native cache"
+                )
+            raise RuntimeError(f"Config group {group!r} not available in python cache")
+
+        if native:
+            cfg_native = (
+                base_cfg_native
+                if base_cfg_native is not None
+                else pymmcore.Configuration()
+            )
+            for dev, prop, val in extras:
+                cfg_native.addSetting(pymmcore.PropertySetting(dev, prop, val))
+            return cfg_native
+
+        cfg = Configuration()
+        if base_cfg_native is not None:
+            cfg.extend(base_cfg_native)
+        cfg.extend(extras)
+        return cfg
 
     def getConfigState(
         self,
@@ -849,15 +1052,34 @@ class UniMMCore(CMMCorePlus):
         strings from the python-side store.
         """
         try:
-            if native:
-                return super().getConfigData(groupName, configName, native=True)
-            return super().getConfigData(groupName, configName, native=False)
+            base_cfg_native = super().getConfigData(groupName, configName, native=True)
         except Exception:
-            with self._py_config_lock:
-                items = tuple(
-                    self._py_config_store.get(groupName, {}).get(configName, [])
-                )
-            return items
+            base_cfg_native = None
+
+        extras = self._py_entries_with_values(
+            self._py_config_items(groupName, configName)
+        )
+
+        if not extras:
+            if base_cfg_native is None:
+                detail = "no native data" if native else "no data"
+                message = f"Config {configName!r} in group {groupName!r} has {detail}"
+                raise RuntimeError(message)
+            return (
+                base_cfg_native
+                if native
+                else Configuration.from_configuration(base_cfg_native)
+            )
+
+        if base_cfg_native is None:
+            base_cfg_native = pymmcore.Configuration()
+        for dev, prop, val in extras:
+            base_cfg_native.addSetting(pymmcore.PropertySetting(dev, prop, val))
+
+        if native:
+            return base_cfg_native
+        cfg = Configuration.from_configuration(base_cfg_native)
+        return cfg
 
     def _config_matches_current(
         self, groupName: str, configName: str, *, use_cache: bool
@@ -919,6 +1141,50 @@ class UniMMCore(CMMCorePlus):
         if native_name:
             return native_name
         return ""
+
+    def getSystemState(
+        self, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        native_cfg: pymmcore.Configuration = super().getSystemState(native=True)
+        extras = self._system_state_py_entries(use_cache=False)
+        if not extras:
+            return (
+                native_cfg if native else Configuration.from_configuration(native_cfg)
+            )
+        if native:
+            for dev, prop, val in extras:
+                native_cfg.addSetting(pymmcore.PropertySetting(dev, prop, val))
+            return native_cfg
+        cfg = Configuration.from_configuration(native_cfg)
+        cfg.extend(extras)
+        return cfg
+
+    @overload
+    def getSystemStateCache(
+        self, *, native: Literal[True]
+    ) -> pymmcore.Configuration: ...
+
+    @overload
+    def getSystemStateCache(
+        self, *, native: Literal[False] = False
+    ) -> Configuration: ...
+
+    def getSystemStateCache(
+        self, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        native_cfg: pymmcore.Configuration = super().getSystemStateCache(native=True)
+        extras = self._system_state_py_entries(use_cache=True)
+        if not extras:
+            return (
+                native_cfg if native else Configuration.from_configuration(native_cfg)
+            )
+        if native:
+            for dev, prop, val in extras:
+                native_cfg.addSetting(pymmcore.PropertySetting(dev, prop, val))
+            return native_cfg
+        cfg = Configuration.from_configuration(native_cfg)
+        cfg.extend(extras)
+        return cfg
 
     def getCurrentConfigFromCache(
         self, groupName: ConfigGroupName | str
