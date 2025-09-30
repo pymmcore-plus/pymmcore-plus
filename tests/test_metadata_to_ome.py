@@ -107,6 +107,17 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     sizes = [v for k, v in seq.sizes.items() if v and k not in {"p", "g"}]
     assert len(ome.images[0].pixels.planes) == prod(sizes)
 
+    pixels = ome.images[0].pixels
+    assert pixels.metadata_only is None
+    assert pixels.tiff_data_blocks is not None
+    assert len(pixels.tiff_data_blocks) == len(pixels.planes)
+
+    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes):
+        assert tiff_data.first_z == plane.the_z
+        assert tiff_data.first_c == plane.the_c
+        assert tiff_data.first_t == plane.the_t
+        assert tiff_data.plane_count == 1
+
     if isinstance((plan := seq.stage_positions), useq.WellPlatePlan):
         assert ome.plates is not None
         plate = ome.plates[0]
@@ -162,8 +173,97 @@ def test_ome_generation_from_events() -> None:
     assert len(ome.images) == 1
     assert len(ome.images[0].pixels.planes) == len(events)
 
+    pixels = ome.images[0].pixels
+    assert pixels.metadata_only is None
+    assert pixels.tiff_data_blocks is not None
+    assert len(pixels.tiff_data_blocks) == len(pixels.planes)
+
+    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes):
+        assert tiff_data.first_z == plane.the_z
+        assert tiff_data.first_c == plane.the_c
+        assert tiff_data.first_t == plane.the_t
+        assert tiff_data.plane_count == 1
+
 
 def test_stupidly_empty_metadata() -> None:
     ome = create_ome_metadata({}, [])  # type: ignore
     validate_xml(ome.to_xml())
     assert len(ome.images) == 0
+
+
+@pytest.mark.parametrize(
+    "axis_order,expected_dimension_order",
+    [
+        # Test cases that verify the mapping from useq iteration order
+        # to OME rasterization order (reversed)
+        ("tpzc", "XYCZT"),  # t->p->z->c becomes C fastest, Z, T slowest
+        ("tpcz", "XYZCT"),  # t->p->c->z becomes Z fastest, C, T slowest
+        ("pcz", "XYZCT"),  # p->c->z becomes Z fastest, C slowest (T added)
+        ("pzc", "XYCZT"),  # p->z->c becomes C fastest, Z slowest (T added)
+        ("zcpt", "XYTCZ"),  # z->c->p->t becomes T fastest, C, Z slowest
+        ("czpt", "XYTZC"),  # c->z->p->t becomes T fastest, Z, C slowest
+        ("tc", "XYCTZ"),  # t->c becomes C fastest, T slowest (Z added at end)
+        ("ct", "XYTCZ"),  # c->t becomes T fastest, C slowest (Z added at end)
+        ("z", "XYZCT"),  # z only becomes Z fastest (C,T added at end)
+        ("c", "XYCZT"),  # c only becomes C fastest (Z,T added)
+        ("t", "XYTCZ"),  # t only becomes T fastest (C,Z added)
+    ],
+)
+def test_dimension_order_from_axis_order(
+    axis_order: str, expected_dimension_order: str
+) -> None:
+    """Test that useq axis_order is correctly converted to OME DimensionOrder.
+
+    useq axis_order represents iteration order (outermost to innermost loop),
+    while OME DimensionOrder represents rasterization order (fastest to slowest
+    varying dimension). The mapping should reverse the filtered axes.
+    """
+    from ome_types.model import Pixels_DimensionOrder
+
+    from pymmcore_plus.metadata._ome import _extract_dimension_order_from_sequence
+
+    # Create a sequence with the specified axis order
+    seq = useq.MDASequence(axis_order=tuple(axis_order))
+
+    # Extract the dimension order
+    result = _extract_dimension_order_from_sequence(seq)
+
+    # Verify it matches the expected OME dimension order
+    expected = getattr(Pixels_DimensionOrder, expected_dimension_order)
+    assert result == expected, (
+        f"For axis_order='{axis_order}', expected {expected_dimension_order} "
+        f"but got {result}"
+    )
+
+
+def test_dimension_order_iteration_vs_rasterization() -> None:
+    """Test relationship between iteration and rasterization order."""
+    from pymmcore_plus.metadata._ome import _extract_dimension_order_from_sequence
+
+    # Create a sequence with axis_order="tpzc"
+    seq = useq.MDASequence(
+        axis_order=("t", "p", "z", "c"),
+        time_plan=useq.TIntervalLoops(interval=0, loops=2),
+        stage_positions=(useq.Position(x=0, y=0),),
+        z_plan=useq.ZRangeAround(range=2, step=1),
+        channels=(
+            useq.Channel(config="DAPI", exposure=10),
+            useq.Channel(config="FITC", exposure=10),
+        ),
+    )  # Get the dimension order
+    dimension_order = _extract_dimension_order_from_sequence(seq)
+    assert str(dimension_order) == "Pixels_DimensionOrder.XYCZT"
+
+    # Verify this matches the actual iteration pattern
+    events = list(seq)[:6]  # First 6 events for one position
+
+    # Check that C varies fastest (0->1 in consecutive events)
+    assert events[0].index.get("c", 0) == 0
+    assert events[1].index.get("c", 0) == 1
+    assert events[0].index.get("z", 0) == events[1].index.get("z", 0)  # Z same
+    assert events[0].index.get("t", 0) == events[1].index.get("t", 0)  # T same
+
+    # Check that Z varies next (changes when C completes a cycle)
+    assert events[2].index.get("z", 0) == 1  # Z increased
+    assert events[2].index.get("c", 0) == 0  # C reset to 0
+    assert events[2].index.get("t", 0) == 0  # T still same
