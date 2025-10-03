@@ -141,7 +141,14 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
         plate = ome.plates[0]
         assert plate.rows == plan.plate.rows
         assert plate.columns == plan.plate.columns
-        assert len(plate.wells) == len(plan)
+
+        # Count total WellSamples across all wells
+        total_well_samples = sum(
+            len(well.well_samples) if well.well_samples else 0
+            for well in plate.wells
+        )
+        # Total WellSamples should equal total image positions (including FOVs)
+        assert total_well_samples == len(plan)
 
 
 def test_ome_generation_from_events() -> None:
