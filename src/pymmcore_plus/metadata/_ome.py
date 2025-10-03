@@ -488,26 +488,16 @@ def _build_ome_plate(
     # create a mapping from well name to acquisition indices
     well_acquisition_map: dict[str, list[int]] = {}
     for acquisition_index, position in enumerate(plate_plan.image_positions):
-        position_name = position.name
-        if position_name is not None:
-            # Extract base well name by removing FOV suffix (e.g., "A1_0000" -> "A1")
-            # This handles cases where well_points_plan creates multiple FOVs per well
-            if "_" in position_name:
-                # Try to split on underscore and take the first part
-                base_well_name = position_name.split("_")[0]
-            else:
-                base_well_name = position_name
+        well_name = position.name
+        if well_name is not None:
+            if well_name not in well_acquisition_map:
+                well_acquisition_map[well_name] = []
+            well_acquisition_map[well_name].append(acquisition_index)
 
-            if base_well_name not in well_acquisition_map:
-                well_acquisition_map[base_well_name] = []
-            well_acquisition_map[base_well_name].append(acquisition_index)
-
-    for well_index, ((row, col), name, pos) in enumerate(
-        zip(
-            plate_plan.selected_well_indices,
-            plate_plan.selected_well_names,
-            plate_plan.selected_well_positions,
-        )
+    for (row, col), name, pos in zip(
+        plate_plan.selected_well_indices,
+        plate_plan.selected_well_names,
+        plate_plan.selected_well_positions,
     ):
         # get all acquisition indices for this well
         acquisition_indices = well_acquisition_map.get(name, [])
@@ -531,7 +521,6 @@ def _build_ome_plate(
 
         wells.append(
             Well(
-                id=f"Well:{well_index}",
                 row=row,
                 column=col,
                 well_samples=well_samples,
@@ -539,7 +528,6 @@ def _build_ome_plate(
         )
 
     return Plate(
-        id="Plate:0",
         name=plate_plan.plate.name,
         rows=plate_plan.plate.rows,
         columns=plate_plan.plate.columns,

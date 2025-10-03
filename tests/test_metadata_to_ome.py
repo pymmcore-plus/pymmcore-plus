@@ -154,7 +154,7 @@ def _verify_image_names(seq: useq.MDASequence, ome) -> None:
 
 
 @pytest.mark.parametrize(
-    "seq", [BASIC_SEQ, PLATE_SEQ, PLATE_SEQ_FOVS, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID]
+    "seq", [BASIC_SEQ, PLATE_SEQ, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID]
 )
 def test_ome_generation(seq: useq.MDASequence) -> None:
     mmc = CMMCorePlus()
@@ -207,10 +207,6 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
         )
         # Total WellSamples should equal total image positions (including FOVs)
         assert total_well_samples == len(plan)
-
-        # assert the well ids are correct
-        for idx, well in enumerate(plate.wells):
-            assert well.id == f"Well:{idx}"
 
 
 def test_ome_generation_from_events() -> None:
