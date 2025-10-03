@@ -148,9 +148,9 @@ def _verify_image_names(seq: useq.MDASequence, ome) -> None:
                 expected_names.append(f"p{p_idx:04d}")
 
     actual_names = [img.name for img in ome.images]
-    assert (
-        actual_names == expected_names
-    ), f"Image names mismatch.\nExpected: {expected_names}\nActual: {actual_names}"
+    assert actual_names == expected_names, (
+        f"Image names mismatch.\nExpected: {expected_names}\nActual: {actual_names}"
+    )
 
 
 @pytest.mark.parametrize(
@@ -194,6 +194,7 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     if isinstance((plan := seq.stage_positions), useq.WellPlatePlan):
         # enable for debugging
         from rich import print
+
         print(ome.to_xml())
         assert ome.plates is not None
         plate = ome.plates[0]
