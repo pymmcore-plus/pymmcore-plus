@@ -44,7 +44,7 @@ PLATE_SEQ_FOVS = useq.MDASequence(
         plate=useq.WellPlate.from_str("96-well"),
         a1_center_xy=(0, 0),
         selected_wells=((0, 0, 0), (0, 1, 2)),
-        well_points_plan=useq.GridRowsColumns(rows=2, columns=2),
+        well_points_plan=useq.GridRowsColumns(rows=1, columns=2),
     ),
     z_plan=useq.ZRangeAround(range=3.0, step=1.0),
     channels=(
@@ -101,8 +101,7 @@ def _get_expected_images(seq: useq.MDASequence) -> int:
 
 
 @pytest.mark.parametrize(
-    # "seq", [BASIC_SEQ, PLATE_SEQ, PLATE_SEQ_FOVS, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID]
-    "seq", [PLATE_SEQ, PLATE_SEQ_FOVS]
+    "seq", [BASIC_SEQ, PLATE_SEQ, PLATE_SEQ_FOVS, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID]
 )
 def test_ome_generation(seq: useq.MDASequence) -> None:
     mmc = CMMCorePlus()
@@ -149,6 +148,10 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
         )
         # Total WellSamples should equal total image positions (including FOVs)
         assert total_well_samples == len(plan)
+
+        # assert the well ids are correct
+        for idx, well in enumerate(plate.wells):
+            assert well.id == f"Well:{idx}"
 
 
 def test_ome_generation_from_events() -> None:
