@@ -154,8 +154,7 @@ def _verify_image_names(seq: useq.MDASequence, ome) -> None:
 
 
 @pytest.mark.parametrize(
-    # "seq", [BASIC_SEQ, PLATE_SEQ, PLATE_SEQ_FOVS, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID]
-    "seq", [PLATE_SEQ, PLATE_SEQ_FOVS]
+    "seq", [BASIC_SEQ, PLATE_SEQ, PLATE_SEQ_FOVS, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID]
 )
 def test_ome_generation(seq: useq.MDASequence) -> None:
     mmc = CMMCorePlus()
