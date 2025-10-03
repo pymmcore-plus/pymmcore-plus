@@ -85,6 +85,59 @@ def _get_expected_images(seq: useq.MDASequence) -> int:
     return expected_images
 
 
+def _verify_image_names(seq: useq.MDASequence, ome) -> None:
+    """Verify that OME image names follow the _PositionKey naming convention."""
+    # For well plate plans, verify well-based names
+    if isinstance(seq.stage_positions, useq.WellPlatePlan):
+        # Well plate positions use well names from the plan
+        expected_names = []
+        for idx, well_name in enumerate(
+            [pos.name for pos in seq.stage_positions.image_positions]
+        ):
+            # Format: well_name_p{index:04d} or p{index:04d} if no name
+            if well_name:
+                expected_names.append(f"{well_name}_p{idx:04d}")
+            else:
+                expected_names.append(f"p{idx:04d}")
+
+        actual_names = [img.name for img in ome.images]
+        assert actual_names == expected_names, (
+            f"Well plate image names mismatch.\n"
+            f"Expected: {expected_names}\n"
+            f"Actual: {actual_names}"
+        )
+        return
+
+    # For regular positions with or without grids
+    expected_names = []
+    parent_grid = seq.grid_plan
+
+    for p_idx, pos in enumerate(seq.stage_positions):
+        pos_name = pos.name if hasattr(pos, "name") else None
+        sub_grid = pos.sequence.grid_plan if pos.sequence else None
+        grid_plan = sub_grid or parent_grid
+
+        if grid_plan:
+            # Has grid positions
+            num_grid_positions = grid_plan.num_positions()
+            for g_idx in range(num_grid_positions):
+                if pos_name:
+                    expected_names.append(f"{pos_name}_p{p_idx:04d}_g{g_idx:04d}")
+                else:
+                    expected_names.append(f"p{p_idx:04d}_g{g_idx:04d}")
+        else:
+            # No grid
+            if pos_name:
+                expected_names.append(f"{pos_name}_p{p_idx:04d}")
+            else:
+                expected_names.append(f"p{p_idx:04d}")
+
+    actual_names = [img.name for img in ome.images]
+    assert actual_names == expected_names, (
+        f"Image names mismatch.\nExpected: {expected_names}\nActual: {actual_names}"
+    )
+
+
 @pytest.mark.parametrize("seq", [BASIC_SEQ, PLATE_SEQ, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID])
 def test_ome_generation(seq: useq.MDASequence) -> None:
     mmc = CMMCorePlus()
@@ -103,9 +156,16 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     ome = create_ome_metadata(summary_meta, frame_meta_list)
     validate_xml(ome.to_xml())
 
+    from rich import print
+
+    print(ome.to_xml())
+
     assert len(ome.images) == _get_expected_images(seq)
     sizes = [v for k, v in seq.sizes.items() if v and k not in {"p", "g"}]
     assert len(ome.images[0].pixels.planes) == prod(sizes)
+
+    # Verify image names follow the _PositionKey naming convention
+    _verify_image_names(seq, ome)
 
     pixels = ome.images[0].pixels
     assert pixels.metadata_only is None
@@ -171,6 +231,8 @@ def test_ome_generation_from_events() -> None:
     validate_xml(ome.to_xml())
 
     assert len(ome.images) == 1
+    # Verify the image name follows _PositionKey convention: "p0_p0000"
+    assert ome.images[0].name == "p0_p0000"
     assert len(ome.images[0].pixels.planes) == len(events)
 
     pixels = ome.images[0].pixels

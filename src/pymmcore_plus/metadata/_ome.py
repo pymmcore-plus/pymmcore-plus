@@ -101,11 +101,19 @@ class _PositionKey(NamedTuple):
     g_index: int | None = None
 
     def __str__(self) -> str:
-        p_name = self.name or f"Pos{self.p_index:04d}"
         if self.g_index is not None:
-            return f"{p_name}_Grid{self.g_index:04d}_{self.p_index}"
+            # if it has a name, include it in the position string before grid
+            # (e.g. name_p0000_g0000)
+            if self.name:
+                return f"{self.name}_p{self.p_index:04d}_g{self.g_index:04d}"
+            # otherwise just use p and g indices (e.g. p0000_g0000)
+            return f"p{self.p_index:04d}_g{self.g_index:04d}"
         else:
-            return f"{p_name}_{self.p_index}"
+            # if it has a name, include it in the position string (e.g. name_p0000)
+            if self.name:
+                return f"{self.name}_p{self.p_index:04d}"
+            # otherwise just use p index (e.g. p0000)
+            return f"p{self.p_index:04d}"
 
     @property
     def image_id(self) -> str:
