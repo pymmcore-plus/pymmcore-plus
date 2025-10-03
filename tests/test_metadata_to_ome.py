@@ -38,21 +38,6 @@ PLATE_SEQ = useq.MDASequence(
     ),
 )
 
-PLATE_SEQ_FOVS = useq.MDASequence(
-    axis_order="pcz",
-    stage_positions=useq.WellPlatePlan(
-        plate=useq.WellPlate.from_str("96-well"),
-        a1_center_xy=(0, 0),
-        selected_wells=((0, 0, 0), (0, 1, 2)),
-        well_points_plan=useq.GridRowsColumns(rows=1, columns=2),
-    ),
-    z_plan=useq.ZRangeAround(range=3.0, step=1.0),
-    channels=(
-        useq.Channel(config="DAPI", exposure=20),
-        useq.Channel(config="FITC", exposure=30),
-    ),
-)
-
 GRID_SEQ = useq.MDASequence(
     time_plan=useq.TIntervalLoops(interval=0.5, loops=2),
     stage_positions=(
