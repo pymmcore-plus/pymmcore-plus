@@ -192,21 +192,11 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
         assert tiff_data.plane_count == 1
 
     if isinstance((plan := seq.stage_positions), useq.WellPlatePlan):
-        # enable for debugging
-        from rich import print
-
-        print(ome.to_xml())
         assert ome.plates is not None
         plate = ome.plates[0]
         assert plate.rows == plan.plate.rows
         assert plate.columns == plan.plate.columns
-
-        # Count total WellSamples across all wells
-        total_well_samples = sum(
-            len(well.well_samples) if well.well_samples else 0 for well in plate.wells
-        )
-        # Total WellSamples should equal total image positions (including FOVs)
-        assert total_well_samples == len(plan)
+        assert len(plate.wells) == len(plan)
 
 
 def test_ome_generation_from_events() -> None:
