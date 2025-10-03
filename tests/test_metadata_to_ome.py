@@ -156,9 +156,9 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     ome = create_ome_metadata(summary_meta, frame_meta_list)
     validate_xml(ome.to_xml())
 
-    from rich import print
-
-    print(ome.to_xml())
+    # enable for debugging
+    # from rich import print
+    # print(ome.to_xml())
 
     assert len(ome.images) == _get_expected_images(seq)
     sizes = [v for k, v in seq.sizes.items() if v and k not in {"p", "g"}]
