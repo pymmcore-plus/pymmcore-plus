@@ -118,7 +118,7 @@ class _PositionKey(NamedTuple):
     @property
     def image_id(self) -> str:
         if self.g_index is not None:
-            return f"{self.p_index}_{self.g_index}"
+            return f"{self.p_index}:{self.g_index}"
         return f"{self.p_index}"
 
 
