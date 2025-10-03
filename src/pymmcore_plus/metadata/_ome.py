@@ -502,10 +502,12 @@ def _build_ome_plate(
                 well_acquisition_map[base_well_name] = []
             well_acquisition_map[base_well_name].append(acquisition_index)
 
-    for (row, col), name, pos in zip(
-        plate_plan.selected_well_indices,
-        plate_plan.selected_well_names,
-        plate_plan.selected_well_positions,
+    for well_index, ((row, col), name, pos) in enumerate(
+        zip(
+            plate_plan.selected_well_indices,
+            plate_plan.selected_well_names,
+            plate_plan.selected_well_positions,
+        )
     ):
         # get all acquisition indices for this well
         acquisition_indices = well_acquisition_map.get(name, [])
@@ -529,6 +531,7 @@ def _build_ome_plate(
 
         wells.append(
             Well(
+                id=f"Well:{well_index}",
                 row=row,
                 column=col,
                 well_samples=well_samples,
@@ -536,6 +539,7 @@ def _build_ome_plate(
         )
 
     return Plate(
+        id="Plate:0",
         name=plate_plan.plate.name,
         rows=plate_plan.plate.rows,
         columns=plate_plan.plate.columns,

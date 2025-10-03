@@ -173,10 +173,6 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     ome = create_ome_metadata(summary_meta, frame_meta_list)
     validate_xml(ome.to_xml())
 
-    # enable for debugging
-    from rich import print
-    print(ome.to_xml())
-
     assert len(ome.images) == _get_expected_images(seq)
     sizes = [v for k, v in seq.sizes.items() if v and k not in {"p", "g"}]
     assert len(ome.images[0].pixels.planes) == prod(sizes)
@@ -196,6 +192,9 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
         assert tiff_data.plane_count == 1
 
     if isinstance((plan := seq.stage_positions), useq.WellPlatePlan):
+        # enable for debugging
+        from rich import print
+        print(ome.to_xml())
         assert ome.plates is not None
         plate = ome.plates[0]
         assert plate.rows == plan.plate.rows
@@ -208,6 +207,10 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
         )
         # Total WellSamples should equal total image positions (including FOVs)
         assert total_well_samples == len(plan)
+
+        # assert the well ids are correct
+        for idx, well in enumerate(plate.wells):
+            assert well.id == f"Well:{idx}"
 
 
 def test_ome_generation_from_events() -> None:
