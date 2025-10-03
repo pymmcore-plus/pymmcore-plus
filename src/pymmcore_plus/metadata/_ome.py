@@ -488,11 +488,19 @@ def _build_ome_plate(
     # create a mapping from well name to acquisition indices
     well_acquisition_map: dict[str, list[int]] = {}
     for acquisition_index, position in enumerate(plate_plan.image_positions):
-        well_name = position.name
-        if well_name is not None:
-            if well_name not in well_acquisition_map:
-                well_acquisition_map[well_name] = []
-            well_acquisition_map[well_name].append(acquisition_index)
+        position_name = position.name
+        if position_name is not None:
+            # Extract base well name by removing FOV suffix (e.g., "A1_0000" -> "A1")
+            # This handles cases where well_points_plan creates multiple FOVs per well
+            if "_" in position_name:
+                # Try to split on underscore and take the first part
+                base_well_name = position_name.split("_")[0]
+            else:
+                base_well_name = position_name
+
+            if base_well_name not in well_acquisition_map:
+                well_acquisition_map[base_well_name] = []
+            well_acquisition_map[base_well_name].append(acquisition_index)
 
     for (row, col), name, pos in zip(
         plate_plan.selected_well_indices,

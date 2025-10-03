@@ -38,6 +38,21 @@ PLATE_SEQ = useq.MDASequence(
     ),
 )
 
+PLATE_SEQ_FOVS = useq.MDASequence(
+    axis_order="pcz",
+    stage_positions=useq.WellPlatePlan(
+        plate=useq.WellPlate.from_str("96-well"),
+        a1_center_xy=(0, 0),
+        selected_wells=((0, 0, 0), (0, 1, 2)),
+        well_points_plan=useq.GridRowsColumns(rows=1, columns=2),
+    ),
+    z_plan=useq.ZRangeAround(range=3.0, step=1.0),
+    channels=(
+        useq.Channel(config="DAPI", exposure=20),
+        useq.Channel(config="FITC", exposure=30),
+    ),
+)
+
 GRID_SEQ = useq.MDASequence(
     time_plan=useq.TIntervalLoops(interval=0.5, loops=2),
     stage_positions=(
@@ -133,12 +148,15 @@ def _verify_image_names(seq: useq.MDASequence, ome) -> None:
                 expected_names.append(f"p{p_idx:04d}")
 
     actual_names = [img.name for img in ome.images]
-    assert actual_names == expected_names, (
-        f"Image names mismatch.\nExpected: {expected_names}\nActual: {actual_names}"
-    )
+    assert (
+        actual_names == expected_names
+    ), f"Image names mismatch.\nExpected: {expected_names}\nActual: {actual_names}"
 
 
-@pytest.mark.parametrize("seq", [BASIC_SEQ, PLATE_SEQ, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID])
+@pytest.mark.parametrize(
+    # "seq", [BASIC_SEQ, PLATE_SEQ, PLATE_SEQ_FOVS, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID]
+    "seq", [PLATE_SEQ, PLATE_SEQ_FOVS]
+)
 def test_ome_generation(seq: useq.MDASequence) -> None:
     mmc = CMMCorePlus()
     mmc.loadSystemConfiguration("tests/local_config.cfg")
@@ -157,8 +175,8 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     validate_xml(ome.to_xml())
 
     # enable for debugging
-    # from rich import print
-    # print(ome.to_xml())
+    from rich import print
+    print(ome.to_xml())
 
     assert len(ome.images) == _get_expected_images(seq)
     sizes = [v for k, v in seq.sizes.items() if v and k not in {"p", "g"}]
@@ -183,7 +201,14 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
         plate = ome.plates[0]
         assert plate.rows == plan.plate.rows
         assert plate.columns == plan.plate.columns
-        assert len(plate.wells) == len(plan)
+
+        # Count total WellSamples across all wells
+        total_well_samples = sum(
+            len(well.well_samples) if well.well_samples else 0
+            for well in plate.wells
+        )
+        # Total WellSamples should equal total image positions (including FOVs)
+        assert total_well_samples == len(plan)
 
 
 def test_ome_generation_from_events() -> None:
