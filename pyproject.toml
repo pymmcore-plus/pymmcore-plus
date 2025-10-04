@@ -179,7 +179,6 @@ filterwarnings = [
     "ignore:Focus direction is unknown",
     "ignore:'BaseCommand' is deprecated:DeprecationWarning:typer",
     "ignore:Failing to pass a value to the 'type_params' parameter",
-    "ignore:The '__version__' attribute is deprecated and will be removed in Click 9.1:DeprecationWarning",
 ]
 markers = ["run_last: mark a test to run last"]
 
