@@ -61,7 +61,7 @@ CONFIG_PARAM = typer.Option(
 @app.callback()
 def _main(
     version: Optional[bool] = typer.Option(
-        False,
+        None,
         "--version",
         callback=_show_version_and_exit,
         help="Show version and exit.",
