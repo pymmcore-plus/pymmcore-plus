@@ -484,14 +484,11 @@ def _build_ome_plate(
         if position_name is not None:
             # Extract base well name by removing FOV suffix (e.g., "A1_0000" -> "A1")
             # This handles cases where well_points_plan creates multiple FOVs per well
-            if "_" in position_name:
-                # Try to split on underscore and take the first part
-                base_well_name = position_name.split("_")[0]
-            else:
-                base_well_name = position_name
+            base_well_name = position_name.split("_")[0]
 
             if base_well_name not in well_acquisition_map:
                 well_acquisition_map[base_well_name] = []
+
             well_acquisition_map[base_well_name].append(acquisition_index)
 
     for well_index, ((row, col), name, pos) in enumerate(
