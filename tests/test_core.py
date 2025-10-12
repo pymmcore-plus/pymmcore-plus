@@ -308,7 +308,7 @@ def test_detect_device(core: CMMCorePlus):
 def test_metadata(core: CMMCorePlus) -> None:
     core.startContinuousSequenceAcquisition(10)
     core.stopSequenceAcquisition()
-    image, md = core.getLastImageAndMD()
+    _image, md = core.getLastImageAndMD()
     assert isinstance(md, Metadata)
     assert md["Height"] == "512"
     assert "ImageNumber" in md.keys()

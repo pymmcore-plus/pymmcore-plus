@@ -87,7 +87,7 @@ def test_config_group_create():
     }
 
     # setting as a dict must be a dict of 2-tuples -> str
-    with pytest.raises(ValueError, match="Expected a dict of {\\(deviceLabel"):
+    with pytest.raises(ValueError, match=r"Expected a dict of {\(deviceLabel"):
         group["Config"] = {("Dichroic",): "400DCLP"}
 
     assert list(group["Config"]) == [

@@ -307,7 +307,7 @@ def test_slm_image_validation() -> None:
 
     # Test with wrong shape image
     wrong_shape_image = np.random.randint(0, 255, size=(100, 100), dtype=DTYPE)
-    with pytest.raises(ValueError, match="Image shape .* doesn't match SLM shape"):
+    with pytest.raises(ValueError, match=r"Image shape .* doesn't match SLM shape"):
         core.setSLMImage(DEV, wrong_shape_image)
 
 
