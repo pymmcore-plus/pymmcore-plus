@@ -54,7 +54,7 @@ class CustomFormatter(logging.Formatter):
         return formatter.format(record)
 
 
-_FILE_FORMMATTER = logging.Formatter(
+_FILE_FORMATTER = logging.Formatter(
     "%(asctime)s.%(msecs)03d    tid0x%(thread)x [%(levelname)s,%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
@@ -141,7 +141,7 @@ def configure_logging(
             log_file, maxBytes=file_rotation * 1_000_000, backupCount=file_retention
         )
         file_handler.setLevel(file_level)
-        file_handler.setFormatter(_FILE_FORMMATTER)
+        file_handler.setFormatter(_FILE_FORMATTER)
         logger.addHandler(file_handler)
 
 
