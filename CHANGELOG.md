@@ -1,5 +1,30 @@
 # Changelog
 
+## [v0.16.0](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.16.0) (2025-09-15)
+
+[Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.4...v0.16.0)
+
+**Implemented enhancements:**
+
+- feat: add utilities for converting Summary/FrameMetadata to ome\_types.OME object [\#500](https://github.com/pymmcore-plus/pymmcore-plus/pull/500) ([fdrgsp](https://github.com/fdrgsp))
+- feat: Restore initial state after MDA sequence with intelligent defaults [\#491](https://github.com/pymmcore-plus/pymmcore-plus/pull/491) ([Copilot](https://github.com/apps/copilot-swe-agent))
+
+**Fixed bugs:**
+
+- fix: reset core configuration to handle non-programmatic changes [\#504](https://github.com/pymmcore-plus/pymmcore-plus/pull/504) ([tlambert03](https://github.com/tlambert03))
+- fix: Don't emit propertyChanged for empty shutter [\#496](https://github.com/pymmcore-plus/pymmcore-plus/pull/496) ([marktsuchida](https://github.com/marktsuchida))
+
+**Tests & CI:**
+
+- test: add reference cleanup tests [\#485](https://github.com/pymmcore-plus/pymmcore-plus/pull/485) ([tlambert03](https://github.com/tlambert03))
+
+**Merged pull requests:**
+
+- ci\(dependabot\): bump CodSpeedHQ/action from 3 to 4 [\#499](https://github.com/pymmcore-plus/pymmcore-plus/pull/499) ([dependabot[bot]](https://github.com/apps/dependabot))
+- ci\(pre-commit.ci\): autoupdate [\#497](https://github.com/pymmcore-plus/pymmcore-plus/pull/497) ([pre-commit-ci[bot]](https://github.com/apps/pre-commit-ci))
+- refactor: improve device discovery structure [\#494](https://github.com/pymmcore-plus/pymmcore-plus/pull/494) ([tlambert03](https://github.com/tlambert03))
+- ci: bump cache to fix benchmarks [\#492](https://github.com/pymmcore-plus/pymmcore-plus/pull/492) ([tlambert03](https://github.com/tlambert03))
+
 ## [v0.15.4](https://github.com/pymmcore-plus/pymmcore-plus/tree/v0.15.4) (2025-08-19)
 
 [Full Changelog](https://github.com/pymmcore-plus/pymmcore-plus/compare/v0.15.3...v0.15.4)

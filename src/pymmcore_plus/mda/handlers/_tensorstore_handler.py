@@ -107,7 +107,13 @@ class TensorStoreHandler:
         self._ts = tensorstore
 
         self.ts_driver = driver
-        self.kvstore = f"file://{path}" if path is not None else kvstore
+        if path is not None:
+            self.kvstore: dict | str = {"driver": "file", "path": str(path)}
+        elif kvstore is not None:
+            self.kvstore = kvstore
+        else:
+            raise ValueError("Either path or kvstore must be provided.")
+
         self.delete_existing = delete_existing
         self.spec = spec
 

@@ -17,6 +17,7 @@ from ome_types.model import (
     PixelType,
     Plane,
     Plate,
+    TiffData,
     UnitsLength,
     UnitsTime,
     Well,
@@ -235,15 +236,29 @@ def _extract_dimension_order_from_sequence(
 ) -> Pixels_DimensionOrder:
     """Extract axis order from a useq.MDASequence.
 
+    useq axis_order represents iteration order (outermost to innermost loop),
+    while OME DimensionOrder represents rasterization order (slowest to fastest
+    varying dimension). Since planes are stored in the order they're generated,
+    we need to reverse the useq axis order to get the OME dimension order.
+
+    For example, if useq axis_order="tpzc":
+    - Iteration: for t in times: for p in positions: for z in z_steps: for c in channels
+    - Plane storage: t0-z0-c0, t0-z0-c1, t0-z1-c0, t0-z1-c1, t1-z0-c0, ...
+    - This means C varies fastest, then Z, then T → OME order "XYCZT"
+
     Returns
     -------
     A Pixels_DimensionOrder representing the dimension order compatible with OME
-    standards
-    (e.g., "XYCZT").
+    standards (e.g., "XYCZT").
     """
-    filtered_axes = (axis for axis in sequence.axis_order if axis not in {"p", "g"})
-    dimension_order = "XY" + "".join(filtered_axes).upper()
+    # Filter out 'p' and 'g' axes since they don't exist within a single OME Image
+    filtered_axes = [axis for axis in sequence.axis_order if axis not in {"p", "g"}]
 
+    # Reverse the order since useq is iteration order, OME is rasterization order
+    reversed_axes = filtered_axes[::-1]
+    dimension_order = "XY" + "".join(reversed_axes).upper()
+
+    # Ensure we have exactly 5 dimensions by adding missing ones
     if len(dimension_order) != 5:
         missing_axes = [axis for axis in "XYCZT" if axis not in dimension_order]
         dimension_order += "".join(missing_axes)
@@ -375,8 +390,6 @@ def _build_pixels_object(
     position_frames: list[FrameMetaV1],
 ) -> Pixels:
     """Build a Pixels object with the given parameters."""
-    from ome_types.model import MetadataOnly
-
     return Pixels(
         id=f"Pixels:{image_id}",
         dimension_order=dimension_order,
@@ -391,9 +404,34 @@ def _build_pixels_object(
         physical_size_y=dimension_info.pixel_size_um,
         physical_size_y_unit=UnitsLength.MICROMETER,
         channels=channels,
-        metadata_only=MetadataOnly(),
+        tiff_data_blocks=_build_tiff_data_list(position_frames),
         planes=_build_plane_list(position_frames),
     )
+
+
+def _build_tiff_data_list(position_frames: list[FrameMetaV1]) -> list[TiffData]:
+    """Build TiffData objects for frame metadata at a specific position."""
+    tiff_data_blocks = []
+    for frame_metadata in position_frames:
+        mda_event = _extract_mda_event(frame_metadata)
+        if mda_event is None:  # pragma: no cover
+            continue
+
+        event_index = mda_event.index
+        z_index = event_index.get("z", 0)
+        c_index = event_index.get("c", 0)
+        t_index = event_index.get("t", 0)
+
+        # Create a TiffData block for this plane
+        tiff_data = TiffData(
+            first_z=z_index,
+            first_c=c_index,
+            first_t=t_index,
+            plane_count=1,
+        )
+        tiff_data_blocks.append(tiff_data)
+
+    return tiff_data_blocks
 
 
 def _build_plane_list(position_frames: list[FrameMetaV1]) -> list[Plane]:
