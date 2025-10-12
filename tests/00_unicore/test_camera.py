@@ -144,7 +144,7 @@ def test_basic_acquisition(device: str) -> None:
     # load either a Python or C++ camera device
     _load_device(core, device)
 
-    with pytest.raises(RuntimeError, match="snapImage()"):
+    with pytest.raises(RuntimeError, match=r"snapImage()"):
         core.getImage()
 
     # Snap a single image
