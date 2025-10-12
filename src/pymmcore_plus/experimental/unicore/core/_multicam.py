@@ -111,8 +111,8 @@ class MultiCameraManager:
         """Snap a single camera using the core's helper method."""
         from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
 
-        cam = self._core._pydevices.get_device_of_type(label, CameraDevice)
-        buf = self._core._snap_single_camera(cam)
+        cam = self._core._pydevices.get_device_of_type(label, CameraDevice)  # noqa: SLF001
+        buf = self._core._snap_single_camera(cam)  # noqa: SLF001
         return label, buf
 
     def get_snap_image(self, channel: int) -> np.ndarray:
@@ -176,9 +176,9 @@ class MultiCameraManager:
         try:
             # Start each camera's sequence acquisition using the core's logic
             for label in saved_labels:
-                cam = self._core._pydevices.get_device_of_type(label, CameraDevice)
+                cam = self._core._pydevices.get_device_of_type(label, CameraDevice)  # noqa: SLF001
                 with cam:
-                    thread = self._core._create_sequence_thread(
+                    thread = self._core._create_sequence_thread(  # noqa: SLF001
                         cam=cam,
                         n_images=n_images,
                         stop_on_overflow=stop_on_overflow,
@@ -194,7 +194,7 @@ class MultiCameraManager:
                     thread.start()
         except Exception:
             # If anything failed, clean up threads that were created
-            for _, thread in threads_to_start:
+            for _ in threads_to_start:
                 # Threads not started yet, just discard them
                 pass
             raise
