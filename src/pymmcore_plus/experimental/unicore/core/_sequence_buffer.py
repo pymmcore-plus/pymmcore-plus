@@ -23,7 +23,7 @@ class BufferSlot(NamedTuple):
 
 
 # TODO: version that doesn't use contiguous memory,
-# but rather uses a deuqe of numpy arrays.
+# but rather uses a deque of numpy arrays.
 class SequenceStack: ...
 
 
