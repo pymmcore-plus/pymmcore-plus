@@ -149,7 +149,7 @@ class DeviceProperty:
         return self.core.getDeviceType(self.device)
 
     def allowedValues(self) -> tuple[str, ...]:
-        """Return allowed values for this property, if contstrained."""
+        """Return allowed values for this property, if constrained."""
         # https://github.com/micro-manager/mmCoreAndDevices/issues/172
         allowed = self.core.getAllowedPropertyValues(self.device, self.name)
         if not allowed and self.deviceType() is DeviceType.StateDevice:
