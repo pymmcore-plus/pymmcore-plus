@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import time
 import warnings
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
@@ -15,7 +15,7 @@ from pymmcore_plus._logger import exceptions_logged, logger
 
 from ._protocol import PMDAEngine
 from ._thread_relay import mda_listeners_connected
-from .events import PMDASignaler, _get_auto_MDA_callback_class
+from .events import PMDASignaler, RunStatus, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
     from typing import Protocol, TypeAlias
@@ -88,6 +88,23 @@ class MDARunner:
     that are available to connect to and when they are emitted).
     """
 
+    __slots__ = (
+        "_engine",
+        "_frame_metadatas",
+        "_handlers",
+        "_pause_interval",
+        "_paused",
+        "_paused_time",
+        "_request_cancel",
+        "_running",
+        "_sequence",
+        "_sequence_t0",
+        "_signals",
+        "_status",
+        "_summary_metadata",
+        "_t0",
+    )
+
     def __init__(self) -> None:
         self._engine: PMDAEngine | None = None
         self._signals = _get_auto_MDA_callback_class()()
@@ -96,8 +113,12 @@ class MDARunner:
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
-        self._canceled = False
+        self._request_cancel = False
         self._sequence: MDASequence | None = None
+        self._summary_metadata: Mapping = {}
+        self._frame_metadatas: list[Mapping] = []
+        self._status: RunStatus = RunStatus.IDLE
+
         # timer for the full sequence, reset only once at the beginning of the sequence
         self._sequence_t0: float = 0.0
         # event clock, reset whenever `event.reset_event_timer` is True
@@ -173,7 +194,7 @@ class MDARunner:
         a sequenceCanceled signal, followed by a sequenceFinished signal will
         be emitted.
         """
-        self._canceled = True
+        self._request_cancel = True
         self._paused_time = 0
 
     def toggle_pause(self) -> None:
@@ -230,8 +251,12 @@ class MDARunner:
             # context manager expects to see both of those signals.
             try:
                 engine = self._prepare_to_run(sequence)
+                self._status = RunStatus.RUNNING
                 self._run(engine, events)
+                if self._status != RunStatus.CANCELED:
+                    self._status = RunStatus.COMPLETED
             except Exception as e:
+                self._status = RunStatus.ERROR
                 error = e
             with exceptions_logged():
                 self._finish_run(sequence)
@@ -350,6 +375,8 @@ class MDARunner:
                     # if the engine calculated its own time, don't overwrite it
                     if "runner_time_ms" not in meta:
                         meta["runner_time_ms"] = runner_time_ms
+
+                    self._frame_metadatas.append(meta)
                     with exceptions_logged():
                         self._signals.frameReady.emit(img, event, meta)
             finally:
@@ -366,13 +393,15 @@ class MDARunner:
         if not self._engine:  # pragma: no cover
             raise RuntimeError("No MDAEngine set.")
 
+        self._summary_metadata = {}
+        self._frame_metadatas.clear()
         self._running = True
         self._paused = False
         self._paused_time = 0.0
         self._sequence = sequence
 
-        meta = self._engine.setup_sequence(sequence)
-        self._signals.sequenceStarted.emit(sequence, meta or {})
+        self._summary_metadata = self._engine.setup_sequence(sequence) or {}
+        self._signals.sequenceStarted.emit(sequence, self._summary_metadata)
         logger.info("MDA Started: %s", sequence)
         return self._engine
 
@@ -390,10 +419,11 @@ class MDARunner:
         bool
             Whether the MDA has been canceled.
         """
-        if self._canceled:
+        if self._request_cancel:
             logger.warning("MDA Canceled: %s", self._sequence)
             self._signals.sequenceCanceled.emit(self._sequence)
-            self._canceled = False
+            self._status = RunStatus.CANCELED
+            self._request_cancel = False
             return True
         return False
 
@@ -414,13 +444,17 @@ class MDARunner:
             return False  # pragma: no cover
         if self._check_canceled():
             return True
-        while self.is_paused() and not self._canceled:
+
+        if self._paused and not self._request_cancel:
+            self._status = RunStatus.PAUSED
+        while self._paused and not self._request_cancel:
             self._paused_time += self._pause_interval  # fixme: be more precise
             time.sleep(self._pause_interval)
 
             if self._check_canceled():
                 return True
 
+        self._status = RunStatus.RUNNING
         # FIXME: this is actually the only place where the runner assumes our event is
         # an MDAevent.  For everything else, the engine is technically the only thing
         # that cares about the event time.
@@ -432,12 +466,12 @@ class MDARunner:
             remaining_wait_time = go_at - self.event_seconds_elapsed()
             while remaining_wait_time > 0:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
-                while self._paused and not self._canceled:
+                while self._paused and not self._request_cancel:
                     self._paused_time += self._pause_interval  # fixme: be more precise
                     remaining_wait_time += self._pause_interval
                     time.sleep(self._pause_interval)
 
-                if self._canceled:
+                if self._request_cancel:
                     break
                 time.sleep(min(remaining_wait_time, 0.5))
                 remaining_wait_time = go_at - self.event_seconds_elapsed()
@@ -455,10 +489,20 @@ class MDARunner:
             The sequence that was finished.
         """
         self._running = False
-        self._canceled = False
+        self._request_cancel = False
 
         if hasattr(self._engine, "teardown_sequence"):
             self._engine.teardown_sequence(sequence)  # type: ignore
 
         logger.info("MDA Finished: %s", sequence)
-        self._signals.sequenceFinished.emit(sequence)
+
+        # FIXME
+        # This is a hidden type error.
+        # The PMDASignaler signaler protocol says that sequenceFinished emits
+        # a SummaryMetaV1 and a tuple of FrameMetaV1, but we don't actually
+        # enforce that here (it's up to the runner).
+        # This is a general leaking of implementation details of the
+        # default engine into the runner, not sure how to fix it.
+        self._signals.sequenceFinished.emit(
+            sequence, self._status, self._summary_metadata, tuple(self._frame_metadatas)
+        )
