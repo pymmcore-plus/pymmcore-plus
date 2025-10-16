@@ -32,6 +32,7 @@ from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice
 
+from ._multicam import MultiCameraManager
 from ._sequence_buffer import SequenceBuffer
 
 if TYPE_CHECKING:
@@ -110,6 +111,9 @@ class UniMMCore(CMMCorePlus):
 
         super().__init__(*args, **kwargs)
 
+        # Multi-camera support (must be after super().__init__ for full init)
+        self._multicam = MultiCameraManager(core=self)
+
     def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
         """Helper function to set the current core device if it is a python device.
 
@@ -136,7 +140,66 @@ class UniMMCore(CMMCorePlus):
         super().waitForDeviceType(DeviceType.AnyType)
         self.unloadAllDevices()
         self._pycore.reset_current()
+        self._multicam.clear()
         super().reset()
+
+    # -----------------------------------------------------------------------
+    # ------------------------ Multi-Camera Support  ------------------------
+    # -----------------------------------------------------------------------
+
+    def setup_multicamera(self, camera_labels: Sequence[str] | None) -> None:
+        """Configure multi-camera acquisition mode.
+
+        This allows multiple Python cameras to be used as if they were a single
+        multi-channel camera, similar to the C++ MultiCamera adapter but at the
+        core level for better architecture.
+
+        Parameters
+        ----------
+        camera_labels : Sequence[str] | None
+            Labels of the camera devices to use in multi-camera mode.
+            All must be loaded Python (Unicore) camera devices. If `None` or
+            an empty sequence is provided, multi-camera mode is disabled.
+
+        Raises
+        ------
+        ValueError
+            If any camera label is not a loaded Python device.
+        TypeError
+            If any device is not a CameraDevice.
+        RuntimeError
+            If a sequence is currently running.
+
+        Examples
+        --------
+        >>> core = UniMMCore()
+        >>> core.load_py_device("cam1", MyCameraClass())
+        >>> core.load_py_device("cam2", MyCameraClass())
+        >>> core.setup_multicamera(["cam1", "cam2"])
+        >>> core.setCameraDevice("cam1")  # Set any as current
+        >>> core.snapImage()  # Will snap from all cameras
+        >>> img1 = core.getImage(0)  # Get first camera
+        >>> img2 = core.getImage(1)  # Get second camera
+        """
+        if self.isSequenceRunning():
+            raise RuntimeError("Cannot setup multicamera while sequence is running")
+
+        # If no cameras provided, clear multicam mode
+        if not camera_labels:
+            self._multicam.clear()
+            return
+
+        # Validate that all labels are Python camera devices
+        for label in camera_labels:
+            if label not in self._pydevices:
+                raise ValueError(f"Camera {label!r} is not a loaded Python device")
+            try:
+                self._pydevices.get_device_of_type(label, CameraDevice)
+            except TypeError as e:
+                raise TypeError(f"Device {label!r} is not a CameraDevice") from e
+
+        # Setup multi-camera manager with camera labels
+        self._multicam.setup(tuple(camera_labels))
 
     # ------------------------------------------------------------------------
     # ----------------- Functionality for All Devices ------------------------
@@ -706,9 +769,33 @@ class UniMMCore(CMMCorePlus):
     _current_image_buffer: np.ndarray | None = None
 
     def _do_snap_image(self) -> None:
+        # Check multi-camera mode first, before checking for Python cameras
+        if self._multicam.is_active():
+            self._multicam.snap()
+            return
+
         if (cam := self._py_camera()) is None:
             return pymmcore.CMMCore.snapImage(self)
 
+        # Single camera mode
+        self._current_image_buffer = self._snap_single_camera(cam)
+
+    def _snap_single_camera(self, cam: CameraDevice) -> np.ndarray | None:
+        """Snap a single camera and return its buffer.
+
+        This is a helper method that can be used by both single-camera and
+        multi-camera acquisition paths.
+
+        Parameters
+        ----------
+        cam : CameraDevice
+            The camera device to snap.
+
+        Returns
+        -------
+        np.ndarray | None
+            The image buffer, or None if the camera didn't provide one.
+        """
         buf = None
 
         def _get_buffer(shape: Sequence[int], dtype: DTypeLike) -> np.ndarray:
@@ -720,15 +807,14 @@ class UniMMCore(CMMCorePlus):
         # synchronous call - consume one item from the generator
         with cam:
             for _ in cam.start_sequence(1, get_buffer=_get_buffer):
-                if buf is not None:
-                    self._current_image_buffer = buf
-                else:  # pragma: no cover  #  bad camera implementation
+                if buf is None:  # pragma: no cover
                     warnings.warn(
                         "Camera device did not provide an image buffer.",
                         RuntimeWarning,
                         stacklevel=2,
                     )
-                return
+                return buf
+        return None
 
         # --------------------------------------------------------------------- getImage
 
@@ -740,11 +826,16 @@ class UniMMCore(CMMCorePlus):
     def getImage(
         self, numChannel: int | None = None, *, fix: bool = True
     ) -> np.ndarray:
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            return self._multicam.get_snap_image(numChannel or 0)
+
         if self._py_camera() is None:  # pragma: no cover
             if numChannel is not None:
                 return super().getImage(numChannel, fix=fix)
             return super().getImage(fix=fix)
 
+        # Single camera mode
         if self._current_image_buffer is None:
             raise RuntimeError(
                 "No image buffer available. Call snapImage() before calling getImage()."
@@ -754,10 +845,38 @@ class UniMMCore(CMMCorePlus):
 
     # ---------------------------------------------------------------- sequence common
 
-    def _start_sequence(
-        self, cam: CameraDevice, n_images: int | None, stop_on_overflow: bool
-    ) -> None:
-        """Initialise _seq state and call cam.start_sequence."""
+    def _create_sequence_thread(
+        self,
+        cam: CameraDevice,
+        n_images: int | None,
+        stop_on_overflow: bool,
+        seq_buffer: SequenceBuffer | None = None,
+        stop_event: threading.Event | None = None,
+    ) -> AcquisitionThread:
+        """Initialise sequence state and return an AcquisitionThread.
+
+        Parameters
+        ----------
+        cam : CameraDevice
+            The camera device to start sequence acquisition for.
+        n_images : int | None
+            Number of images to acquire, or None for continuous.
+        stop_on_overflow : bool
+            Whether to stop on buffer overflow.
+        seq_buffer : SequenceBuffer | None
+            Buffer to use for this sequence. If None, uses self._seq_buffer.
+        stop_event : threading.Event | None
+            Event to use for stopping. If None, uses self._stop_event.
+
+        Returns
+        -------
+        AcquisitionThread
+            The thread that will run the acquisition (not started yet).
+        """
+        # Use provided buffer/event or defaults
+        buffer = seq_buffer if seq_buffer is not None else self._seq_buffer
+        stop_event_ = stop_event if stop_event is not None else self._stop_event
+
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
         camera_label = cam.get_label()
 
@@ -773,10 +892,10 @@ class UniMMCore(CMMCorePlus):
         }
 
         def get_buffer_with_overflow_handling(
-            shape: Sequence[int], dtype: DTypeLike
+            shape: Sequence[int], dtype: DTypeLike, _buf: SequenceBuffer = buffer
         ) -> np.ndarray:
             try:
-                return self._seq_buffer.acquire_slot(shape, dtype)
+                return _buf.acquire_slot(shape, dtype)
             except BufferError:
                 if not stop_on_overflow:  # we shouldn't get here...
                     raise  # pragma: no cover
@@ -784,13 +903,20 @@ class UniMMCore(CMMCorePlus):
 
         # Keep track of images acquired for metadata and auto-stop
         counter = count()
+        start_time = perf_counter_ns()
 
         # Create metadata-injecting wrapper for finalize callback
-        def finalize_with_metadata(cam_meta: Mapping) -> None:
-            img_number = next(counter)
-            elapsed_ms = (perf_counter_ns() - start_time) / 1e6
+        def finalize_with_metadata(
+            cam_meta: Mapping,
+            _buf: SequenceBuffer = buffer,
+            _event: threading.Event = stop_event_,
+            _counter: Iterator[int] = counter,
+            _start: int = start_time,
+        ) -> None:
+            img_number = next(_counter)
+            elapsed_ms = (perf_counter_ns() - _start) / 1e6
             received = datetime.now().isoformat(sep=" ")
-            self._seq_buffer.finalize_slot(
+            _buf.finalize_slot(
                 {
                     **base_meta,
                     **cam_meta,
@@ -802,29 +928,23 @@ class UniMMCore(CMMCorePlus):
 
             # Auto-stop when we've acquired the requested number of images
             if n_images is not None and (img_number + 1) >= n_images:
-                self._stop_event.set()
+                _event.set()
 
         # Reset the circular buffer and stop event -------------
 
-        self._stop_event.clear()
-        self._seq_buffer.clear()
-        self._seq_buffer.overwrite_on_overflow = not stop_on_overflow
+        stop_event_.clear()
+        buffer.clear()
+        buffer.overwrite_on_overflow = not stop_on_overflow
 
-        # Create the Acquisition Thread ---------
-
-        self._acquisition_thread = AcquisitionThread(
+        # Create and return the Acquisition Thread
+        return AcquisitionThread(
             image_generator=cam.start_sequence(
                 n_images, get_buffer_with_overflow_handling
             ),
             finalize=finalize_with_metadata,
             label=camera_label,
-            stop_event=self._stop_event,
+            stop_event=stop_event_,
         )
-
-        # Zoom zoom ---------
-
-        start_time = perf_counter_ns()
-        self._acquisition_thread.start()
 
     # ------------------------------------------------- startSequenceAcquisition
 
@@ -832,27 +952,49 @@ class UniMMCore(CMMCorePlus):
     def _do_start_sequence_acquisition(
         self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
     ) -> None:
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            self._multicam.start_sequence(numImages, stopOnOverflow)
+            return
+
         if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
             return pymmcore.CMMCore.startSequenceAcquisition(
                 self, cameraLabel, numImages, intervalMs, stopOnOverflow
             )
+
         with cam:
-            self._start_sequence(cam, numImages, stopOnOverflow)
+            self._acquisition_thread = self._create_sequence_thread(
+                cam, numImages, stopOnOverflow
+            )
+            self._acquisition_thread.start()
 
     # ------------------------------------------------- continuous acquisition
 
     # startContinuousSequenceAcquisition
     def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            self._multicam.start_sequence(None, False)
+            return
+
         if (cam := self._py_camera()) is None:  # pragma: no cover
             return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)
+
         with cam:
-            self._start_sequence(cam, None, False)
+            self._acquisition_thread = self._create_sequence_thread(cam, None, False)
+            self._acquisition_thread.start()
 
     # ---------------------------------------------------------------- stopSequence
 
     def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            self._multicam.stop_sequence()
+            return
+
         if self._py_camera(cameraLabel) is None:  # pragma: no cover
             pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
+            return
 
         if self._acquisition_thread is not None:
             self._stop_event.set()
@@ -865,6 +1007,10 @@ class UniMMCore(CMMCorePlus):
     @overload
     def isSequenceRunning(self, cameraLabel: DeviceLabel | str) -> bool: ...
     def isSequenceRunning(self, cameraLabel: DeviceLabel | str | None = None) -> bool:
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            return self._multicam.is_sequence_running()
+
         if self._py_camera(cameraLabel) is None:
             return super().isSequenceRunning()
 
@@ -880,15 +1026,38 @@ class UniMMCore(CMMCorePlus):
         return True
 
     def getRemainingImageCount(self) -> int:
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            return self._multicam.get_remaining_image_count()
+
         if self._py_camera() is None:
             return super().getRemainingImageCount()
+
         return len(self._seq_buffer) if self._seq_buffer is not None else 0
 
     # ---------------------------------------------------- getImages
 
     def getLastImage(self, *, out: np.ndarray | None = None) -> np.ndarray:
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            # For multicam, we need to pick one buffer - use round-robin logic
+            # Actually, getLastImage doesn't make as much sense for multicam
+            # but we can return from the first camera's buffer
+            if not any(
+                self._seq_buffer
+                for self._seq_buffer in self._multicam._seq_buffers.values()  # noqa: SLF001
+            ):
+                raise IndexError("Circular buffer is empty.")
+            # Get from first camera
+            first_label = self._multicam._labels[0]  # noqa: SLF001
+            result = self._multicam._seq_buffers[first_label].peek_last(out=out)  # noqa: SLF001
+            if result is None:
+                raise IndexError("Circular buffer is empty.")
+            return result[0]
+
         if self._py_camera() is None:
             return super().getLastImage()
+
         if (
             not (self._seq_buffer)
             or (result := self._seq_buffer.peek_last(out=out)) is None
@@ -959,13 +1128,23 @@ class UniMMCore(CMMCorePlus):
     # ---------------------------------------------------- popNext
 
     def _pop_or_raise(self) -> tuple[np.ndarray, Mapping]:
+        if self._multicam.is_active():
+            if data := self._multicam.pop_next_image():
+                return data
+            raise IndexError("All circular buffers are empty.")
+
         if not self._seq_buffer or (data := self._seq_buffer.pop_next()) is None:
             raise IndexError("Circular buffer is empty.")
         return data
 
     def popNextImage(self, *, fix: bool = True) -> np.ndarray:
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            return self._pop_or_raise()[0]
+
         if self._py_camera() is None:
             return super().popNextImage(fix=fix)
+
         return self._pop_or_raise()[0]
 
     @overload
@@ -975,12 +1154,21 @@ class UniMMCore(CMMCorePlus):
     @overload
     def popNextImageMD(self, md: pymmcore.Metadata, /) -> np.ndarray: ...
     def popNextImageMD(self, *args: Any) -> np.ndarray:
-        if self._py_camera() is None:
-            return super().popNextImageMD(*args)
-
         md_object = args[0] if len(args) == 1 else args[-1]
         if not isinstance(md_object, pymmcore.Metadata):  # pragma: no cover
             raise TypeError("Expected a Metadata object for the last argument.")
+
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            img, md = self._pop_or_raise()
+            for k, v in md.items():
+                tag = pymmcore.MetadataSingleTag(k, "_", False)
+                tag.SetValue(str(v))
+                md_object.SetTag(tag)
+            return img
+
+        if self._py_camera() is None:
+            return super().popNextImageMD(*args)
 
         img, md = self._pop_or_raise()
         for k, v in md.items():
@@ -993,6 +1181,11 @@ class UniMMCore(CMMCorePlus):
 
     def setCircularBufferMemoryFootprint(self, sizeMB: int) -> None:
         """Set the circular buffer memory footprint in MB."""
+        # Multicam handles its own buffers
+        if self._multicam.is_active():
+            # TODO: support setting buffer size for multicam
+            return
+
         if self._py_camera() is None:
             return super().setCircularBufferMemoryFootprint(sizeMB)
 
@@ -1007,6 +1200,12 @@ class UniMMCore(CMMCorePlus):
 
     def initializeCircularBuffer(self) -> None:
         """Initialize the circular buffer."""
+        # Multicam handles its own buffers
+        if self._multicam.is_active():
+            for buf in self._multicam._seq_buffers.values():  # noqa: SLF001
+                buf.clear()
+            return
+
         if self._py_camera() is None:
             return super().initializeCircularBuffer()
 
@@ -1098,19 +1297,40 @@ class UniMMCore(CMMCorePlus):
         return 1 if len(shape) == 2 else shape[2]
 
     def getNumberOfCameraChannels(self) -> int:
-        if self._py_camera() is None:  # pragma: no cover
-            return super().getNumberOfCameraChannels()
-        raise NotImplementedError(
-            "getNumberOfCameraChannels is not implemented for Python cameras."
-        )
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            return self._multicam.get_num_channels()
+
+        # Check if current camera device is a Python camera
+        current_cam = self.getCameraDevice()
+        if current_cam and current_cam in self._pydevices:
+            return 1
+
+        # Fall back to C++ implementation
+        return super().getNumberOfCameraChannels()
 
     def getCameraChannelName(self, channelNr: int) -> str:
         """Get the name of the camera channel."""
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            return self._multicam.get_channel_name(channelNr)
+
         if self._py_camera() is None:  # pragma: no cover
             return super().getCameraChannelName(channelNr)
-        raise NotImplementedError(
-            "getCameraChannelName is not implemented for Python cameras."
-        )
+
+        return self.getCameraDevice()
+
+    def getPhysicalCameraDevice(self, channel_index: int = 0) -> str:
+        """Return the name of the actual camera device for a given channel index.
+
+        This method is overridden to support multi-camera mode for Python cameras.
+        """
+        # Check multi-camera mode first
+        if self._multicam.is_active():
+            return self._multicam.get_channel_name(channel_index)
+
+        # Defer to parent for single camera or C++ cameras
+        return super().getPhysicalCameraDevice(channel_index)
 
     @overload
     def getExposure(self) -> float: ...

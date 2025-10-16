@@ -273,3 +273,185 @@ def test_buffer_methods(device: str) -> None:
         timeout -= 0.1
     assert core.isBufferOverflowed()
     core.clearCircularBuffer()
+
+
+def test_multicamera_setup() -> None:
+    """Test multi-camera setup and configuration."""
+    core = UniMMCore()
+
+    # Load multiple cameras
+    cam1 = MyCamera()
+    cam2 = MyCamera()
+    core.loadPyDevice("cam1", cam1)
+    core.loadPyDevice("cam2", cam2)
+    core.initializeDevice("cam1")
+    core.initializeDevice("cam2")
+
+    # Test setup
+    core.setup_multicamera(["cam1", "cam2"])
+    assert core.getNumberOfCameraChannels() == 2
+    assert core.getCameraChannelName(0) == "cam1"
+    assert core.getCameraChannelName(1) == "cam2"
+    assert core.getPhysicalCameraDevice(0) == "cam1"
+    assert core.getPhysicalCameraDevice(1) == "cam2"
+
+    # Test clear (by passing None)
+    core.setup_multicamera(None)
+    # After clearing, set one of the cameras as the current device
+    core.setCameraDevice("cam1")
+    assert core.getNumberOfCameraChannels() == 1
+
+    # Test validation errors
+    with pytest.raises(ValueError, match="not a loaded Python device"):
+        core.setup_multicamera(["nonexistent"])
+
+    core.loadPyDevice("notcam", MyCamera())
+    # Device is loaded but not initialized, should still work
+    core.setup_multicamera(["cam1", "notcam"])
+    core.setup_multicamera(None)  # Clear again
+
+
+def test_multicamera_snap() -> None:
+    """Test multi-camera snap acquisition."""
+    core = UniMMCore()
+
+    # Load and setup multiple cameras
+    core.loadPyDevice("cam1", MyCamera())
+    core.loadPyDevice("cam2", MyCamera())
+    core.initializeDevice("cam1")
+    core.initializeDevice("cam2")
+    core.setup_multicamera(["cam1", "cam2"])
+
+    # Snap all cameras
+    core.snapImage()
+
+    # Retrieve images from each camera
+    img1 = core.getImage(0)
+    img2 = core.getImage(1)
+
+    assert img1.shape == FRAME_SHAPE
+    assert img2.shape == FRAME_SHAPE
+    assert img1.dtype == DTYPE
+    assert img2.dtype == DTYPE
+    np.testing.assert_array_equal(img1, FRAME)
+    np.testing.assert_array_equal(img2, FRAME)
+
+    # Test error when channel out of range
+    with pytest.raises(IndexError, match="out of range"):
+        core.getImage(2)
+
+
+def test_multicamera_sequence() -> None:
+    """Test multi-camera sequence acquisition."""
+    core = UniMMCore()
+
+    # Load and setup multiple cameras
+    core.loadPyDevice("cam1", MyCamera())
+    core.loadPyDevice("cam2", MyCamera())
+    core.initializeDevice("cam1")
+    core.initializeDevice("cam2")
+    core.setup_multicamera(["cam1", "cam2"])
+    core.setCameraDevice("cam1")  # Set any as current
+
+    # Start sequence acquisition
+    n_frames = 3
+    core.startSequenceAcquisition(n_frames, 0, True)
+    assert core.isSequenceRunning()
+
+    # Wait for images to arrive
+    # With 2 cameras, we expect n_frames * 2 total images
+    expected_total = n_frames * 2
+    while core.getRemainingImageCount() < expected_total:
+        time.sleep(0.001)
+        if not core.isSequenceRunning():
+            break
+
+    # Should have stopped automatically
+    assert not core.isSequenceRunning()
+    assert core.getRemainingImageCount() == expected_total
+
+    # Pop images - they should come from alternating cameras
+    images_retrieved = 0
+    cameras_seen = set()
+    while core.getRemainingImageCount() > 0:
+        frame, meta = core.popNextImageAndMD()
+        images_retrieved += 1
+        assert frame.shape == FRAME_SHAPE
+        assert frame.dtype == DTYPE
+        # Track which cameras we've seen - using the correct key name
+        cam_label = meta.get("Camera", None)
+        if cam_label is None:
+            # Try alternative key
+            cam_label = meta.get(core.Keyword.Metadata_CameraLabel, None)
+        if cam_label:
+            cameras_seen.add(cam_label)
+
+    assert images_retrieved == expected_total
+    # We should have seen images from both cameras
+    assert len(cameras_seen) == 2
+    assert "cam1" in cameras_seen
+    assert "cam2" in cameras_seen
+
+
+def test_multicamera_continuous_sequence() -> None:
+    """Test multi-camera continuous sequence acquisition."""
+    core = UniMMCore()
+
+    # Load and setup multiple cameras
+    core.loadPyDevice("cam1", MyCamera())
+    core.loadPyDevice("cam2", MyCamera())
+    core.initializeDevice("cam1")
+    core.initializeDevice("cam2")
+    core.setup_multicamera(["cam1", "cam2"])
+    core.setCameraDevice("cam1")
+
+    # Start continuous acquisition
+    core.startContinuousSequenceAcquisition()
+    assert core.isSequenceRunning()
+
+    # Wait for some images
+    while core.getRemainingImageCount() < 6:
+        time.sleep(0.001)
+
+    # Stop acquisition
+    core.stopSequenceAcquisition()
+    assert not core.isSequenceRunning()
+
+    # Should have images from both cameras
+    count = core.getRemainingImageCount()
+    assert count >= 6
+
+    # Verify we can pop images
+    frame = core.popNextImage()
+    assert frame.shape == FRAME_SHAPE
+
+
+def test_multicamera_errors() -> None:
+    """Test multi-camera error conditions."""
+    core = UniMMCore()
+
+    # Load cameras
+    core.loadPyDevice("cam1", MyCamera())
+    core.loadPyDevice("cam2", MyCamera())
+    core.initializeDevice("cam1")
+    core.initializeDevice("cam2")
+
+    # Cannot setup multicamera while sequence is running
+    core.loadPyDevice("single", MyCamera())
+    core.initializeDevice("single")
+    core.setCameraDevice("single")
+    core.startContinuousSequenceAcquisition()
+
+    with pytest.raises(RuntimeError, match="while sequence is running"):
+        core.setup_multicamera(["cam1", "cam2"])
+
+    core.stopSequenceAcquisition()
+
+    # Now setup should work
+    core.setup_multicamera(["cam1", "cam2"])
+
+    # Cannot clear while sequence is running
+    core.startContinuousSequenceAcquisition()
+    with pytest.raises(RuntimeError, match="while sequence is running"):
+        core.setup_multicamera(None)  # Try to clear
+    core.stopSequenceAcquisition()
