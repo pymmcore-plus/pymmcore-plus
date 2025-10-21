@@ -235,11 +235,9 @@ class MDARunner:
         no-op if no acquisition is currently underway.
         """
         if self.is_running():
-            if self._status == RunStatus.PAUSED:
-                self._status = RunStatus.RUNNING
-            elif self._status == RunStatus.RUNNING:
-                self._status = RunStatus.PAUSED
-            self._signals.sequencePauseToggled.emit(self.is_paused())
+            paused = self.is_paused()
+            self._status = RunStatus.RUNNING if paused else RunStatus.PAUSED
+            self._signals.sequencePauseToggled.emit(paused)
 
     def run(
         self,
@@ -463,11 +461,10 @@ class MDARunner:
         if not self._await_unpause():  # returns False if cancelled while paused
             return True
 
-        # Handle min_start_time: the runner is responsible for scheduling WHEN events
-        # execute (including waiting for min_start_time), while the engine is
-        # responsible for HOW they execute. This timing logic must stay in the runner
-        # because it requires access to runner state (_paused_time, timing methods)
-        # and must emit runner signals (awaitingEvent).
+        # FIXME: this is actually the only place where the runner assumes our event is
+        # an MDAevent.  For everything else, the engine is technically the only thing
+        # that cares about the event time.
+        # So this whole method could potentially be moved to the engine.
         if event.min_start_time:
             go_at = event.min_start_time + self._paused_time
             # We need to enter a loop here checking paused and canceled.
