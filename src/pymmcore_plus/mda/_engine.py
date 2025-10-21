@@ -676,6 +676,10 @@ class MDAEngine(PMDAEngine):
         n_channels = core.getNumberOfCameraChannels()
         count = 0
         iter_events = product(event.events, range(n_channels))
+
+        # to make sure we emit the cancel log only once
+        cancel_logged = False
+
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
             # NOTE: there is not a way to pause a hardware sequence acquisition.
@@ -684,6 +688,7 @@ class MDAEngine(PMDAEngine):
             if core.mda.is_cancel_requested():
                 core.stopSequenceAcquisition()
                 logger.warning("MDA Canceled: %s", event)
+                cancel_logged = True
                 return
 
             if remaining := core.getRemainingImageCount():
@@ -701,6 +706,8 @@ class MDAEngine(PMDAEngine):
 
             # check if acquisition is canceled
             if core.mda.is_cancel_requested():
+                if not cancel_logged:
+                    logger.warning("MDA Canceled: %s", event)
                 return
 
             yield self._next_seqimg_payload(
