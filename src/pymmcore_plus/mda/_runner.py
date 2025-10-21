@@ -219,10 +219,8 @@ class MDARunner:
         if self.is_running():
             if self._status == RunStatus.PAUSED:
                 self._status = RunStatus.RUNNING
-                logger.info("MDA Resumed")
             elif self._status == RunStatus.RUNNING:
                 self._status = RunStatus.PAUSED
-                logger.info("MDA Paused")
             self._signals.sequencePauseToggled.emit(self.is_paused())
 
     def run(
@@ -492,10 +490,14 @@ class MDARunner:
         if self._status != RunStatus.PAUSED:
             self._status = RunStatus.PAUSED
 
+        logger.info("MDA Paused")
+
         # Wait while paused, tracking time and checking for cancel
         while self.is_paused() and not self.is_canceled():
             self._paused_time += self._pause_interval
             time.sleep(self._pause_interval)
+
+        logger.info("MDA Resumed")
 
         # Check if cancelled while paused
         if self.is_canceled():
