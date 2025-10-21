@@ -137,7 +137,7 @@ class MDARunner:
         """Return the current status of the MDA runner."""
         return self._status
 
-    #----------------------------PUBLIC METHODS ----------------------------#
+    # ----------------------------PUBLIC METHODS ----------------------------#
 
     def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
         """Set the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] to use for the MDA run."""  # noqa: E501
@@ -333,7 +333,7 @@ class MDARunner:
         """
         return time.perf_counter() - self._t0
 
-    #---------------------------PRIVATE METHODS ---------------------------#
+    # ---------------------------PRIVATE METHODS ---------------------------#
 
     def _outputs_connected(
         self, output: SingleOutput | Sequence[SingleOutput] | None
