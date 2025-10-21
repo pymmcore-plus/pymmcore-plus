@@ -679,14 +679,14 @@ class MDAEngine(PMDAEngine):
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
 
-            # while core.mda.status() == RunStatus.PAUSED:
-            #     ...
-            print('             ', core.mda.status())
-            if core.mda.status() == RunStatus.CANCELED:
-                print('---------------------------------')
+            # pause execution while acquisition is paused
+            while core.mda.is_paused():
+                time.sleep(0.1)
+
+            # stop acquisition if it was canceled
+            if core.mda.is_canceled():
                 core.stopSequenceAcquisition()
-                logger.warning("MDA Canceled: %s", event)
-                break
+                return
 
             if remaining := core.getRemainingImageCount():
                 yield self._next_seqimg_payload(
@@ -700,6 +700,12 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while remaining := core.getRemainingImageCount():
+            # pause execution while acquisition is paused
+            while core.mda.is_paused():
+                time.sleep(0.1)
+            # stop acquisition if it was canceled
+            if core.mda.is_canceled():
+                return
             yield self._next_seqimg_payload(
                 *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
             )

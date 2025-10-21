@@ -182,6 +182,25 @@ class MDARunner:
         """
         return self._status == RunStatus.PAUSED
 
+    def is_canceled(self) -> bool:
+        """Return True if the cancel method has been called and emit relevant signals.
+
+        If cancelled, this relies on the `self._sequence` being the current sequence
+        in order to emit a `sequenceCanceled` signal.
+
+        Returns
+        -------
+        bool
+            Whether the MDA has been canceled.
+        """
+        if self._request_cancel:
+            logger.warning("MDA Canceled: %s", self._sequence)
+            self._signals.sequenceCanceled.emit(self._sequence)
+            self._status = RunStatus.CANCELED
+            self._request_cancel = False
+            return True
+        return False
+
     def cancel(self) -> None:
         """Cancel the currently running acquisition.
 
@@ -402,25 +421,6 @@ class MDARunner:
     def _reset_event_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
 
-    def _check_canceled(self) -> bool:
-        """Return True if the cancel method has been called and emit relevant signals.
-
-        If cancelled, this relies on the `self._sequence` being the current sequence
-        in order to emit a `sequenceCanceled` signal.
-
-        Returns
-        -------
-        bool
-            Whether the MDA has been canceled.
-        """
-        if self._request_cancel:
-            logger.warning("MDA Canceled: %s", self._sequence)
-            self._signals.sequenceCanceled.emit(self._sequence)
-            self._status = RunStatus.CANCELED
-            self._request_cancel = False
-            return True
-        return False
-
     def _wait_until_event(self, event: MDAEvent) -> bool:
         """Wait until the event's min start time, checking for pauses cancellations.
 
@@ -436,7 +436,7 @@ class MDARunner:
         """
         if not self.is_running():
             return False  # pragma: no cover
-        if self._check_canceled():
+        if self.is_canceled():
             return True
 
         if self.is_paused() and not self._request_cancel:
@@ -445,7 +445,7 @@ class MDARunner:
             self._paused_time += self._pause_interval  # fixme: be more precise
             time.sleep(self._pause_interval)
 
-            if self._check_canceled():
+            if self.is_canceled():
                 return True
 
         self._status = RunStatus.RUNNING
@@ -472,7 +472,7 @@ class MDARunner:
 
         # check canceled again in case it was canceled
         # during the waiting loop
-        return self._check_canceled()
+        return self.is_canceled()
 
     def _finish_run(self, sequence: MDASequence) -> None:
         """To be called at the end of an acquisition.
