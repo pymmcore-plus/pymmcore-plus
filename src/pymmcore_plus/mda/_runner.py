@@ -352,15 +352,9 @@ class MDARunner:
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
-        if isinstance(events, Iterator):
-            # if an iterator is passed directly, then we use that iterator
-            # instead of the engine's event_iterator.  Directly passing an iterator
-            # is an advanced use case, (for example, `iter(Queue(), None)` for event-
-            # driven acquisition) and we don't want the engine to interfere with it.
-            event_iterator = iter
-        else:
-            event_iterator = getattr(engine, "event_iterator", iter)
+        event_iterator = self._get_event_iterator(engine, events)
         _events: Iterator[MDAEvent] = event_iterator(events)
+
         self._reset_event_timer()
         self._sequence_t0 = self._t0
 
@@ -368,48 +362,26 @@ class MDARunner:
             if event.reset_event_timer:
                 self._reset_event_timer()
 
-            if not self.is_running():
+            # Check for early termination conditions
+            if not self.is_running() or self.is_canceled():
+                if self.is_canceled():
+                    self._emit_cancel_signal_and_log()
                 break
 
-            if self.is_canceled():
+            # Handle pause state
+            if self._handle_pause_state():
+                # Canceled during pause
                 self._emit_cancel_signal_and_log()
                 break
 
-            # PAUSED TOGGLED: wait while paused, breaking out if canceled
-            if self.is_paused():
-                logger.info("MDA Paused")
-            while self.is_paused() and not self.is_canceled():
-                self._paused_time += self._pause_interval
-                time.sleep(self._pause_interval)
-                if not self.is_paused():
-                    logger.info("MDA Resumed")
-
-            # TIMELAPSE: wait for event's min_start_time, breaking out if canceled
-            if self._wait_until_event(event) or not self.is_running():
+            # Wait for event's min_start_time if needed
+            if self._wait_until_event(event):
+                # Canceled during wait
                 self._emit_cancel_signal_and_log()
                 break
 
-            self._signals.eventStarted.emit(event)
-            logger.info("%s", event)
-            engine.setup_event(event)
-
-            try:
-                runner_time_ms = self.seconds_elapsed() * 1000
-                # this is a bit of a hack to pass the time into the engine
-                # it is used for intra-event time calculations inside the engine.
-                # we pop it off after the event is executed.
-                event.metadata["runner_t0"] = self._sequence_t0
-                output = engine.exec_event(event) or ()  # in case output is None
-                for payload in output:
-                    img, event, meta = payload
-                    event.metadata.pop("runner_t0", None)
-                    # if the engine calculated its own time, don't overwrite it
-                    if "runner_time_ms" not in meta:
-                        meta["runner_time_ms"] = runner_time_ms
-                    with exceptions_logged():
-                        self._signals.frameReady.emit(img, event, meta)
-            finally:
-                teardown_event(event)
+            # Execute the event
+            self._execute_event(engine, event, teardown_event)
 
     def _emit_cancel_signal_and_log(self) -> None:
         """Emit the sequenceCanceled signal and log the cancellation."""
@@ -439,6 +411,81 @@ class MDARunner:
     def _reset_event_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
 
+    def _get_event_iterator(
+        self, engine: PMDAEngine, events: Iterable[MDAEvent]
+    ) -> Any:
+        """Get the appropriate event iterator based on the events type.
+
+        If an iterator is passed directly, use iter() to avoid engine interference.
+        Otherwise, use the engine's event_iterator if available.
+        """
+        if isinstance(events, Iterator):
+            # if an iterator is passed directly, then we use that iterator
+            # instead of the engine's event_iterator.  Directly passing an iterator
+            # is an advanced use case, (for example, `iter(Queue(), None)` for event-
+            # driven acquisition) and we don't want the engine to interfere with it.
+            return iter
+        return getattr(engine, "event_iterator", iter)
+
+    def _handle_pause_state(self) -> bool:
+        """Handle paused state, waiting until resumed or canceled.
+
+        Returns
+        -------
+        bool
+            True if canceled during pause, False otherwise.
+        """
+        if not self.is_paused():
+            return False
+
+        logger.info("MDA Paused")
+        while self.is_paused() and not self.is_canceled():
+            self._paused_time += self._pause_interval
+            time.sleep(self._pause_interval)
+
+        if not self.is_canceled():
+            logger.info("MDA Resumed")
+
+        return self.is_canceled()
+
+    def _execute_event(
+        self, engine: PMDAEngine, event: MDAEvent, teardown_event: Any
+    ) -> None:
+        """Execute a single MDA event and emit frame data.
+
+        Parameters
+        ----------
+        engine : PMDAEngine
+            The engine to execute the event with.
+        event : MDAEvent
+            The event to execute.
+        teardown_event : callable
+            Function to call for event cleanup.
+        """
+        self._signals.eventStarted.emit(event)
+        logger.info("%s", event)
+        engine.setup_event(event)
+
+        try:
+            runner_time_ms = self.seconds_elapsed() * 1000
+            # this is a bit of a hack to pass the time into the engine
+            # it is used for intra-event time calculations inside the engine.
+            # we pop it off after the event is executed.
+            event.metadata["runner_t0"] = self._sequence_t0
+            output = engine.exec_event(event) or ()  # in case output is None
+            for payload in output:
+                img, event, meta = payload
+                event.metadata.pop("runner_t0", None)
+                # if the engine calculated its own time, don't overwrite it
+                if "runner_time_ms" not in meta:
+                    meta["runner_time_ms"] = runner_time_ms
+                with exceptions_logged():
+                    self._signals.frameReady.emit(img, event, meta)
+        finally:
+            teardown_event(event)
+
+
+
     def _wait_until_event(self, event: MDAEvent) -> bool:
         """Check if acquisition should stop before executing this event.
 
@@ -460,37 +507,34 @@ class MDARunner:
         # that cares about the event time.
         # So this whole method could potentially be moved to the engine.
         # if the event has a min_start_time, wait until that time is reached
-        if mst := event.min_start_time:
-            # We need to enter a loop here checking paused and canceled.
-            # otherwise you'll potentially wait a long time to cancel
-            # Note: we calculate remaining_wait_time fresh each iteration using
-            # event.min_start_time + self._paused_time to ensure it stays correct
-            # even when self._paused_time changes during pause.
-            remaining_wait_time = mst + self._paused_time - self.event_seconds_elapsed()
-            while remaining_wait_time > 0:
-                self._signals.awaitingEvent.emit(event, remaining_wait_time)
+        if not (mst := event.min_start_time):
+            return False
 
-                if self.is_paused():
-                    logger.info("MDA Paused")
-                while self.is_paused() and not self.is_canceled():
-                    self._paused_time += self._pause_interval
-                    remaining_wait_time += self._pause_interval
+        # We need to enter a loop here checking paused and canceled.
+        # otherwise you'll potentially wait a long time to cancel
+        # Note: we calculate remaining_wait_time fresh each iteration using
+        # event.min_start_time + self._paused_time to ensure it stays correct
+        # even when self._paused_time changes during pause.
+        remaining_wait_time = mst + self._paused_time - self.event_seconds_elapsed()
 
-                    time.sleep(self._pause_interval)
-                    if not self.is_paused():
-                        logger.info("MDA Resumed")
+        while remaining_wait_time > 0:
+            self._signals.awaitingEvent.emit(event, remaining_wait_time)
 
-                if self.is_canceled():
-                    break
+            # Handle pause state - returns True if canceled
+            if self._handle_pause_state():
+                return True
 
-                time.sleep(min(remaining_wait_time, 0.5))
-                remaining_wait_time = (
-                    mst + self._paused_time - self.event_seconds_elapsed()
-                )
+            if self.is_canceled():
+                return True
 
-        # check canceled again in case it was canceled
-        # during the waiting loop
+            time.sleep(min(remaining_wait_time, 0.5))
+            remaining_wait_time = (
+                mst + self._paused_time - self.event_seconds_elapsed()
+            )
+
+        # check canceled again in case it was canceled during the waiting loop
         return self.is_canceled()
+
 
     def _finish_run(self, sequence: MDASequence) -> None:
         """To be called at the end of an acquisition.
