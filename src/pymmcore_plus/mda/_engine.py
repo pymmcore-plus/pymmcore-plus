@@ -686,7 +686,6 @@ class MDAEngine(PMDAEngine):
                 return
 
             if remaining := core.getRemainingImageCount():
-                print('remaining images:', remaining)
                 yield self._next_seqimg_payload(
                     *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
                 )

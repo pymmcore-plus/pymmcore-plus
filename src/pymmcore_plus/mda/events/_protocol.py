@@ -17,6 +17,9 @@ class RunStatus(str, Enum):
     def __str__(self) -> str:
         return str(self.value)
 
+    def __repr__(self) -> str:
+        return f"RunStatus.{self.name}"
+
 
 @runtime_checkable
 class PMDASignaler(Protocol):
