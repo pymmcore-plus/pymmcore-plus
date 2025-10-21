@@ -28,7 +28,7 @@ SKIP_NO_PYTESTQT = pytest.mark.skipif(
 
 def test_initial_status(core: CMMCorePlus) -> None:
     """Test that the initial status is IDLE."""
-    assert core.mda.status() == RunStatus.IDLE
+    assert core.mda.status == RunStatus.IDLE
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
 
@@ -44,16 +44,16 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
     # Track status changes
     status_changes: list[RunStatus] = []
 
-    def track_status():
-        status_changes.append(core.mda.status())
+    def track_status:
+        status_changes.append(core.mda.status)
 
     # Connect to signals to track status
     core.mda.events.sequenceStarted.connect(track_status)
-    core.mda.events.eventStarted.connect(lambda _: track_status())
-    core.mda.events.sequenceFinished.connect(lambda _: track_status())
+    core.mda.events.eventStarted.connect(lambda _: track_status)
+    core.mda.events.sequenceFinished.connect(lambda _: track_status)
 
     # Check initial state
-    assert core.mda.status() == RunStatus.IDLE
+    assert core.mda.status == RunStatus.IDLE
 
     # Run the sequence
     with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=5000):
@@ -62,7 +62,7 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
     # Verify status was RUNNING during execution
     assert RunStatus.RUNNING in status_changes
     # After completion, should be back to a terminal state
-    final_status = core.mda.status()
+    final_status = core.mda.status
     assert final_status in (RunStatus.COMPLETED, RunStatus.IDLE)
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
@@ -80,7 +80,7 @@ def test_status_on_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
 
     def on_pause_toggle(paused: bool):
         pause_toggled_events.append(paused)
-        status_at_pause.append(core.mda.status())
+        status_at_pause.append(core.mda.status)
 
     core.mda.events.sequencePauseToggled.connect(on_pause_toggle)
 
@@ -93,7 +93,7 @@ def test_status_on_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
         if event_count == 1:
             core.mda.toggle_pause()
             assert core.mda.is_paused()
-            assert core.mda.status() == RunStatus.PAUSED
+            assert core.mda.status == RunStatus.PAUSED
             # Resume after a short delay
             qtbot.waitSignal(
                 core.mda.events.sequencePauseToggled, timeout=100
@@ -101,7 +101,7 @@ def test_status_on_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
             time.sleep(0.1)
             core.mda.toggle_pause()
             assert not core.mda.is_paused()
-            assert core.mda.status() == RunStatus.RUNNING
+            assert core.mda.status == RunStatus.RUNNING
 
     core.mda.events.eventStarted.connect(on_event)
 
@@ -143,7 +143,7 @@ def test_status_on_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
     canceled_signal.assert_called_once()
 
     # Status should be CANCELED
-    assert core.mda.status() == RunStatus.CANCELED
+    assert core.mda.status == RunStatus.CANCELED
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
 
@@ -176,7 +176,7 @@ def test_status_after_user_callback_error(core: CMMCorePlus) -> None:
 
     # User callback errors don't stop the acquisition
     # Status should be COMPLETED
-    assert core.mda.status() == RunStatus.COMPLETED
+    assert core.mda.status == RunStatus.COMPLETED
     assert not core.mda.is_running()
 
     core.mda.events.frameReady.disconnect(cause_error)
@@ -196,7 +196,7 @@ def test_is_running_includes_paused(core: CMMCorePlus, qtbot: QtBot) -> None:
             # First event - pause
             core.mda.toggle_pause()
             running_states.append(
-                (core.mda.is_running(), core.mda.is_paused(), core.mda.status())
+                (core.mda.is_running(), core.mda.is_paused(), core.mda.status)
             )
             time.sleep(0.1)
             # Resume
@@ -274,7 +274,7 @@ def test_cancel_during_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
         core.run_mda(sequence)
 
     # Should be canceled, not paused
-    assert core.mda.status() == RunStatus.CANCELED
+    assert core.mda.status == RunStatus.CANCELED
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
 
@@ -320,7 +320,7 @@ def test_sequenced_event_pause_and_cancel(core: CMMCorePlus, qtbot: QtBot) -> No
 
     # Verify pause/resume happened
     assert pause_toggle_count == 2  # One for pause, one for resume
-    assert core.mda.status() in (RunStatus.COMPLETED, RunStatus.IDLE)
+    assert core.mda.status in (RunStatus.COMPLETED, RunStatus.IDLE)
 
 
 @SKIP_NO_PYTESTQT
@@ -348,7 +348,7 @@ def test_sequenced_event_cancel_during_sequence(
     with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=10000):
         core.run_mda(sequence)
 
-    assert core.mda.status() == RunStatus.CANCELED
+    assert core.mda.status == RunStatus.CANCELED
 
 
 def test_status_persistence_after_completion(core: CMMCorePlus) -> None:
@@ -360,28 +360,28 @@ def test_status_persistence_after_completion(core: CMMCorePlus) -> None:
     core.mda.run(sequence)
 
     # Status should be COMPLETED
-    assert core.mda.status() == RunStatus.COMPLETED
+    assert core.mda.status == RunStatus.COMPLETED
     assert not core.mda.is_running()
 
 
 def test_toggle_pause_when_not_running(core: CMMCorePlus) -> None:
     """Test that toggle_pause is a no-op when not running."""
-    assert core.mda.status() == RunStatus.IDLE
+    assert core.mda.status == RunStatus.IDLE
 
     # Should be no-op
     core.mda.toggle_pause()
 
     # Status should still be IDLE
-    assert core.mda.status() == RunStatus.IDLE
+    assert core.mda.status == RunStatus.IDLE
     assert not core.mda.is_paused()
 
 
 def test_cancel_when_not_running(core: CMMCorePlus) -> None:
     """Test that cancel is a no-op when not running."""
-    assert core.mda.status() == RunStatus.IDLE
+    assert core.mda.status == RunStatus.IDLE
 
     # Should be no-op
     core.mda.cancel()
 
     # Status should still be IDLE
-    assert core.mda.status() == RunStatus.IDLE
+    assert core.mda.status == RunStatus.IDLE

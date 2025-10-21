@@ -111,7 +111,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
 
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
-    assert core.mda.status() != RunStatus.CANCELED
+    assert core.mda.status != RunStatus.CANCELED
     core.mda.events.frameReady.disconnect(cb)
 
     # Hardware failure
@@ -128,7 +128,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
                     core.mda.run(mda)
         assert not core.mda.is_running()
         assert not core.mda.is_paused()
-        assert core.mda.status() != RunStatus.CANCELED
+        assert core.mda.status != RunStatus.CANCELED
 
 
 # using a dict here instead of a useq.AxesBasedAF to force MDASequence to

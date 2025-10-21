@@ -93,7 +93,6 @@ class MDARunner:
         "_handlers",
         "_pause_interval",
         "_paused_time",
-        "_request_cancel",
         "_sequence",
         "_sequence_t0",
         "_signals",
@@ -108,7 +107,6 @@ class MDARunner:
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
-        self._request_cancel = False
         self._sequence: MDASequence | None = None
 
         # timer for the full sequence, reset only once at the beginning of the sequence
@@ -136,7 +134,7 @@ class MDARunner:
 
     @property
     def status(self) -> RunStatus:
-        """The current status of the MDA runner."""
+        """Return the current status of the MDA runner."""
         return self._status
 
     #----------------------------PUBLIC METHODS ----------------------------#
@@ -186,23 +184,14 @@ class MDARunner:
         return self._status == RunStatus.PAUSED
 
     def is_canceled(self) -> bool:
-        """Return True if the cancel method has been called and emit relevant signals.
-
-        If cancelled, this relies on the `self._sequence` being the current sequence
-        in order to emit a `sequenceCanceled` signal.
+        """Return True if the acquisition has been canceled.
 
         Returns
         -------
         bool
             Whether the MDA has been canceled.
         """
-        if self._request_cancel:
-            logger.warning("MDA Canceled: %s", self._sequence)
-            self._signals.sequenceCanceled.emit(self._sequence)
-            self._status = RunStatus.CANCELED
-            self._request_cancel = False
-            return True
-        return False
+        return self._status == RunStatus.CANCELED
 
     def cancel(self) -> None:
         """Cancel the currently running acquisition.
@@ -212,8 +201,13 @@ class MDARunner:
         a sequenceCanceled signal, followed by a sequenceFinished signal will
         be emitted.
         """
-        self._request_cancel = True
+        if not self.is_running():
+            return
+
+        self._status = RunStatus.CANCELED
         self._paused_time = 0
+        logger.warning("MDA Canceled: %s", self._sequence)
+        self._signals.sequenceCanceled.emit(self._sequence)
 
     def toggle_pause(self) -> None:
         """Toggle the paused state of the current acquisition.
@@ -225,8 +219,10 @@ class MDARunner:
         if self.is_running():
             if self._status == RunStatus.PAUSED:
                 self._status = RunStatus.RUNNING
+                logger.info("MDA Resumed")
             elif self._status == RunStatus.RUNNING:
                 self._status = RunStatus.PAUSED
+                logger.info("MDA Paused")
             self._signals.sequencePauseToggled.emit(self.is_paused())
 
     def run(
@@ -469,7 +465,7 @@ class MDARunner:
                 # Adjust remaining time for time spent paused
                 remaining_wait_time = go_at - self.event_seconds_elapsed()
 
-                if self._request_cancel:
+                if self.is_canceled():
                     break
                 time.sleep(min(remaining_wait_time, 0.5))
                 remaining_wait_time = go_at - self.event_seconds_elapsed()
@@ -496,17 +492,14 @@ class MDARunner:
         if self._status != RunStatus.PAUSED:
             self._status = RunStatus.PAUSED
 
-        logger.info("MDA Paused")
-
         # Wait while paused, tracking time and checking for cancel
-        while self.is_paused() and not self._request_cancel:
+        while self.is_paused() and not self.is_canceled():
             self._paused_time += self._pause_interval
             time.sleep(self._pause_interval)
 
-            if self.is_canceled():
-                return False  # cancelled while paused
-
-        logger.info("MDA Resumed")
+        # Check if cancelled while paused
+        if self.is_canceled():
+            return False  # cancelled while paused
 
         # Resume running if we exited the pause loop without being canceled
         if self.is_running() and self._status != RunStatus.RUNNING:
@@ -528,8 +521,6 @@ class MDARunner:
         terminal_states = (RunStatus.CANCELED, RunStatus.ERROR, RunStatus.COMPLETED)
         if self._status not in terminal_states:
             self._status = RunStatus.IDLE
-
-        self._request_cancel = False
 
         if hasattr(self._engine, "teardown_sequence"):
             self._engine.teardown_sequence(sequence)  # type: ignore
