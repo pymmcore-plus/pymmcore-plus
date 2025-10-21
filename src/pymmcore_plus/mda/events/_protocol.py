@@ -10,6 +10,7 @@ class RunStatus(str, Enum):
     IDLE = "idle"
     RUNNING = "running"
     PAUSED = "paused"
+    CANCELING = "canceling"
     CANCELED = "canceled"
     ERROR = "error"
     COMPLETED = "completed"
@@ -36,14 +37,7 @@ class PMDASignaler(Protocol):
     sequenceCanceled: ClassVar[PSignal]
     """Emits `(sequence: MDASequence)` when an acquisition sequence is canceled."""
     sequenceFinished: ClassVar[PSignal]
-    """Emits `(sequence: MDASequence, status: RunStatus, summary_meta: Mapping, frame_metas: tuple[Mapping, ...])` when an acquisition sequence is finished.
-
-    In practice summary_meta will often be of type
-    [`SummaryMetaV1`][pymmcore_plus.metadata.schema.SummaryMetaV1] and frame_metas will
-    often be a tuple of [`FrameMetaV1`][pymmcore_plus.metadata.schema.FrameMetaV1]
-    objects. But that is only true if the [`MDAEngine`][pymmcore_plus.mda.MDAEngine]
-    used in the acquisition produces metadata of those types.
-    """  # noqa: E501
+    """Emits `(sequence: MDASequence)` when an acquisition sequence is finished."""
     frameReady: ClassVar[PSignal]
     """Emits `(img: np.ndarray, event: MDAEvent, metadata: dict)` after an image is acquired during an acquisition sequence.
 

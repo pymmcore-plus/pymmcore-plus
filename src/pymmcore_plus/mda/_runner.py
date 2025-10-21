@@ -162,17 +162,22 @@ class MDARunner:
         This will return True at any point between the emission of the
         [`sequenceStarted`][pymmcore_plus.mda.PMDASignaler.sequenceStarted] and
         [`sequenceFinished`][pymmcore_plus.mda.PMDASignaler.sequenceFinished] signals,
-        including when the acquisition is currently paused.
+        including when the acquisition is currently paused or in the process of
+        pausing/canceling.
 
         Returns
         -------
         bool
             Whether an acquisition is underway.
         """
-        return self._status in (RunStatus.RUNNING, RunStatus.PAUSED)
+        return self._status in (
+            RunStatus.RUNNING,
+            RunStatus.PAUSED,
+            RunStatus.CANCELING,
+        )
 
     def is_paused(self) -> bool:
-        """Return True if the acquisition is currently paused.
+        """Return True if the acquisition is paused.
 
         Use `toggle_pause` to change the paused state.
 
@@ -184,7 +189,11 @@ class MDARunner:
         return self._status == RunStatus.PAUSED
 
     def is_canceled(self) -> bool:
-        """Return True if the acquisition has been canceled.
+        """Return True if the acquisition has been fully canceled.
+
+        This returns True only when the acquisition has completely stopped due to`
+        cancellation. To check if a cancel has been requested (but not yet completed),
+        the internal `_is_cancel_requested` method should be used.
 
         Returns
         -------
@@ -193,21 +202,30 @@ class MDARunner:
         """
         return self._status == RunStatus.CANCELED
 
+    def is_cancel_requested(self) -> bool:
+        """Return True if cancellation has been requested (CANCELING).
+
+        Returns
+        -------
+        bool
+            Whether cancellation has been requested.
+        """
+        return self._status == RunStatus.CANCELING
+
     def cancel(self) -> None:
         """Cancel the currently running acquisition.
 
         This is a no-op if no acquisition is currently running.
-        If an acquisition is running then this will cancel the acquisition and
-        a sequenceCanceled signal, followed by a sequenceFinished signal will
-        be emitted.
+        If an acquisition is running, this will request cancellation by setting the
+        status to CANCELING. The acquisition will stop at the next check point, at
+        which time the status will change to CANCELED and a sequenceCanceled signal,
+        followed by a sequenceFinished signal will be emitted.
         """
         if not self.is_running():
             return
 
-        self._status = RunStatus.CANCELED
+        self._status = RunStatus.CANCELING
         self._paused_time = 0
-        logger.warning("MDA Canceled: %s", self._sequence)
-        self._signals.sequenceCanceled.emit(self._sequence)
 
     def toggle_pause(self) -> None:
         """Toggle the paused state of the current acquisition.
@@ -436,9 +454,11 @@ class MDARunner:
         bool
             True if acquisition should stop (cancelled), False if it should continue.
         """
-        # should stop if cancelled
-        if self.is_canceled():
+        # should stop if cancel requested
+        if self.is_cancel_requested():
+            self._finalize_cancel()
             return True
+
         # should stop if canceled during pause
         if not self._await_unpause():  # returns False if cancelled while paused
             return True
@@ -463,14 +483,30 @@ class MDARunner:
                 # Adjust remaining time for time spent paused
                 remaining_wait_time = go_at - self.event_seconds_elapsed()
 
-                if self.is_canceled():
+                if self.is_cancel_requested():
                     break
-                time.sleep(min(remaining_wait_time, 0.5))
-                remaining_wait_time = go_at - self.event_seconds_elapsed()
+
+                if remaining_wait_time > 0:
+                    time.sleep(min(remaining_wait_time, 0.5))
+                    remaining_wait_time = go_at - self.event_seconds_elapsed()
 
         # check canceled again in case it was canceled
         # during the waiting loop
-        return self.is_canceled()
+        if self.is_cancel_requested():
+            self._finalize_cancel()
+            return True
+        return False
+
+    def _finalize_cancel(self) -> None:
+        """Transition from CANCELING to CANCELED and emit the signal.
+
+        This should be called when the runner has detected a cancel request and is
+        actually stopping execution.
+        """
+        if self._status == RunStatus.CANCELING:
+            self._status = RunStatus.CANCELED
+            logger.warning("MDA Canceled: %s", self._sequence)
+            self._signals.sequenceCanceled.emit(self._sequence)
 
     def _await_unpause(self) -> bool:
         """Wait while paused, tracking time.
@@ -486,26 +522,19 @@ class MDARunner:
         if not self.is_paused():
             return True  # not paused, continue normally
 
-        # Update status to PAUSED if needed
-        if self._status != RunStatus.PAUSED:
-            self._status = RunStatus.PAUSED
-
         logger.info("MDA Paused")
 
         # Wait while paused, tracking time and checking for cancel
-        while self.is_paused() and not self.is_canceled():
+        while self.is_paused() and not self.is_cancel_requested():
             self._paused_time += self._pause_interval
             time.sleep(self._pause_interval)
 
         logger.info("MDA Resumed")
 
         # Check if cancelled while paused
-        if self.is_canceled():
+        if self.is_cancel_requested():
+            self._finalize_cancel()
             return False  # cancelled while paused
-
-        # Resume running if we exited the pause loop without being canceled
-        if self.is_running() and self._status != RunStatus.RUNNING:
-            self._status = RunStatus.RUNNING
 
         return True  # resumed normally
 

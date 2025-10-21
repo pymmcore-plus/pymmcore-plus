@@ -681,8 +681,9 @@ class MDAEngine(PMDAEngine):
             # NOTE: there is not a way to pause a hardware sequence acquisition.
 
             # check if acquisition is canceled
-            if core.mda.is_canceled():
+            if core.mda.is_cancel_requested():
                 core.stopSequenceAcquisition()
+                logger.warning("MDA Canceled: %s", event)
                 return
 
             if remaining := core.getRemainingImageCount():
@@ -699,7 +700,7 @@ class MDAEngine(PMDAEngine):
         while remaining := core.getRemainingImageCount():
 
             # check if acquisition is canceled
-            if core.mda.is_canceled():
+            if core.mda.is_cancel_requested():
                 return
 
             yield self._next_seqimg_payload(
