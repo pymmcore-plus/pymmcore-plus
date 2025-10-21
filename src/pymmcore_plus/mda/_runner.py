@@ -116,23 +116,6 @@ class MDARunner:
         # event clock, reset whenever `event.reset_event_timer` is True
         self._t0: float = 0.0
 
-    def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
-        """Set the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] to use for the MDA run."""  # noqa: E501
-        # MagicMock on py312 no longer satisfies isinstance ... so we explicitly
-        # allow it here just for the sake of testing.
-        if not isinstance(engine, (PMDAEngine, MagicMock)):
-            raise TypeError("Engine does not conform to the Engine protocol.")
-
-        if self.is_running():  # pragma: no cover
-            raise RuntimeError(
-                "Cannot register a new engine when the current engine is running "
-                "an acquisition. Please cancel the current engine's acquisition "
-                "before registering"
-            )
-
-        old_engine, self._engine = self._engine, engine
-        return old_engine
-
     # NOTE:
     # this return annotation is a lie, since the user can set it to their own engine.
     # but in MOST cases, this is the engine that will be used by default, so it's
@@ -151,9 +134,29 @@ class MDARunner:
         """
         return self._signals
 
+    @property
     def status(self) -> RunStatus:
-        """Return the current status of the MDA runner."""
+        """The current status of the MDA runner."""
         return self._status
+
+    #----------------------------PUBLIC METHODS ----------------------------#
+
+    def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
+        """Set the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] to use for the MDA run."""  # noqa: E501
+        # MagicMock on py312 no longer satisfies isinstance ... so we explicitly
+        # allow it here just for the sake of testing.
+        if not isinstance(engine, (PMDAEngine, MagicMock)):
+            raise TypeError("Engine does not conform to the Engine protocol.")
+
+        if self.is_running():  # pragma: no cover
+            raise RuntimeError(
+                "Cannot register a new engine when the current engine is running "
+                "an acquisition. Please cancel the current engine's acquisition "
+                "before registering"
+            )
+
+        old_engine, self._engine = self._engine, engine
+        return old_engine
 
     def is_running(self) -> bool:
         """Return True if an acquisition is currently underway.
@@ -318,6 +321,40 @@ class MDARunner:
         """
         return time.perf_counter() - self._t0
 
+    def await_unpause(self) -> bool:
+        """Wait while paused, tracking time.
+
+        This private method handles exiting the pause state, updating internal state
+        (_paused_time, _status) and checking for cancellation during the pause.
+
+        Returns
+        -------
+        bool
+            True if successfully exited pause (or not paused), False if cancelled.
+        """
+        if not self.is_paused():
+            return True  # not paused, continue normally
+
+        # Update status to PAUSED if needed
+        if self._status != RunStatus.PAUSED:
+            self._status = RunStatus.PAUSED
+
+        # Wait while paused, tracking time and checking for cancel
+        while self.is_paused() and not self._request_cancel:
+            self._paused_time += self._pause_interval
+            time.sleep(self._pause_interval)
+
+            if self.is_canceled():
+                return False  # cancelled while paused
+
+        # Resume running if we exited the pause loop without being canceled
+        if self.is_running() and self._status != RunStatus.RUNNING:
+            self._status = RunStatus.RUNNING
+
+        return True  # resumed normally
+
+    #---------------------------PRIVATE METHODS ---------------------------#
+
     def _outputs_connected(
         self, output: SingleOutput | Sequence[SingleOutput] | None
     ) -> AbstractContextManager:
@@ -372,8 +409,8 @@ class MDARunner:
         for event in _events:
             if event.reset_event_timer:
                 self._reset_event_timer()
-            # If cancelled break out of the loop
-            if self._wait_until_event(event) or not self.is_running():
+            # If we should stop, break out of the loop
+            if self._should_stop(event) or not self.is_running():
                 break
 
             self._signals.eventStarted.emit(event)
@@ -421,38 +458,34 @@ class MDARunner:
     def _reset_event_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
 
-    def _wait_until_event(self, event: MDAEvent) -> bool:
-        """Wait until the event's min start time, checking for pauses cancellations.
+    def _should_stop(self, event: MDAEvent) -> bool:
+        """Check if acquisition should stop before executing this event.
+
+        This method handles pause/cancel checking and waiting for min_start_time.
+        It will block if paused or if the event's min_start_time hasn't been reached.
 
         Parameters
         ----------
         event : MDAEvent
-            The event to wait for.
+            The event to check.
 
         Returns
         -------
         bool
-            Whether the MDA was cancelled while waiting.
+            True if acquisition should stop (cancelled), False if it should continue.
         """
-        if not self.is_running():
-            return False  # pragma: no cover
+        # should stop if cancelled
         if self.is_canceled():
             return True
+        # should stop if canceled during pause
+        if not self.await_unpause():  # returns False if cancelled while paused
+            return True
 
-        if self.is_paused() and not self._request_cancel:
-            self._status = RunStatus.PAUSED
-        while self.is_paused() and not self._request_cancel:
-            self._paused_time += self._pause_interval  # fixme: be more precise
-            time.sleep(self._pause_interval)
-
-            if self.is_canceled():
-                return True
-
-        self._status = RunStatus.RUNNING
-        # FIXME: this is actually the only place where the runner assumes our event is
-        # an MDAevent.  For everything else, the engine is technically the only thing
-        # that cares about the event time.
-        # So this whole method could potentially be moved to the engine.
+        # Handle min_start_time: the runner is responsible for scheduling WHEN events
+        # execute (including waiting for min_start_time), while the engine is
+        # responsible for HOW they execute. This timing logic must stay in the runner
+        # because it requires access to runner state (_paused_time, timing methods)
+        # and must emit runner signals (awaitingEvent).
         if event.min_start_time:
             go_at = event.min_start_time + self._paused_time
             # We need to enter a loop here checking paused and canceled.
@@ -460,10 +493,13 @@ class MDARunner:
             remaining_wait_time = go_at - self.event_seconds_elapsed()
             while remaining_wait_time > 0:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
-                while self.is_paused() and not self._request_cancel:
-                    self._paused_time += self._pause_interval  # fixme: be more precise
-                    remaining_wait_time += self._pause_interval
-                    time.sleep(self._pause_interval)
+
+                # should stop if canceled during pause.
+                if not self.await_unpause():  # returns False if cancelled while paused
+                    return True
+
+                # Adjust remaining time for time spent paused
+                remaining_wait_time = go_at - self.event_seconds_elapsed()
 
                 if self._request_cancel:
                     break
