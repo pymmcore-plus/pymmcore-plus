@@ -13,7 +13,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus, FocusDirection
 from pymmcore_plus.mda._engine import _warn_focus_dir
-from pymmcore_plus.mda.events import MDASignaler
+from pymmcore_plus.mda.events import MDASignaler, RunStatus
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
@@ -51,7 +51,7 @@ def test_mda_waiting(core: CMMCorePlus) -> None:
 
 
 def test_setting_position(core: CMMCorePlus) -> None:
-    core.mda._running = True
+    core.mda._status = RunStatus.RUNNING
     event1 = MDAEvent(
         exposure=123,
         x_pos=123,
@@ -111,7 +111,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
 
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
-    assert not core.mda._canceled
+    assert core.mda.status() != RunStatus.CANCELED
     core.mda.events.frameReady.disconnect(cb)
 
     # Hardware failure
@@ -128,7 +128,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
                     core.mda.run(mda)
         assert not core.mda.is_running()
         assert not core.mda.is_paused()
-        assert not core.mda._canceled
+        assert core.mda.status() != RunStatus.CANCELED
 
 
 # using a dict here instead of a useq.AxesBasedAF to force MDASequence to

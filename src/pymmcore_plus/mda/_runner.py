@@ -15,7 +15,7 @@ from pymmcore_plus._logger import exceptions_logged, logger
 
 from ._protocol import PMDAEngine
 from ._thread_relay import mda_listeners_connected
-from .events import PMDASignaler, _get_auto_MDA_callback_class
+from .events import PMDASignaler, RunStatus, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
     from typing import Protocol, TypeAlias
@@ -88,16 +88,29 @@ class MDARunner:
     that are available to connect to and when they are emitted).
     """
 
+    __slots__ = (
+        "_engine",
+        "_handlers",
+        "_pause_interval",
+        "_paused_time",
+        "_request_cancel",
+        "_sequence",
+        "_sequence_t0",
+        "_signals",
+        "_status",
+        "_t0",
+    )
+
     def __init__(self) -> None:
         self._engine: PMDAEngine | None = None
         self._signals = _get_auto_MDA_callback_class()()
-        self._running = False
-        self._paused = False
+        self._status: RunStatus = RunStatus.IDLE
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
-        self._canceled = False
+        self._request_cancel = False
         self._sequence: MDASequence | None = None
+
         # timer for the full sequence, reset only once at the beginning of the sequence
         self._sequence_t0: float = 0.0
         # event clock, reset whenever `event.reset_event_timer` is True
@@ -138,6 +151,10 @@ class MDARunner:
         """
         return self._signals
 
+    def status(self) -> RunStatus:
+        """Return the current status of the MDA runner."""
+        return self._status
+
     def is_running(self) -> bool:
         """Return True if an acquisition is currently underway.
 
@@ -151,7 +168,7 @@ class MDARunner:
         bool
             Whether an acquisition is underway.
         """
-        return self._running
+        return self._status in (RunStatus.RUNNING, RunStatus.PAUSED)
 
     def is_paused(self) -> bool:
         """Return True if the acquisition is currently paused.
@@ -163,7 +180,7 @@ class MDARunner:
         bool
             Whether the current acquisition is paused.
         """
-        return self._paused
+        return self._status == RunStatus.PAUSED
 
     def cancel(self) -> None:
         """Cancel the currently running acquisition.
@@ -173,7 +190,7 @@ class MDARunner:
         a sequenceCanceled signal, followed by a sequenceFinished signal will
         be emitted.
         """
-        self._canceled = True
+        self._request_cancel = True
         self._paused_time = 0
 
     def toggle_pause(self) -> None:
@@ -184,8 +201,11 @@ class MDARunner:
         no-op if no acquisition is currently underway.
         """
         if self.is_running():
-            self._paused = not self._paused
-            self._signals.sequencePauseToggled.emit(self._paused)
+            if self._status == RunStatus.PAUSED:
+                self._status = RunStatus.RUNNING
+            elif self._status == RunStatus.RUNNING:
+                self._status = RunStatus.PAUSED
+            self._signals.sequencePauseToggled.emit(self.is_paused())
 
     def run(
         self,
@@ -230,8 +250,12 @@ class MDARunner:
             # context manager expects to see both of those signals.
             try:
                 engine = self._prepare_to_run(sequence)
+                self._status = RunStatus.RUNNING
                 self._run(engine, events)
+                if self._status != RunStatus.CANCELED:
+                    self._status = RunStatus.COMPLETED
             except Exception as e:
+                self._status = RunStatus.ERROR
                 error = e
             with exceptions_logged():
                 self._finish_run(sequence)
@@ -330,7 +354,7 @@ class MDARunner:
             if event.reset_event_timer:
                 self._reset_event_timer()
             # If cancelled break out of the loop
-            if self._wait_until_event(event) or not self._running:
+            if self._wait_until_event(event) or not self.is_running():
                 break
 
             self._signals.eventStarted.emit(event)
@@ -366,8 +390,7 @@ class MDARunner:
         if not self._engine:  # pragma: no cover
             raise RuntimeError("No MDAEngine set.")
 
-        self._running = True
-        self._paused = False
+        self._status = RunStatus.RUNNING
         self._paused_time = 0.0
         self._sequence = sequence
 
@@ -390,10 +413,11 @@ class MDARunner:
         bool
             Whether the MDA has been canceled.
         """
-        if self._canceled:
+        if self._request_cancel:
             logger.warning("MDA Canceled: %s", self._sequence)
             self._signals.sequenceCanceled.emit(self._sequence)
-            self._canceled = False
+            self._status = RunStatus.CANCELED
+            self._request_cancel = False
             return True
         return False
 
@@ -414,13 +438,17 @@ class MDARunner:
             return False  # pragma: no cover
         if self._check_canceled():
             return True
-        while self.is_paused() and not self._canceled:
+
+        if self.is_paused() and not self._request_cancel:
+            self._status = RunStatus.PAUSED
+        while self.is_paused() and not self._request_cancel:
             self._paused_time += self._pause_interval  # fixme: be more precise
             time.sleep(self._pause_interval)
 
             if self._check_canceled():
                 return True
 
+        self._status = RunStatus.RUNNING
         # FIXME: this is actually the only place where the runner assumes our event is
         # an MDAevent.  For everything else, the engine is technically the only thing
         # that cares about the event time.
@@ -432,12 +460,12 @@ class MDARunner:
             remaining_wait_time = go_at - self.event_seconds_elapsed()
             while remaining_wait_time > 0:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
-                while self._paused and not self._canceled:
+                while self.is_paused() and not self._request_cancel:
                     self._paused_time += self._pause_interval  # fixme: be more precise
                     remaining_wait_time += self._pause_interval
                     time.sleep(self._pause_interval)
 
-                if self._canceled:
+                if self._request_cancel:
                     break
                 time.sleep(min(remaining_wait_time, 0.5))
                 remaining_wait_time = go_at - self.event_seconds_elapsed()
@@ -454,8 +482,14 @@ class MDARunner:
         sequence : MDASequence
             The sequence that was finished.
         """
-        self._running = False
-        self._canceled = False
+        # Only reset to IDLE if we're not already in a terminal state
+        # (CANCELED, ERROR, COMPLETED). This preserves the final status
+        # for external observers
+        terminal_states = (RunStatus.CANCELED, RunStatus.ERROR, RunStatus.COMPLETED)
+        if self._status not in terminal_states:
+            self._status = RunStatus.IDLE
+
+        self._request_cancel = False
 
         if hasattr(self._engine, "teardown_sequence"):
             self._engine.teardown_sequence(sequence)  # type: ignore
