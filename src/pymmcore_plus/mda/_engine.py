@@ -678,10 +678,7 @@ class MDAEngine(PMDAEngine):
         iter_events = product(event.events, range(n_channels))
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
-
-            # check if acquisition is paused
-            if core.mda.is_paused():
-                core.mda.await_unpause()
+            # NOTE: there is not a way to pause a hardware sequence acquisition.
 
             # check if acquisition is canceled
             if core.mda.is_canceled():
@@ -689,6 +686,7 @@ class MDAEngine(PMDAEngine):
                 return
 
             if remaining := core.getRemainingImageCount():
+                print('remaining images:', remaining)
                 yield self._next_seqimg_payload(
                     *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
                 )
@@ -700,10 +698,6 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while remaining := core.getRemainingImageCount():
-
-            # check if acquisition is paused
-            if core.mda.is_paused():
-                core.mda.await_unpause()
 
             # check if acquisition is canceled
             if core.mda.is_canceled():

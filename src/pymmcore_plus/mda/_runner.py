@@ -321,38 +321,6 @@ class MDARunner:
         """
         return time.perf_counter() - self._t0
 
-    def await_unpause(self) -> bool:
-        """Wait while paused, tracking time.
-
-        This private method handles exiting the pause state, updating internal state
-        (_paused_time, _status) and checking for cancellation during the pause.
-
-        Returns
-        -------
-        bool
-            True if successfully exited pause (or not paused), False if cancelled.
-        """
-        if not self.is_paused():
-            return True  # not paused, continue normally
-
-        # Update status to PAUSED if needed
-        if self._status != RunStatus.PAUSED:
-            self._status = RunStatus.PAUSED
-
-        # Wait while paused, tracking time and checking for cancel
-        while self.is_paused() and not self._request_cancel:
-            self._paused_time += self._pause_interval
-            time.sleep(self._pause_interval)
-
-            if self.is_canceled():
-                return False  # cancelled while paused
-
-        # Resume running if we exited the pause loop without being canceled
-        if self.is_running() and self._status != RunStatus.RUNNING:
-            self._status = RunStatus.RUNNING
-
-        return True  # resumed normally
-
     #---------------------------PRIVATE METHODS ---------------------------#
 
     def _outputs_connected(
@@ -478,7 +446,7 @@ class MDARunner:
         if self.is_canceled():
             return True
         # should stop if canceled during pause
-        if not self.await_unpause():  # returns False if cancelled while paused
+        if not self._await_unpause():  # returns False if cancelled while paused
             return True
 
         # Handle min_start_time: the runner is responsible for scheduling WHEN events
@@ -495,7 +463,7 @@ class MDARunner:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
 
                 # should stop if canceled during pause.
-                if not self.await_unpause():  # returns False if cancelled while paused
+                if not self._await_unpause():  # returns False if cancelled while paused
                     return True
 
                 # Adjust remaining time for time spent paused
@@ -509,6 +477,42 @@ class MDARunner:
         # check canceled again in case it was canceled
         # during the waiting loop
         return self.is_canceled()
+
+    def _await_unpause(self) -> bool:
+        """Wait while paused, tracking time.
+
+        This private method handles exiting the pause state, updating internal state
+        (_paused_time, _status) and checking for cancellation during the pause.
+
+        Returns
+        -------
+        bool
+            True if successfully exited pause (or not paused), False if cancelled.
+        """
+        if not self.is_paused():
+            return True  # not paused, continue normally
+
+        # Update status to PAUSED if needed
+        if self._status != RunStatus.PAUSED:
+            self._status = RunStatus.PAUSED
+
+        logger.info("MDA Paused")
+
+        # Wait while paused, tracking time and checking for cancel
+        while self.is_paused() and not self._request_cancel:
+            self._paused_time += self._pause_interval
+            time.sleep(self._pause_interval)
+
+            if self.is_canceled():
+                return False  # cancelled while paused
+
+        logger.info("MDA Resumed")
+
+        # Resume running if we exited the pause loop without being canceled
+        if self.is_running() and self._status != RunStatus.RUNNING:
+            self._status = RunStatus.RUNNING
+
+        return True  # resumed normally
 
     def _finish_run(self, sequence: MDASequence) -> None:
         """To be called at the end of an acquisition.
