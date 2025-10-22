@@ -172,7 +172,7 @@ class MDARunner:
         return self._status in (RunStatus.RUNNING, RunStatus.PAUSED)
 
     def is_paused(self) -> bool:
-        """Return True if the acquisition is paused.
+        """Return True if the acquisition is currently paused.
 
         Use `toggle_pause` to change the paused state.
 
