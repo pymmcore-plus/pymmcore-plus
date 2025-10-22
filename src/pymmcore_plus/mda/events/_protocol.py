@@ -9,7 +9,8 @@ class RunStatus(str, Enum):
 
     IDLE = "idle"
     RUNNING = "running"
-    PAUSED = "paused"
+    PAUSED_TOGGLED = "paused"
+    CANCELING = "canceling"
     CANCELED = "canceled"
     ERROR = "error"
     COMPLETED = "completed"

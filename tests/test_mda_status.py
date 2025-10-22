@@ -47,7 +47,7 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
 
     def _on_finished(seq):
         assert set(status_changes) == {
-            RunStatus.PAUSED,
+            RunStatus.PAUSED_TOGGLED,
             RunStatus.RUNNING,
             RunStatus.COMPLETED,
         }
@@ -85,13 +85,16 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_sequenced_event_paused_and_cancelled(core: CMMCorePlus, qtbot: QtBot) -> None:
+@pytest.mark.parametrize("hardware_seq", [True, False])
+def test_sequenced_event_paused_and_cancelled(
+    core: CMMCorePlus, qtbot: QtBot, hardware_seq: bool
+) -> None:
     """Test pausing and then canceling during a hardware-triggered sequence.
 
     It checks that the sequence is actually cancelled and that the appropriate
     warnings are logged.
     """
-    core.mda.engine.use_hardware_sequencing = True
+    core.mda.engine.use_hardware_sequencing = hardware_seq
 
     # Temporarily set logger level to WARNING to capture warnings
     original_level = logger.level
@@ -111,15 +114,19 @@ def test_sequenced_event_paused_and_cancelled(core: CMMCorePlus, qtbot: QtBot) -
 
         def _on_finished(seq):
             t1 = time.perf_counter()
-            assert core.mda.status == RunStatus.CANCELED
+            assert core.mda.is_canceled()
             assert t1 - t0 < 4.5, "Acquisition not canceled!"
             # assert that both pause warning and cancel warning were logged
-            assert len(warnings_captured) == 2
-            assert warnings_captured[0] == (
-                "Pause has been requested, but sequenced acquisition "
-                "cannot be yet paused, only canceled."
-            )
-            assert "MDA Canceled:" in warnings_captured[1]
+            if hardware_seq:
+                assert len(warnings_captured) == 2
+                assert warnings_captured[0] == (
+                    "Pause has been requested, but sequenced acquisition "
+                    "cannot be yet paused, only canceled."
+                )
+                assert "MDA Canceled:" in warnings_captured[1]
+            else:
+                assert len(warnings_captured) == 1
+                assert "MDA Canceled:" in warnings_captured[0]
 
         core.mda.events.sequenceFinished.connect(_on_finished)
 
@@ -144,7 +151,7 @@ def test_sequenced_event_paused_and_cancelled(core: CMMCorePlus, qtbot: QtBot) -
                     core.mda.cancel()
                     assert not core.mda.is_running()
                     assert not core.mda.is_paused()
-                    assert core.mda.is_canceled()
+                    assert core.mda.is_cancel_requested()
     finally:
         logger.removeHandler(handler)
         logger.setLevel(original_level)

@@ -16,6 +16,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import FocusDirection, Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent, iter_sequenced_events
+from pymmcore_plus.mda.events import RunStatus
 from pymmcore_plus.metadata import (
     FrameMetaV1,
     PropertyValue,
@@ -678,7 +679,7 @@ class MDAEngine(PMDAEngine):
 
         # to make sure we emit the cancel and pause warnings only once
         pause_logged: bool = False
-        cancel_logged: bool = False
+        canceled: bool = False
 
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
@@ -692,10 +693,12 @@ class MDAEngine(PMDAEngine):
                     pause_logged = True
 
             # check if acquisition is canceled
-            if core.mda.is_canceled():
+            if core.mda.is_cancel_requested():
                 core.stopSequenceAcquisition()
+                core.mda.status = RunStatus.CANCELED
                 logger.warning("MDA Canceled: %s", event)
-                cancel_logged = True
+                core.mda.events.sequenceCanceled.emit(event)
+                canceled = True
                 return
 
             if remaining := core.getRemainingImageCount():
@@ -711,9 +714,11 @@ class MDAEngine(PMDAEngine):
 
         while remaining := core.getRemainingImageCount():
             # check if acquisition is canceled
-            if core.mda.is_canceled():
-                if not cancel_logged:
+            if core.mda.is_cancel_requested():
+                if not canceled:
+                    core.mda.status = RunStatus.CANCELED
                     logger.warning("MDA Canceled: %s", event)
+                    core.mda.events.sequenceCanceled.emit(event)
                 return
 
             yield self._next_seqimg_payload(
