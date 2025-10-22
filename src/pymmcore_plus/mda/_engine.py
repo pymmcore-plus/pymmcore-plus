@@ -16,7 +16,6 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import FocusDirection, Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent, iter_sequenced_events
-from pymmcore_plus.mda.events import RunStatus
 from pymmcore_plus.metadata import (
     FrameMetaV1,
     PropertyValue,
@@ -683,6 +682,11 @@ class MDAEngine(PMDAEngine):
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
             # NOTE: there is not a way to pause a hardware sequence acquisition.
+            if core.mda.is_paused():
+                logger.warning(
+                    "Pause has been requested, but sequenced acquisition "
+                    "cannot be yet paused."
+                )
 
             # check if acquisition is canceled
             if core.mda.is_canceled():
