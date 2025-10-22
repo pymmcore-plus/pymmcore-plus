@@ -33,4 +33,5 @@ acq_thread = mmc.run_mda(sequence)
 while acq_thread.is_alive():
     time.sleep(0.5)
     mmc.mda.cancel()
+    # mmc.mda.toggle_pause()
 

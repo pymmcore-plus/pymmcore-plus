@@ -8,6 +8,7 @@ from functools import cache
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
+from click import pause
 import numpy as np
 import useq
 from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
@@ -677,16 +678,19 @@ class MDAEngine(PMDAEngine):
         iter_events = product(event.events, range(n_channels))
 
         # to make sure we emit the cancel log only once
-        cancel_logged = False
+        pause_logged: bool = False
+        cancel_logged: bool = False
 
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
             # NOTE: there is not a way to pause a hardware sequence acquisition.
             if core.mda.is_paused():
-                logger.warning(
-                    "Pause has been requested, but sequenced acquisition "
-                    "cannot be yet paused."
-                )
+                if not pause_logged:
+                    logger.warning(
+                        "Pause has been requested, but sequenced acquisition "
+                        "cannot be yet paused."
+                    )
+                    pause_logged = True
 
             # check if acquisition is canceled
             if core.mda.is_canceled():
