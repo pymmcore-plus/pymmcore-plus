@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 import time
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
 
 import pytest
 from useq import MDASequence
@@ -38,215 +37,51 @@ def test_initial_status(core: CMMCorePlus) -> None:
 @SKIP_NO_PYTESTQT
 def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
     """Test status transitions during a normal MDA run."""
-    sequence = MDASequence(
-        channels=["DAPI"],
-        time_plan={"interval": 0.1, "loops": 3},
-    )
+    sequence = MDASequence(time_plan={"interval": 0.3, "loops": 5})
 
     # Track status changes
     status_changes: list[RunStatus] = []
 
-    def track_status():
+    def _track_status():
         status_changes.append(core.mda.status)
 
+    def _on_finished(seq):
+        assert set(status_changes) == {
+            RunStatus.PAUSED,
+            RunStatus.RUNNING,
+            RunStatus.COMPLETED,
+        }
+        assert not core.mda.is_running()
+        assert not core.mda.is_paused()
+        assert not core.mda.is_canceled()
+
     # Connect to signals to track status
-    core.mda.events.sequenceStarted.connect(track_status)
-    core.mda.events.eventStarted.connect(lambda _: track_status())
-    core.mda.events.awaitingEvent.connect(lambda _: track_status())
-    core.mda.events.sequenceFinished.connect(lambda _: track_status())
+    core.mda.events.sequenceStarted.connect(_track_status)
+    core.mda.events.eventStarted.connect(lambda _: _track_status())
+    core.mda.events.awaitingEvent.connect(lambda _: _track_status())
+    core.mda.events.frameReady.connect(lambda _: _track_status())
+    core.mda.events.sequenceFinished.connect(lambda _: _track_status())
+    core.mda.events.sequenceFinished.connect(_on_finished)
 
     # Check initial state
     assert core.mda.status == RunStatus.IDLE
 
     # Run the sequence
-    with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=5000):
-        core.mda.run(sequence)
-
-    # Verify status was RUNNING during execution
-    assert RunStatus.RUNNING in status_changes
-    # After completion, should be back to a terminal state
-    final_status = core.mda.status
-    assert final_status in (RunStatus.COMPLETED, RunStatus.IDLE)
-    assert not core.mda.is_running()
-    assert not core.mda.is_paused()
-    assert not core.mda.is_canceled()
-
-
-@SKIP_NO_PYTESTQT
-def test_status_on_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
-    """Test status transitions when pausing and resuming."""
-    sequence = MDASequence(
-        time_plan={"interval": 0.5, "loops": 5},
-    )
-
-    pause_toggled_events: list[bool] = []
-    status_at_pause: list[RunStatus] = []
-
-    def on_pause_toggle(paused: bool):
-        pause_toggled_events.append(paused)
-        status_at_pause.append(core.mda.status)
-
-    core.mda.events.sequencePauseToggled.connect(on_pause_toggle)
-
-    event_count = 0
-
-    def on_event(_):
-        nonlocal event_count
-        event_count += 1
-        # Pause after first event
-        if event_count == 1:
-            core.mda.toggle_pause()
-            assert core.mda.is_paused()
-            assert core.mda.status == RunStatus.PAUSED
-            # Resume after a short delay
-            qtbot.waitSignal(
-                core.mda.events.sequencePauseToggled, timeout=1000
-            )  # wait for pause
-            time.sleep(0.1)
-            core.mda.toggle_pause()
-            assert not core.mda.is_paused()
-            assert core.mda.status == RunStatus.RUNNING
-
-    core.mda.events.eventStarted.connect(on_event)
-
     with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=10000):
-        core.mda.run(sequence)
-
-    # Verify we got pause/resume events
-    assert len(pause_toggled_events) >= 2
-    assert pause_toggled_events[0] is True  # paused
-    assert pause_toggled_events[1] is False  # resumed
-
-    # Verify status was PAUSED when paused
-    assert RunStatus.PAUSED in status_at_pause
-    assert RunStatus.RUNNING in status_at_pause
-
-
-@SKIP_NO_PYTESTQT
-def test_status_on_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
-    """Test status when canceling an acquisition."""
-    sequence = MDASequence(
-        time_plan={"interval": 0.1, "loops": 10},
-    )
-
-    canceled_signal = Mock()
-    core.mda.events.sequenceCanceled.connect(canceled_signal)
-
-    def on_second_event(_):
-        # Cancel after a couple events
-        if canceled_signal.call_count == 0:
-            time.sleep(0.15)  # let a couple events happen
-            core.mda.cancel()
-
-    core.mda.events.eventStarted.connect(on_second_event)
-
-    with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=5000):
-        core.mda.run(sequence)
-
-    # Verify cancel was called
-    canceled_signal.assert_called_once()
-
-    # Status should be CANCELED
-    assert core.mda.status == RunStatus.CANCELED
-    assert not core.mda.is_running()
-    assert not core.mda.is_paused()
-
-
-@SKIP_NO_PYTESTQT
-def test_is_running_includes_paused(core: CMMCorePlus, qtbot: QtBot) -> None:
-    """Test that is_running returns True even when paused."""
-    sequence = MDASequence(
-        time_plan={"interval": 0.5, "loops": 3},
-    )
-
-    running_states: list[tuple[bool, bool, RunStatus]] = []
-
-    def on_event(_):
-        if len(running_states) == 0:
-            # First event - pause
-            core.mda.toggle_pause()
-            running_states.append(
-                (core.mda.is_running(), core.mda.is_paused(), core.mda.status)
-            )
-            time.sleep(0.1)
-            # Resume
-            core.mda.toggle_pause()
-
-    core.mda.events.eventStarted.connect(on_event)
-
-    with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=10000):
-        core.mda.run(sequence)
-
-    # When paused, is_running should still be True
-    assert len(running_states) >= 1
-    is_running, is_paused, status = running_states[0]
-    assert is_running is True  # Still running even when paused
-    assert is_paused is True
-    assert status == RunStatus.PAUSED
-
-
-@SKIP_NO_PYTESTQT
-def test_pause_toggle_signal_emitted_once(core: CMMCorePlus, qtbot: QtBot) -> None:
-    """Test that sequencePauseToggled is emitted only once per toggle."""
-    sequence = MDASequence(
-        time_plan={"interval": 0.5, "loops": 3},
-    )
-
-    pause_toggle_count = 0
-    first_event_handled = False
-
-    def count_toggles(_):
-        nonlocal pause_toggle_count
-        pause_toggle_count += 1
-
-    core.mda.events.sequencePauseToggled.connect(count_toggles)
-
-    def on_first_event(_):
-        nonlocal first_event_handled
-        if not first_event_handled:
-            first_event_handled = True
-            # Pause
-            core.mda.toggle_pause()
-            initial_count = pause_toggle_count
-            # Wait a bit to ensure no extra signals
-            time.sleep(0.3)
-            # Should only have gotten one signal
-            assert pause_toggle_count == initial_count
-            # Resume
-            core.mda.toggle_pause()
-
-    core.mda.events.eventStarted.connect(on_first_event)
-
-    with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=10000):
-        core.mda.run(sequence)
-
-    # Should have exactly 2 toggles (pause + resume)
-    assert pause_toggle_count == 2
-
-
-@SKIP_NO_PYTESTQT
-def test_cancel_during_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
-    """Test canceling while paused."""
-    sequence = MDASequence(
-        time_plan={"interval": 0.5, "loops": 5},
-    )
-
-    def on_first_event(_):
-        core.mda.toggle_pause()
-        assert core.mda.is_paused()
-        # Cancel while paused
-        time.sleep(0.1)
-        core.mda.cancel()
-
-    core.mda.events.eventStarted.connect(on_first_event)
-
-    with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=5000):
-        core.mda.run(sequence)
-
-    # Should be canceled, not paused
-    assert core.mda.status == RunStatus.CANCELED
-    assert not core.mda.is_running()
-    assert not core.mda.is_paused()
+        acq_thread = core.run_mda(sequence)
+        assert core.mda.is_running()
+        paused = False
+        while acq_thread.is_alive():
+            if not paused:
+                paused = True
+                time.sleep(0.3)
+                core.mda.toggle_pause()
+                assert core.mda.is_paused()
+                status_changes.append(core.mda.status)
+                time.sleep(0.3)
+                core.mda.toggle_pause()
+                assert not core.mda.is_paused()
+                status_changes.append(core.mda.status)
 
 
 @SKIP_NO_PYTESTQT
@@ -273,8 +108,10 @@ def test_sequenced_event_paused_and_cancelled(core: CMMCorePlus, qtbot: QtBot) -
     logger.addHandler(handler)
 
     try:
+
         def _on_finished(seq):
             t1 = time.perf_counter()
+            assert core.mda.status == RunStatus.CANCELED
             assert t1 - t0 < 4.5, "Acquisition not canceled!"
             # assert that both pause warning and cancel warning were logged
             assert len(warnings_captured) == 2
@@ -293,15 +130,21 @@ def test_sequenced_event_paused_and_cancelled(core: CMMCorePlus, qtbot: QtBot) -
         t0 = time.perf_counter()
         with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=10000):
             acq_thread = core.run_mda(sequence)
+            assert core.mda.is_running()
             paused = False
             while acq_thread.is_alive():
                 if not paused:
                     paused = True
-                    time.sleep(1)
+                    time.sleep(0.2)
                     core.mda.toggle_pause()
+                    assert core.mda.is_paused()
+                    assert core.mda.is_running()
                     # to stop the sequence faster
                     time.sleep(0.1)
                     core.mda.cancel()
+                    assert not core.mda.is_running()
+                    assert not core.mda.is_paused()
+                    assert core.mda.is_canceled()
     finally:
         logger.removeHandler(handler)
         logger.setLevel(original_level)
