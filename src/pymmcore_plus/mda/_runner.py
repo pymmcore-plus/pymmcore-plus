@@ -88,18 +88,19 @@ class MDARunner:
     that are available to connect to and when they are emitted).
     """
 
-    __slots__ = (
-        "__weakref__",
-        "_engine",
-        "_handlers",
-        "_pause_interval",
-        "_paused_time",
-        "_sequence",
-        "_sequence_t0",
-        "_signals",
-        "_status",
-        "_t0",
-    )
+    # if we want to use this we need to fix tests that mock MDARunner in pymmcore_widget
+    # __slots__ = (
+    #     "__weakref__",
+    #     "_engine",
+    #     "_handlers",
+    #     "_pause_interval",
+    #     "_paused_time",
+    #     "_sequence",
+    #     "_sequence_t0",
+    #     "_signals",
+    #     "_status",
+    #     "_t0",
+    # )
 
     def __init__(self) -> None:
         self._engine: PMDAEngine | None = None
