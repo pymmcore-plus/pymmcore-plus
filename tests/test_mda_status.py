@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import time
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
@@ -9,6 +10,7 @@ from unittest.mock import Mock
 import pytest
 from useq import MDASequence
 
+from pymmcore_plus._logger import logger
 from pymmcore_plus.mda.events import RunStatus
 
 if TYPE_CHECKING:
@@ -248,47 +250,61 @@ def test_cancel_during_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_sequenced_event_cancel_during_sequence(
-    core: CMMCorePlus, qtbot: QtBot
-) -> None:
-    """Test canceling during a hardware-triggered sequence.
+def test_sequenced_event_paused_and_cancelled(core: CMMCorePlus, qtbot: QtBot) -> None:
+    """Test pausing and then canceling during a hardware-triggered sequence.
 
-    We verify cancellation works by checking that the acquisition completes
-    much faster than it would if all frames were acquired.
+    It checks that the sequence is actually cancelled and that the appropriate
+    warnings are logged.
     """
-    # Create a long sequence that will use hardware sequencing
-    # With 100 frames at 50ms exposure, full run would take ~5 seconds
-    sequence = MDASequence(
-        time_plan={"interval": 0, "loops": 100},
-    )
-    core.setExposure(50)  # 50ms exposure per frame
+    core.mda.engine.use_hardware_sequencing = True
 
-    t0 = time.perf_counter()
+    # Temporarily set logger level to WARNING to capture warnings
+    original_level = logger.level
+    logger.setLevel(logging.WARNING)
 
-    with qtbot.waitSignal(core.mda.events.sequenceStarted, timeout=10000):
-        acq_thread = core.run_mda(sequence)
-        while acq_thread.is_alive():
-            time.sleep(0.5)
-            print("Canceling MDA...")
-            core.mda.cancel()
+    warnings_captured = []
 
-    elapsed = time.perf_counter() - t0
+    class WarningHandler(logging.Handler):
+        def emit(self, record):
+            if record.levelno >= logging.WARNING:
+                warnings_captured.append(record.getMessage())
 
-    # with qtbot.waitSignals(
-    #     (
-    #         core.mda.events.sequenceStarted,
-    #         core.mda.events.sequenceCanceled,
-    #         core.mda.events.sequenceFinished,
-    #     ),
-    #     timeout=2000,
-    # ):
-    #     core.mda.run(sequence)
-    #     core.mda.cancel()
+    handler = WarningHandler()
+    logger.addHandler(handler)
 
-    # Should be canceled and much faster than full sequence (~5s)
-    # assert core.mda.status == RunStatus.CANCELED
-    # assert elapsed < 2.0, f"Expected quick cancel, but took {elapsed:.2f}s"
-    print(f"Elapsed time until cancel: {elapsed:.2f}s")
+    try:
+        def _on_finished(seq):
+            t1 = time.perf_counter()
+            assert t1 - t0 < 4.5, "Acquisition not canceled!"
+            # assert that both pause warning and cancel warning were logged
+            assert len(warnings_captured) == 2
+            assert warnings_captured[0] == (
+                "Pause has been requested, but sequenced acquisition "
+                "cannot be yet paused, only canceled."
+            )
+            assert "MDA Canceled:" in warnings_captured[1]
+
+        core.mda.events.sequenceFinished.connect(_on_finished)
+
+        # With 100 frames at 50ms exposure, full run would take ~5 seconds
+        sequence = MDASequence(time_plan={"interval": 0, "loops": 100})
+        core.setExposure(50)
+
+        t0 = time.perf_counter()
+        with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=10000):
+            acq_thread = core.run_mda(sequence)
+            paused = False
+            while acq_thread.is_alive():
+                if not paused:
+                    paused = True
+                    time.sleep(1)
+                    core.mda.toggle_pause()
+                    # to stop the sequence faster
+                    time.sleep(0.1)
+                    core.mda.cancel()
+    finally:
+        logger.removeHandler(handler)
+        logger.setLevel(original_level)
 
 
 def test_status_persistence_after_completion(core: CMMCorePlus) -> None:

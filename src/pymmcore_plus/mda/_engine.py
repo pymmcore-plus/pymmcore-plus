@@ -677,18 +677,19 @@ class MDAEngine(PMDAEngine):
         count = 0
         iter_events = product(event.events, range(n_channels))
 
-        # to make sure we emit the cancel log only once
+        # to make sure we emit the cancel and pause warnings only once
         pause_logged: bool = False
         cancel_logged: bool = False
 
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
+
             # NOTE: there is not a way to pause a hardware sequence acquisition.
             if core.mda.is_paused():
                 if not pause_logged:
                     logger.warning(
                         "Pause has been requested, but sequenced acquisition "
-                        "cannot be yet paused."
+                        "cannot be yet paused, only canceled."
                     )
                     pause_logged = True
 
