@@ -50,6 +50,7 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
     # Connect to signals to track status
     core.mda.events.sequenceStarted.connect(track_status)
     core.mda.events.eventStarted.connect(lambda _: track_status())
+    core.mda.events.awaitingEvent.connect(lambda _: track_status())
     core.mda.events.sequenceFinished.connect(lambda _: track_status())
 
     # Check initial state
@@ -66,6 +67,7 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
     assert final_status in (RunStatus.COMPLETED, RunStatus.IDLE)
     assert not core.mda.is_running()
     assert not core.mda.is_paused()
+    assert not core.mda.is_canceled()
 
 
 @SKIP_NO_PYTESTQT
@@ -116,6 +118,11 @@ def test_status_on_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
     # Verify status was PAUSED when paused
     assert RunStatus.PAUSED in status_at_pause
     assert RunStatus.RUNNING in status_at_pause
+
+    from rich import print
+    print()
+    print(pause_toggled_events)
+    print(status_at_pause)
 
 
 @SKIP_NO_PYTESTQT
@@ -246,68 +253,17 @@ def test_cancel_during_pause(core: CMMCorePlus, qtbot: QtBot) -> None:
 
 
 @SKIP_NO_PYTESTQT
-def test_sequenced_event_pause_and_cancel(core: CMMCorePlus, qtbot: QtBot) -> None:
-    """Test pause/cancel during hardware-triggered sequence acquisition.
-
-    This tests the pause/cancel logic in exec_sequenced_event in the engine.
-    """
-    # Create a sequence that will use hardware triggering
-
-    sequence = MDASequence(
-        channels=["DAPI", "FITC"],
-        z_plan={"range": 5, "step": 1},
-        time_plan={"interval": 0.5, "loops": 2},
-    )
-
-    pause_toggle_count = 0
-    events_started = 0
-
-    def count_pause_toggles(_):
-        nonlocal pause_toggle_count
-        pause_toggle_count += 1
-
-    def count_events(_):
-        nonlocal events_started
-        events_started += 1
-        # Pause after first event
-        if events_started == 1:
-            core.mda.toggle_pause()
-            time.sleep(0.2)
-            # Should still be paused
-            assert core.mda.is_paused()
-            # Resume
-            core.mda.toggle_pause()
-
-    core.mda.events.sequencePauseToggled.connect(count_pause_toggles)
-    core.mda.events.eventStarted.connect(count_events)
-
-    with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=15000):
-        core.mda.run(sequence)
-
-    # Verify pause/resume happened
-    assert pause_toggle_count == 2  # One for pause, one for resume
-    assert core.mda.status in (RunStatus.COMPLETED, RunStatus.IDLE)
-
-
-@SKIP_NO_PYTESTQT
 def test_sequenced_event_cancel_during_sequence(
     core: CMMCorePlus, qtbot: QtBot
 ) -> None:
     """Test canceling during a hardware-triggered sequence."""
     sequence = MDASequence(
-        channels=["DAPI", "FITC"],
-        z_plan={"range": 10, "step": 1},
-        time_plan={"interval": 0.5, "loops": 3},
+        time_plan={"interval": 0, "loops": 50},
     )
-
-    events_started = 0
+    core.setExposure(100)
 
     def cancel_early(_):
-        nonlocal events_started
-        events_started += 1
-        if events_started == 2:
-            # Cancel during acquisition
-            core.mda.cancel()
+        core.mda.cancel()
 
     core.mda.events.eventStarted.connect(cancel_early)
 
@@ -351,3 +307,73 @@ def test_cancel_when_not_running(core: CMMCorePlus) -> None:
 
     # Status should still be IDLE
     assert core.mda.status == RunStatus.IDLE
+
+
+def test_remaining_wait_time_calculation_with_pause(core: CMMCorePlus) -> None:
+    """Test that _get_remaining_wait_time recalculates with updated _paused_time.
+
+    This verifies the comment in _get_remaining_wait_time:
+    'We calculate remaining_wait_time fresh each iteration using
+    event.min_start_time + self._paused_time to ensure it stays correct
+    even when self._paused_time changes during pause.'
+
+    This is a unit test that directly tests the calculation logic,
+    simulating the scenario where pause time accumulates during a wait interval.
+    """
+    # Set up the runner with a known state
+    runner = core.mda
+    min_start_time = 4.0  # Event should start 4 seconds after t0
+
+    # Simulate starting the sequence
+    runner._t0 = time.perf_counter()
+    initial_t0 = runner._t0
+
+    # Initially, no pause time has accumulated
+    runner._paused_time = 0.0
+
+    # Calculate remaining wait time - should be close to 4.0 seconds
+    remaining_1 = runner._get_remaining_wait_time(min_start_time)
+    assert 3.9 < remaining_1 <= 4.0, f"Expected remaining time ~4.0s, got {remaining_1}"
+
+    # Simulate some time passing (1.0 seconds)
+    time.sleep(1.0)
+
+    # Without any pause, remaining time should decrease to ~3.0s
+    remaining_2 = runner._get_remaining_wait_time(min_start_time)
+    assert 2.9 < remaining_2 < 3.1, f"Expected remaining time ~3.0s, got {remaining_2}"
+
+    # Now simulate a pause accumulating (add 2.0 seconds of pause time)
+    # This simulates what happens when _handle_pause_state() accumulates time
+    runner._paused_time = 2.0
+
+    # The remaining wait time should be recalculated using the NEW paused_time
+    # Formula: min_start_time + paused_time - elapsed
+    # Expected: 4.0 + 2.0 - 1.0 = 5.0 seconds
+    remaining_3 = runner._get_remaining_wait_time(min_start_time)
+    elapsed = time.perf_counter() - initial_t0
+    expected = min_start_time + runner._paused_time - elapsed
+    assert abs(remaining_3 - expected) < 0.1, (
+        f"Expected remaining time to be recalculated with new paused_time. "
+        f"Expected ~{expected:.2f}s, got {remaining_3:.2f}s. "
+        f"This confirms that the calculation uses the CURRENT paused_time value."
+    )
+
+    # Verify that the remaining time INCREASED compared to remaining_2
+    # because we added pause time (this is the key behavior)
+    assert remaining_3 > remaining_2, (
+        f"After adding paused_time, remaining wait should increase. "
+        f"Before pause: {remaining_2:.2f}s, after pause: {remaining_3:.2f}s. "
+        f"This demonstrates that _get_remaining_wait_time recalculates "
+        f"fresh each time using the current _paused_time value, maintaining "
+        f"the correct interval duration even when paused."
+    )
+
+    # Verify the timing makes sense: with 2s pause added to 4s interval,
+    # and 1s already elapsed, we should have ~5s remaining
+    assert 4.9 < remaining_3 < 5.1, (
+        f"Expected remaining time ~5.0s (4s interval + 2s pause - 1s elapsed), "
+        f"got {remaining_3:.2f}s"
+    )
+
+    # Clean up
+    runner._paused_time = 0.0

@@ -388,13 +388,7 @@ class MDARunner:
                     self._emit_cancel_signal_and_log()
                 break
 
-            # handle pause state
-            if self._handle_pause_state():
-                # if true, we were canceled during pause
-                self._emit_cancel_signal_and_log()
-                break
-
-            # wait for event's min_start_time if needed (timelapse)
+            # wait for event's min_start_time (if timelapse) and handle pause state
             if self._wait_until_event(event):
                 # if true, we were canceled during wait
                 self._emit_cancel_signal_and_log()
@@ -410,28 +404,6 @@ class MDARunner:
         """Emit the sequenceCanceled signal and log the cancellation."""
         logger.warning("MDA Canceled: %s", self._sequence)
         self._signals.sequenceCanceled.emit(self._sequence)
-
-    def _handle_pause_state(self) -> bool:
-        """Handle paused state, waiting until resumed or canceled.
-
-        Returns
-        -------
-        bool
-            True if canceled during pause, False otherwise.
-        """
-        if not self.is_paused():
-            return False
-
-        logger.info("MDA Paused")
-
-        while self.is_paused() and not self.is_canceled():
-            self._paused_time += self._pause_interval
-            time.sleep(self._pause_interval)
-
-        if not self.is_canceled():
-            logger.info("MDA Resumed")
-
-        return self.is_canceled()
 
     def _get_event_iterator(
         self, engine: PMDAEngine, events: Iterable[MDAEvent]
@@ -485,8 +457,6 @@ class MDARunner:
         finally:
             teardown_event(event)
 
-
-
     def _wait_until_event(self, event: MDAEvent) -> bool:
         """Check if acquisition should stop before executing this event.
 
@@ -513,29 +483,53 @@ class MDARunner:
 
         # We need to enter a loop here checking paused and canceled.
         # otherwise you'll potentially wait a long time to cancel
-        # Note: we calculate remaining_wait_time fresh each iteration using
-        # event.min_start_time + self._paused_time to ensure it stays correct
-        # even when self._paused_time changes during pause.
-        remaining_wait_time = mst + self._paused_time - self.event_seconds_elapsed()
+        remaining_wait_time = self._get_remaining_wait_time(mst)
 
         while remaining_wait_time > 0:
             self._signals.awaitingEvent.emit(event, remaining_wait_time)
 
-            # Handle pause state - returns True if canceled
+            # handle pause state
             if self._handle_pause_state():
+                # if true, we were canceled during pause
                 return True
 
             if self.is_canceled():
                 return True
 
             time.sleep(min(remaining_wait_time, 0.5))
-            remaining_wait_time = (
-                mst + self._paused_time - self.event_seconds_elapsed()
-            )
+            remaining_wait_time = self._get_remaining_wait_time(mst)
 
         # check canceled again in case it was canceled during the waiting loop
         return self.is_canceled()
 
+    def _handle_pause_state(self) -> bool:
+        """Handle paused state, waiting until resumed or canceled.
+
+        Returns
+        -------
+        bool
+            True if canceled during pause, False otherwise.
+        """
+        if not self.is_paused():
+            return False
+
+        logger.info("MDA Paused")
+
+        while self.is_paused() and not self.is_canceled():
+            self._paused_time += self._pause_interval
+            time.sleep(self._pause_interval)
+
+        if not self.is_canceled():
+            logger.info("MDA Resumed")
+
+        return self.is_canceled()
+
+    def _get_remaining_wait_time(self, min_start_time: float) -> float:
+        """Calculate remaining wait time until min_start_time is reached."""
+        # Note: we calculate remaining_wait_time fresh each iteration using
+        # event.min_start_time + self._paused_time to ensure it stays correct
+        # even when self._paused_time changes during pause.
+        return min_start_time + self._paused_time - self.event_seconds_elapsed()
 
     def _finish_run(self, sequence: MDASequence) -> None:
         """To be called at the end of an acquisition.
