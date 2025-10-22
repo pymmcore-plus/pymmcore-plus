@@ -349,45 +349,6 @@ class MDARunner:
 
         return cast("SupportsFrameReady", handler_for_path(path))
 
-    def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
-        """Main execution of events, inside the try/except block of `run`."""
-        teardown_event = getattr(engine, "teardown_event", lambda e: None)
-        event_iterator = self._get_event_iterator(engine, events)
-        _events: Iterator[MDAEvent] = event_iterator(events)
-
-        self._reset_event_timer()
-        self._sequence_t0 = self._t0
-
-        for event in _events:
-            if event.reset_event_timer:
-                self._reset_event_timer()
-
-            # Check for early termination conditions
-            if not self.is_running() or self.is_canceled():
-                if self.is_canceled():
-                    self._emit_cancel_signal_and_log()
-                break
-
-            # Handle pause state
-            if self._handle_pause_state():
-                # Canceled during pause
-                self._emit_cancel_signal_and_log()
-                break
-
-            # Wait for event's min_start_time if needed
-            if self._wait_until_event(event):
-                # Canceled during wait
-                self._emit_cancel_signal_and_log()
-                break
-
-            # Execute the event
-            self._execute_event(engine, event, teardown_event)
-
-    def _emit_cancel_signal_and_log(self) -> None:
-        """Emit the sequenceCanceled signal and log the cancellation."""
-        logger.warning("MDA Canceled: %s", self._sequence)
-        self._signals.sequenceCanceled.emit(self._sequence)
-
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
 
@@ -408,8 +369,69 @@ class MDARunner:
         logger.info("MDA Started: %s", sequence)
         return self._engine
 
+    def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
+        """Main execution of events, inside the try/except block of `run`."""
+        teardown_event = getattr(engine, "teardown_event", lambda e: None)
+        event_iterator = self._get_event_iterator(engine, events)
+        _events: Iterator[MDAEvent] = event_iterator(events)
+
+        self._reset_event_timer()
+        self._sequence_t0 = self._t0
+
+        for event in _events:
+            if event.reset_event_timer:
+                self._reset_event_timer()
+
+            # check for early termination conditions
+            if not self.is_running() or self.is_canceled():
+                if self.is_canceled():
+                    self._emit_cancel_signal_and_log()
+                break
+
+            # handle pause state
+            if self._handle_pause_state():
+                # if true, we were canceled during pause
+                self._emit_cancel_signal_and_log()
+                break
+
+            # wait for event's min_start_time if needed (timelapse)
+            if self._wait_until_event(event):
+                # if true, we were canceled during wait
+                self._emit_cancel_signal_and_log()
+                break
+
+            # execute the event
+            self._execute_event(engine, event, teardown_event)
+
     def _reset_event_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
+
+    def _emit_cancel_signal_and_log(self) -> None:
+        """Emit the sequenceCanceled signal and log the cancellation."""
+        logger.warning("MDA Canceled: %s", self._sequence)
+        self._signals.sequenceCanceled.emit(self._sequence)
+
+    def _handle_pause_state(self) -> bool:
+        """Handle paused state, waiting until resumed or canceled.
+
+        Returns
+        -------
+        bool
+            True if canceled during pause, False otherwise.
+        """
+        if not self.is_paused():
+            return False
+
+        logger.info("MDA Paused")
+
+        while self.is_paused() and not self.is_canceled():
+            self._paused_time += self._pause_interval
+            time.sleep(self._pause_interval)
+
+        if not self.is_canceled():
+            logger.info("MDA Resumed")
+
+        return self.is_canceled()
 
     def _get_event_iterator(
         self, engine: PMDAEngine, events: Iterable[MDAEvent]
@@ -426,27 +448,6 @@ class MDARunner:
             # driven acquisition) and we don't want the engine to interfere with it.
             return iter
         return getattr(engine, "event_iterator", iter)
-
-    def _handle_pause_state(self) -> bool:
-        """Handle paused state, waiting until resumed or canceled.
-
-        Returns
-        -------
-        bool
-            True if canceled during pause, False otherwise.
-        """
-        if not self.is_paused():
-            return False
-
-        logger.info("MDA Paused")
-        while self.is_paused() and not self.is_canceled():
-            self._paused_time += self._pause_interval
-            time.sleep(self._pause_interval)
-
-        if not self.is_canceled():
-            logger.info("MDA Resumed")
-
-        return self.is_canceled()
 
     def _execute_event(
         self, engine: PMDAEngine, event: MDAEvent, teardown_event: Any
