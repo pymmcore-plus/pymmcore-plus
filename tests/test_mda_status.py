@@ -67,7 +67,10 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
     assert core.mda.status == RunStatus.IDLE
 
     # Run the sequence
-    with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=10000):
+    with qtbot.waitSignals(
+        (core.mda.events.sequenceFinished, core.mda.events.sequencePauseToggled),
+        timeout=10000,
+    ):
         acq_thread = core.run_mda(sequence)
         assert core.mda.is_running()
         paused = False
@@ -135,7 +138,10 @@ def test_sequenced_event_paused_and_cancelled(
         core.setExposure(50)
 
         t0 = time.perf_counter()
-        with qtbot.waitSignal(core.mda.events.sequenceFinished, timeout=10000):
+        with qtbot.waitSignals(
+            (core.mda.events.sequenceFinished, core.mda.events.sequenceCanceled),
+            timeout=10000,
+        ):
             acq_thread = core.run_mda(sequence)
             assert core.mda.is_running()
             paused = False
