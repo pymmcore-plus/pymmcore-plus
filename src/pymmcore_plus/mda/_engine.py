@@ -683,7 +683,6 @@ class MDAEngine(PMDAEngine):
 
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
-
             # NOTE: there is not a way to pause a hardware sequence acquisition.
             pause_logged = self._check_sequence_pause(pause_logged)
 
@@ -718,7 +717,6 @@ class MDAEngine(PMDAEngine):
                 expected_images,
                 count,
             )
-
 
     def _check_sequence_cancellation(
         self, event: SequencedEvent, *, already_canceled: bool = False
