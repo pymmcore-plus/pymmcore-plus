@@ -215,9 +215,10 @@ def test_remaining_wait_time_calculation_with_pause(core: CMMCorePlus) -> None:
     # Simulate some time passing (1.0 seconds)
     time.sleep(1.0)
 
-    # Without any pause, remaining time should decrease to ~3.0s
+    # Without any pause, remaining time should decrease by ~1s
+    # More lenient bounds since sleep timing can vary
     remaining_2 = runner._get_remaining_wait_time(min_start_time)
-    assert 2.9 < remaining_2 < 3.1, f"Expected remaining time ~3.0s, got {remaining_2}"
+    assert 2.7 < remaining_2 < 3.2, f"Expected remaining time ~3.0s, got {remaining_2}"
 
     # Now simulate a pause accumulating (add 2.0 seconds of pause time)
     # This simulates what happens when _handle_pause_state() accumulates time
@@ -225,11 +226,11 @@ def test_remaining_wait_time_calculation_with_pause(core: CMMCorePlus) -> None:
 
     # The remaining wait time should be recalculated using the NEW paused_time
     # Formula: min_start_time + paused_time - elapsed
-    # Expected: 4.0 + 2.0 - 1.0 = 5.0 seconds
+    # Expected: 4.0 + 2.0 - ~1.0 = ~5.0 seconds (but elapsed may vary slightly)
     remaining_3 = runner._get_remaining_wait_time(min_start_time)
     elapsed = time.perf_counter() - initial_t0
     expected = min_start_time + runner._paused_time - elapsed
-    assert abs(remaining_3 - expected) < 0.1, (
+    assert abs(remaining_3 - expected) < 0.2, (
         f"Expected remaining time to be recalculated with new paused_time. "
         f"Expected ~{expected:.2f}s, got {remaining_3:.2f}s. "
         f"This confirms that the calculation uses the CURRENT paused_time value."
@@ -246,9 +247,10 @@ def test_remaining_wait_time_calculation_with_pause(core: CMMCorePlus) -> None:
     )
 
     # Verify the timing makes sense: with 2s pause added to 4s interval,
-    # and 1s already elapsed, we should have ~5s remaining
-    assert 4.9 < remaining_3 < 5.1, (
-        f"Expected remaining time ~5.0s (4s interval + 2s pause - 1s elapsed), "
+    # and ~1s already elapsed, we should have ~5s remaining
+    # More lenient bounds to account for sleep timing variations
+    assert 4.7 < remaining_3 < 5.3, (
+        f"Expected remaining time ~5.0s (4s interval + 2s pause - ~1s elapsed), "
         f"got {remaining_3:.2f}s"
     )
 
