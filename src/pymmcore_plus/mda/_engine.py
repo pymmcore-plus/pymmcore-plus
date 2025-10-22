@@ -8,7 +8,6 @@ from functools import cache
 from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
-from click import pause
 import numpy as np
 import useq
 from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
@@ -683,7 +682,6 @@ class MDAEngine(PMDAEngine):
 
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
-
             # NOTE: there is not a way to pause a hardware sequence acquisition.
             if core.mda.is_paused():
                 if not pause_logged:
@@ -712,7 +710,6 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while remaining := core.getRemainingImageCount():
-
             # check if acquisition is canceled
             if core.mda.is_canceled():
                 if not cancel_logged:
