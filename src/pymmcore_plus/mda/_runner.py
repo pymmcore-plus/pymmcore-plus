@@ -522,7 +522,7 @@ class MDARunner:
             time.sleep(self._pause_interval)
 
         if not self.is_canceled():
-            logger.info("MDA Resumed")
+            logger.info(f"MDA Resumed (paused for {self._paused_time:.2f} seconds)")
 
         return self.is_canceled()
 
