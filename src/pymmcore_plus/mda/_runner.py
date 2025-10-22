@@ -89,6 +89,7 @@ class MDARunner:
     """
 
     __slots__ = (
+        "__weakref__",
         "_engine",
         "_handlers",
         "_pause_interval",
