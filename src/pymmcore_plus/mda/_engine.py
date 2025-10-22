@@ -692,6 +692,7 @@ class MDAEngine(PMDAEngine):
                 canceled = True
                 return
 
+            # pop images as they become available
             if remaining := core.getRemainingImageCount():
                 yield self._next_seqimg_payload(
                     *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
@@ -703,7 +704,7 @@ class MDAEngine(PMDAEngine):
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
 
-        # Collect any remaining images from the buffer
+        # collect any remaining images from the buffer
         for payload in self._collect_remaining_images(iter_events, event_t0_ms, event):
             yield payload
             count += 1
