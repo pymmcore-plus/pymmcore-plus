@@ -449,6 +449,7 @@ class MDARunner:
 
             # check for pause state
             if self._handle_pause_state():
+                # if true, we canceled during pause
                 self._transition_to_canceled()
                 break
 
