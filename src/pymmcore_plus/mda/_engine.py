@@ -713,9 +713,9 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         # collect any remaining images from the buffer
-        count += yield from self._collect_remaining_images(
-            core, iter_events, event_t0_ms
-        )
+        for payload in self._collect_remaining_images(core, iter_events, event_t0_ms):
+            yield payload
+            count += 1
 
         # necessary?
         expected_images = n_events * n_channels
@@ -776,6 +776,8 @@ class MDAEngine(PMDAEngine):
     ) -> Iterator[PImagePayload]:
         """Collect any remaining images from the circular buffer after sequence ends.
 
+        This method is called after the main acquisition loop has finished.
+
         Parameters
         ----------
         core : CMMCorePlus
@@ -789,18 +791,12 @@ class MDAEngine(PMDAEngine):
         ------
         PImagePayload
             Image payloads for the remaining images in the buffer.
-
-        Returns
-        -------
-        int
-            The number of images collected from the buffer.
         """
         remainings_logged: bool = False
-        count = 0
         while remaining := core.getRemainingImageCount():
             # if canceled, stop collecting images
             if self.mmcore.mda.is_cancel_requested() or self.mmcore.mda.is_canceled():
-                return count
+                return
             # log only once when we start collecting remaining images
             if not remainings_logged:
                 remainings_logged = True
@@ -811,8 +807,6 @@ class MDAEngine(PMDAEngine):
             yield self._next_seqimg_payload(
                 *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
             )
-            count += 1
-        return count
 
     # ===================== EXTRA =====================
 
@@ -856,7 +850,7 @@ class MDAEngine(PMDAEngine):
             return
 
         # Retrieve the last commanded XY position.
-        last_x, last_y = core._last_xy_position.get(None) or (
+        last_x, last_y = core._last_xy_position.get(None) or (  # noqa: SLF001
             None,
             None,
         )
