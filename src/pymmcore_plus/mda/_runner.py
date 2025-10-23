@@ -584,12 +584,16 @@ class MDARunner:
         self._status = RunStatus.PAUSED
         logger.info("MDA Paused")
 
+        # track the duration of this specific pause
+        pause_start = time.perf_counter()
+
         while self.is_paused() and not self.is_cancel_requested():
             self._paused_time += self._pause_interval
             time.sleep(self._pause_interval)
 
         if not self.is_cancel_requested():
-            logger.info(f"MDA Resumed (paused for {self._paused_time:.2f} seconds)")
+            pause_duration = time.perf_counter() - pause_start
+            logger.info(f"MDA Resumed (paused for {pause_duration:.2f} seconds).")
 
         return self.is_cancel_requested()
 
