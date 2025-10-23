@@ -140,8 +140,8 @@ class MDARunner:
         return self._status
 
     @status.setter
-    def status(self, value: RunStatus) -> None:
-        self._status = value
+    def status(self, status: RunStatus) -> None:
+        self._status = status
 
     # ----------------------------PUBLIC METHODS ----------------------------#
 
@@ -177,7 +177,11 @@ class MDARunner:
         bool
             Whether an acquisition is underway.
         """
-        return self._status in (RunStatus.RUNNING, RunStatus.PAUSED_TOGGLED)
+        return self._status in (
+            RunStatus.RUNNING,
+            RunStatus.PAUSE_TOGGLED,
+            RunStatus.PAUSED,
+        )
 
     def is_paused(self) -> bool:
         """Return True if the acquisition is currently paused.
@@ -189,7 +193,22 @@ class MDARunner:
         bool
             Whether the current acquisition is paused.
         """
-        return self._status == RunStatus.PAUSED_TOGGLED
+        return self._status == RunStatus.PAUSED
+
+    def is_pause_requested(self) -> bool:
+        """Return True if a pause has been requested but not yet enacted.
+
+        This returns True immediately after `toggle_pause()` is called to pause,
+        and remains True until the acquisition actually pauses, at which point
+        the status transitions to PAUSED. This can be used to distinguish between
+        "pause requested" and "pause complete".
+
+        Returns
+        -------
+        bool
+            Whether a pause has been requested but not yet completed.
+        """
+        return self._status == RunStatus.PAUSE_TOGGLED
 
     def is_canceled(self) -> bool:
         """Return True if the acquisition has been canceled.
@@ -237,14 +256,22 @@ class MDARunner:
     def toggle_pause(self) -> None:
         """Toggle the paused state of the current acquisition.
 
-        To get whether the acquisition is currently paused use the
-        [`is_paused`][pymmcore_plus.mda.MDARunner.is_paused] method. This method is a
-        no-op if no acquisition is currently underway.
+        This is a no-op if no acquisition is currently running.
+        If the acquisition is currently running, it will be paused at the next
+        check point and the status will transition to PAUSED.  If the acquisition
+        is currently paused, it will be resumed and the status will transition to
+        RUNNING.
+
+        To check whether a pause has been requested but not yet enacted, use
+        `is_pause_requested()`. To check whether the acquisition is currently paused,
+        use `is_paused()`.
         """
-        if self.is_running():
-            paused = self.is_paused()
-            self._status = RunStatus.RUNNING if paused else RunStatus.PAUSED_TOGGLED
-            self._signals.sequencePauseToggled.emit(not paused)
+        if not self.is_running():
+            return
+
+        paused = self.is_paused()
+        self._status = RunStatus.RUNNING if paused else RunStatus.PAUSE_TOGGLED
+        self._signals.sequencePauseToggled.emit(not paused)
 
     def run(
         self,
@@ -416,7 +443,12 @@ class MDARunner:
                 break
 
             if not self.is_running():
-                # This shouldn't normally happen, but if it does, break gracefully
+                # this shouldn't normally happen, but if it does, break gracefully
+                break
+
+            # check for pause state
+            if self._handle_pause_state():
+                self._transition_to_canceled()
                 break
 
             # wait for event's min_start_time (if timelapse) and handle pause state
@@ -546,9 +578,10 @@ class MDARunner:
         bool
             True if canceled during pause, False otherwise.
         """
-        if not self.is_paused():
+        if not self.is_pause_requested():
             return False
 
+        self._status = RunStatus.PAUSED
         logger.info("MDA Paused")
 
         while self.is_paused() and not self.is_cancel_requested():

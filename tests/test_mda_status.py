@@ -47,7 +47,8 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
 
     def _on_finished(seq):
         assert set(status_changes) == {
-            RunStatus.PAUSED_TOGGLED,
+            RunStatus.PAUSE_TOGGLED,
+            RunStatus.PAUSED,
             RunStatus.RUNNING,
             RunStatus.COMPLETED,
         }
@@ -79,10 +80,13 @@ def test_status_during_run(core: CMMCorePlus, qtbot: QtBot) -> None:
                 paused = True
                 time.sleep(0.3)
                 core.mda.toggle_pause()
-                assert core.mda.is_paused()
+                assert core.mda.is_pause_requested()
                 status_changes.append(core.mda.status)
                 time.sleep(0.3)
+                assert core.mda.is_paused()
+                status_changes.append(core.mda.status)
                 core.mda.toggle_pause()
+                assert not core.mda.is_pause_requested()
                 assert not core.mda.is_paused()
                 status_changes.append(core.mda.status)
 
@@ -123,7 +127,7 @@ def test_sequenced_event_paused_and_cancelled(
             if hardware_seq:
                 assert len(warnings_captured) == 2
                 assert warnings_captured[0] == (
-                    "Pause has been requested, but sequenced acquisition "
+                    "MDA: Pause has been requested, but sequenced acquisition "
                     "cannot be yet paused, only canceled."
                 )
                 assert "MDA Canceled:" in warnings_captured[1]
@@ -139,7 +143,11 @@ def test_sequenced_event_paused_and_cancelled(
 
         t0 = time.perf_counter()
         with qtbot.waitSignals(
-            (core.mda.events.sequenceFinished, core.mda.events.sequenceCanceled),
+            (
+                core.mda.events.sequenceFinished,
+                core.mda.events.sequencePauseToggled,
+                core.mda.events.sequenceCanceled,
+            ),
             timeout=10000,
         ):
             acq_thread = core.run_mda(sequence)
@@ -150,12 +158,15 @@ def test_sequenced_event_paused_and_cancelled(
                     paused = True
                     time.sleep(0.2)
                     core.mda.toggle_pause()
-                    assert core.mda.is_paused()
+                    assert core.mda.is_pause_requested()
                     assert core.mda.is_running()
+                    time.sleep(0.2)
+                    if not hardware_seq:
+                        assert core.mda.is_paused()
                     # to stop the sequence faster
-                    time.sleep(0.1)
                     core.mda.cancel()
                     assert not core.mda.is_running()
+                    assert not core.mda.is_pause_requested()
                     assert not core.mda.is_paused()
                     assert core.mda.is_cancel_requested()
     finally:

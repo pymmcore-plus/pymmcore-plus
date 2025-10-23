@@ -677,18 +677,28 @@ class MDAEngine(PMDAEngine):
         count = 0
         iter_events = product(event.events, range(n_channels))
 
-        # to make sure we emit the cancel and pause warnings only once
+        # to make sure we emit the pause warnings only once
         pause_logged: bool = False
-        canceled: bool = False
 
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
-            # NOTE: there is not a way to pause a hardware sequence acquisition.
-            pause_logged = self._check_sequence_pause(pause_logged)
 
-            # check if acquisition is canceled
-            if self._check_sequence_cancellation(event, already_canceled=canceled):
-                canceled = True
+            # NOTE: there is not a way to pause a hardware sequence acquisition.
+            # So we just log a warning once if pause is requested.
+            if self.mmcore.mda.is_pause_requested():
+                if not pause_logged:
+                    pause_logged = True
+                    logger.warning(
+                        "MDA: Pause has been requested, but sequenced acquisition "
+                        "cannot be yet paused, only canceled."
+                    )
+
+            # check if acquisition is canceled and stop the sequence if so
+            if self.mmcore.mda.is_cancel_requested():
+                self.mmcore.stopSequenceAcquisition()
+                self.mmcore.mda.status = RunStatus.CANCELED
+                logger.warning("MDA Canceled: %s", event)
+                self.mmcore.mda.events.sequenceCanceled.emit(event)
                 return
 
             # pop images as they become available
@@ -704,8 +714,21 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         # collect any remaining images from the buffer
-        for payload in self._collect_remaining_images(iter_events, event_t0_ms, event):
-            yield payload
+        remainings_logged: bool = False
+        while remaining := core.getRemainingImageCount():
+            # if canceled, stop collecting images
+            if self.mmcore.mda.is_cancel_requested() or self.mmcore.mda.is_canceled():
+                return
+            # log only once when we start collecting remaining images
+            if not remainings_logged:
+                remainings_logged = True
+                logger.info(
+                    f"MDA: Collecting {remaining} remaining images from circular "
+                    "buffer..."
+                )
+            yield self._next_seqimg_payload(
+                *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
+            )
             count += 1
 
         # necessary?
@@ -716,50 +739,6 @@ class MDAEngine(PMDAEngine):
                 "Expected %s, got %s",
                 expected_images,
                 count,
-            )
-
-    def _check_sequence_cancellation(
-        self, event: SequencedEvent, *, already_canceled: bool = False
-    ) -> bool:
-        """Check if acquisition is canceled and handle it.
-
-        Returns True if canceled.
-        """
-        if self.mmcore.mda.is_cancel_requested():
-            if not already_canceled:
-                self.mmcore.stopSequenceAcquisition()
-                self.mmcore.mda.status = RunStatus.CANCELED
-                logger.warning("MDA Canceled: %s", event)
-                self.mmcore.mda.events.sequenceCanceled.emit(event)
-            return True
-        return False
-
-    def _check_sequence_pause(self, pause_logged: bool) -> bool:
-        """Check if pause is requested and log warning if not already logged.
-
-        Returns True if pause warning was logged.
-        """
-        if self.mmcore.mda.is_paused():
-            if not pause_logged:
-                logger.warning(
-                    "Pause has been requested, but sequenced acquisition "
-                    "cannot be yet paused, only canceled."
-                )
-                return True
-        return pause_logged
-
-    def _collect_remaining_images(
-        self,
-        iter_events: Iterator[tuple[MDAEvent, int]],
-        event_t0_ms: float,
-        event: SequencedEvent,
-    ) -> Iterator[PImagePayload]:
-        """Collect all remaining images from the circular buffer."""
-        while remaining := self.mmcore.getRemainingImageCount():
-            if self._check_sequence_cancellation(event):
-                return
-            yield self._next_seqimg_payload(
-                *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
             )
 
     def _next_seqimg_payload(
