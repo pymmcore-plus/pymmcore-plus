@@ -682,7 +682,6 @@ class MDAEngine(PMDAEngine):
 
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
-
             # NOTE: there is not a way to pause a hardware sequence acquisition.
             # So we just log a warning once if pause is requested.
             if self.mmcore.mda.is_pause_requested():
