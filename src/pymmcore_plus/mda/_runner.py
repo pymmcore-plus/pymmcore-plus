@@ -269,9 +269,10 @@ class MDARunner:
         if not self.is_running():
             return
 
-        paused = self.is_paused()
-        self._status = RunStatus.RUNNING if paused else RunStatus.PAUSE_TOGGLED
-        self._signals.sequencePauseToggled.emit(not paused)
+        # Check if pause is already requested or enacted
+        paused_state = self.is_pause_requested() or self.is_paused()
+        self._status = RunStatus.RUNNING if paused_state else RunStatus.PAUSE_TOGGLED
+        self._signals.sequencePauseToggled.emit(not paused_state)
 
     def run(
         self,
