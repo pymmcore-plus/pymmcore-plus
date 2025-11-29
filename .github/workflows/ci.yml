@@ -58,7 +58,7 @@ jobs:
     env:
       UV_NO_SYNC: "1"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -110,11 +110,11 @@ jobs:
         os: [macos-latest, windows-latest]
         qt: [PySide6, PyQt6]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: pymmcore-plus/pymmcore-widgets
           fetch-depth: 0
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           path: pymmcore-plus
           fetch-depth: 0
@@ -156,11 +156,11 @@ jobs:
       matrix:
         qt: [PySide6, PyQt6]
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           repository: pymmcore-plus/pymmcore-gui
           fetch-depth: 0
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           path: pymmcore-plus
           fetch-depth: 0
@@ -201,7 +201,7 @@ jobs:
     env:
       UV_NO_SYNC: "1"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
@@ -235,7 +235,7 @@ jobs:
       id-token: write
       contents: write
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           fetch-depth: 0
 
