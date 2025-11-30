@@ -255,9 +255,8 @@ class RenderEngine:
             # cv2.GaussianBlur is ~8x faster than PIL
             import cv2
 
-            ksize = int(blur_radius * 4) | 1  # kernel size must be odd
-            sigma = blur_radius / 2
-            return cv2.GaussianBlur(arr, (ksize, ksize), sigma)  # type: ignore [no-any-return]
+            ksize = int(blur_radius * 6) | 1  # kernel size must be odd
+            return cv2.GaussianBlur(arr, (ksize, ksize), blur_radius)  # type: ignore [no-any-return]
         else:
             # Fall back to PIL
             normalized = (arr / arr_max * 255).astype(np.uint8)
