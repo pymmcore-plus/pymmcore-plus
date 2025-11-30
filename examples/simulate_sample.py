@@ -146,12 +146,11 @@ if __name__ == "__main__":
     core = CMMCorePlus()
     core.loadSystemConfiguration()
 
-    sample = create_sample()
-
     window = SimulationWidget(core)
     window.setWindowTitle("Simulated Sample")
     window.resize(600, 1200)
 
+    sample = create_sample()
     with sample.patch(core):
         core.snapImage()
         window.show()
