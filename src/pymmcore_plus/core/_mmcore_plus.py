@@ -1268,18 +1268,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             }
         }
         """
-        dev = _device.Device.create(device_label, mmcore=self)
-        if (isinstance(device_type, type) and not isinstance(dev, device_type)) or (
-            isinstance(device_type, DeviceType)
-            and device_type not in {DeviceType.Any, DeviceType.Unknown}
-            and dev.type() != device_type
-        ):
-            raise TypeError(
-                f"{device_type!r} requested but device with label "
-                f"{device_label!r} is a {dev.type()}."
-            )
-
-        return dev
+        return _device.Device.create(device_label, mmcore=self, device_type=device_type)
 
     def getConfigGroupObject(
         self, group_name: str, allow_missing: bool = False
