@@ -138,8 +138,11 @@ class CoreSamplePatcher:
             raise RuntimeError(
                 "No snapped state available. Call snapImage() before getImage()."
             )
-
         return self._sample.render(self._snapped_state)
+
+    def getLastImage(self, *_: Any, **__: Any) -> np.ndarray:
+        """Return rendered image based on current state (for live mode)."""
+        return self._sample.render(self._core.state())
 
 
 @contextmanager
