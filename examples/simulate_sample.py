@@ -20,17 +20,14 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 import numpy as np
-from PIL import Image, ImageQt
-from pymmcore_widgets import LiveButton, PropertyBrowser, SnapButton, StageWidget
-from qtpy.QtCore import Qt
-from qtpy.QtWidgets import (
-    QApplication,
-    QHBoxLayout,
-    QLabel,
-    QSizePolicy,
-    QVBoxLayout,
-    QWidget,
+from pymmcore_widgets import (
+    ImagePreview,
+    LiveButton,
+    PropertyBrowser,
+    SnapButton,
+    StageWidget,
 )
+from qtpy.QtWidgets import QApplication, QHBoxLayout, QVBoxLayout, QWidget
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.experimental.simulate import (
@@ -55,19 +52,16 @@ class SimulationWidget(QWidget):
         self._pixmap: QPixmap | None = None
 
         # Image display
-        self.image_label = QLabel()
-        self.image_label.setSizePolicy(
-            QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding
-        )
+        self.image_viewer = ImagePreview(mmcore=core)
 
         # Snap button
-        self.snap_button = SnapButton()
-        self.live_button = LiveButton()
+        self.snap_button = SnapButton(mmcore=core)
+        self.live_button = LiveButton(mmcore=core)
 
         # Stage widgets
-        self.stage_widget = StageWidget("XY")
+        self.stage_widget = StageWidget("XY", mmcore=core)
         self.stage_widget.snap_checkbox.setChecked(True)
-        self.z_widget = StageWidget("Z")
+        self.z_widget = StageWidget("Z", mmcore=core)
         self.z_widget.snap_checkbox.setChecked(True)
 
         # Property browser (separate window)
@@ -75,7 +69,7 @@ class SimulationWidget(QWidget):
 
         # Layout
         layout = QVBoxLayout()
-        layout.addWidget(self.image_label)
+        layout.addWidget(self.image_viewer)
 
         btns = QHBoxLayout()
         btns.addWidget(self.snap_button)
@@ -90,27 +84,6 @@ class SimulationWidget(QWidget):
         main_layout = QHBoxLayout(self)
         main_layout.addWidget(self.props)
         main_layout.addLayout(layout)
-
-        # Connect to snap event
-        self.core.events.imageSnapped.connect(self._on_snap)
-
-    def _on_snap(self) -> None:
-        """Handle snap event - render and display the simulated image."""
-        img = self.core.getImage()
-        self._pixmap = ImageQt.toqpixmap(Image.fromarray(img))
-        self._update_display()
-
-    def _update_display(self) -> None:
-        """Update the displayed image, scaling to fit."""
-        if self._pixmap is None:
-            return
-
-        scaled = self._pixmap.scaled(
-            self.image_label.size(),
-            Qt.AspectRatioMode.KeepAspectRatio,
-            Qt.TransformationMode.FastTransformation,
-        )
-        self.image_label.setPixmap(scaled)
 
 
 def create_sample(
@@ -177,7 +150,7 @@ if __name__ == "__main__":
 
     window = SimulationWidget(core)
     window.setWindowTitle("Simulated Sample")
-    window.resize(600, 700)
+    window.resize(600, 1200)
 
     with sample.patch(core):
         core.snapImage()
