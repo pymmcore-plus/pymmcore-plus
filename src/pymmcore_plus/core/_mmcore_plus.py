@@ -27,8 +27,9 @@ from psygnal import SignalInstance
 from typing_extensions import deprecated
 
 import pymmcore_plus._pymmcore as pymmcore
+from pymmcore_plus._discovery import find_micromanager
 from pymmcore_plus._logger import current_logfile, logger
-from pymmcore_plus._util import find_micromanager, print_tabular_data
+from pymmcore_plus._util import print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from pymmcore_plus.metadata.functions import summary_metadata
 
@@ -334,8 +335,10 @@ class CMMCorePlus(pymmcore.CMMCore):
     def __del__(self) -> None:
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
+
         try:
             super().registerCallback(None)
+
             self.reset()
             # clean up logging
             self.setPrimaryLogFile("")
@@ -517,7 +520,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** The returned [`pymmcore_plus.FocusDirection`][] enum is more
         interpretable than the raw `int` returned by `pymmcore`
         """
-        return FocusDirection(super().getFocusDirection(stageLabel))
+        try:
+            return FocusDirection(super().getFocusDirection(stageLabel))
+        except (ValueError, TypeError):
+            # On some platforms (notably Windows), device adapters may return
+            # invalid values that cannot be converted to FocusDirection enum.
+            return FocusDirection.Unknown
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         """Return the intrinsic property type for a given device and property.
@@ -1260,18 +1268,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             }
         }
         """
-        dev = _device.Device.create(device_label, mmcore=self)
-        if (isinstance(device_type, type) and not isinstance(dev, device_type)) or (
-            isinstance(device_type, DeviceType)
-            and device_type not in {DeviceType.Any, DeviceType.Unknown}
-            and dev.type() != device_type
-        ):
-            raise TypeError(
-                f"{device_type!r} requested but device with label "
-                f"{device_label!r} is a {dev.type()}."
-            )
-
-        return dev
+        return _device.Device.create(device_label, mmcore=self, device_type=device_type)
 
     def getConfigGroupObject(
         self, group_name: str, allow_missing: bool = False
@@ -1622,16 +1619,16 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** to emit the `imageSnapped` event after snapping an image.
         and to emit shutter property changes if `getAutoShutter` is `True`.
         """
-        if autoshutter := self.getAutoShutter():
-            self.events.propertyChanged.emit(self.getShutterDevice(), "State", True)
+        if (autoshutter := self.getAutoShutter()) and (
+            shutter := self.getShutterDevice()
+        ):
+            self.events.propertyChanged.emit(shutter, "State", True)
         try:
             self._do_snap_image()
             self.events.imageSnapped.emit(self.getCameraDevice())
         finally:
-            if autoshutter:
-                self.events.propertyChanged.emit(
-                    self.getShutterDevice(), "State", False
-                )
+            if autoshutter and shutter:
+                self.events.propertyChanged.emit(shutter, "State", False)
 
     @property
     def mda(self) -> MDARunner:

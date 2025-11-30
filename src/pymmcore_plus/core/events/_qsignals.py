@@ -25,6 +25,7 @@ class QCoreSignaler(QObject):
     exposureChanged = Signal(str, float)
     SLMExposureChanged = Signal(str, float)
     sLMExposureChanged = SLMExposureChanged  # alias
+    shutterOpenChanged = Signal(str, bool)
 
     # https://github.com/micro-manager/mmCoreAndDevices/pull/659
     imageSnapped = Signal(str)  # on snapImage()

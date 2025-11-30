@@ -2,16 +2,19 @@
 
 import logging
 from importlib.metadata import PackageNotFoundError, version
+from typing import TYPE_CHECKING, Any
 
 try:
     __version__ = version("pymmcore-plus")
 except PackageNotFoundError:  # pragma: no cover
     __version__ = "unknown"
 
+if TYPE_CHECKING:
+    from ._ipy_completion import install_pymmcore_ipy_completion
 
 from ._accumulator import AbstractChangeAccumulator
+from ._discovery import find_micromanager, use_micromanager
 from ._logger import configure_logging
-from ._util import find_micromanager, use_micromanager
 from .core import (
     ActionType,
     CFGCommand,
@@ -63,10 +66,26 @@ __all__ = [
     "__version__",
     "configure_logging",
     "find_micromanager",
+    "install_pymmcore_ipy_completion",
     "use_micromanager",
 ]
 
 
+def __getattr__(name: str) -> Any:
+    """Lazy import for compatibility with pymmcore."""
+    if name == "install_pymmcore_ipy_completion":
+        try:
+            from ._ipy_completion import install_pymmcore_ipy_completion
+        except ImportError as e:  # pragma: no cover
+            raise ImportError(
+                f"Error importing IPython completion for pymmcore-plus: {e}"
+            ) from None
+
+        return install_pymmcore_ipy_completion
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'. ")
+
+
+# install the IPython completer when imported, if running in an IPython environment
 def _install_ipy_completer() -> None:  # pragma: no cover
     import os
     import sys

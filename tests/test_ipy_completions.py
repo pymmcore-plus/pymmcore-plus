@@ -12,10 +12,8 @@ except ImportError:
     # If IPython is not installed, we cannot run these tests.
     pytest.skip("IPython is not installed", allow_module_level=True)
 
-from pymmcore_plus._ipy_completion import (
-    cmmcoreplus_matcher,
-    install_pymmcore_ipy_completion,
-)
+from pymmcore_plus import install_pymmcore_ipy_completion
+from pymmcore_plus._ipy_completion import cmmcoreplus_matcher
 from pymmcore_plus.core._constants import DeviceType
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
@@ -155,7 +153,9 @@ def test_config_completions(shell_core: CMMCorePlus) -> None:
 
 def test_install_script() -> None:
     # CREATE a new ipython shell instance
-    shell = InteractiveShell.instance()
+    from IPython.testing.globalipapp import get_ipython
+
+    shell = get_ipython()
     try:
         assert shell
         install_pymmcore_ipy_completion()

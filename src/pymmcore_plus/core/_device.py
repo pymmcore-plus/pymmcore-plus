@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import weakref
 from typing import TYPE_CHECKING, Any, Literal, overload
 
 from ._constants import DeviceType, FocusDirection, Keyword
@@ -34,6 +35,12 @@ class Device:
         Device label assigned to this device.
     mmcore : CMMCorePlus
         CMMCorePlus instance that owns this device.
+    device_type : DeviceType or Device subclass, optional
+        The type of device to create. If not specified, the type will be inferred
+        from the core if the device is already loaded. If the device is not loaded,
+        an error will be raised. This parameter is mainly intended for usage when
+        calling from `CMMCorePlus.getDeviceObject()`.  Otherwise, prefer using
+        `[SpecificDeviceSubclass].create()`.
 
     Examples
     --------
@@ -56,14 +63,39 @@ class Device:
     propertyChanged: PSignalInstance
 
     @classmethod
-    def create(cls, device_label: str, mmcore: CMMCorePlus) -> Self:
-        sub_cls = cls.get_subclass(device_label, mmcore)
+    def create(
+        cls,
+        device_label: str,
+        mmcore: CMMCorePlus,
+        device_type: type[Device] | DeviceType = DeviceType.Any,
+    ) -> Self:
+        if device_type in {DeviceType.Any, DeviceType.Unknown}:
+            try:
+                sub_cls = cls.get_subclass(device_label, mmcore)
+            except RuntimeError as e:
+                raise RuntimeError(
+                    f"Could not determine device type for {device_label}. "
+                    "If you are preloading a device object, "
+                    "please specify `device_type` as a `pymmcore_plus.DeviceType`."
+                ) from e
+        else:
+            if isinstance(device_type, type) and issubclass(device_type, Device):
+                sub_cls = device_type
+            elif isinstance(device_type, DeviceType):
+                sub_cls = _TYPE_MAP[device_type]
+            else:
+                raise TypeError(
+                    f"Invalid device_type: {device_type!r}.  Must be a "
+                    "pymmcore_plus `DeviceType` or `Device` subclass."
+                )
+
         # make sure it's an error to call this class method on a subclass with
         # a non-matching type
-        if issubclass(sub_cls, cls):
-            return sub_cls(device_label, mmcore)
-        dev_type = mmcore.getDeviceType(device_label).name
-        raise TypeError(f"Cannot cast {dev_type} {device_label!r} to {cls}")
+        if not issubclass(sub_cls, cls):
+            dev_type = mmcore.getDeviceType(device_label).name
+            raise TypeError(f"Cannot cast {dev_type} {device_label!r} to {cls}")
+
+        return sub_cls(device_label, mmcore)
 
     @classmethod
     def get_subclass(cls, device_label: str, mmcore: CMMCorePlus) -> type[Device]:
@@ -82,17 +114,18 @@ class Device:
         if mmcore is None:
             from ._mmcore_plus import CMMCorePlus
 
-            self._mmc = CMMCorePlus.instance()
+            mmcore = CMMCorePlus.instance()
         else:
-            self._mmc = mmcore
+            mmcore = mmcore
 
+        self._mmc_ref = weakref.ref(mmcore)
         self._label = device_label
         self._type = None
         if self.isLoaded():
-            adapter_name = self._mmc.getDeviceLibrary(device_label)
-            device_name = self._mmc.getDeviceName(device_label)
-            description = self._mmc.getDeviceDescription(device_label)
-            type = self._mmc.getDeviceType(device_label)  # noqa: A001
+            adapter_name = mmcore.getDeviceLibrary(device_label)
+            device_name = mmcore.getDeviceName(device_label)
+            description = mmcore.getDeviceDescription(device_label)
+            type = mmcore.getDeviceType(device_label)  # noqa: A001
             if self.type() != type:
                 raise TypeError(
                     f"Cannot create loaded device with label {device_label!r} and type "
@@ -103,7 +136,18 @@ class Device:
         self._device_name = device_name
         self._type = type
         self._description = description
-        self.propertyChanged = _DevicePropValueSignal(device_label, None, self._mmc)
+        self.propertyChanged = _DevicePropValueSignal(device_label, None, mmcore)
+
+    @property
+    def _mmc(self) -> CMMCorePlus:
+        """Return the `CMMCorePlus` instance to which this Device is bound."""
+        mmc = self._mmc_ref()
+        if mmc is None:  # pragma: no cover
+            raise RuntimeError(
+                "The CMMCorePlus instance to which this Device "
+                "is bound has been garbage collected."
+            )
+        return mmc
 
     @property
     def label(self) -> str:
