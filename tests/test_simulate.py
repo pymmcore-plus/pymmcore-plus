@@ -25,7 +25,13 @@ HAS_CV2 = importlib.util.find_spec("cv2")
 
 @pytest.fixture
 def mock_state() -> SummaryMetaV1:
-    """Create a mock SummaryMetaV1 state."""
+    """Create a mock SummaryMetaV1 state.
+
+    Camera parameters are set to produce reasonable signal levels:
+    - 100ms exposure, gain=0, 8-bit, FWC=255 (maps 1:1 to ADU at unity gain)
+    - photon_flux=1000 default, QE=0.8 default
+    - With intensity=200: ~628 photons → ~502 electrons → ~200 ADU
+    """
     return {
         "format": "summary-dict",
         "version": "1.0",
@@ -54,6 +60,80 @@ def mock_state() -> SummaryMetaV1:
                         "name": "Exposure",
                         "value": "100.0",
                         "data_type": "float",
+                        "is_read_only": False,
+                    },
+                    {
+                        "name": "Offset",
+                        "value": "0",
+                        "data_type": "int",
+                        "is_read_only": False,
+                    },
+                    {
+                        "name": "Gain",
+                        "value": "0",
+                        "data_type": "int",
+                        "is_read_only": False,
+                    },
+                    {
+                        "name": "BitDepth",
+                        "value": "8",
+                        "data_type": "int",
+                        "is_read_only": False,
+                    },
+                    {
+                        "name": "ReadNoise (electrons)",
+                        "value": "0",
+                        "data_type": "float",
+                        "is_read_only": False,
+                    },
+                    # Set FWC low for 8-bit to get reasonable signal levels
+                    # At unity gain (0), FWC electrons = max gray value (255)
+                    {
+                        "name": "Full Well Capacity",
+                        "value": "255",
+                        "data_type": "float",
+                        "is_read_only": True,
+                    },
+                    {
+                        "name": "Photon Flux",
+                        "value": "1000",
+                        "data_type": "float",
+                        "is_read_only": False,
+                    },
+                    {
+                        "name": "Quantum Efficiency",
+                        "value": "0.8",
+                        "data_type": "float",
+                        "is_read_only": True,
+                    },
+                ),
+            },
+            {
+                "label": "Core",
+                "library": "",
+                "name": "Core",
+                "type": "CoreDevice",
+                "description": "Core device",
+                "properties": (
+                    {
+                        "name": "Camera",
+                        "value": "Camera",
+                        "data_type": "str",
+                        "allowed_values": ("", "Camera"),
+                        "is_read_only": False,
+                    },
+                    {
+                        "name": "Focus",
+                        "value": "Z",
+                        "data_type": "str",
+                        "allowed_values": ("", "Z"),
+                        "is_read_only": False,
+                    },
+                    {
+                        "name": "XYStage",
+                        "value": "XY",
+                        "data_type": "str",
+                        "allowed_values": ("", "XY"),
                         "is_read_only": False,
                     },
                 ),
@@ -186,27 +266,21 @@ def test_bitmap_invalid_type() -> None:
 
 def test_render_config_defaults() -> None:
     config = sim.RenderConfig()
-    assert config.noise_std == 3.0
     assert config.shot_noise is True
     assert config.defocus_scale == 0.125
     assert config.base_blur == 1.0
-    assert config.intensity_scale == 1.0
-    assert config.background == 0
-    assert config.bit_depth == 8
     assert config.random_seed is None
+    assert config.backend == "auto"
 
 
 def test_render_config_custom() -> None:
     config = sim.RenderConfig(
-        noise_std=5.0, shot_noise=False, defocus_scale=0.2, bit_depth=16, random_seed=42
+        shot_noise=False, defocus_scale=0.2, random_seed=42, backend="pil"
     )
-    assert (
-        config.noise_std,
-        config.shot_noise,
-        config.defocus_scale,
-        config.bit_depth,
-        config.random_seed,
-    ) == (5.0, False, 0.2, 16, 42)
+    assert config.shot_noise is False
+    assert config.defocus_scale == 0.2
+    assert config.random_seed == 42
+    assert config.backend == "pil"
 
 
 # =============================================================================
@@ -227,7 +301,7 @@ def test_render_empty_sample(mock_state: SummaryMetaV1) -> None:
 
 
 def test_render_single_point(mock_state: SummaryMetaV1) -> None:
-    config = sim.RenderConfig(noise_std=0, shot_noise=False, base_blur=0)
+    config = sim.RenderConfig(shot_noise=False, base_blur=0)
     img = RenderEngine([sim.Point(0, 0, intensity=200, radius=10)], config).render(
         mock_state
     )
@@ -236,7 +310,7 @@ def test_render_single_point(mock_state: SummaryMetaV1) -> None:
 
 
 def test_render_with_offset(mock_state: SummaryMetaV1) -> None:
-    config = sim.RenderConfig(noise_std=0, shot_noise=False, base_blur=0)
+    config = sim.RenderConfig(shot_noise=False, base_blur=0)
     engine = RenderEngine([sim.Point(100, 100, intensity=200, radius=10)], config)
 
     img1 = engine.render(mock_state)
@@ -248,15 +322,19 @@ def test_render_with_offset(mock_state: SummaryMetaV1) -> None:
 
 
 def test_render_16bit(mock_state: SummaryMetaV1) -> None:
-    config = sim.RenderConfig(bit_depth=16, noise_std=0, shot_noise=False)
+    # Set camera to 16-bit
+    for dev in mock_state["devices"]:
+        if dev["label"] == "Camera":
+            for prop in dev["properties"]:
+                if prop["name"] == "BitDepth":
+                    prop["value"] = "16"
+    config = sim.RenderConfig(shot_noise=False)
     img = RenderEngine([sim.Point(0, 0, intensity=200)], config).render(mock_state)
     assert img.dtype == np.uint16
 
 
 def test_render_with_defocus(mock_state: SummaryMetaV1) -> None:
-    config = sim.RenderConfig(
-        noise_std=0, shot_noise=False, base_blur=0, defocus_scale=1.0
-    )
+    config = sim.RenderConfig(shot_noise=False, base_blur=0, defocus_scale=1.0)
     engine = RenderEngine([sim.Point(0, 0, intensity=255, radius=1)], config)
 
     mock_state["position"]["z"] = 0.0
@@ -276,11 +354,12 @@ def test_render_with_defocus(mock_state: SummaryMetaV1) -> None:
 
 
 def test_render_reproducible_with_seed(mock_state: SummaryMetaV1) -> None:
-    config = sim.RenderConfig(random_seed=42, noise_std=5.0)
+    # Test that random seed produces reproducible results with shot noise
+    config = sim.RenderConfig(random_seed=42, shot_noise=True)
     img1 = RenderEngine([sim.Point(0, 0, intensity=100)], config).render(mock_state)
     img2 = RenderEngine(
         [sim.Point(0, 0, intensity=100)],
-        sim.RenderConfig(random_seed=42, noise_std=5.0),
+        sim.RenderConfig(random_seed=42, shot_noise=True),
     ).render(mock_state)
     np.testing.assert_array_equal(img1, img2)
 
@@ -313,10 +392,12 @@ def test_sample_repr() -> None:
 
 
 def test_sample_integration_stage_movement(core: pymmcore_plus.CMMCorePlus) -> None:
-    config = sim.RenderConfig(noise_std=0, shot_noise=False, base_blur=0)
+    config = sim.RenderConfig(shot_noise=False, base_blur=0)
     sample = sim.Sample([sim.Point(0, 0, intensity=255, radius=10)], config)
 
     with sample.patch(core):
+        # Ensure stage is at origin so point at (0,0) should be at image center
+        core.setXYPosition(0, 0)
         core.snapImage()
         img = core.getImage()
         assert img.sum() > 0
@@ -328,9 +409,7 @@ def test_sample_integration_stage_movement(core: pymmcore_plus.CMMCorePlus) -> N
 
 
 def test_sample_integration_z_defocus(core: pymmcore_plus.CMMCorePlus) -> None:
-    config = sim.RenderConfig(
-        noise_std=0, shot_noise=False, base_blur=0, defocus_scale=0.5
-    )
+    config = sim.RenderConfig(shot_noise=False, base_blur=0, defocus_scale=0.5)
     sample = sim.Sample([sim.Point(0, 0, intensity=255, radius=3)], config)
 
     with sample.patch(core):
@@ -382,9 +461,7 @@ def test_render_backend(
     if backend == "cv2" and not HAS_CV2:
         pytest.skip("opencv-python not installed")
 
-    config = sim.RenderConfig(
-        noise_std=0, shot_noise=False, base_blur=0, backend=backend
-    )
+    config = sim.RenderConfig(shot_noise=False, base_blur=0, backend=backend)
     engine = RenderEngine(all_object_types, config)
     img = engine.render(mock_state)
 
@@ -399,12 +476,7 @@ def test_render_blur_backend(mock_state: SummaryMetaV1, backend: Backend) -> Non
     if backend == "cv2" and not HAS_CV2:
         pytest.skip("opencv-python not installed")
 
-    config = sim.RenderConfig(
-        noise_std=0,
-        shot_noise=False,
-        base_blur=2.0,
-        backend=backend,
-    )
+    config = sim.RenderConfig(shot_noise=False, base_blur=2.0, backend=backend)
     engine = RenderEngine([sim.Point(0, 0, intensity=255, radius=3)], config)
     img = engine.render(mock_state)
     assert img.sum() > 0
@@ -459,12 +531,8 @@ def test_backend_consistency(mock_state: sim.SummaryMetaV1) -> None:
     ]
 
     for name, objects, tolerance in test_cases:
-        config_pil = sim.RenderConfig(
-            noise_std=0, shot_noise=False, base_blur=0, backend="pil"
-        )
-        config_cv2 = sim.RenderConfig(
-            noise_std=0, shot_noise=False, base_blur=0, backend="cv2"
-        )
+        config_pil = sim.RenderConfig(shot_noise=False, base_blur=0, backend="pil")
+        config_cv2 = sim.RenderConfig(shot_noise=False, base_blur=0, backend="cv2")
 
         img_pil = RenderEngine(objects, config_pil).render(mock_state)
         img_cv2 = RenderEngine(objects, config_cv2).render(mock_state)

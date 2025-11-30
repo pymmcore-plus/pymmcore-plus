@@ -130,7 +130,6 @@ def create_sample(
     )
 
     config = RenderConfig(
-        noise_std=3.0,
         shot_noise=True,
         defocus_scale=0.12,
         base_blur=1.5,
