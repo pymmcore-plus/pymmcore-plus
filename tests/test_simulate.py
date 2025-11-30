@@ -431,3 +431,52 @@ def test_draw_cv2_methods() -> None:
         obj.draw_cv2(img, transform, scale=1.0)
 
     assert img.sum() > 0
+
+
+@pytest.mark.skipif(not HAS_CV2, reason="opencv-python not installed")
+def test_backend_consistency(mock_state: sim.SummaryMetaV1) -> None:
+    """Test PIL and CV2 backends produce similar results.
+
+    Small differences are expected due to rasterization algorithms:
+    - PIL draws rounder circles at small radii
+    - CV2 circles are more diamond-shaped at small radii
+    These differences become negligible with blur applied.
+    """
+    from pymmcore_plus.experimental.simulate._render import RenderEngine
+
+    # Test objects with various shapes
+    test_cases = [
+        ("Line", [sim.Line((-50, -50), (50, 50), intensity=200)], 0.05),
+        (
+            "Rectangle",
+            [sim.Rectangle((-30, -20), 60, 40, intensity=200, fill=True)],
+            0.05,
+        ),
+        ("Ellipse", [sim.Ellipse((0, 0), 30, 20, intensity=200, fill=True)], 0.05),
+        ("Point (large)", [sim.Point(0, 0, intensity=200, radius=10)], 0.15),
+        # Small points have larger differences due to rasterization
+        ("Point (small)", [sim.Point(0, 0, intensity=200, radius=3)], 0.40),
+    ]
+
+    for name, objects, tolerance in test_cases:
+        config_pil = sim.RenderConfig(
+            noise_std=0, shot_noise=False, base_blur=0, backend="pil"
+        )
+        config_cv2 = sim.RenderConfig(
+            noise_std=0, shot_noise=False, base_blur=0, backend="cv2"
+        )
+
+        img_pil = RenderEngine(objects, config_pil).render(mock_state)
+        img_cv2 = RenderEngine(objects, config_cv2).render(mock_state)
+
+        pil_sum = float(img_pil.sum())
+        cv2_sum = float(img_cv2.sum())
+        diff_pct = (
+            abs(pil_sum - cv2_sum) / max(pil_sum, cv2_sum)
+            if max(pil_sum, cv2_sum) > 0
+            else 0
+        )
+
+        assert diff_pct < tolerance, (
+            f"{name}: {diff_pct:.1%} diff exceeds {tolerance:.0%} tolerance"
+        )

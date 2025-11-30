@@ -178,7 +178,7 @@ class Point(SampleObject):
         import cv2
 
         cx, cy = transform(self.x, self.y)
-        r = int(self.radius * scale)
+        r = round(self.radius * scale)
         cv2.circle(img, (cx, cy), r, self.intensity, -1)
 
     def get_bounds(self) -> Bounds:
@@ -241,7 +241,7 @@ class Ellipse(SampleObject):
         import cv2
 
         cx, cy = transform(*self.center)
-        axes = (int(self.rx * scale), int(self.ry * scale))
+        axes = (round(self.rx * scale), round(self.ry * scale))
         thickness = -1 if self.fill else self.width
         cv2.ellipse(img, (cx, cy), axes, 0, 0, 360, self.intensity, thickness)
 
@@ -297,7 +297,7 @@ class Rectangle(SampleObject):
     ) -> None:
         tl = transform(*self.top_left)
         br = transform(*self.bottom_right)
-        radius = int(self.corner_radius * scale)
+        radius = round(self.corner_radius * scale)
         if self.fill:
             draw_context.rounded_rectangle([tl, br], radius=radius, fill=self.intensity)
         else:
@@ -582,7 +582,7 @@ class Arc(SampleObject):
         import cv2
 
         cx, cy = transform(*self.center)
-        axes = (int(self.rx * scale), int(self.ry * scale))
+        axes = (round(self.rx * scale), round(self.ry * scale))
         cv2.ellipse(
             img,
             (cx, cy),

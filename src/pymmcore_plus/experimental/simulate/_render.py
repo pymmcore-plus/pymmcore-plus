@@ -252,15 +252,13 @@ class RenderEngine:
             return arr
 
         if self._should_use_cv2():
-            # cv2.GaussianBlur is ~8x faster than PIL
             import cv2
 
             ksize = int(blur_radius * 6) | 1  # kernel size must be odd
             return cv2.GaussianBlur(arr, (ksize, ksize), blur_radius)  # type: ignore [no-any-return]
         else:
-            # Fall back to PIL
             normalized = (arr / arr_max * 255).astype(np.uint8)
-            img = Image.fromarray(normalized, mode="L")
+            img = Image.fromarray(normalized)
             blurred = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
             return np.asarray(blurred, dtype=np.float32) / 255 * arr_max  # type: ignore [no-any-return]
 
