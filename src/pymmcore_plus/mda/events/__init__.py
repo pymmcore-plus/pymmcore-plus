@@ -4,7 +4,7 @@ from typing import TYPE_CHECKING
 
 from pymmcore_plus._util import signals_backend
 
-from ._protocol import PMDASignaler, RunStatus
+from ._protocol import PMDASignaler
 from ._psygnal import MDASignaler
 
 if TYPE_CHECKING:
@@ -15,7 +15,6 @@ __all__ = [
     "MDASignaler",
     "PMDASignaler",
     "QMDASignaler",
-    "RunStatus",
     "_get_auto_MDA_callback_class",
 ]
 
