@@ -97,7 +97,6 @@ dev = [
     "ruff>=0.9.4",
     "pydantic >2.7.4; python_version >= '3.13'",
     "opencv-python>=4.11.0.86",
-    "pymmcore-widgets>=0.10.1",
 ]
 
 [tool.uv.sources]
