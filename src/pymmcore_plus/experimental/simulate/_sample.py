@@ -9,7 +9,7 @@ from unittest.mock import patch
 from ._render import RenderConfig, RenderEngine
 
 if TYPE_CHECKING:
-    from collections.abc import Generator, Iterator, Sequence
+    from collections.abc import Generator, Iterable, Iterator
     from typing import Any
 
     import numpy as np
@@ -23,82 +23,42 @@ if TYPE_CHECKING:
 class Sample:
     """A simulated microscope sample that integrates with CMMCorePlus.
 
-    This class allows you to define a virtual sample with drawable objects
-    (points, lines, shapes, etc.) and have them rendered as if they were
-    real sample features when acquiring images through CMMCorePlus.
-
-    When installed on a core, this sample intercepts `snapImage()` and
-    `getImage()` calls to return rendered images based on the current
-    microscope state (stage position, exposure, pixel size, etc.).
+    Use `sample.patch(core)` as a context manager to intercept image acquisition
+    calls and return rendered images based on microscope state.
 
     Parameters
     ----------
-    objects : Sequence[SampleObject]
-        List of sample objects to render.
+    objects : Iterable[SampleObject]
+        Sample objects to render (points, lines, shapes, etc.).
     config : RenderConfig | None
         Rendering configuration. If None, uses default config.
     """
 
     def __init__(
-        self,
-        objects: Sequence[SampleObject],
-        config: RenderConfig | None = None,
+        self, objects: Iterable[SampleObject], config: RenderConfig | None = None
     ) -> None:
-        self._objects = list(objects)
-        self._config = config or RenderConfig()
-        self._engine = RenderEngine(self._objects, self._config)
+        self._engine = RenderEngine(list(objects), config or RenderConfig())
 
     # ------------- Object Management -------------
 
     @property
     def objects(self) -> list[SampleObject]:
         """List of sample objects."""
-        return self._objects
+        return self._engine.objects
 
-    def add_object(self, obj: SampleObject) -> None:
-        """Add a sample object.
-
-        Parameters
-        ----------
-        obj : SampleObject
-            Object to add.
-        """
-        self._objects.append(obj)
-
-    def remove_object(self, obj: SampleObject) -> None:
-        """Remove a sample object.
-
-        Parameters
-        ----------
-        obj : SampleObject
-            Object to remove.
-        """
-        self._objects.remove(obj)
-
-    def clear_objects(self) -> None:
-        """Remove all sample objects."""
-        self._objects.clear()
+    @property
+    def config(self) -> RenderConfig:
+        """Rendering configuration."""
+        return self._engine.config
 
     # ------------- Rendering -------------
 
     def render(self, state: SummaryMetaV1) -> np.ndarray:
-        """Render the sample directly without patching.
-
-        Parameters
-        ----------
-        state : SummaryMetaV1 | None
-            Microscope state to render. If None and a core is set,
-            uses current state from the core.
-
-        Returns
-        -------
-        np.ndarray
-            Rendered image.
-        """
+        """Render the sample for the given microscope state."""
         return self._engine.render(state)
 
     def __repr__(self) -> str:
-        return f"Sample({len(self._objects)} objects, config={self._config!r})"
+        return f"Sample({len(self.objects)} objects, config={self.config!r})"
 
     # ------------- Patching -------------
 

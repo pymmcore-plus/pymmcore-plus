@@ -28,8 +28,6 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageFilter
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
-
     from typing_extensions import Literal, TypeAlias
 
     from pymmcore_plus.metadata.schema import ImageInfo, SummaryMetaV1
@@ -112,7 +110,7 @@ class RenderEngine:
     >>> image = engine.render(state)
     """
 
-    objects: Sequence[SampleObject]
+    objects: list[SampleObject]
     config: RenderConfig = field(default_factory=RenderConfig)
     _rng: np.random.Generator = field(default=None, repr=False)  # type: ignore
 

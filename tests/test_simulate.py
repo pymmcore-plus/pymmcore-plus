@@ -295,19 +295,6 @@ def test_sample_creation() -> None:
     assert len(sample.objects) == 2
 
 
-def test_sample_add_remove_clear() -> None:
-    sample = sim.Sample([])
-    point = sim.Point(0, 0)
-    sample.add_object(point)
-    assert len(sample.objects) == 1
-    sample.remove_object(point)
-    assert len(sample.objects) == 0
-
-    sample = sim.Sample([sim.Point(0, 0), sim.Point(1, 1), sim.Point(2, 2)])
-    sample.clear_objects()
-    assert len(sample.objects) == 0
-
-
 def test_sample_patch_context_manager(core: pymmcore_plus.CMMCorePlus) -> None:
     sample = sim.Sample([sim.Point(0, 0, intensity=200)])
     with sample.patch(core):
