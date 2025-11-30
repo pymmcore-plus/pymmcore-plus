@@ -68,13 +68,12 @@ from ._objects import (
     SampleObject,
     rects_intersect,
 )
-from ._render import RenderConfig, RenderEngine
+from ._render import RenderConfig
 from ._sample import Sample
 
 __all__ = [
     "Arc",
     "Bitmap",
-    # Utilities
     "Bounds",
     "Ellipse",
     "Line",
@@ -82,12 +81,8 @@ __all__ = [
     "Polygon",
     "Rectangle",
     "RegularPolygon",
-    # Configuration
     "RenderConfig",
-    "RenderEngine",
-    # Main entry point
     "Sample",
-    # Sample objects
     "SampleObject",
     "rects_intersect",
 ]

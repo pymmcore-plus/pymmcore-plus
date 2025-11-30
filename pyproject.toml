@@ -96,6 +96,7 @@ dev = [
     "pre-commit>=4.1.0",
     "ruff>=0.9.4",
     "pydantic >2.7.4; python_version >= '3.13'",
+    "opencv-python>=4.11.0.86",
 ]
 
 [tool.uv.sources]

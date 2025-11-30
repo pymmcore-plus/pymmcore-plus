@@ -5,7 +5,7 @@
 # ]
 #
 # [tool.uv.sources]
-# pymmcore-plus = { path = "../" }
+# pymmcore-plus = { path = "../", editable = true }
 # ///
 """Example: Simulated microscope sample with Qt widgets.
 
@@ -17,7 +17,7 @@ Run with: uv run examples/simulate_sample.py
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 import numpy as np
 from PIL import Image, ImageQt
@@ -48,11 +48,10 @@ if TYPE_CHECKING:
 class SimulationWidget(QWidget):
     """Widget for displaying simulated microscope images."""
 
-    def __init__(self, core: CMMCorePlus, sample: Sample) -> None:
+    def __init__(self, core: CMMCorePlus) -> None:
         super().__init__()
 
         self.core = core
-        self.sample = sample
         self._pixmap: QPixmap | None = None
 
         # Image display
@@ -97,8 +96,7 @@ class SimulationWidget(QWidget):
 
     def _on_snap(self) -> None:
         """Handle snap event - render and display the simulated image."""
-        # Render the sample at current state
-        img = self.sample.render()
+        img = self.core.getImage()
         self._pixmap = ImageQt.toqpixmap(Image.fromarray(img))
         self._update_display()
 
@@ -106,17 +104,13 @@ class SimulationWidget(QWidget):
         """Update the displayed image, scaling to fit."""
         if self._pixmap is None:
             return
+
         scaled = self._pixmap.scaled(
             self.image_label.size(),
             Qt.AspectRatioMode.KeepAspectRatio,
             Qt.TransformationMode.FastTransformation,
         )
         self.image_label.setPixmap(scaled)
-
-    def resizeEvent(self, a0: Any) -> None:
-        """Re-scale image on resize."""
-        self._update_display()
-        super().resizeEvent(a0)
 
 
 def create_sample(
@@ -131,27 +125,19 @@ def create_sample(
 
     objects: list = []
 
+    def rnd_coords() -> tuple[int, int]:
+        return (int(rng.integers(-extent, extent)), int(rng.integers(-extent, extent)))
+
     # Random lines
     objects.extend(
-        Line(
-            start=(
-                int(rng.integers(-extent, extent)),
-                int(rng.integers(-extent, extent)),
-            ),
-            end=(
-                int(rng.integers(-extent, extent)),
-                int(rng.integers(-extent, extent)),
-            ),
-            intensity=int(rng.integers(20, 50)),
-        )
+        Line(start=rnd_coords(), end=rnd_coords(), intensity=int(rng.integers(50, 150)))
         for _ in range(n_lines)
     )
 
     # Random points
     objects.extend(
         Point(
-            x=int(rng.integers(-extent, extent)),
-            y=int(rng.integers(-extent, extent)),
+            *rnd_coords(),
             intensity=int(rng.integers(30, 150)),
             radius=float(rng.uniform(2, 12)),
         )
@@ -161,13 +147,10 @@ def create_sample(
     # Some rectangles
     objects.extend(
         Rectangle(
-            top_left=(
-                int(rng.integers(-extent, extent)),
-                int(rng.integers(-extent, extent)),
-            ),
+            top_left=rnd_coords(),
             width=float(rng.uniform(20, 60)),
             height=float(rng.uniform(20, 60)),
-            intensity=int(rng.integers(40, 100)),
+            intensity=int(rng.integers(20, 90)),
             fill=True,
         )
         for _ in range(n_rectangles)
@@ -178,6 +161,7 @@ def create_sample(
         shot_noise=True,
         defocus_scale=0.12,
         base_blur=1.5,
+        backend="auto",
     )
 
     return Sample(objects, config)
@@ -190,14 +174,12 @@ if __name__ == "__main__":
     core.loadSystemConfiguration()
 
     sample = create_sample()
-    sample.patch(core)  # Set the core for rendering
 
-    window = SimulationWidget(core, sample)
+    window = SimulationWidget(core)
     window.setWindowTitle("Simulated Sample")
     window.resize(600, 700)
 
-    # Initial snap
-    core.snapImage()
-
-    window.show()
-    app.exec()
+    with sample.patch(core):
+        core.snapImage()
+        window.show()
+        app.exec()

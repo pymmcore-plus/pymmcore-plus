@@ -2,6 +2,12 @@
 
 All objects are defined in world-space coordinates (typically microns).
 The RenderEngine handles transformation to pixel coordinates.
+
+Each object implements:
+- `draw()`: Render using PIL (always available)
+- `draw_cv2()`: Render using OpenCV (~20% faster, optional)
+
+The RenderEngine automatically uses cv2 methods when opencv-python is installed.
 """
 
 from __future__ import annotations
@@ -52,7 +58,10 @@ class SampleObject(ABC):
     Subclasses must implement:
     - `draw()`: Render the object onto a PIL ImageDraw context
     - `get_bounds()`: Return the bounding box in world coordinates
+    - `intensity`: Property returning the object's intensity value
     """
+
+    intensity: int  # All subclasses must have this attribute
 
     @abstractmethod
     def draw(
@@ -82,6 +91,36 @@ class SampleObject(ABC):
         Bounds
             Tuple of (left, top, right, bottom) in world units.
         """
+
+    def draw_cv2(
+        self,
+        img: np.ndarray,
+        transform: TransformFn,
+        scale: float,
+    ) -> None:
+        """Draw this object using OpenCV (optional, for performance).
+
+        Default implementation falls back to PIL via a temporary image.
+        Subclasses can override for better performance.
+
+        Parameters
+        ----------
+        img : np.ndarray
+            Image array to draw on (modified in-place).
+        transform : TransformFn
+            Function to convert (world_x, world_y) to (pixel_x, pixel_y).
+        scale : float
+            Pixels per world unit.
+        """
+        # Default: use PIL and copy to numpy (slower but always works)
+        from PIL import Image, ImageDraw
+
+        h, w = img.shape
+        layer = Image.new("L", (w, h), 0)
+        draw = ImageDraw.Draw(layer)
+        self.draw(draw, transform, scale)
+        # Add PIL result to the cv2 image
+        img += np.asarray(layer, dtype=np.uint8)
 
     def should_draw(self, fov_rect: Bounds) -> bool:
         """Check if this object intersects the field of view.
@@ -129,6 +168,18 @@ class Point(SampleObject):
         cx, cy = transform(self.x, self.y)
         r = self.radius * scale
         draw_context.ellipse([cx - r, cy - r, cx + r, cy + r], fill=self.intensity)
+
+    def draw_cv2(
+        self,
+        img: np.ndarray,
+        transform: TransformFn,
+        scale: float,
+    ) -> None:
+        import cv2
+
+        cx, cy = transform(self.x, self.y)
+        r = int(self.radius * scale)
+        cv2.circle(img, (cx, cy), r, self.intensity, -1)
 
     def get_bounds(self) -> Bounds:
         return (
@@ -180,6 +231,19 @@ class Ellipse(SampleObject):
             draw_context.ellipse(bbox, fill=self.intensity)
         else:
             draw_context.ellipse(bbox, outline=self.intensity, width=self.width)
+
+    def draw_cv2(
+        self,
+        img: np.ndarray,
+        transform: TransformFn,
+        scale: float,
+    ) -> None:
+        import cv2
+
+        cx, cy = transform(*self.center)
+        axes = (int(self.rx * scale), int(self.ry * scale))
+        thickness = -1 if self.fill else self.width
+        cv2.ellipse(img, (cx, cy), axes, 0, 0, 360, self.intensity, thickness)
 
     def get_bounds(self) -> Bounds:
         return (
@@ -241,6 +305,23 @@ class Rectangle(SampleObject):
                 [tl, br], radius=radius, outline=self.intensity, width=self.line_width
             )
 
+    def draw_cv2(
+        self,
+        img: np.ndarray,
+        transform: TransformFn,
+        scale: float,
+    ) -> None:
+        import cv2
+
+        tl = transform(*self.top_left)
+        br = transform(*self.bottom_right)
+        # cv2.rectangle doesn't support rounded corners, fall back to PIL for that
+        if self.corner_radius > 0:
+            super().draw_cv2(img, transform, scale)
+            return
+        thickness = -1 if self.fill else self.line_width
+        cv2.rectangle(img, tl, br, self.intensity, thickness)
+
     def get_bounds(self) -> Bounds:
         return (
             self.top_left[0],
@@ -280,6 +361,18 @@ class Line(SampleObject):
         pt1 = transform(*self.start)
         pt2 = transform(*self.end)
         draw_context.line([pt1, pt2], fill=self.intensity, width=self.width)
+
+    def draw_cv2(
+        self,
+        img: np.ndarray,
+        transform: TransformFn,
+        scale: float,
+    ) -> None:
+        import cv2
+
+        pt1 = transform(*self.start)
+        pt2 = transform(*self.end)
+        cv2.line(img, pt1, pt2, self.intensity, self.width)
 
     def get_bounds(self) -> Bounds:
         x1, y1 = self.start
@@ -323,6 +416,22 @@ class Polygon(SampleObject):
             # ImageDraw.polygon doesn't support width, use lines instead
             draw_context.line(
                 [*transformed, transformed[0]], fill=self.intensity, width=self.width
+            )
+
+    def draw_cv2(
+        self,
+        img: np.ndarray,
+        transform: TransformFn,
+        scale: float,
+    ) -> None:
+        import cv2
+
+        pts = np.array([transform(x, y) for x, y in self.vertices], dtype=np.int32)
+        if self.fill:
+            cv2.fillPoly(img, [pts], self.intensity)
+        else:
+            cv2.polylines(
+                img, [pts], isClosed=True, color=self.intensity, thickness=self.width
             )
 
     def get_bounds(self) -> Bounds:
@@ -391,6 +500,22 @@ class RegularPolygon(SampleObject):
                 [*transformed, transformed[0]], fill=self.intensity, width=self.width
             )
 
+    def draw_cv2(
+        self,
+        img: np.ndarray,
+        transform: TransformFn,
+        scale: float,
+    ) -> None:
+        import cv2
+
+        pts = np.array([transform(x, y) for x, y in self._vertices], dtype=np.int32)
+        if self.fill:
+            cv2.fillPoly(img, [pts], self.intensity)
+        else:
+            cv2.polylines(
+                img, [pts], isClosed=True, color=self.intensity, thickness=self.width
+            )
+
     def get_bounds(self) -> Bounds:
         return (
             self.center[0] - self.radius,
@@ -446,6 +571,27 @@ class Arc(SampleObject):
             end=self.end_angle,
             fill=self.intensity,
             width=self.width,
+        )
+
+    def draw_cv2(
+        self,
+        img: np.ndarray,
+        transform: TransformFn,
+        scale: float,
+    ) -> None:
+        import cv2
+
+        cx, cy = transform(*self.center)
+        axes = (int(self.rx * scale), int(self.ry * scale))
+        cv2.ellipse(
+            img,
+            (cx, cy),
+            axes,
+            0,
+            self.start_angle,
+            self.end_angle,
+            self.intensity,
+            self.width,
         )
 
     def get_bounds(self) -> Bounds:

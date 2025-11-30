@@ -2,17 +2,21 @@
 
 from __future__ import annotations
 
+import importlib.util
 from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
 
 import pymmcore_plus.experimental.simulate as sim
+from pymmcore_plus.experimental.simulate._render import RenderEngine
 
 if TYPE_CHECKING:
     import pymmcore_plus
+    from pymmcore_plus.experimental.simulate._render import Backend
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
+HAS_CV2 = importlib.util.find_spec("cv2")
 
 # =============================================================================
 # Test utilities and fixtures
@@ -211,20 +215,20 @@ def test_render_config_custom() -> None:
 
 
 def test_engine_creation() -> None:
-    engine = sim.RenderEngine([sim.Point(0, 0)])
+    engine = RenderEngine([sim.Point(0, 0)])
     assert len(engine.objects) == 1
     assert isinstance(engine.config, sim.RenderConfig)
 
 
 def test_render_empty_sample(mock_state: SummaryMetaV1) -> None:
-    img = sim.RenderEngine([]).render(mock_state)
+    img = RenderEngine([]).render(mock_state)
     assert img.shape == (512, 512)
     assert img.dtype == np.uint8
 
 
 def test_render_single_point(mock_state: SummaryMetaV1) -> None:
     config = sim.RenderConfig(noise_std=0, shot_noise=False, base_blur=0)
-    img = sim.RenderEngine([sim.Point(0, 0, intensity=200, radius=10)], config).render(
+    img = RenderEngine([sim.Point(0, 0, intensity=200, radius=10)], config).render(
         mock_state
     )
     assert img.shape == (512, 512)
@@ -233,7 +237,7 @@ def test_render_single_point(mock_state: SummaryMetaV1) -> None:
 
 def test_render_with_offset(mock_state: SummaryMetaV1) -> None:
     config = sim.RenderConfig(noise_std=0, shot_noise=False, base_blur=0)
-    engine = sim.RenderEngine([sim.Point(100, 100, intensity=200, radius=10)], config)
+    engine = RenderEngine([sim.Point(100, 100, intensity=200, radius=10)], config)
 
     img1 = engine.render(mock_state)
     mock_state["position"]["x"] = 100.0
@@ -245,7 +249,7 @@ def test_render_with_offset(mock_state: SummaryMetaV1) -> None:
 
 def test_render_16bit(mock_state: SummaryMetaV1) -> None:
     config = sim.RenderConfig(bit_depth=16, noise_std=0, shot_noise=False)
-    img = sim.RenderEngine([sim.Point(0, 0, intensity=200)], config).render(mock_state)
+    img = RenderEngine([sim.Point(0, 0, intensity=200)], config).render(mock_state)
     assert img.dtype == np.uint16
 
 
@@ -253,7 +257,7 @@ def test_render_with_defocus(mock_state: SummaryMetaV1) -> None:
     config = sim.RenderConfig(
         noise_std=0, shot_noise=False, base_blur=0, defocus_scale=1.0
     )
-    engine = sim.RenderEngine([sim.Point(0, 0, intensity=255, radius=1)], config)
+    engine = RenderEngine([sim.Point(0, 0, intensity=255, radius=1)], config)
 
     mock_state["position"]["z"] = 0.0
     img_focus = engine.render(mock_state)
@@ -273,8 +277,8 @@ def test_render_with_defocus(mock_state: SummaryMetaV1) -> None:
 
 def test_render_reproducible_with_seed(mock_state: SummaryMetaV1) -> None:
     config = sim.RenderConfig(random_seed=42, noise_std=5.0)
-    img1 = sim.RenderEngine([sim.Point(0, 0, intensity=100)], config).render(mock_state)
-    img2 = sim.RenderEngine(
+    img1 = RenderEngine([sim.Point(0, 0, intensity=100)], config).render(mock_state)
+    img2 = RenderEngine(
         [sim.Point(0, 0, intensity=100)],
         sim.RenderConfig(random_seed=42, noise_std=5.0),
     ).render(mock_state)
@@ -289,7 +293,6 @@ def test_render_reproducible_with_seed(mock_state: SummaryMetaV1) -> None:
 def test_sample_creation() -> None:
     sample = sim.Sample([sim.Point(0, 0), sim.Line((0, 0), (10, 10))])
     assert len(sample.objects) == 2
-    assert sample.is_installed is False
 
 
 def test_sample_add_remove_clear() -> None:
@@ -305,51 +308,11 @@ def test_sample_add_remove_clear() -> None:
     assert len(sample.objects) == 0
 
 
-def test_sample_install_uninstall(core: pymmcore_plus.CMMCorePlus) -> None:
-    sample = sim.Sample([sim.Point(0, 0, intensity=200)])
-    assert sample.is_installed is False
-
-    sample.install(core)
-    assert sample.is_installed is True
-    core.snapImage()
-    assert isinstance(core.getImage(), np.ndarray)
-
-    sample.uninstall()
-    assert sample.is_installed is False
-
-
-def test_sample_double_install_error(core: pymmcore_plus.CMMCorePlus) -> None:
-    sample = sim.Sample([sim.Point(0, 0)])
-    sample.install(core)
-    with pytest.raises(RuntimeError, match="already installed"):
-        sample.install(core)
-    sample.uninstall()
-
-
-def test_sample_uninstall_not_installed_error() -> None:
-    with pytest.raises(RuntimeError, match="not installed"):
-        sim.Sample([sim.Point(0, 0)]).uninstall()
-
-
-def test_sample_context_manager(core: pymmcore_plus.CMMCorePlus) -> None:
+def test_sample_patch_context_manager(core: pymmcore_plus.CMMCorePlus) -> None:
     sample = sim.Sample([sim.Point(0, 0, intensity=200)])
     with sample.patch(core):
-        assert sample.is_installed is True
         core.snapImage()
         assert isinstance(core.getImage(), np.ndarray)
-    assert sample.is_installed is False
-
-
-def test_sample_context_manager_no_core_error() -> None:
-    with pytest.raises(RuntimeError, match="No core set"):
-        with sim.Sample([sim.Point(0, 0)]):
-            pass
-
-
-def test_sample_render_direct(core: pymmcore_plus.CMMCorePlus) -> None:
-    sample = sim.Sample([sim.Point(0, 0, intensity=200)])
-    sample.patch(core)
-    assert isinstance(sample.render(), np.ndarray)
 
 
 def test_sample_render_with_state(core: pymmcore_plus.CMMCorePlus) -> None:
@@ -360,7 +323,6 @@ def test_sample_render_with_state(core: pymmcore_plus.CMMCorePlus) -> None:
 def test_sample_repr() -> None:
     repr_str = repr(sim.Sample([sim.Point(0, 0), sim.Point(1, 1)]))
     assert "2 objects" in repr_str
-    assert "not installed" in repr_str
 
 
 def test_sample_integration_stage_movement(core: pymmcore_plus.CMMCorePlus) -> None:
@@ -404,3 +366,81 @@ def test_sample_integration_z_defocus(core: pymmcore_plus.CMMCorePlus) -> None:
 
         if total_focus > 0 and total_defocus > 0:
             assert center_focus / total_focus > center_defocus / total_defocus
+
+
+# =============================================================================
+# Test both PIL and cv2 rendering backends
+# =============================================================================
+
+
+@pytest.fixture
+def all_object_types() -> list:
+    """Create one of each object type for testing."""
+    return [
+        sim.Point(0, 0, intensity=100, radius=5),
+        sim.Line((0, 0), (10, 10), intensity=100),
+        sim.Rectangle((0, 0), 10, 10, intensity=100, fill=True),
+        sim.Ellipse((0, 0), 5, 3, intensity=100, fill=True),
+        sim.Polygon([(0, 0), (10, 0), (5, 10)], intensity=100, fill=True),
+        sim.RegularPolygon((0, 0), radius=5, n_sides=6, intensity=100, fill=True),
+        sim.Arc((0, 0), 5, 5, 0, 180, intensity=100),
+    ]
+
+
+@pytest.mark.parametrize("backend", ["pil", "cv2"])
+def test_render_backend(
+    mock_state: SummaryMetaV1, all_object_types: list, backend: Backend
+) -> None:
+    """Test that both backends produce valid output."""
+    if backend == "cv2" and not HAS_CV2:
+        pytest.skip("opencv-python not installed")
+
+    config = sim.RenderConfig(
+        noise_std=0, shot_noise=False, base_blur=0, backend=backend
+    )
+    engine = RenderEngine(all_object_types, config)
+    img = engine.render(mock_state)
+
+    assert img.shape == (512, 512)
+    assert img.dtype == np.uint8
+    assert img.sum() > 0
+
+
+@pytest.mark.parametrize("backend", ["pil", "cv2"])
+def test_render_blur_backend(mock_state: SummaryMetaV1, backend: Backend) -> None:
+    """Test that blur works with both backends."""
+    if backend == "cv2" and not HAS_CV2:
+        pytest.skip("opencv-python not installed")
+
+    config = sim.RenderConfig(
+        noise_std=0,
+        shot_noise=False,
+        base_blur=2.0,
+        backend=backend,
+    )
+    engine = RenderEngine([sim.Point(0, 0, intensity=255, radius=3)], config)
+    img = engine.render(mock_state)
+    assert img.sum() > 0
+
+
+@pytest.mark.skipif(not HAS_CV2, reason="opencv-python not installed")
+def test_draw_cv2_methods() -> None:
+    """Test draw_cv2 methods on individual objects (requires cv2)."""
+
+    def transform(x: float, y: float) -> tuple[int, int]:
+        return int(x) + 50, int(y) + 50
+
+    objects = [
+        sim.Point(0, 0, intensity=100, radius=5),
+        sim.Line((-10, -10), (10, 10), intensity=100),
+        sim.Rectangle((-5, -5), 10, 10, intensity=100, fill=True),
+        sim.Ellipse((0, 0), 8, 5, intensity=100, fill=True),
+        sim.Polygon([(-5, -5), (5, -5), (0, 5)], intensity=100, fill=True),
+        sim.Arc((0, 0), 10, 10, 0, 90, intensity=100),
+    ]
+
+    img = np.zeros((100, 100), dtype=np.uint8)
+    for obj in objects:
+        obj.draw_cv2(img, transform, scale=1.0)
+
+    assert img.sum() > 0
