@@ -2,6 +2,7 @@
 # dependencies = [
 #     "pymmcore-plus[simulate]",
 #     "pymmcore-widgets[PyQt6]",
+#     "opencv-python",
 # ]
 #
 # [tool.uv.sources]
@@ -34,7 +35,6 @@ from pymmcore_plus.experimental.simulate import (
     Line,
     Point,
     Rectangle,
-    RenderConfig,
     Sample,
 )
 
@@ -129,14 +129,7 @@ def create_sample(
         for _ in range(n_rectangles)
     )
 
-    config = RenderConfig(
-        shot_noise=True,
-        defocus_scale=0.12,
-        base_blur=1.5,
-        backend="auto",
-    )
-
-    return Sample(objects, config)
+    return Sample(objects)
 
 
 if __name__ == "__main__":

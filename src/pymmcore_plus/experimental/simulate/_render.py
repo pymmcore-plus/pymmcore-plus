@@ -69,7 +69,7 @@ class RenderConfig:
 
     shot_noise: bool = True
     defocus_scale: float = 0.125
-    base_blur: float = 1.0
+    base_blur: float = 1.5
     random_seed: int | None = None
     backend: Backend = "auto"
 
