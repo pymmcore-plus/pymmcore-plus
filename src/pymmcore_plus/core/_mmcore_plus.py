@@ -1959,7 +1959,19 @@ class CMMCorePlus(pymmcore.CMMCore):
     # here for ease of overriding in Unicore ---------------------
 
     def _do_snap_image(self) -> None:
-        super().snapImage()
+        try:
+            super().snapImage()
+        except RuntimeError as e:
+            # this is an "opinionated" fix for a common issue.
+            # RuntimeError:
+            # This operation can not be executed while sequence acquisition is running.
+            # we consider it better to stop the sequence acquisition and try again
+            # than to just raise an immediate error.
+            # but, it does rely on string matching the error message (flaky)
+            if "sequence acquisition" not in str(e).lower():
+                raise
+            self.stopSequenceAcquisition()
+            super().snapImage()
 
     def _do_start_sequence_acquisition(
         self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
