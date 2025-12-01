@@ -199,6 +199,7 @@ class RenderEngine:
             photons_per_second=photon_flux,
             exposure_ms=props.exposure_ms,
             read_noise=props.read_noise,
+            ccd_binning=props.binning,
             bit_depth=props.bit_depth,
             offset=int(props.offset),
             rnd=self._rng,
@@ -268,20 +269,15 @@ class RenderEngine:
         if blur_radius <= 0:
             return arr
 
-        arr_max = arr.max()
-        if arr_max == 0:
-            return arr
-
         if self._should_use_cv2():
             import cv2
 
             ksize = int(blur_radius * 6) | 1  # kernel size must be odd
             return cv2.GaussianBlur(arr, (ksize, ksize), blur_radius)  # type: ignore [no-any-return]
         else:
-            normalized = (arr / arr_max * 255).astype(np.uint8)
-            img = Image.fromarray(normalized)
+            img = Image.fromarray(arr, mode="F")
             blurred = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
-            return np.asarray(blurred, dtype=np.float32) / 255 * arr_max  # type: ignore [no-any-return]
+            return np.asarray(blurred, dtype=np.float32)
 
 
 # -----------------------------------------------------------------------------
@@ -370,36 +366,11 @@ class ImageProps:
     magnification: float = 20.0
     full_well_capacity: float = 18000.0
     qe: float = 0.8
-    effective_pixel_size: float | None = None  # from MM pixel size config
 
     @property
     def sample_pixel_size(self) -> float:
-        """Effective pixel size in sample space (µm/pixel).
-
-        If effective_pixel_size is set (from Micro-Manager's pixel size
-        configuration), uses that directly. Otherwise computes from
-        physical sensor pixel size, and magnification
-        """
-        if self.effective_pixel_size is not None:
-            return self.effective_pixel_size
+        """Effective pixel size in sample space (µm/pixel)."""
         return self.pixel_size / self.magnification
-
-    @property
-    def max_gray(self) -> int:
-        """Maximum gray value for the bit depth: 2^bit_depth - 1."""
-        return (1 << self.bit_depth) - 1
-
-    @property
-    def adu_per_electron(self) -> float:
-        """Conversion factor from electrons to ADU (gray levels).
-
-        At unity gain (gain=0), full_well_capacity maps to max_gray.
-        Positive gain amplifies (saturate earlier), negative attenuates.
-
-        adu_per_electron = (max_gray / full_well_capacity) * 2^gain
-        """
-        unity_gain = self.max_gray / self.full_well_capacity
-        return unity_gain * (2.0**self.gain)  # type: ignore [no-any-return]
 
 
 @no_type_check
@@ -408,23 +379,8 @@ def img_props(state: SummaryMetaV1) -> ImageProps:
 
     Reads camera properties from the state dict and returns an ImageProps
     dataclass with all relevant parameters for image simulation.
-
-    The sample pixel size (effective_pixel_size) is read from image_infos
-    if available, which represents the already-computed pixel size in sample
-    space (accounting for magnification, binning, etc. via Micro-Manager's
-    pixel size configuration).
     """
     props: dict[str, float | int] = {}
-
-    # Get image dimensions and pixel size from image_infos
-    if img_infos := state.get("image_infos"):
-        info = img_infos[0]
-        props["img_width"] = info["width"]
-        props["img_height"] = info["height"]
-        # pixel_size_um is the effective sample pixel size from MM config
-        # This already accounts for magnification and binning
-        if "pixel_size_um" in info:
-            props["effective_pixel_size"] = float(info["pixel_size_um"])
 
     # Get camera properties
     if camera := _get_camera(state):
@@ -444,12 +400,9 @@ def img_props(state: SummaryMetaV1) -> ImageProps:
             elif name == "ReadNoise (electrons)":
                 props["read_noise"] = float(value)
             elif name == "OnCameraCCDXSize":
-                # Only use if not already set from image_infos
-                if "img_width" not in props:
-                    props["img_width"] = int(value)
+                props["img_width"] = int(value)
             elif name == "OnCameraCCDYSize":
-                if "img_height" not in props:
-                    props["img_height"] = int(value)
+                props["img_height"] = int(value)
             elif name == "Binning":
                 props["binning"] = int(value)
             elif name == "Photon Flux":
@@ -464,6 +417,7 @@ def img_props(state: SummaryMetaV1) -> ImageProps:
 
     if props.get("bit_depth") and props["bit_depth"] < 10:
         props["offset"] = 10.0  # lower offset for low bit depth cameras
+
     return ImageProps(**props)
 
 
