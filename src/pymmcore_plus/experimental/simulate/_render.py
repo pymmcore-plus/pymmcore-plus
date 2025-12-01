@@ -128,55 +128,12 @@ class RenderEngine:
                 return True
         return False
 
-    def render(self, state: SummaryMetaV1) -> np.ndarray:
-        """Render sample objects with physically realistic camera simulation.
-
-        Physical Model Overview
-        -----------------------
-        1. **Geometry**: Determine field of view using camera dimensions, pixel size,
-           binning, and magnification. Sample pixel size = phys_pixel / magnification.
-
-        2. **Ground truth**: Render objects as fluorophore density (0-255 intensity).
-
-        3. **Emission**: Convert density to photon flux (photons/pixel/second).
-
-        4. **Optics**: Apply PSF blur (Gaussian). Preserves total flux.
-
-        5. **Detection**: Integrate photon flux over exposure time → photon count.
-
-        6. **Conversion**: Photons → electrons via quantum efficiency (QE).
-
-        7. **Shot noise**: Apply Poisson statistics to electron counts.
-
-        8. **Saturation**: Clip electrons to full well capacity (FWC).
-
-        9. **Read noise**: Add Gaussian read noise (in electrons).
-
-        10. **Digitization**: Convert electrons → ADU using gain, add offset, clip.
-
-        Parameters
-        ----------
-        state : SummaryMetaV1
-            Current microscope state from `core.state()`.
-
-        Returns
-        -------
-        np.ndarray
-            Rendered image as uint8 (bit_depth <= 8) or uint16 (bit_depth > 8).
-        """
-        # =====================================================================
-        # STEP 1: GEOMETRY - Determine image shape and coordinate transform
-        # =====================================================================
-        # Extract camera and optical properties from microscope state
-        props = img_props(state)
-
+    def _render_ground_truth(
+        self, props: ImageProps, stage_x: float, stage_y: float
+    ) -> np.ndarray:
         # Sample pixel size: how many µm in the sample each pixel represents
         # This accounts for both the physical sensor pixel size and magnification
-        # With binning, effective pixels are larger on the sensor
-        sample_pixel = props.sample_pixel_size  # (pixel_size * binning) / magnification
-
-        # Get current stage position in world coordinates (µm)
-        stage_x, stage_y, stage_z = _stage_position(state)
+        sample_pixel = props.sample_pixel_size  # pixel_size / magnification
 
         # Compute field of view (FOV) rectangle in sample/world coordinates
         # The FOV is centered on the stage position
@@ -195,9 +152,6 @@ class RenderEngine:
             pixel_y = (y - top) / sample_pixel
             return int(pixel_x), int(pixel_y)
 
-        # =====================================================================
-        # STEP 2: GROUND TRUTH - Render fluorophore density
-        # =====================================================================
         # Draw all objects onto the image canvas
         # Intensity values (0-255) represent relative fluorophore density
         # This is the "ideal" sample without any optical or noise effects
@@ -211,85 +165,49 @@ class RenderEngine:
             )
         # density is now a float32 array with values typically 0-255
         # (can exceed 255 if objects overlap)
+        return density
 
-        # =====================================================================
-        # STEP 3: EMISSION - Convert density to photon flux
-        # =====================================================================
-        # photon_flux (from ImageProps) is the emission rate for intensity=255
-        # in units of photons/pixel/second
+    def render(self, state: SummaryMetaV1) -> np.ndarray:
+        """Render sample objects with physically realistic camera simulation.
+
+        Parameters
+        ----------
+        state : SummaryMetaV1
+            Current microscope state from `core.state()`.
+
+        Returns
+        -------
+        np.ndarray
+            Rendered image as uint8 (bit_depth <= 8) or uint16 (bit_depth > 8).
+        """
+        # Extract camera and optical properties from microscope state
+        props = img_props(state)
+        # Get current stage position in world coordinates (µm)
+        stage_x, stage_y, stage_z = _stage_position(state)
+
+        density = self._render_ground_truth(props, stage_x, stage_y)
+
         # Scale density to get photon emission rate for each pixel
-        photon_flux = density * (props.photon_flux / 255.0)
-        # photon_flux is now in photons/pixel/second
+        photon_flux = density * (props.photon_flux / 255.0)  # photons/second
 
-        # =====================================================================
-        # STEP 4: OPTICS - Apply point spread function (PSF) blur
-        # =====================================================================
-        # The PSF spreads light from each point source across neighboring pixels
-        # Blur increases with defocus (distance from focal plane)
-        # IMPORTANT: This convolution preserves total flux (sum is conserved)
+        # This convolution preserves total flux (sum is conserved)
         photon_flux = self._apply_defocus(photon_flux, stage_z)
 
-        # =====================================================================
-        # STEP 5: DETECTION - Integrate flux over exposure time
-        # =====================================================================
-        # Total photons collected = flux (photons/s) * exposure time (s)
-        exposure_s = props.exposure_ms / 1000.0
-        photons = photon_flux * exposure_s
-        # photons is now total photon count per pixel
-
-        # =====================================================================
-        # STEP 6: CONVERSION - Photons to electrons via quantum efficiency
-        # =====================================================================
-        # QE is the fraction of incident photons that produce photoelectrons
-        # Typical scientific cameras have QE of 0.6-0.95
-        electrons = photons * props.qe
-        # electrons is now the expected electron count per pixel
-
-        # =====================================================================
-        # STEP 7: SHOT NOISE - Apply Poisson statistics
-        # =====================================================================
-        # Shot noise arises from the discrete nature of photon detection
-        # Variance = mean for Poisson distribution (sqrt(N) noise)
-        if self.config.shot_noise:
-            np.maximum(electrons, 0, out=electrons)  # Poisson requires non-negative
-            electrons = self._rng.poisson(electrons).astype(np.float32)
-
-        # =====================================================================
-        # STEP 8: SATURATION - Clip to full well capacity
-        # =====================================================================
-        # Each pixel can only hold a finite number of electrons (FWC)
-        # Excess electrons are lost (blooming ignored in this simple model)
-        np.clip(electrons, 0, props.full_well_capacity, out=electrons)
-
-        # =====================================================================
-        # STEP 9: READ NOISE - Add Gaussian noise during readout
-        # =====================================================================
-        # Read noise is added during the charge-to-voltage conversion
-        # It's independent of signal level and specified in electrons RMS
-        if props.read_noise > 0:
-            electrons += self._rng.normal(0, props.read_noise, electrons.shape)
-
-        # =====================================================================
-        # STEP 10: DIGITIZATION - Convert electrons to ADU (gray levels)
-        # =====================================================================
-        # The ADC converts the analog electron signal to digital counts (ADU)
-
-        # Gain determines the electrons-to-ADU conversion:
-        # - At unity gain (gain=0): FWC electrons → max gray value
-        # - Positive gain: more amplification, saturate at fewer electrons
-        # - Negative gain: less amplification, need more electrons to saturate
-        adu = electrons * props.adu_per_electron
-
-        # Add digital offset (bias level)
-        # This ensures the baseline is above zero to preserve read noise symmetry
-        adu += props.offset
-
-        # Final clipping to valid ADU range [0, max_gray]
-        np.clip(adu, 0, props.max_gray, out=adu)
-
-        # Convert to appropriate integer dtype based on bit depth
-        dtype = np.uint16 if props.bit_depth > 8 else np.uint8
-        return adu.astype(dtype)  # type: ignore [no-any-return]
+        # convert gain of -5 to 8 into analog gain multiplier, where 1 is unity
+        analog_gain = 2.0**props.gain
+        gray_values = simulate_camera(
+            photons_per_second=photon_flux,
+            exposure_ms=props.exposure_ms,
+            read_noise=props.read_noise,
+            bit_depth=props.bit_depth,
+            offset=int(props.offset),
+            rnd=self._rng,
+            analog_gain=analog_gain,
+            qe=props.qe,
+            full_well=props.full_well_capacity,
+            add_poisson=self.config.shot_noise,
+        )
+        return gray_values
 
     def _render_objects_cv2(
         self,
@@ -460,12 +378,11 @@ class ImageProps:
 
         If effective_pixel_size is set (from Micro-Manager's pixel size
         configuration), uses that directly. Otherwise computes from
-        physical sensor pixel size, binning, and magnification:
-        sample_pixel_size = (pixel_size * binning) / magnification
+        physical sensor pixel size, and magnification
         """
         if self.effective_pixel_size is not None:
             return self.effective_pixel_size
-        return (self.pixel_size * self.binning) / self.magnification
+        return self.pixel_size / self.magnification
 
     @property
     def max_gray(self) -> int:
@@ -537,6 +454,7 @@ def img_props(state: SummaryMetaV1) -> ImageProps:
                 props["binning"] = int(value)
             elif name == "Photon Flux":
                 # DemoCamera's Photon Flux is too low for realistic simulation
+                # i think it's modeling at the camera, rather than from the sample
                 # Scale up by 100x to get reasonable signal at typical exposures
                 props["photon_flux"] = float(value) * 100
             elif name == "Full Well Capacity":
@@ -547,3 +465,84 @@ def img_props(state: SummaryMetaV1) -> ImageProps:
     if props.get("bit_depth") and props["bit_depth"] < 10:
         props["offset"] = 10.0  # lower offset for low bit depth cameras
     return ImageProps(**props)
+
+
+def simulate_camera(
+    photons_per_second: np.ndarray,
+    exposure_ms: float,
+    read_noise: float,
+    bit_depth: int,
+    offset: int,
+    rnd: np.random.Generator,
+    analog_gain: float = 1.0,
+    em_gain: float = 1.0,
+    ccd_binning: int = 1,
+    qe: float = 1,
+    full_well: float = 18000,
+    serial_reg_full_well: float | None = None,
+    dark_current: float = 0.0,
+    add_poisson: bool = True,
+) -> np.ndarray:
+    if analog_gain <= 0:
+        raise ValueError("gain_multiplier must be positive")
+
+    # restrict to positive values
+    exposure_s = exposure_ms / 1000
+    incident_photons = np.maximum(photons_per_second * exposure_s, 0)
+
+    # combine signal and dark current into single poisson sample
+    detected_photons = incident_photons * qe
+    avg_dark_e = dark_current * exposure_s
+
+    if add_poisson:
+        # Single Poisson sample combining both sources
+        total_electrons: np.ndarray = rnd.poisson(detected_photons + avg_dark_e)
+    else:
+        # Just the mean values
+        total_electrons = detected_photons + avg_dark_e
+
+    # cap total electrons to full-well-capacity
+    total_electrons = np.minimum(total_electrons, full_well)
+
+    if (b := ccd_binning) > 1:
+        # Hardware binning: sum electrons from NxN blocks
+        # Reshape to create blocks
+        new_h = total_electrons.shape[0] // b
+        new_w = total_electrons.shape[1] // b
+        cropped = total_electrons[: new_h * b, : new_w * b]
+        # Sum over binning blocks
+        binned_electrons = cropped.reshape(new_h, b, new_w, b).sum(axis=(1, 3))
+    else:
+        binned_electrons = total_electrons
+
+    if em_gain > 1.0:
+        # Gamma distribution models the stochastic multiplication
+        # Only apply to pixels with signal
+        amplified = np.zeros_like(binned_electrons, dtype=float)
+        mask = binned_electrons > 0
+        amplified[mask] = rnd.gamma(shape=binned_electrons[mask], scale=em_gain)
+        binned_electrons = amplified
+
+    # cap total electrons to serial register full-well-capacity
+    if serial_reg_full_well is not None:
+        binned_electrons = np.minimum(binned_electrons, serial_reg_full_well)
+        effective_full_well = serial_reg_full_well
+    else:
+        effective_full_well = full_well * (ccd_binning**2)
+
+    # Add read noise (Gaussian, in electrons)
+    if read_noise > 0:
+        binned_electrons += rnd.normal(0, read_noise, size=binned_electrons.shape)
+
+    # unity gain is gain at which full well maps to max gray value
+    unity_gain = effective_full_well / (2**bit_depth - 1)
+    # actual gain considering analog gain setting.  Final e-/ADU
+    actual_gain = unity_gain / analog_gain
+    # Convert to ADU with offset
+    adu = (binned_electrons / actual_gain) + offset
+    # Quantize/clip to bit depth
+    adu = np.clip(adu, 0, 2**bit_depth - 1)
+
+    # Final integer image
+    gray_values = np.round(adu).astype(np.uint16 if bit_depth > 8 else np.uint8)
+    return gray_values  # type: ignore [no-any-return]
