@@ -8,6 +8,7 @@ from contextlib import suppress
 from datetime import datetime
 from itertools import count
 from time import perf_counter_ns
+from pathlib import Path
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -16,6 +17,8 @@ from typing import (
     TypeVar,
     cast,
     overload,
+    Iterable,
+    Union
 )
 
 import numpy as np
@@ -24,15 +27,16 @@ import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._config import Configuration
-from pymmcore_plus.core._constants import PixelType
+from pymmcore_plus.core._constants import PixelType, FocusDirection
 from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
-from pymmcore_plus.experimental.unicore.devices._device_base import Device
+from pymmcore_plus.experimental.unicore.devices._device_base import Device, SequenceableDevice
 from pymmcore_plus.experimental.unicore.devices._shutter import ShutterDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
+from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage, StageDevice
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice
+from pymmcore_plus.experimental.unicore.devices._register_python_device import REGISTRY_DEVICES
 
 from ._sequence_buffer import SequenceBuffer
 
@@ -286,10 +290,220 @@ class UniMMCore(CMMCorePlus):
                 pass
         return None
 
+    def _loadSystemConfigurationPython(
+            self, fileName: str | Path
+    ) -> None:
+        """
+        Internal method to load a system configuration file.
+        This function should work for python and c++ devices.
+        """
+        # open file and read file
+        with open(fileName, "r", encoding='utf8') as config_file:
+            list_of_lines = config_file.readlines()  # read lines and save in a list
+        config_file.close()  # close file
+
+        for line in list_of_lines:  # iterate over all the list of lines
+            if line.startswith("#") or line.startswith('\n'):  # skip comment lines
+                continue
+            elif line.startswith("Property"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) == 4:
+                    _, deviceLabel, propName, propValue = new_line
+                    try:
+                        super().setProperty(deviceLabel, propName, propValue)
+                    except Exception:
+                        self.setProperty(deviceLabel, propName, propValue)  # check if try/except can be removed
+                elif len(new_line) == 3:
+                    _, deviceLabel, propName = new_line  # assume propValue is empty string
+                    try:
+                        super().setProperty(deviceLabel, propName, "")
+                    except Exception:
+                        self.setProperty(deviceLabel, propName, "")
+                else:
+                    raise RuntimeError("Invalid Property line format.")
+            elif line.startswith("Device"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) != 4:
+                    raise RuntimeError("Invalid Device line format.")
+                # load Device
+                _, deviceLabel, moduleName, deviceName = new_line
+                try:
+                    super().loadDevice(deviceLabel, moduleName, deviceName)
+                except Exception:
+                    # try python device
+                    # print(REGISTRY_DEVICES)
+                    # print(deviceName)
+                    if deviceLabel in REGISTRY_DEVICES.keys():
+                        pyModuleDevice = REGISTRY_DEVICES[deviceLabel]
+                        # print(pyModuleDevice)
+                        # load the device
+                        self.loadPyDevice(deviceLabel,
+                                          pyModuleDevice)  # check how to deal with devices with args in their instance
+                        # initialize the device
+                        self.initializeDevice(deviceLabel)  # see if its better to initialize the device all at once
+                        # set initial values for each device
+                        if deviceName == "CameraDevice":
+                            self.setCameraDevice(deviceLabel)
+                        elif deviceName == "StageDevice":
+                            self.setFocusDevice(
+                                deviceLabel)  # here its assumed that the stage device is the focus device (Z-axes)
+                        elif deviceName == "XYStageDevice":
+                            self.setXYStageDevice(deviceLabel)
+                        elif deviceName == "StateDevice":
+                            self.setState(deviceLabel, 0)  # by default always has default value of 0
+                        elif deviceName == "SLMDevice":
+                            self.setSLMDevice(deviceLabel)
+                        elif deviceName == "ShutterDevice":
+                            self.setShutterDevice(deviceLabel)
+                        else:
+                            raise RuntimeError(
+                                f"Impossible to set {deviceLabel}. The {deviceName} is not a valid device.")
+                        # TODO
+                        # check if there other possible devices and check what a sequenceable device does!
+                    else:
+                        raise RuntimeError(
+                            "Device not loaded! Please import your python device or Invalid Device type.")
+            elif line.startswith("Label"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) != 4:
+                    raise RuntimeError("Invalid Label line format.")
+                _, deviceLabel, stateInt, stateLabel = new_line
+                try:
+                    super().defineStateLabel(deviceLabel, int(stateInt), stateLabel)
+                except Exception:
+                    if deviceLabel in self.getLoadedDevices():
+                        self.defineStateLabel(deviceLabel, int(stateInt), stateLabel)
+                    else:
+                        continue  # skip for the moment, don't know if it's important. It's the case where the device is not loaded yet.
+            elif line.startswith("ConfigGroup"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) != 6:
+                    raise RuntimeError("Invalid ConfigGroup line format.")
+                _, configurationGroup, configurationPresets, deviceLabel, propertyName, propertyValue = new_line
+                try:
+                    super().defineConfig(configurationGroup, configurationPresets, deviceLabel, propertyName,
+                                         propertyValue)
+                except Exception:
+                    self.defineConfig(configurationGroup, configurationPresets, deviceLabel, propertyName,
+                                      propertyValue)
+                    # in theory deviceLabel, propName and propertyValue could be ""
+            elif line.startswith("Delay"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) != 3:
+                    raise RuntimeError("Invalid line format")
+                _, deviceLabel, delayMs = new_line
+                try:
+                    super().setDeviceDelayMs(deviceLabel, float(delayMs))
+                except Exception:
+                    self.setDeviceDelayMs(deviceLabel, float(delayMs))
+            elif line.startswith("FocusDirection"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) != 3:
+                    raise RuntimeError("Invalid line format")
+                _, deviceLabel, sign = new_line
+                try:
+                    super().setFocusDirection(deviceLabel, int(sign))
+                except Exception:
+                    self.setFocusDirection(deviceLabel, int(sign))
+            elif line.startswith("ConfigPixelSize"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) == 5:
+                    _, resolutionID, deviceLabel, propName, value = new_line
+                    try:
+                        super().definePixelSizeConfig(resolutionID, deviceLabel, propName, value)
+                    except Exception:
+                        self.definePixelSizeConfig(resolutionID, deviceLabel, propName,
+                                                   value)  # CHECK IF WITH UNICORE WORKS
+                else:
+                    raise RuntimeError("Invalid line format")
+            elif line.startswith("PixelSizeum"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) != 3:
+                    raise RuntimeError("Invalid line format")
+                _, resolutionID, pixSize = new_line
+                try:
+                    super().setPixelSizeUm(resolutionID, float(pixSize))
+                except Exception:
+                    self.setPixelSizeUm(resolutionID, float(pixSize))  # CHECK IF WITH UNICORE WORKS
+            elif line.startswith("PixelSizeAffine"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) == 8:
+                    _, resolutionID, a11, a12, a13, a21, a22, a23 = new_line
+                    try:
+                        super().setPixelSizeAffine(resolutionID,
+                                                   [float(a11), float(a12), float(a13), float(a21), float(a22),
+                                                    float(a23)])
+                    except Exception:
+                        self.setPixelSizeAffine(resolutionID,
+                                                [float(a11), float(a12), float(a13), float(a21), float(a22),
+                                                 float(a23)])  # CHECK IF WITH UNICORE WORKS
+                else:
+                    raise RuntimeError("Invalid line format")
+            elif line.startswith("PixelSizedxdz"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) == 3:
+                    _, resolutionID, dxdz = new_line
+                    try:
+                        super().setPixelSizedxdz(resolutionID, float(dxdz))
+                    except Exception:
+                        self.setPixelSizedxdz(resolutionID, float(dxdz))  # CHECK IF WITH UNICORE WORKS
+                else:
+                    raise RuntimeError("Invalid line format")
+            elif line.startswith("PixelSizeydz"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) == 3:
+                    _, resolutionID, dydz = new_line
+                    try:
+                        super().setPixelSizedydz(resolutionID, float(dydz))
+                    except Exception:
+                        self.setPixelSizedydz(resolutionID, float(dydz))  # CHECK IF WITH UNICORE WORKS
+                else:
+                    raise RuntimeError("Invalid line format")
+            elif line.startswith("PixelSizeOptimalZUm"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) == 3:
+                    _, resolutionID, optimalZUm = new_line
+                    try:
+                        super().setPixelSizeOptimalZUm(resolutionID, float(optimalZUm))
+                    except Exception:
+                        self.setPixelSizeOptimalZUm(resolutionID, float(optimalZUm))  # CHECK IF WITH UNICORE WORKS
+                else:
+                    raise RuntimeError("Invalid line format")
+            elif line.startswith("Parent"):
+                new_line = line.strip('\n').split(',')
+                if len(new_line) != 3:
+                    raise RuntimeError("Invalid line format")
+                _, deviceLabel, parentHubLabel = line.strip().split(',')
+                try:
+                    super().setParentLabel(deviceLabel, parentHubLabel)
+                except Exception:
+                    self.setParentLabel(deviceLabel,
+                                        parentHubLabel)  # CHECK IF WITH UNICORE WORKS ... not sure what parent hub could be
+            else:
+                raise RuntimeError(f"Unexpected line: {line}")
+        # verify settings for startup
+        # don't know if relevant for us
+        # HERE: build system cache...verify what it does
+        # skip for now
+        self.waitForSystem()
+        self.updateSystemStateCache()  # probably to override -> return self.getSystemState()
+
+
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
     ) -> None:
-        super().loadSystemConfiguration(fileName)
+        """Load a system config file conforming to the MM .cfg format. Try first a "real" device and then try with python devices."""
+        # COPY FROM PYMMCORE-PLUS for the moment
+        fpath = Path(fileName).expanduser()
+        if not fpath.exists() and not fpath.is_absolute() and self._mm_path:
+            fpath = Path(self._mm_path) / fileName
+        if not fpath.exists():
+            raise FileNotFoundError(f"Path does not exist: {fpath}")
+        self._last_sys_config = str(fpath.resolve())
+        try:
+            super().loadSystemConfiguration(self._last_sys_config)
+        except Exception:
+            self._loadSystemConfigurationPython(self._last_sys_config)
         with self._py_config_lock:
             self._py_config_store.clear()
 
@@ -1435,6 +1649,96 @@ class UniMMCore(CMMCorePlus):
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.stop_sequence()
+
+    # ########################################################################
+    # ----------------------------- StageDevice ------------------------------
+    # ########################################################################
+    def getFocusDevice(self) -> PyDeviceLabel | DeviceLabel | Literal[""] | None:
+        """Return the current Focus Device"""
+        return self._pycore.current(KW.CoreFocus) or super().getFocusDevice()
+
+    def setFocusDevice(self, focusLabel: str) -> None:
+        """Set new current Focus Device"""
+        try:
+            super().setFocusDevice(focusLabel)
+        except Exception:
+            # python device
+            if focusLabel in self._pydevices:
+                if self.getDeviceType(focusLabel) == DeviceType.StageDevice:
+                    # assign focus device
+                    label = self._set_current_if_pydevice(KW.CoreFocus, focusLabel)
+                    super().setFocusDevice(label)
+        # otherwise do nothing
+
+    def getPosition(self, stageName: DeviceLabel | str | None) -> float:
+        label = stageName
+        if label == "":
+            raise RuntimeError(f"Failed to retrieve Z position for {self}")
+        elif label is None:
+            label = self.getFocusDevice()
+
+        if label not in self._pydevices:
+            return super().getPosition()
+        with self._pydevices.get_device_of_type(label, StageDevice) as device:
+            return device.get_position_um()
+
+
+    def setPosition(self, stageLabel: DeviceLabel | str | None, position: float) -> None:
+        label = stageLabel
+        if label == "":
+            raise RuntimeError(f"Failed to set Z position for {self}")
+        elif label is None:
+            label = self.getFocusDevice()
+
+        if label not in self._pydevices:
+            super().setPosition(position)
+        with self._pydevices.get_device_of_type(label, StageDevice) as device:
+            device.set_position_um(position)
+
+    def setZPosition(self, val: float) -> None:
+        """Set the position of the current  focus device in microns. If fails, it will try to use the python focus device."""
+        try:
+            super().setZPosition(val)
+        except Exception:
+            # python focus Device
+            self.setPosition(self.getFocusDevice(), val)
+
+    def getZPosition(self) -> float:
+        """ Get the position of the current focus device in microns. If fails, it will try to use the python focus device."""
+        try:
+            return super().getZPosition()
+        except Exception:
+            # python focus device
+            return self.getPosition(self.getFocusDevice())
+
+    def setFocusDirection(self, stageLabel: DeviceLabel | str, sign: int) -> None:
+        """Set the focus direction of the Z stage"""
+        if stageLabel == "" or stageLabel != self.getFocusDevice():
+            raise RuntimeError(f"Failed to set new FocusDirection: No {stageLabel} as Focus Device.")
+        if stageLabel not in self._pydevices:
+            super().setFocusDirection(stageLabel, sign)
+        
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as device:
+            device.set_focus_direction(sign)
+
+    def getFocusDirection(self, stageLabel: DeviceLabel | str) -> FocusDirection:
+        """Get the current focus direction of the Z stage"""
+        if stageLabel == "" or stageLabel != self.getFocusDevice():
+            raise RuntimeError(f"Failed to retrieve Focus direction: No {stageLabel} as Focus Device.")
+        if stageLabel not in self._pydevices:
+            return super().getFocusDirection(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as device:
+            return device.get_focus_direction()
+
+    def setOrigin(self):
+        """Zero the current focus/Z stage's coordinates at the current position."""
+        try:
+            super().setOrigin()
+        except Exception:
+            z_stage = self.getFocusDevice()
+            with self._pydevices.get_device_of_type(z_stage, StageDevice) as device:
+                device.set_origin()
+
 
     # -----------------------------------------------------------------------
     # ---------------------------- Any Stage --------------------------------
