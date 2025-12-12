@@ -33,9 +33,9 @@ class CoreEventsProxy(Protocol):
     XYStagePositionChanged: PSignalInstance  # (str, float, float)
     exposureChanged: PSignalInstance  # (str, float)
     SLMExposureChanged: PSignalInstance  # (str, float)
-    # channelGroupChanged: PSignalInstance  # (str)
-    # configGroupChanged: PSignalInstance  # (str, str)
-    # configSet: PSignalInstance  # (str, str)
+    channelGroupChanged: PSignalInstance  # (str)
+    configGroupChanged: PSignalInstance  # (str, str)
+    configSet: PSignalInstance  # (str, str)
 
 
 class CMMCoreProxy(Protocol):

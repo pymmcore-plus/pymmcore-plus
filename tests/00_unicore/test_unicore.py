@@ -6,7 +6,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from pymmcore_plus import DeviceInitializationState, DeviceType, PropertyType, _pymmcore
-from pymmcore_plus.experimental.unicore import GenericDevice, UniMMCore, pymm_property
+from pymmcore_plus.experimental.unicore import (
+    GenericDevice,
+    StateDevice,
+    UniMMCore,
+    pymm_property,
+)
 
 DOC = """Example generic device."""
 PROP_A = "propA"  # must match below
@@ -289,3 +294,230 @@ def test_waiting():
     core._pydevices = pydev_mock
     core.waitForSystem()
     pydev_mock.wait_for_device_type.assert_called_once_with(DeviceType.Any, 500)
+
+
+def test_config_groups_with_python_state_device():
+    core = UniMMCore()
+
+    class SimStateDevice(StateDevice):
+        def __init__(self, label: str, state_dict: dict[int, str]) -> None:
+            super().__init__(state_dict)
+            self._current_state = 0
+            self._current_label = self._state_to_label.get(self._current_state)
+            self._label = label
+
+        def get_state(self) -> int:
+            return self._current_state
+
+        def set_state(self, position: int | str) -> None:
+            if isinstance(position, str):
+                position = int(position)
+            self._current_state = position
+            self._current_label = self._state_to_label.get(self._current_state)
+
+    core.loadPyDevice(
+        "PyLED", SimStateDevice(label="PyLED", state_dict={0: "UV", 1: "BLUE"})
+    )
+    core.initializeDevice("PyLED")
+
+    # Define group and config using Python device
+    core.defineConfigGroup("my_group")
+    core.defineConfig("my_group", "uv_cfg", "PyLED", "Label", "UV")
+
+    # Lists should include python-side groups/configs
+    assert "my_group" in core.getAvailableConfigGroups()
+    assert "uv_cfg" in core.getAvailableConfigs("my_group")
+
+    # Change to BLUE, then apply config back to UV
+    core.setStateLabel("PyLED", "BLUE")
+    assert core.getStateLabel("PyLED") == "BLUE"
+    core.setConfig("my_group", "uv_cfg")
+    assert core.getStateLabel("PyLED") == "UV"
+
+    # Group state fallback (python mapping)
+    state = core.getConfigGroupState("my_group")
+    assert isinstance(state, dict)
+    assert state["PyLED"]["Label"] == "UV"
+
+    # Cache-based state should include python values via Configuration
+    cached_state = core.getConfigGroupStateFromCache("my_group")
+    assert ("PyLED", "Label", "UV") in list(cached_state)
+
+    # waiting on a python-only config should not error
+    core.waitForConfig("my_group", "uv_cfg")
+
+    # Native-only should fail for python-defined groups
+    with pytest.raises(RuntimeError):
+        core.getConfigGroupState("my_group", native=True)
+
+    # Rename and delete configs in python store
+    core.renameConfig("my_group", "uv_cfg", "uv_cfg2")
+    assert "uv_cfg2" in core.getAvailableConfigs("my_group")
+    assert "uv_cfg" not in core.getAvailableConfigs("my_group")
+
+    core.deleteConfig("my_group", "uv_cfg2")
+    assert "uv_cfg2" not in core.getAvailableConfigs("my_group")
+
+    # Also support empty two-arg defineConfig
+    core.defineConfig("empty_group", "empty")
+    assert "empty_group" in core.getAvailableConfigGroups()
+
+
+def test_config_group_introspection_with_python_device():
+    core = UniMMCore()
+
+    class SimStateDevice(StateDevice):
+        def __init__(self, label: str, state_dict: dict[int, str]) -> None:
+            super().__init__(state_dict)
+            self._current_state = 0
+            self._current_label = self._state_to_label.get(self._current_state)
+            self._label = label
+
+        def get_state(self) -> int:
+            return self._current_state
+
+        def set_state(self, position: int | str) -> None:
+            if isinstance(position, str):
+                position = int(position)
+            self._current_state = position
+            self._current_label = self._state_to_label.get(self._current_state)
+
+    core.loadPyDevice(
+        "PyLED", SimStateDevice(label="PyLED", state_dict={0: "UV", 1: "BLUE"})
+    )
+    core.initializeAllDevices()
+
+    # Define two configs
+    core.defineConfigGroup("grp")
+    core.defineConfig("grp", "uv", "PyLED", "Label", "UV")
+    core.defineConfig("grp", "blue", "PyLED", "Label", "BLUE")
+
+    # getConfigData should return stored triplets
+    data = core.getConfigData("grp", "uv")
+    assert ("PyLED", "Label", "UV") in data
+
+    # getConfigState should reflect stored values (not live), mapping-style
+    state = core.getConfigState("grp", "uv")
+    assert state["PyLED"]["Label"] == "UV"
+
+    # Change current to BLUE; current config should be 'blue'
+    core.setStateLabel("PyLED", "BLUE")
+    assert core.getStateLabel("PyLED") == "BLUE"
+    assert core.getCurrentConfig("grp") == "blue"
+
+    # Switch back by applying 'uv', then verify current detection from cache
+    core.setConfig("grp", "uv")
+    assert core.getStateLabel("PyLED") == "UV"
+    # Ensure cache path works too
+    current_cached = core.getCurrentConfigFromCache("grp")
+    assert current_cached == "uv"
+
+    # System state should include python device properties
+    system_state = core.getSystemState()
+    assert ("PyLED", "Label", "UV") in list(system_state)
+    cached_system_state = core.getSystemStateCache()
+    assert ("PyLED", "Label", "UV") in list(cached_system_state)
+
+
+def test_mixed_native_and_python_devices_in_one_config():
+    core = UniMMCore()
+    # Load native demo configuration to have C++ devices available
+    core.loadSystemConfiguration()
+
+    # Sanity check a native device is present (from demo config)
+    assert "Camera" in core.getLoadedDevices()
+
+    # Add a python StateDevice
+    class SimStateDevice(StateDevice):
+        def __init__(self, label: str, state_dict: dict[int, str]) -> None:
+            super().__init__(state_dict)
+            self._current_state = 0
+            self._current_label = self._state_to_label.get(self._current_state)
+            self._label = label
+
+        def get_state(self) -> int:
+            return self._current_state
+
+        def set_state(self, position: int | str) -> None:
+            if isinstance(position, str):
+                position = int(position)
+            self._current_state = position
+            self._current_label = self._state_to_label.get(self._current_state)
+
+    core.loadPyDevice(
+        "PyLED", SimStateDevice(label="PyLED", state_dict={0: "UV", 1: "BLUE"})
+    )
+    core.initializeAllDevices()
+
+    # Choose a native property to include in the config; use Binning on Camera
+    # Ensure we can set it and read it
+    native_dev = "Camera"
+    native_prop = "Binning"
+    # Some demo configs default to 1; set to 2 then back via config
+    core.setProperty(native_dev, native_prop, "2")
+    assert core.getProperty(native_dev, native_prop) == "2"
+
+    # Define a mixed config: python LED Label=UV and native Camera Binning=1
+    core.defineConfigGroup("mix")
+    core.defineConfig("mix", "cfg", "PyLED", "Label", "UV")
+    core.defineConfig("mix", "cfg", native_dev, native_prop, "1")
+
+    # Change current away from the target config
+    core.setStateLabel("PyLED", "BLUE")
+    assert core.getStateLabel("PyLED") == "BLUE"
+    core.setProperty(native_dev, native_prop, "2")
+    assert core.getProperty(native_dev, native_prop) == "2"
+
+    # Apply mixed config; both python and native properties should be applied
+    core.setConfig("mix", "cfg")
+    assert core.getStateLabel("PyLED") == "UV"
+    assert core.getProperty(native_dev, native_prop) == "1"
+
+    # Group state via python fallback should include LED Label=UV
+    st = core.getConfigGroupState("mix")
+    assert st["PyLED"]["Label"] == "UV"
+
+    # Native-only query may succeed or fail depending on C++ group presence.
+    # Ensure it doesn't break the API surface.
+    # If it succeeds, it should return a native object; if it fails, it should raise.
+    try:
+        _ = core.getConfigGroupState("mix", native=True)
+    except RuntimeError:
+        pass
+
+
+def test_rename_and_delete_python_config_group():
+    core = UniMMCore()
+
+    class SimStateDevice(StateDevice):
+        def __init__(self, label: str, state_dict: dict[int, str]) -> None:
+            super().__init__(state_dict)
+            self._current_state = 0
+            self._current_label = self._state_to_label.get(self._current_state)
+            self._label = label
+
+        def get_state(self) -> int:
+            return self._current_state
+
+        def set_state(self, position: int | str) -> None:
+            if isinstance(position, str):
+                position = int(position)
+            self._current_state = position
+            self._current_label = self._state_to_label.get(self._current_state)
+
+    core.loadPyDevice(
+        "PyLED", SimStateDevice(label="PyLED", state_dict={0: "UV", 1: "BLUE"})
+    )
+    core.initializeDevice("PyLED")
+
+    core.defineConfigGroup("py_group")
+    core.defineConfig("py_group", "uv", "PyLED", "Label", "UV")
+
+    core.renameConfigGroup("py_group", "py_group_renamed")
+    groups = core.getAvailableConfigGroups()
+    assert "py_group" not in groups
+    assert "py_group_renamed" in groups
+
+    # Deleting should remove python configs as well
+    core.deleteConfigGroup("py_group_renamed")
+    assert "py_group_renamed" not in core.getAvailableConfigGroups()
