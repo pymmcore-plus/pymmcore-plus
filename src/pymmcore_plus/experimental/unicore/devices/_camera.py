@@ -108,12 +108,13 @@ class CameraDevice(Device):
     @abstractmethod
     def getNumberOfChannels(self) -> int:
         """Return the number of channels of the camera device.
-        Cameras with gray images have 1 channel
+        Cameras with gray images have 1 channel.
 
         Cameras with color images have 3 channels
 
         ect.
         """
+
     # Standard Properties --------------------------------------------
 
     # these are the standard properties that cameras may implement.

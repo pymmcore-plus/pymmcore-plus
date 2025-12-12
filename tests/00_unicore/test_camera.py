@@ -67,6 +67,7 @@ class MyCamera(CameraDevice):
             time.sleep(0.01)  # Simulate time taken to acquire an image
             buffer[:] = FRAME
             yield {"random_key": f"value_{i}"}  # Example metadata, can be anything.
+
     def getNumberOfChannels(self) -> int:
         return 1
 

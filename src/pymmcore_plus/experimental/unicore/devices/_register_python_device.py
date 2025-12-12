@@ -1,15 +1,16 @@
-REGISTRY_DEVICES = {} # global dictionary containing the class instances of the python devices
+REGISTRY_DEVICES = {}  # global dictionary containing the class instances of the python devices
 
 
 def device_registry(name, *args, **kwargs):
-    """
-    Decorator to register a python device in a UniMMCore instance
-    """
+    """Decorator to register a python device in a UniMMCore instance."""
+
     def decorator(func):
         device_instance = func(*args, **kwargs)
         REGISTRY_DEVICES[name] = device_instance
         return func
+
     return decorator
+
 
 """
 This decorator is used to register a python device implemented for UniMMCore instance. In this way, we can
@@ -43,7 +44,7 @@ def make_filter_wheel(my_label, state_label, my_sim):
 @device_registry("XYStage", microscope_sim)
 def make_xy_stage(my_sim):
     return SimStageDevice(my_sim)
-+++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++    
++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
 <local_python_config.cfg> -> To simulate the .cfg file that you would use on a real microscope
 # Unload all devices
 Property,Core,Initialize,0

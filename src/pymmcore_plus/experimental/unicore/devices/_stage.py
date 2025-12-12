@@ -2,7 +2,7 @@ from abc import abstractmethod
 from typing import ClassVar, Literal
 
 from pymmcore_plus.core import DeviceType
-from pymmcore_plus.core._constants import Keyword, FocusDirection
+from pymmcore_plus.core._constants import FocusDirection, Keyword
 
 from ._device_base import SeqT, SequenceableDevice
 
@@ -37,10 +37,11 @@ class StageDevice(_BaseStage[float]):
     @abstractmethod
     def get_position_um(self) -> float:
         """Returns the current position of the stage in microns."""
-    
+
     @abstractmethod
     def get_focus_direction(self) -> FocusDirection:
         """Returns the focus direction of the stage."""
+
     @abstractmethod
     def set_focus_direction(self, sign: int) -> None:
         """Sets the focus direction of the stage."""

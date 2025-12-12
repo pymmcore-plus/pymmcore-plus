@@ -1,16 +1,10 @@
-from unittest.mock import Mock
-
-import pytest
-
 from pymmcore_plus import FocusDirection
-from pymmcore_plus.core._constants import Keyword
-from pymmcore_plus.experimental.unicore import (
-    UniMMCore,
-    StageDevice
-)
+from pymmcore_plus.experimental.unicore import StageDevice, UniMMCore
+
 
 class MyZStage(StageDevice):
     """Example of a Z Stage device"""
+
     def __init__(self):
         super().__init__()
         self.position = 0.0
@@ -45,21 +39,19 @@ class MyZStage(StageDevice):
 
     def set_focus_direction(self, sign: int) -> None:
         """Set the focus direction of the stage
-                if sign > 0.0 direction towards sample
-                if sign < 0.0 direction away from sample
-                """
+        if sign > 0.0 direction towards sample
+        if sign < 0.0 direction away from sample
+        """
         if sign > 0.0:
             self.direction = FocusDirection.FocusDirectionTowardSample
         if sign < 0.0:
             self.direction = FocusDirection.FocusDirectionAwayFromSample
 
-
-
     def _calculate_direction(self) -> float:
         return self.position - self.previous_position
 
-def test_unicore_z_stage():
 
+def test_unicore_z_stage():
     core = UniMMCore()
 
     stage = MyZStage()
@@ -78,7 +70,6 @@ def test_unicore_z_stage():
     core.setZPosition(20.0)
     assert core.getZPosition() == 20.0
 
-
     # test focus direction
     core.home("ZStage")
     assert stage.HOME
@@ -93,8 +84,3 @@ def test_unicore_z_stage():
     assert core.getZPosition() == 10.0
     assert stage.previous_position == 20.0
     assert stage.origin == 20.0
-
-
-
-
-
