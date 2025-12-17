@@ -1812,28 +1812,28 @@ class UniMMCore(CMMCorePlus):
         deviceLabel: str | None = None,
         propName: str | None = None,
     ) -> None:
-        if deviceLabel is not None and propName is not None:
-            # Deleting a specific property from a preset
-            if deviceLabel in self._pydevices:
-                # Python device: remove from our storage
-                py_group = self._py_config_groups.get(groupName, {})
-                py_preset = py_group.get(configName, {})  # type: ignore[call-overload]
-                key = (deviceLabel, propName)
-                if key in py_preset:
-                    del py_preset[key]
-                    self.events.configDeleted.emit(groupName, configName)
-                else:
-                    raise RuntimeError(
-                        f"Property '{propName}' not found in preset '{configName}'"
-                    )
-            else:
-                # C++ device: let C++ handle it
-                super().deleteConfig(groupName, configName, deviceLabel, propName)
-        else:
+        if deviceLabel is None or propName is None:
             # Deleting entire preset: delete from both C++ and Python storage
             super().deleteConfig(groupName, configName)
             py_group = self._py_config_groups.get(groupName, {})
             py_group.pop(configName, None)  # type: ignore[call-overload]
+
+        # Deleting a specific property from a preset
+        elif deviceLabel in self._pydevices:
+            # Python device: remove from our storage
+            py_group = self._py_config_groups.get(groupName, {})
+            py_preset = py_group.get(configName, {})  # type: ignore[call-overload]
+            key = (deviceLabel, propName)
+            if key in py_preset:
+                del py_preset[key]
+                self.events.configDeleted.emit(groupName, configName)
+            else:
+                raise RuntimeError(
+                    f"Property '{propName}' not found in preset '{configName}'"
+                )
+        else:
+            # C++ device: let C++ handle it
+            super().deleteConfig(groupName, configName, deviceLabel, propName)
 
     def renameConfig(
         self, groupName: str, oldConfigName: str, newConfigName: str

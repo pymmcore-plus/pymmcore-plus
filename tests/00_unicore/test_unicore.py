@@ -566,3 +566,76 @@ def test_system_state_includes_py_devices():
 
     native_state = core.getSystemState(native=True)
     assert isinstance(native_state, pymmcore.Configuration)
+
+
+def test_delete_python_device_property_from_config():
+    """Test deleting a specific Python device property from a config preset."""
+    from unittest.mock import MagicMock
+
+    core = UniMMCore()
+
+    # Load Python device
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+
+    # Create a config with multiple Python device properties
+    core.defineConfigGroup("testGroup")
+    core.defineConfig("testGroup", "preset1", "PyDev", "propA", "valueA")
+    core.defineConfig("testGroup", "preset1", "PyDev", "propB", 42.0)
+
+    # Verify both properties are in the config
+    config = core.getConfigData("testGroup", "preset1")
+    assert list(config) == [("PyDev", "propA", "valueA"), ("PyDev", "propB", "42.0")]
+
+    # Set up event listener
+    config_deleted_mock = MagicMock()
+    core.events.configDeleted.connect(config_deleted_mock)
+
+    # Delete one Python device property
+    core.deleteConfig("testGroup", "preset1", "PyDev", "propA")
+
+    # Verify event was emitted
+    config_deleted_mock.assert_called_once_with("testGroup", "preset1")
+
+    # Verify property was removed but other property remains
+    config = core.getConfigData("testGroup", "preset1")
+    assert list(config) == [("PyDev", "propB", "42.0")]
+
+    # Try to delete non-existent Python property - should raise error
+    with pytest.raises(RuntimeError, match="not found"):
+        core.deleteConfig("testGroup", "preset1", "PyDev", "nonExistentProp")
+
+    # Try to delete already-deleted property - should raise error
+    with pytest.raises(RuntimeError, match="not found"):
+        core.deleteConfig("testGroup", "preset1", "PyDev", "propA")
+
+
+def test_config_with_only_python_devices():
+    """Test getCurrentConfig works when config only has Python device settings."""
+    core = UniMMCore()
+
+    # Load only Python device (no C++ devices in config)
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+
+    # Create config with only Python device
+    # Note: propB has limits (0.0, 100.0)
+    core.defineConfigGroup("pyOnlyGroup")
+    core.defineConfig("pyOnlyGroup", "preset1", "PyDev", "propB", 25.0)
+    core.defineConfig("pyOnlyGroup", "preset2", "PyDev", "propB", 75.0)
+
+    # Initially no preset matches (propB default is 10.0)
+    assert core.getCurrentConfig("pyOnlyGroup") == ""
+
+    # Set property to match preset1
+    core.setProperty("PyDev", "propB", 25.0)
+    assert core.getCurrentConfig("pyOnlyGroup") == "preset1"
+    assert core.getCurrentConfigFromCache("pyOnlyGroup") == "preset1"
+
+    # Change to match preset2
+    core.setProperty("PyDev", "propB", 75.0)
+    assert core.getCurrentConfig("pyOnlyGroup") == "preset2"
+
+    # Set to non-matching value
+    core.setProperty("PyDev", "propB", 50.0)
+    assert core.getCurrentConfig("pyOnlyGroup") == ""
