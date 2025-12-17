@@ -69,11 +69,6 @@ ConfigGroup: TypeAlias = "MutableMapping[ConfigPresetName, ConfigDict]"
 # but to avoid all the casting, we use str here
 ConfigGroups: TypeAlias = MutableMapping[str, ConfigGroup]
 
-# Forbidden characters in names (matches MM::g_FieldDelimiters)
-_FIELD_DELIMITERS = ","
-# Additional forbidden characters for preset names
-_PRESET_FORBIDDEN = "/\\*!'"
-
 
 class BufferOverflowStop(Exception):
     """Exception raised to signal graceful stop on buffer overflow."""
@@ -2046,9 +2041,6 @@ def _ensure_label(
     return cast("str", args[0]), args[1:]
 
 
-# Threading ------------------------------------------------------
-
-
 class ThreadSafeConfig(MutableMapping[DevPropTuple, Any]):
     """A thread-safe cache for property states.
 
@@ -2131,6 +2123,11 @@ class AcquisitionThread(threading.Thread):
 
 
 # --------- helpers -------------------------------------------------------
+
+# Forbidden characters in names (matches MM::g_FieldDelimiters)
+_FIELD_DELIMITERS = ","
+# Additional forbidden characters for preset names
+_PRESET_FORBIDDEN = "/\\*!'"
 
 
 def _check_config_group_name(name: str) -> None:
