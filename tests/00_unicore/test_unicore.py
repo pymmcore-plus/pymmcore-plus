@@ -289,3 +289,164 @@ def test_waiting():
     core._pydevices = pydev_mock
     core.waitForSystem()
     pydev_mock.wait_for_device_type.assert_called_once_with(DeviceType.Any, 500)
+
+
+def test_define_config_groups():
+    core = UniMMCore()
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        core.defineConfigGroup("")
+    with pytest.raises(ValueError, match="reserved characters"):
+        core.defineConfigGroup("bad,name")
+
+    core.defineConfigGroup("group1")
+    assert core.isGroupDefined("group1")
+    assert tuple(core.getAvailableConfigGroups()) == ("group1",)
+    with pytest.raises(RuntimeError, match="already in use"):
+        core.defineConfigGroup("group1")
+
+    with pytest.raises(ValueError, match="cannot be empty"):
+        core.defineConfig("group1", "")
+    with pytest.raises(ValueError, match="reserved characters"):
+        core.defineConfig("group1", "bad,name")
+
+    core.defineConfig("group1", "preset1")
+
+    core.renameConfigGroup("group1", "renamed_group")
+    assert core.isGroupDefined("renamed_group")
+    assert not core.isGroupDefined("group1")
+
+    with pytest.raises(RuntimeError, match="not defined"):
+        core.renameConfigGroup("group1", "another_name")
+    with pytest.raises(RuntimeError, match="already in use"):
+        core.renameConfigGroup("renamed_group", "renamed_group")
+
+    # rename Config
+    with pytest.raises(RuntimeError, match="does not exist"):
+        core.renameConfig("notagroup", "nonexistent_preset", "new_name")
+    with pytest.raises(RuntimeError, match="contains no preset"):
+        core.renameConfig("renamed_group", "nonexistent_preset", "new_name")
+    with pytest.raises(RuntimeError, match="already in use"):
+        core.renameConfig("renamed_group", "preset1", "preset1")
+
+    core.renameConfig("renamed_group", "preset1", "renamed_preset")
+    assert core.isConfigDefined("renamed_group", "renamed_preset")
+
+    # Cleanup
+    core.deleteConfigGroup("renamed_group")
+    assert not core.isGroupDefined("renamed_group")
+
+    with pytest.raises(RuntimeError, match="not defined"):
+        core.deleteConfigGroup("renamed_group")
+
+    assert tuple(core.getAvailableConfigGroups()) == ()
+
+
+def test_config_group_with_c_and_py_devices():
+    core = UniMMCore()
+
+    core.defineConfigGroup("group1")
+    core.loadDevice("CDev", "DemoCamera", "DCam")
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+    core.setCameraDevice("CDev")
+
+    with pytest.raises(ValueError, match="Device label cannot be empty"):
+        core.defineConfig("group1", "preset1", "", "Exposure", 50)
+    with pytest.raises(ValueError, match="reserved characters"):
+        core.defineConfig("group1", "preset1", "bad,name", "Exposure", 50)
+    with pytest.raises(ValueError, match="Property name cannot be empty"):
+        core.defineConfig("group1", "preset1", "CDev", "", 50)
+    with pytest.raises(ValueError, match="reserved characters"):
+        core.defineConfig("group1", "preset1", "CDev", "bad,name", 50)
+    with pytest.raises(ValueError, match="value cannot be None"):
+        core.defineConfig("group1", "preset1", "CDev", "Exposure", None)
+    with pytest.raises(ValueError, match="reserved characters"):
+        core.defineConfig("group1", "preset1", "CDev", "Exposure", "bad,value")
+
+    core.defineConfig("group1", "preset1", "CDev", "Exposure", 50)
+    core.defineConfig("group1", "preset1", "PyDev", "propB", 25.0)
+    assert core.isConfigDefined("group1", "preset1")
+    core.defineConfig("group1", "preset2", "CDev", "Exposure", 150)
+    core.defineConfig("group1", "preset2", "PyDev", "propB", 125.0)
+    assert core.getAvailableConfigs("group1") == ("preset1", "preset2")
+
+    # Get the config and check values
+    config = core.getConfigData("group1", "preset1")
+    cfg_state = core.getConfigState("group1", "preset1")
+    assert cfg_state == config
+    assert list(config) == [("CDev", "Exposure", "50"), ("PyDev", "propB", "25.0")]
+    with pytest.raises(RuntimeError, match="contains no preset"):
+        core.getConfigData("group1", "preset3")
+
+    with pytest.raises(RuntimeError, match="does not exist"):
+        core.getConfigState("group10", "preset3")
+    with pytest.raises(RuntimeError, match="contains no preset"):
+        core.getConfigState("group1", "preset31")
+
+    assert core.getCurrentConfig("group1") == ""
+
+    # Apply the config and check core values
+    assert core.getExposure() != 50
+    assert core.getProperty("PyDev", "propB") != 25.0
+    core.setConfig("group1", "preset1")
+    assert core.getExposure() == 50
+    assert core.getProperty("PyDev", "propB") == 25.0
+
+    cfg_group_state = core.getConfigGroupState("group1")
+    cfg_group_state_cached = core.getConfigGroupStateFromCache("group1")
+    assert (
+        list(cfg_group_state)
+        == list(cfg_group_state_cached)
+        == [
+            ("CDev", "Exposure", "50.0000"),
+            ("PyDev", "propB", "25.0"),
+        ]
+    )
+
+    assert core.getCurrentConfig("group1") == "preset1"
+    assert core.getCurrentConfigFromCache("group1") == "preset1"
+
+    with pytest.raises(RuntimeError, match="does not exist"):
+        core.setConfig("group10", "preset3")
+    with pytest.raises(RuntimeError, match="does not exist"):
+        core.setConfig("group1", "preset10")
+
+    # Clean up
+    with pytest.raises(RuntimeError, match="not found in preset"):
+        core.deleteConfig("group1", "preset1", "CDev", "NotExposure")
+
+    core.deleteConfig("group1", "preset1", "CDev", "Exposure")
+    config = core.getConfigData("group1", "preset1")
+    assert list(config) == [("PyDev", "propB", "25.0")]
+
+    with pytest.raises(RuntimeError, match="does not exist"):
+        core.deleteConfig("group3", "preset1")
+
+    core.deleteConfig("group1", "preset1")
+    with pytest.raises(RuntimeError, match="contains no preset"):
+        core.getConfigData("group1", "preset1")
+    with pytest.raises(RuntimeError, match="contains no preset"):
+        core.deleteConfig("group1", "preset1")
+
+    core.deleteConfigGroup("group1")
+    with pytest.raises(RuntimeError, match="not defined"):
+        core.getConfigData("group1", "preset1")
+
+
+def test_config_group_channel_groups():
+    core = UniMMCore()
+
+    core.defineConfigGroup("channel")
+    core.defineConfig("channel", "preset1")
+    core.defineConfig("channel", "preset2")
+
+    with pytest.raises(RuntimeError, match="undefined group"):
+        core.setChannelGroup("nonexistent_group")
+
+    assert not core.getChannelGroup()
+    core.setChannelGroup("channel")
+    assert core.getChannelGroup() == "channel"
+
+    core.deleteConfigGroup("channel")
+    assert not core.getChannelGroup()
