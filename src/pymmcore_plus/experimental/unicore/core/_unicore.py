@@ -75,67 +75,6 @@ _FIELD_DELIMITERS = ","
 _PRESET_FORBIDDEN = "/\\*!'"
 
 
-def _check_config_group_name(name: str) -> None:
-    """Validate a configuration group name."""
-    if not name:
-        raise ValueError("Configuration group name cannot be empty")
-    if any(c in name for c in _FIELD_DELIMITERS):
-        raise ValueError(
-            f"Configuration group name {name!r} contains reserved characters"
-        )
-
-
-def _check_config_preset_name(name: str) -> None:
-    """Validate a configuration preset name."""
-    if not name:
-        raise ValueError("Configuration preset name cannot be empty")
-    forbidden = _FIELD_DELIMITERS + _PRESET_FORBIDDEN
-    if any(c in name for c in forbidden):
-        raise ValueError(
-            f"Configuration preset name {name!r} contains reserved characters"
-        )
-
-
-def _check_device_label(label: str) -> None:
-    """Validate a device label."""
-    if not label:
-        raise ValueError("Device label cannot be empty")
-    if any(c in label for c in _FIELD_DELIMITERS):
-        raise ValueError(f"Device label {label!r} contains reserved characters")
-
-
-def _check_property_name(name: str) -> None:
-    """Validate a property name."""
-    if not name:
-        raise ValueError("Property name cannot be empty")
-    if any(c in name for c in _FIELD_DELIMITERS):
-        raise ValueError(f"Property name {name!r} contains reserved characters")
-
-
-def _check_property_value(value: str | None) -> None:
-    """Validate a property value."""
-    if value is None:
-        raise ValueError("Property value cannot be None")
-    value = str(value)
-    if any(c in value for c in _FIELD_DELIMITERS):
-        raise ValueError(f"Property value {value!r} contains reserved characters")
-
-
-def _values_match(current: Any, expected: Any) -> bool:
-    """Compare property values, handling numeric string comparisons.
-
-    Unlike C++ MMCore which does strict string comparison, this performs
-    numeric-aware comparison to handle cases like "50.0000" == 50.
-    """
-    if current == expected:
-        return True
-    # Try numeric comparison
-    try:
-        return float(current) == float(expected)
-    except (ValueError, TypeError):
-        return str(current) == str(expected)
-
-
 class BufferOverflowStop(Exception):
     """Exception raised to signal graceful stop on buffer overflow."""
 
@@ -2189,3 +2128,67 @@ class AcquisitionThread(threading.Thread):
             raise RuntimeError(
                 f"Error in device {self.label!r} during sequence acquisition: {e}"
             ) from e
+
+
+# --------- helpers -------------------------------------------------------
+
+
+def _check_config_group_name(name: str) -> None:
+    """Validate a configuration group name."""
+    if not name:
+        raise ValueError("Configuration group name cannot be empty")
+    if any(c in name for c in _FIELD_DELIMITERS):
+        raise ValueError(
+            f"Configuration group name {name!r} contains reserved characters"
+        )
+
+
+def _check_config_preset_name(name: str) -> None:
+    """Validate a configuration preset name."""
+    if not name:
+        raise ValueError("Configuration preset name cannot be empty")
+    forbidden = _FIELD_DELIMITERS + _PRESET_FORBIDDEN
+    if any(c in name for c in forbidden):
+        raise ValueError(
+            f"Configuration preset name {name!r} contains reserved characters"
+        )
+
+
+def _check_device_label(label: str) -> None:
+    """Validate a device label."""
+    if not label:
+        raise ValueError("Device label cannot be empty")
+    if any(c in label for c in _FIELD_DELIMITERS):
+        raise ValueError(f"Device label {label!r} contains reserved characters")
+
+
+def _check_property_name(name: str) -> None:
+    """Validate a property name."""
+    if not name:
+        raise ValueError("Property name cannot be empty")
+    if any(c in name for c in _FIELD_DELIMITERS):
+        raise ValueError(f"Property name {name!r} contains reserved characters")
+
+
+def _check_property_value(value: str | None) -> None:
+    """Validate a property value."""
+    if value is None:
+        raise ValueError("Property value cannot be None")
+    value = str(value)
+    if any(c in value for c in _FIELD_DELIMITERS):
+        raise ValueError(f"Property value {value!r} contains reserved characters")
+
+
+def _values_match(current: Any, expected: Any) -> bool:
+    """Compare property values, handling numeric string comparisons.
+
+    Unlike C++ MMCore which does strict string comparison, this performs
+    numeric-aware comparison to handle cases like "50.0000" == 50.
+    """
+    if current == expected:
+        return True
+    # Try numeric comparison
+    try:
+        return float(current) == float(expected)
+    except (ValueError, TypeError):
+        return str(current) == str(expected)
