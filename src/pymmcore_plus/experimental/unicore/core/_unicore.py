@@ -1800,15 +1800,7 @@ class UniMMCore(CMMCorePlus):
             if propName is not None:
                 _check_property_name(propName)
 
-        group = self._config_groups.get(groupName)
-        if group is None:
-            raise RuntimeError(f"Group '{groupName}' does not exist")
-        preset = group.get(configName)  # type: ignore
-        if preset is None:
-            raise RuntimeError(
-                f"Configuration group {groupName!r} contains no preset {configName!r}"
-            )
-
+        group, preset = self._ensure_config_preset(groupName, configName)
         if deviceLabel is not None and propName is not None:
             # Delete specific property from preset
             key = (deviceLabel, propName)
@@ -1819,7 +1811,7 @@ class UniMMCore(CMMCorePlus):
             del preset[key]
         else:
             # Delete entire preset
-            del group[configName]  # type: ignore
+            del group[configName]  # type: ignore[arg-type]
 
         self.events.configDeleted.emit(groupName, configName)
 
@@ -1829,14 +1821,7 @@ class UniMMCore(CMMCorePlus):
         _check_config_group_name(groupName)
         _check_config_preset_name(oldConfigName)
         _check_config_preset_name(newConfigName)
-        group = self._config_groups.get(groupName)
-        if group is None:
-            raise RuntimeError(f"Group '{groupName}' does not exist")
-        if oldConfigName not in group:
-            raise RuntimeError(
-                f"Configuration group {groupName!r} contains no preset "
-                "{oldConfigName!r}"
-            )
+        group, _preset = self._ensure_config_preset(groupName, oldConfigName)
         if newConfigName in group:
             raise RuntimeError(f"Preset name {newConfigName!r} already in use.")
 
@@ -1861,15 +1846,7 @@ class UniMMCore(CMMCorePlus):
     def getConfigData(
         self, configGroup: str, configName: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        group = self._config_groups.get(configGroup)
-        if group is None:
-            raise RuntimeError(f"Configuration group {configGroup!r} not defined")
-        preset = group.get(configName)  # type: ignore
-        if preset is None:
-            raise RuntimeError(
-                f"Configuration group {configName!r} contains no preset {configName!r}"
-            )
-
+        _group, preset = self._ensure_config_preset(configGroup, configName)
         cfg = Configuration() if not native else pymmcore.Configuration()
         for (dev, prop), value in preset.items():
             cfg.addSetting(pymmcore.PropertySetting(dev, prop, str(value)))
@@ -1882,17 +1859,10 @@ class UniMMCore(CMMCorePlus):
     def setConfig(self, groupName: str, configName: str) -> None:
         _check_config_group_name(groupName)
         _check_config_preset_name(configName)
-
-        group = self._config_groups.get(groupName)
-        if group is None:
-            raise RuntimeError(f"Group '{groupName}' does not exist")
-        config = group.get(cast("ConfigPresetName", configName))
-        if config is None:
-            raise RuntimeError(f"Preset '{configName}' does not exist")
+        _group, preset = self._ensure_config_preset(groupName, configName)
 
         failed: list[tuple[DevPropTuple, str]] = []
-
-        for (device, prop), value in config.items():
+        for (device, prop), value in preset.items():
             try:
                 self.setProperty(device, prop, value)
             except Exception:
@@ -1957,19 +1927,11 @@ class UniMMCore(CMMCorePlus):
     def getConfigState(
         self, group: str, config: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        """Return current device state for properties in the specified config.
-
-        This reads CURRENT values from devices, not the stored config values.
-        Use getConfigData() to get the stored config values.
-        """
-        # Get the config data (stored settings)
-        config_data = self.getConfigData(group, config, native=True)
+        _group, preset = self._ensure_config_preset(group, config)
 
         # Read current values from devices for each property in the config
         state = Configuration() if not native else pymmcore.Configuration()
-        for i in range(config_data.size()):
-            setting = config_data.getSetting(i)
-            dev, prop = setting.getDeviceLabel(), setting.getPropertyName()
+        for dev, prop in preset:
             current_value = self.getProperty(dev, prop)
             state.addSetting(pymmcore.PropertySetting(dev, prop, str(current_value)))
         return state
@@ -2032,6 +1994,20 @@ class UniMMCore(CMMCorePlus):
         self._channel_group = channelGroup
         self._state_cache[(KW.CoreDevice, KW.CoreChannelGroup)] = channelGroup
         self.events.channelGroupChanged.emit(channelGroup)
+
+    def _ensure_config_preset(
+        self, groupName: str, configName: str
+    ) -> tuple[ConfigGroup, ConfigDict]:
+        """Get a config preset, raising if group or preset doesn't exist."""
+        group = self._config_groups.get(groupName)
+        if group is None:
+            raise RuntimeError(f"Group '{groupName}' does not exist")
+        preset = group.get(configName)  # type: ignore[call-overload]
+        if preset is None:
+            raise RuntimeError(
+                f"Configuration group {groupName!r} contains no preset {configName!r}"
+            )
+        return group, preset
 
     def _possibly_nullify_channel_group(self) -> None:
         """Ensure current channel group is valid after group changes."""

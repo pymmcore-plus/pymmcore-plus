@@ -382,7 +382,7 @@ def test_config_group_with_c_and_py_devices():
     with pytest.raises(RuntimeError, match="contains no preset"):
         core.getConfigData("group1", "preset3")
 
-    with pytest.raises(RuntimeError, match="not defined"):
+    with pytest.raises(RuntimeError, match="does not exist"):
         core.getConfigState("group10", "preset3")
     with pytest.raises(RuntimeError, match="contains no preset"):
         core.getConfigState("group1", "preset31")
@@ -420,7 +420,7 @@ def test_config_group_with_c_and_py_devices():
 
     with pytest.raises(RuntimeError, match="does not exist"):
         core.setConfig("group10", "preset3")
-    with pytest.raises(RuntimeError, match="does not exist"):
+    with pytest.raises(RuntimeError, match="contains no preset"):
         core.setConfig("group1", "preset10")
 
     # Clean up
@@ -441,7 +441,7 @@ def test_config_group_with_c_and_py_devices():
         core.deleteConfig("group1", "preset1")
 
     core.deleteConfigGroup("group1")
-    with pytest.raises(RuntimeError, match="not defined"):
+    with pytest.raises(RuntimeError, match="does not exist"):
         core.getConfigData("group1", "preset1")
 
 
