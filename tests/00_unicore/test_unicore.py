@@ -552,3 +552,39 @@ def test_wait_for_config():
     # Should raise for non-existent preset
     with pytest.raises(RuntimeError, match="contains no preset"):
         core.waitForConfig("testGroup", "nonexistent")
+
+
+def test_system_state_includes_py_devices():
+    """Test getSystemState and getSystemStateCache include Python device properties."""
+    core = UniMMCore()
+
+    # Load both C++ and Python devices
+    core.loadDevice("CDev", "DemoCamera", "DCam")
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+
+    # Set a property value on Python device
+    core.setProperty("PyDev", "propB", 42.0)
+
+    # getSystemState should include Python device properties
+    state = core.getSystemState()
+    py_props = [(d, p, v) for d, p, v in state if d == "PyDev"]
+    assert len(py_props) > 0, "Python device properties should be in system state"
+    assert any(p == "propB" for _, p, _ in py_props), "propB should be in system state"
+
+    # getSystemStateCache should also include Python device properties
+    state_cache = core.getSystemStateCache()
+    py_props_cache = [(d, p, v) for d, p, v in state_cache if d == "PyDev"]
+    assert len(py_props_cache) > 0, "Python device properties should be in cache"
+
+    # updateSystemStateCache should populate Python device cache
+    core.updateSystemStateCache()
+    state_after_update = core.getSystemStateCache()
+    py_props_after = [(d, p, v) for d, p, v in state_after_update if d == "PyDev"]
+    assert len(py_props_after) > 0
+
+    # Native mode should return pymmcore.Configuration
+    import pymmcore_plus._pymmcore as pymmcore
+
+    native_state = core.getSystemState(native=True)
+    assert isinstance(native_state, pymmcore.Configuration)

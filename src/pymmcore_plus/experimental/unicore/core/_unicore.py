@@ -2025,6 +2025,90 @@ class UniMMCore(CMMCorePlus):
         if self._channel_group not in self._config_groups:
             self._channel_group = ""
 
+    # ########################################################################
+    # ----------------------- System State Methods ---------------------------
+    # ########################################################################
+
+    # currently we still allow C++ to cache the system state for C++ devices,
+    # but we could choose to just own it all ourselves in the future.
+
+    def getSystemState(
+        self, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        """Return the entire system state including Python device properties.
+
+        This method iterates through all devices (C++ and Python) and returns
+        all property values. Following the C++ implementation pattern.
+        """
+        return self._getSystemStateCache(cache=False, native=native)
+
+    @overload
+    def getSystemStateCache(
+        self, *, native: Literal[True]
+    ) -> pymmcore.Configuration: ...
+    @overload
+    def getSystemStateCache(
+        self, *, native: Literal[False] = False
+    ) -> Configuration: ...
+    def getSystemStateCache(
+        self, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        return self._getSystemStateCache(cache=True, native=native)
+
+    def _getSystemStateCache(
+        self, cache: bool, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        """Return the entire system state from cache, including Python devices.
+
+        For Python devices, returns cached values from our state cache.
+        Falls back to live values if not in cache.
+        """
+        # Get the C++ system state cache first
+        if cache:
+            cpp_cfg: pymmcore.Configuration = super().getSystemStateCache(native=True)
+        else:
+            cpp_cfg = super().getSystemState(native=True)
+
+        # Add Python device properties from our cache
+        for label in self._pydevices:
+            with suppress(Exception):  # Skip devices that can't be accessed
+                with self._pydevices[label] as dev:
+                    for prop_name in dev.get_property_names():
+                        with suppress(Exception):  # Skip properties that fail
+                            key = (label, prop_name)
+                            if cache and key in self._state_cache:
+                                value = self._state_cache[key]
+                            else:
+                                value = dev.get_property_value(prop_name)
+                            cpp_cfg.addSetting(
+                                pymmcore.PropertySetting(
+                                    label,
+                                    prop_name,
+                                    str(value),
+                                    dev.is_property_read_only(prop_name),
+                                )
+                            )
+
+        return cpp_cfg if native else Configuration.from_configuration(cpp_cfg)
+
+    def updateSystemStateCache(self) -> None:
+        """Update the system state cache for all devices including Python devices.
+
+        This populates our Python-side cache with current values from all
+        Python devices, then calls the C++ updateSystemStateCache.
+        """
+        # Update Python device properties in our cache
+        for label in self._pydevices:
+            with suppress(Exception):  # Skip devices that can't be accessed
+                with self._pydevices[label] as dev:
+                    for prop_name in dev.get_property_names():
+                        with suppress(Exception):  # Skip properties that fail
+                            value = dev.get_property_value(prop_name)
+                            self._state_cache[(label, prop_name)] = value
+
+        # Call C++ updateSystemStateCache
+        super().updateSystemStateCache()
+
 
 # -------------------------------------------------------------------------------
 
@@ -2063,7 +2147,7 @@ class ThreadSafeConfig(MutableMapping[DevPropTuple, Any]):
             try:
                 return self._store[key]
             except KeyError:  # pragma: no cover
-                prop, dev = key
+                dev, prop = key
                 raise KeyError(
                     f"Property {prop!r} of device {dev!r} not found in cache"
                 ) from None
