@@ -44,7 +44,6 @@ if TYPE_CHECKING:
     from pymmcore import (
         AdapterName,
         AffineTuple,
-        ConfigGroupName,
         ConfigPresetName,
         DeviceLabel,
         DeviceName,
@@ -123,8 +122,10 @@ class UniMMCore(CMMCorePlus):
         self._stop_event: threading.Event = threading.Event()
         self._acquisition_thread: AcquisitionThread | None = None  # TODO: implement
         self._seq_buffer = SequenceBuffer(size_mb=_DEFAULT_BUFFER_SIZE_MB)
-        self._config_groups: ConfigGroups = {}  # config group storage
-        self._channel_group: str = ""  # currently selected channel group
+        # Storage for Python device settings in config groups.
+        # Groups and presets are ALWAYS also created in C++ (via super() calls).
+        # This dict only stores (device, property) -> value for Python devices.
+        self._py_config_groups: ConfigGroups = {}
 
         super().__init__(*args, **kwargs)
 
@@ -154,9 +155,8 @@ class UniMMCore(CMMCorePlus):
         super().waitForDeviceType(DeviceType.AnyType)
         self.unloadAllDevices()
         self._pycore.reset_current()
-        self._config_groups.clear()
-        self._channel_group = ""
-        super().reset()
+        self._py_config_groups.clear()  # Clear Python device config settings
+        super().reset()  # Clears C++ config groups and channel group
 
     # ------------------------------------------------------------------------
     # ----------------- Functionality for All Devices ------------------------
@@ -445,15 +445,18 @@ class UniMMCore(CMMCorePlus):
         self._pydevices.wait_for(label, self.getTimeoutMs())
 
     def waitForConfig(self, group: str, configName: str) -> None:
-        _group, preset = self._ensure_config_preset(group, configName)
+        # Get config data (merged from C++ and Python)
+        cfg = self.getConfigData(group, configName, native=True)
 
         # Wait for each unique device in the config
-        devs_to_await = {dev for dev, _prop in preset}
+        devs_to_await: set[str] = set()
+        for i in range(cfg.size()):
+            devs_to_await.add(cfg.getSetting(i).getDeviceLabel())
+
         for device in devs_to_await:
             try:
                 self.waitForDevice(device)
             except Exception:
-                # TODO: log this
                 # Like C++, trap exceptions and keep quiet
                 pass
 
@@ -1703,45 +1706,40 @@ class UniMMCore(CMMCorePlus):
     # ########################################################################
     # -------------------- Configuration Group Methods -----------------------
     # ########################################################################
+    #
+    # HYBRID PATTERN: Config groups exist in both C++ and Python.
+    # - Groups and presets are ALWAYS created in C++ (via super())
+    # - _config_groups only stores settings for PYTHON devices
+    # - Methods merge results from both systems where appropriate
+    #
+    # This ensures:
+    # - C++ CoreCallback can find configs and emit proper events
+    # - defineStateLabel in C++ can update configs referencing C++ devices
+    # - loadSystemConfiguration works correctly
+    # - Python device settings are properly tracked and applied
 
     # -------------------------------------------------------------------------
     # Group-level operations
     # -------------------------------------------------------------------------
 
     def defineConfigGroup(self, groupName: str) -> None:
-        _check_config_group_name(groupName)
-        if groupName in self._config_groups:
-            raise RuntimeError(f"Group name {groupName!r} already in use.")
-        self._config_groups[groupName] = {}
-        self._possibly_nullify_channel_group()
+        # Create group in C++ (handles validation and events)
+        super().defineConfigGroup(groupName)
+        # Also create empty group in Python for potential Python device settings
+        self._py_config_groups[groupName] = {}
 
     def deleteConfigGroup(self, groupName: str) -> None:
-        _check_config_group_name(groupName)
-        if groupName not in self._config_groups:
-            raise RuntimeError(f"Configuration group {groupName!r} not defined")
-        del self._config_groups[groupName]
-        self._possibly_nullify_channel_group()
-        self.events.configGroupDeleted.emit(groupName)
+        # Delete from C++ (handles validation and events)
+        super().deleteConfigGroup(groupName)
+        self._py_config_groups.pop(groupName, None)
 
     def renameConfigGroup(self, oldGroupName: str, newGroupName: str) -> None:
-        _check_config_group_name(oldGroupName)
-        _check_config_group_name(newGroupName)
-
-        if oldGroupName not in self._config_groups:
-            raise RuntimeError(f"Configuration group {oldGroupName!r} not defined")
-        if newGroupName in self._config_groups:
-            raise RuntimeError(f"Group name {newGroupName!r} already in use.")
-
-        self._config_groups[newGroupName] = self._config_groups.pop(oldGroupName)
-        self._possibly_nullify_channel_group()
-        if self._channel_group == oldGroupName:
-            self.setChannelGroup(newGroupName)
-
-    def isGroupDefined(self, groupName: str) -> bool:
-        return groupName in self._config_groups
-
-    def getAvailableConfigGroups(self) -> tuple[ConfigGroupName, ...]:
-        return tuple(self._config_groups)  # type: ignore
+        # Rename in C++ (handles validation)
+        super().renameConfigGroup(oldGroupName, newGroupName)
+        if oldGroupName in self._py_config_groups:
+            self._py_config_groups[newGroupName] = self._py_config_groups.pop(
+                oldGroupName
+            )
 
     # -------------------------------------------------------------------------
     # Preset-level operations
@@ -1766,30 +1764,40 @@ class UniMMCore(CMMCorePlus):
         propName: str | None = None,
         value: Any | None = None,
     ) -> None:
-        _check_config_group_name(groupName)
-        _check_config_preset_name(configName)
-        if deviceLabel is not None:
-            _check_device_label(deviceLabel)
-            if propName is not None:
-                _check_property_name(propName)
-                _check_property_value(value)
+        # Route to appropriate storage based on device type
+        if deviceLabel is None or propName is None or value is None:
+            # No device specified: just create empty group/preset in C++
+            super().defineConfig(groupName, configName)
+            # Also ensure Python storage has the structure
+            group = self._py_config_groups.setdefault(groupName, {})
+            group.setdefault(cast("ConfigPresetName", configName), {})
 
-        group_existed = groupName in self._config_groups
-        # Ensure group exists
-        group = self._config_groups.setdefault(groupName, {})
-        # Ensure preset exists
-        preset = group.setdefault(cast("ConfigPresetName", configName), {})
-        # Add property setting if provided
-        if deviceLabel is not None and propName is not None and value is not None:
+        elif deviceLabel in self._pydevices:
+            # Python device: store in our _config_groups
+            # But first ensure the group/preset exists in C++ too
+            if not super().isGroupDefined(groupName):
+                super().defineConfigGroup(groupName)
+                self._py_config_groups[groupName] = {}
+            if not super().isConfigDefined(groupName, configName):
+                super().defineConfig(groupName, configName)
+
+            # Store Python device setting locally
+            group = self._py_config_groups.setdefault(groupName, {})
+            preset = group.setdefault(cast("ConfigPresetName", configName), {})
             preset[(deviceLabel, propName)] = value
+            # Emit event (C++ won't emit for Python device settings)
+            self.events.configDefined.emit(
+                groupName, configName, deviceLabel, propName, str(value)
+            )
         else:
-            deviceLabel = propName = value = ""
-        if not group_existed:
-            self._possibly_nullify_channel_group()
-
-        self.events.configDefined.emit(
-            groupName, configName, deviceLabel, propName, str(value)
-        )
+            # C++ device: let C++ handle it entirely
+            # C++ expects string values, so convert
+            super().defineConfig(
+                groupName, configName, deviceLabel, propName, str(value)
+            )
+            # Ensure our Python storage has the group/preset structure
+            group = self._py_config_groups.setdefault(groupName, {})
+            group.setdefault(cast("ConfigPresetName", configName), {})
 
     @overload
     def deleteConfig(self, groupName: str, configName: str) -> None: ...
@@ -1804,47 +1812,38 @@ class UniMMCore(CMMCorePlus):
         deviceLabel: str | None = None,
         propName: str | None = None,
     ) -> None:
-        _check_config_group_name(groupName)
-        _check_config_preset_name(configName)
-        if deviceLabel is not None:  # pragma: no cover
-            _check_device_label(deviceLabel)
-            if propName is not None:
-                _check_property_name(propName)
-
-        group, preset = self._ensure_config_preset(groupName, configName)
         if deviceLabel is not None and propName is not None:
-            # Delete specific property from preset
-            key = (deviceLabel, propName)
-            if key not in preset:
-                raise RuntimeError(
-                    f"Property '{propName}' not found in preset '{configName}'"
-                )
-            del preset[key]
+            # Deleting a specific property from a preset
+            if deviceLabel in self._pydevices:
+                # Python device: remove from our storage
+                py_group = self._py_config_groups.get(groupName, {})
+                py_preset = py_group.get(configName, {})  # type: ignore[call-overload]
+                key = (deviceLabel, propName)
+                if key in py_preset:
+                    del py_preset[key]
+                    self.events.configDeleted.emit(groupName, configName)
+                else:
+                    raise RuntimeError(
+                        f"Property '{propName}' not found in preset '{configName}'"
+                    )
+            else:
+                # C++ device: let C++ handle it
+                super().deleteConfig(groupName, configName, deviceLabel, propName)
         else:
-            # Delete entire preset
-            del group[configName]  # type: ignore[arg-type]
-
-        self.events.configDeleted.emit(groupName, configName)
+            # Deleting entire preset: delete from both C++ and Python storage
+            super().deleteConfig(groupName, configName)
+            py_group = self._py_config_groups.get(groupName, {})
+            py_group.pop(configName, None)  # type: ignore[call-overload]
 
     def renameConfig(
         self, groupName: str, oldConfigName: str, newConfigName: str
     ) -> None:
-        _check_config_group_name(groupName)
-        _check_config_preset_name(oldConfigName)
-        _check_config_preset_name(newConfigName)
-        group, _preset = self._ensure_config_preset(groupName, oldConfigName)
-        if newConfigName in group:
-            raise RuntimeError(f"Preset name {newConfigName!r} already in use.")
-
-        group[newConfigName] = group.pop(oldConfigName)  # type: ignore
-
-    def isConfigDefined(self, groupName: str, configName: str) -> bool:
-        group = self._config_groups.get(groupName)
-        return group is not None and configName in group
-
-    def getAvailableConfigs(self, configGroup: str) -> tuple[ConfigPresetName, ...]:
-        group = self._config_groups.get(configGroup)
-        return tuple(group.keys()) if group else ()
+        # Rename in C++ (handles validation)
+        super().renameConfig(groupName, oldConfigName, newConfigName)
+        # Also rename in Python storage if present
+        py_group = self._py_config_groups.get(groupName, {})
+        if oldConfigName in py_group:
+            py_group[newConfigName] = py_group.pop(oldConfigName)  # type: ignore
 
     @overload
     def getConfigData(
@@ -1857,41 +1856,52 @@ class UniMMCore(CMMCorePlus):
     def getConfigData(
         self, configGroup: str, configName: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        _group, preset = self._ensure_config_preset(configGroup, configName)
-        cfg = Configuration() if not native else pymmcore.Configuration()
-        for (dev, prop), value in preset.items():
-            cfg.addSetting(pymmcore.PropertySetting(dev, prop, str(value)))
-        return cfg
+        # Get C++ config data (includes all C++ device settings)
+        cpp_cfg: pymmcore.Configuration = super().getConfigData(
+            configGroup, configName, native=True
+        )
+
+        # Add Python device settings from our storage
+        py_group = self._py_config_groups.get(configGroup, {})
+        py_preset = py_group.get(configName, {})  # type: ignore[call-overload]
+        for (dev, prop), value in py_preset.items():
+            cpp_cfg.addSetting(pymmcore.PropertySetting(dev, prop, str(value)))
+
+        if native:
+            return cpp_cfg
+        return Configuration.from_configuration(cpp_cfg)
 
     # -------------------------------------------------------------------------
     # Applying configurations
     # -------------------------------------------------------------------------
 
     def setConfig(self, groupName: str, configName: str) -> None:
-        _check_config_group_name(groupName)
-        _check_config_preset_name(configName)
-        _group, preset = self._ensure_config_preset(groupName, configName)
+        # Apply C++ device settings via super() - this handles validation,
+        # error retry logic, and state cache updates for C++ devices
+        super().setConfig(groupName, configName)
 
-        failed: list[tuple[DevPropTuple, str]] = []
-        for (device, prop), value in preset.items():
-            try:
-                self.setProperty(device, prop, value)
-            except Exception:
-                failed.append(((device, prop), value))
+        # Now apply Python device settings from our storage
+        py_group = self._py_config_groups.get(groupName, {})
+        py_preset = py_group.get(configName, {})  # type: ignore[call-overload]
 
-        # Retry failed properties (handles dependency chains)
-        if failed:
-            errors: list[str] = []
-            for (device, prop), value in failed:
+        if py_preset:
+            failed: list[tuple[DevPropTuple, Any]] = []
+            for (device, prop), value in py_preset.items():
                 try:
                     self.setProperty(device, prop, value)
-                except Exception as e:
-                    errors.append(f"{device}.{prop}={value}: {e}")
-            if errors:
-                raise RuntimeError("Failed to apply: " + "; ".join(errors))
+                except Exception:
+                    failed.append(((device, prop), value))
 
-        self.events.configSet.emit(groupName, configName)
-        self._last_config = (groupName, configName)
+            # Retry failed properties (handles dependency chains)
+            if failed:
+                errors: list[str] = []
+                for (device, prop), value in failed:
+                    try:
+                        self.setProperty(device, prop, value)
+                    except Exception as e:
+                        errors.append(f"{device}.{prop}={value}: {e}")
+                if errors:
+                    raise RuntimeError("Failed to apply: " + "; ".join(errors))
 
     # -------------------------------------------------------------------------
     # Current config detection
@@ -1908,26 +1918,60 @@ class UniMMCore(CMMCorePlus):
     def _getCurrentConfig(
         self, groupName: str, from_cache: bool
     ) -> ConfigPresetName | Literal[""]:
-        """Find the first preset whose settings all match current device state."""
-        group = self._config_groups.get(groupName)
-        if not group:  # pragma: no cover
-            return ""
+        """Find the first preset whose settings all match current device state.
 
-        # Build current state for all properties referenced in this group
-        current_state: ConfigDict = {}
-        seen_keys: set[DevPropTuple] = set()
+        This checks both C++ device settings (via super()) and Python device settings.
+        """
+        # Get C++ result first
+        if from_cache:
+            cpp_result = super().getCurrentConfigFromCache(groupName)
+        else:
+            cpp_result = super().getCurrentConfig(groupName)
+
+        # If no Python device settings exist for this group, C++ result is sufficient
+        py_group = self._py_config_groups.get(groupName, {})
+        has_py_settings = any(py_group.values())
+        if not has_py_settings:
+            return cpp_result
+
+        # We have Python device settings - need to verify they match too
+        # Get current state of all Python device properties in this group
         getter = self.getPropertyFromCache if from_cache else self.getProperty
-        for preset in group.values():
+        current_py_state: ConfigDict = {}
+        seen_keys: set[DevPropTuple] = set()
+        for preset in py_group.values():
             for key in preset:
                 if key not in seen_keys:
                     seen_keys.add(key)
                     with suppress(Exception):
-                        current_state[key] = getter(*key)
+                        current_py_state[key] = getter(*key)
 
-        # Find first preset that matches current state
-        for preset_name, preset in group.items():
-            if all(_values_match(current_state.get(k), v) for k, v in preset.items()):
-                return preset_name
+        # Check each preset to see if Python device settings match
+        for preset_name in self.getAvailableConfigs(groupName):
+            py_preset = py_group.get(preset_name, {})
+            if all(
+                _values_match(current_py_state.get(k), v) for k, v in py_preset.items()
+            ):
+                # Python settings match - but only return if C++ also matches
+                # (or if there are no C++ settings for this preset)
+                cpp_cfg = super().getConfigData(groupName, preset_name, native=True)
+                if cpp_cfg.size() == 0:
+                    # No C++ settings, Python match is sufficient
+                    return preset_name
+                # Check each C++ setting with numeric-aware comparison
+                # (C++ getCurrentConfig uses strict string comparison which fails
+                # for values like "50.0000" vs "50")
+                all_cpp_match = True
+                for i in range(cpp_cfg.size()):
+                    setting = cpp_cfg.getSetting(i)
+                    current_val = getter(
+                        setting.getDeviceLabel(), setting.getPropertyName()
+                    )
+                    if not _values_match(current_val, setting.getPropertyValue()):
+                        all_cpp_match = False
+                        break
+                if all_cpp_match:
+                    return preset_name
 
         return ""
 
@@ -1938,14 +1982,23 @@ class UniMMCore(CMMCorePlus):
     def getConfigState(
         self, group: str, config: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        _group, preset = self._ensure_config_preset(group, config)
+        # Get C++ config state (current values for C++ device properties)
+        cpp_state: pymmcore.Configuration = super().getConfigState(
+            group, config, native=True
+        )
 
-        # Read current values from devices for each property in the config
-        state = Configuration() if not native else pymmcore.Configuration()
-        for dev, prop in preset:
+        # Add current values for Python device properties
+        py_group = self._py_config_groups.get(group, {})
+        py_preset = py_group.get(config, {})  # type: ignore[call-overload]
+        for dev, prop in py_preset:
             current_value = self.getProperty(dev, prop)
-            state.addSetting(pymmcore.PropertySetting(dev, prop, str(current_value)))
-        return state
+            cpp_state.addSetting(
+                pymmcore.PropertySetting(dev, prop, str(current_value))
+            )
+
+        if native:
+            return cpp_state
+        return Configuration.from_configuration(cpp_state)
 
     @overload
     def getConfigGroupState(
@@ -1977,53 +2030,25 @@ class UniMMCore(CMMCorePlus):
         self, group: str, from_cache: bool, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
         """Get current values for all properties in a group."""
-        cfg_group = self._config_groups.get(group, {})
-        cfg = Configuration() if not native else pymmcore.Configuration()
+        # Get C++ group state
+        if from_cache:
+            cpp_state: pymmcore.Configuration = super().getConfigGroupStateFromCache(
+                group, native=True
+            )
+        else:
+            cpp_state = super().getConfigGroupState(group, native=True)
+
+        # Add Python device property values
+        py_group = self._py_config_groups.get(group, {})
         getter = self.getPropertyFromCache if from_cache else self.getProperty
-        for preset in cfg_group.values():
+        for preset in py_group.values():
             for device, prop in preset:
                 value = str(getter(device, prop))
-                cfg.addSetting(pymmcore.PropertySetting(device, prop, value))
+                cpp_state.addSetting(pymmcore.PropertySetting(device, prop, value))
 
-        return cfg
-
-    # -------------------------------------------------------------------------
-    # Channel group
-    # -------------------------------------------------------------------------
-
-    def getChannelGroup(self) -> ConfigGroupName:
-        return cast("ConfigGroupName", self._channel_group)
-
-    def setChannelGroup(self, channelGroup: str) -> None:
-        channelGroup = channelGroup or ""
-        if self._channel_group == channelGroup:
-            return  # No change needed
-        if channelGroup and channelGroup not in self._config_groups:
-            raise RuntimeError(
-                f"Cannot set Core Channel Group to undefined group {channelGroup!r}"
-            )
-        self._channel_group = channelGroup
-        self._state_cache[(KW.CoreDevice, KW.CoreChannelGroup)] = channelGroup
-        self.events.channelGroupChanged.emit(channelGroup)
-
-    def _ensure_config_preset(
-        self, groupName: str, configName: str
-    ) -> tuple[ConfigGroup, ConfigDict]:
-        """Get a config preset, raising if group or preset doesn't exist."""
-        group = self._config_groups.get(groupName)
-        if group is None:
-            raise RuntimeError(f"Group '{groupName}' does not exist")
-        preset = group.get(configName)  # type: ignore[call-overload]
-        if preset is None:
-            raise RuntimeError(
-                f"Configuration group {groupName!r} contains no preset {configName!r}"
-            )
-        return group, preset
-
-    def _possibly_nullify_channel_group(self) -> None:
-        """Ensure current channel group is valid after group changes."""
-        if self._channel_group not in self._config_groups:
-            self._channel_group = ""
+        if native:
+            return cpp_state
+        return Configuration.from_configuration(cpp_state)
 
     # ########################################################################
     # ----------------------- System State Methods ---------------------------
@@ -2216,57 +2241,6 @@ class AcquisitionThread(threading.Thread):
 
 
 # --------- helpers -------------------------------------------------------
-
-# Forbidden characters in names (matches MM::g_FieldDelimiters)
-_FIELD_DELIMITERS = ","
-# Additional forbidden characters for preset names
-_PRESET_FORBIDDEN = "/\\*!'"
-
-
-def _check_config_group_name(name: str) -> None:
-    """Validate a configuration group name."""
-    if not name:
-        raise ValueError("Configuration group name cannot be empty")
-    if any(c in name for c in _FIELD_DELIMITERS):
-        raise ValueError(
-            f"Configuration group name {name!r} contains reserved characters"
-        )
-
-
-def _check_config_preset_name(name: str) -> None:
-    """Validate a configuration preset name."""
-    if not name:
-        raise ValueError("Configuration preset name cannot be empty")
-    forbidden = _FIELD_DELIMITERS + _PRESET_FORBIDDEN
-    if any(c in name for c in forbidden):
-        raise ValueError(
-            f"Configuration preset name {name!r} contains reserved characters"
-        )
-
-
-def _check_device_label(label: str) -> None:
-    """Validate a device label."""
-    if not label:
-        raise ValueError("Device label cannot be empty")
-    if any(c in label for c in _FIELD_DELIMITERS):
-        raise ValueError(f"Device label {label!r} contains reserved characters")
-
-
-def _check_property_name(name: str) -> None:
-    """Validate a property name."""
-    if not name:
-        raise ValueError("Property name cannot be empty")
-    if any(c in name for c in _FIELD_DELIMITERS):
-        raise ValueError(f"Property name {name!r} contains reserved characters")
-
-
-def _check_property_value(value: str | None) -> None:
-    """Validate a property value."""
-    if value is None:
-        raise ValueError("Property value cannot be None")
-    value = str(value)
-    if any(c in value for c in _FIELD_DELIMITERS):
-        raise ValueError(f"Property value {value!r} contains reserved characters")
 
 
 def _values_match(current: Any, expected: Any) -> bool:
