@@ -444,7 +444,18 @@ class UniMMCore(CMMCorePlus):
             return super().waitForDevice(label)
         self._pydevices.wait_for(label, self.getTimeoutMs())
 
-    # def waitForConfig
+    def waitForConfig(self, group: str, configName: str) -> None:
+        _group, preset = self._ensure_config_preset(group, configName)
+
+        # Wait for each unique device in the config
+        devs_to_await = {dev for dev, _prop in preset}
+        for device in devs_to_await:
+            try:
+                self.waitForDevice(device)
+            except Exception:
+                # TODO: log this
+                # Like C++, trap exceptions and keep quiet
+                pass
 
     # probably only needed because C++ method is not virtual
     def systemBusy(self) -> bool:

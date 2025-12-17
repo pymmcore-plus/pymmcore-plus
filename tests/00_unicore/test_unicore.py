@@ -526,3 +526,29 @@ def test_config_group_events():
     # Test deleteConfigGroup event
     core.deleteConfigGroup("testGroup")
     config_group_deleted_mock.assert_called_once_with("testGroup")
+
+
+def test_wait_for_config():
+    """Test waitForConfig blocks until all devices in a config are ready."""
+    core = UniMMCore()
+
+    # Load both C++ and Python devices
+    core.loadDevice("CDev", "DemoCamera", "DCam")
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+
+    # Create a config with both device types
+    core.defineConfigGroup("testGroup")
+    core.defineConfig("testGroup", "preset1", "CDev", "Exposure", "50")
+    core.defineConfig("testGroup", "preset1", "PyDev", "propB", "25.0")
+
+    # waitForConfig should work without raising
+    core.waitForConfig("testGroup", "preset1")
+
+    # Should raise for non-existent group
+    with pytest.raises(RuntimeError, match="does not exist"):
+        core.waitForConfig("nonexistent", "preset1")
+
+    # Should raise for non-existent preset
+    with pytest.raises(RuntimeError, match="contains no preset"):
+        core.waitForConfig("testGroup", "nonexistent")
