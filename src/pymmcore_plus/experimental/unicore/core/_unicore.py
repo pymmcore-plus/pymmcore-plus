@@ -1710,6 +1710,7 @@ class UniMMCore(CMMCorePlus):
             raise RuntimeError(f"Configuration group {groupName!r} not defined")
         del self._config_groups[groupName]
         self._possibly_nullify_channel_group()
+        self.events.configGroupDeleted.emit(groupName)
 
     def renameConfigGroup(self, oldGroupName: str, newGroupName: str) -> None:
         _check_config_group_name(oldGroupName)
@@ -1770,8 +1771,14 @@ class UniMMCore(CMMCorePlus):
         # Add property setting if provided
         if deviceLabel is not None and propName is not None and value is not None:
             preset[(deviceLabel, propName)] = value
+        else:
+            deviceLabel = propName = value = ""
         if not group_existed:
             self._possibly_nullify_channel_group()
+
+        self.events.configDefined.emit(
+            groupName, configName, deviceLabel, propName, str(value)
+        )
 
     @overload
     def deleteConfig(self, groupName: str, configName: str) -> None: ...
@@ -1813,6 +1820,8 @@ class UniMMCore(CMMCorePlus):
         else:
             # Delete entire preset
             del group[configName]  # type: ignore
+
+        self.events.configDeleted.emit(groupName, configName)
 
     def renameConfig(
         self, groupName: str, oldConfigName: str, newConfigName: str
@@ -1900,6 +1909,9 @@ class UniMMCore(CMMCorePlus):
             if errors:
                 raise RuntimeError("Failed to apply: " + "; ".join(errors))
 
+        self.events.configSet.emit(groupName, configName)
+        self._last_config = (groupName, configName)
+
     # -------------------------------------------------------------------------
     # Current config detection
     # -------------------------------------------------------------------------
@@ -1945,18 +1957,22 @@ class UniMMCore(CMMCorePlus):
     def getConfigState(
         self, group: str, config: str, *, native: bool = False
     ) -> Configuration | pymmcore.Configuration:
-        cfg_group = self._config_groups.get(group)
-        if cfg_group is None:
-            raise RuntimeError(f"Group '{group}' does not exist")
-        preset = cfg_group.get(config)  # type: ignore[call-overload]
-        if preset is None:
-            raise RuntimeError(
-                f"Configuration group {group!r} contains no preset {config!r}"
-            )
-        cfg = Configuration() if not native else pymmcore.Configuration()
-        for (dev, prop), value in preset.items():
-            cfg.addSetting(pymmcore.PropertySetting(dev, prop, str(value)))
-        return cfg
+        """Return current device state for properties in the specified config.
+
+        This reads CURRENT values from devices, not the stored config values.
+        Use getConfigData() to get the stored config values.
+        """
+        # Get the config data (stored settings)
+        config_data = self.getConfigData(group, config, native=True)
+
+        # Read current values from devices for each property in the config
+        state = Configuration() if not native else pymmcore.Configuration()
+        for i in range(config_data.size()):
+            setting = config_data.getSetting(i)
+            dev, prop = setting.getDeviceLabel(), setting.getPropertyName()
+            current_value = self.getProperty(dev, prop)
+            state.addSetting(pymmcore.PropertySetting(dev, prop, str(current_value)))
+        return state
 
     @overload
     def getConfigGroupState(
@@ -2007,12 +2023,15 @@ class UniMMCore(CMMCorePlus):
 
     def setChannelGroup(self, channelGroup: str) -> None:
         channelGroup = channelGroup or ""
+        if self._channel_group == channelGroup:
+            return  # No change needed
         if channelGroup and channelGroup not in self._config_groups:
             raise RuntimeError(
                 f"Cannot set Core Channel Group to undefined group {channelGroup!r}"
             )
         self._channel_group = channelGroup
         self._state_cache[(KW.CoreDevice, KW.CoreChannelGroup)] = channelGroup
+        self.events.channelGroupChanged.emit(channelGroup)
 
     def _possibly_nullify_channel_group(self) -> None:
         """Ensure current channel group is valid after group changes."""

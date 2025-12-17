@@ -371,15 +371,18 @@ def test_config_group_with_c_and_py_devices():
     core.defineConfig("group1", "preset2", "PyDev", "propB", 125.0)
     assert core.getAvailableConfigs("group1") == ("preset1", "preset2")
 
-    # Get the config and check values
+    # Get the config data (stored values)
     config = core.getConfigData("group1", "preset1")
-    cfg_state = core.getConfigState("group1", "preset1")
-    assert cfg_state == config
     assert list(config) == [("CDev", "Exposure", "50"), ("PyDev", "propB", "25.0")]
+
+    # Before applying the config, current values differ from stored values
+    cfg_state_before = core.getConfigState("group1", "preset1")
+    assert cfg_state_before != config  # Current state differs from stored config
+
     with pytest.raises(RuntimeError, match="contains no preset"):
         core.getConfigData("group1", "preset3")
 
-    with pytest.raises(RuntimeError, match="does not exist"):
+    with pytest.raises(RuntimeError, match="not defined"):
         core.getConfigState("group10", "preset3")
     with pytest.raises(RuntimeError, match="contains no preset"):
         core.getConfigState("group1", "preset31")
@@ -392,6 +395,14 @@ def test_config_group_with_c_and_py_devices():
     core.setConfig("group1", "preset1")
     assert core.getExposure() == 50
     assert core.getProperty("PyDev", "propB") == 25.0
+
+    # After applying config, getConfigState should return values matching current state
+    cfg_state_after = core.getConfigState("group1", "preset1")
+    # The values should now match (though format may differ, e.g., "50.0000" vs "50")
+    assert list(cfg_state_after) == [
+        ("CDev", "Exposure", "50.0000"),
+        ("PyDev", "propB", "25.0"),
+    ]
 
     cfg_group_state = core.getConfigGroupState("group1")
     cfg_group_state_cached = core.getConfigGroupStateFromCache("group1")
@@ -435,6 +446,8 @@ def test_config_group_with_c_and_py_devices():
 
 
 def test_config_group_channel_groups():
+    from unittest.mock import MagicMock
+
     core = UniMMCore()
 
     core.defineConfigGroup("channel")
@@ -444,9 +457,72 @@ def test_config_group_channel_groups():
     with pytest.raises(RuntimeError, match="undefined group"):
         core.setChannelGroup("nonexistent_group")
 
+    # Test channelGroupChanged event
+    channel_group_changed_mock = MagicMock()
+    core.events.channelGroupChanged.connect(channel_group_changed_mock)
+
     assert not core.getChannelGroup()
     core.setChannelGroup("channel")
     assert core.getChannelGroup() == "channel"
+    channel_group_changed_mock.assert_called_once_with("channel")
+
+    # Setting same group again should not emit event
+    channel_group_changed_mock.reset_mock()
+    core.setChannelGroup("channel")
+    channel_group_changed_mock.assert_not_called()
 
     core.deleteConfigGroup("channel")
     assert not core.getChannelGroup()
+
+
+def test_config_group_events():
+    """Test that config group operations emit the correct events."""
+    from unittest.mock import MagicMock
+
+    core = UniMMCore()
+
+    # Load a real device so we can set valid properties
+    core.loadDevice("Cam", "DemoCamera", "DCam")
+    core.initializeAllDevices()
+
+    # Set up mock listeners
+    config_defined_mock = MagicMock()
+    config_set_mock = MagicMock()
+    config_deleted_mock = MagicMock()
+    config_group_deleted_mock = MagicMock()
+
+    core.events.configDefined.connect(config_defined_mock)
+    core.events.configSet.connect(config_set_mock)
+    core.events.configDeleted.connect(config_deleted_mock)
+    core.events.configGroupDeleted.connect(config_group_deleted_mock)
+
+    # Test defineConfig event - creates group implicitly
+    core.defineConfig("testGroup", "preset1", "Cam", "Exposure", "50")
+    config_defined_mock.assert_called_once_with(
+        "testGroup", "preset1", "Cam", "Exposure", "50"
+    )
+    config_defined_mock.reset_mock()
+
+    # Test defineConfig event - empty preset (no device/prop/value)
+    core.defineConfig("testGroup", "preset2")
+    config_defined_mock.assert_called_once_with("testGroup", "preset2", "", "", "")
+    config_defined_mock.reset_mock()
+
+    # Test setConfig event
+    core.setConfig("testGroup", "preset1")
+    config_set_mock.assert_called_once_with("testGroup", "preset1")
+    assert core._last_config == ("testGroup", "preset1")
+
+    # Test deleteConfig event (delete property from preset)
+    core.deleteConfig("testGroup", "preset1", "Cam", "Exposure")
+    config_deleted_mock.assert_called_once_with("testGroup", "preset1")
+    config_deleted_mock.reset_mock()
+
+    # Test deleteConfig event (delete entire preset)
+    core.deleteConfig("testGroup", "preset2")
+    config_deleted_mock.assert_called_once_with("testGroup", "preset2")
+    config_deleted_mock.reset_mock()
+
+    # Test deleteConfigGroup event
+    core.deleteConfigGroup("testGroup")
+    config_group_deleted_mock.assert_called_once_with("testGroup")
