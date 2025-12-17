@@ -2087,6 +2087,9 @@ class ThreadSafeConfig(MutableMapping[DevPropTuple, Any]):
             return f"{self.__class__.__name__}({self._store!r})"
 
 
+# Threading ------------------------------------------------------
+
+
 class AcquisitionThread(threading.Thread):
     """A thread for running sequence acquisition in the background."""
 
