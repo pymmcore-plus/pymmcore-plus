@@ -40,14 +40,12 @@ class StageDevice(_BaseStage[float]):
 
     def get_focus_direction(self) -> FocusDirection:
         """Returns the focus direction of the stage."""
-        raise NotImplementedError(  # pragma: no cover
-            "This device does not support focus direction"
-        )
+        return FocusDirection.Unknown
 
     def set_focus_direction(self, sign: int) -> None:
         """Sets the focus direction of the stage."""
         raise NotImplementedError(  # pragma: no cover
-            "This device does not support focus direction"
+            "This device does not support setting focus direction"
         )
 
     def set_relative_position_um(self, d: float) -> None:
