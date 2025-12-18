@@ -20,7 +20,7 @@ from typing import (
 import numpy as np
 
 import pymmcore_plus._pymmcore as pymmcore
-from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
+from pymmcore_plus.core import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._config import Configuration
 from pymmcore_plus.core._constants import PixelType
@@ -30,7 +30,11 @@ from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
 from pymmcore_plus.experimental.unicore.devices._shutter import ShutterDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
+from pymmcore_plus.experimental.unicore.devices._stage import (
+    StageDevice,
+    XYStageDevice,
+    _BaseStage,
+)
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice
 
 from ._sequence_buffer import SequenceBuffer
@@ -698,7 +702,8 @@ class UniMMCore(CMMCorePlus):
     # ########################################################################
     # ----------------------------- StageDevice ------------------------------
     # ########################################################################
-    def getFocusDevice(self) -> PyDeviceLabel | DeviceLabel | Literal[""] | None:
+
+    def getFocusDevice(self) -> DeviceLabel | Literal[""]:
         """Return the current Focus Device."""
         return self._pycore.current(KW.CoreFocus) or super().getFocusDevice()
 
@@ -715,79 +720,54 @@ class UniMMCore(CMMCorePlus):
                     super().setFocusDevice(label)
         # otherwise do nothing
 
-    def getPosition(self, stageName: DeviceLabel | str | None) -> float:
-        label = stageName
-        if label == "":
-            raise RuntimeError(f"Failed to retrieve Z position for {self}")
-        elif label is None:
-            label = self.getFocusDevice()
-
+    @overload
+    def getPosition(self) -> float: ...
+    @overload
+    def getPosition(self, stageLabel: str) -> float: ...
+    def getPosition(self, stageLabel: str | None = None) -> float:
+        label = stageLabel or self.getFocusDevice()
         if label not in self._pydevices:
-            return super().getPosition()
+            return super().getPosition(label)
         with self._pydevices.get_device_of_type(label, StageDevice) as device:
             return device.get_position_um()
 
+    @overload
+    def setPosition(self, position: float, /) -> None: ...
+    @overload
     def setPosition(
-        self, stageLabel: DeviceLabel | str | None, position: float
-    ) -> None:
-        label = stageLabel
-        if label == "":
-            raise RuntimeError(f"Failed to set Z position for {self}")
-        elif label is None:
-            label = self.getFocusDevice()
-
-        if label not in self._pydevices:
-            super().setPosition(position)
-        with self._pydevices.get_device_of_type(label, StageDevice) as device:
-            device.set_position_um(position)
-
-    def setZPosition(self, val: float) -> None:
-        """Set the position of the current  focus device in microns. If fails, it will try to use the python focus device."""
-        try:
-            super().setZPosition(val)
-        except Exception:
-            # python focus Device
-            self.setPosition(self.getFocusDevice(), val)
-
-    def getZPosition(self) -> float:
-        """Get the position of the current focus device in microns. If fails, it will try to use the python focus device."""
-        try:
-            return super().getZPosition()
-        except Exception:
-            # python focus device
-            return self.getPosition(self.getFocusDevice())
+        self, stageLabel: DeviceLabel | str, position: float, /
+    ) -> None: ...
+    def setPosition(self, *args: Any) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setPosition(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_position_um(*args)
 
     def setFocusDirection(self, stageLabel: DeviceLabel | str, sign: int) -> None:
-        """Set the focus direction of the Z stage."""
-        if stageLabel == "" or stageLabel != self.getFocusDevice():
-            raise RuntimeError(
-                f"Failed to set new FocusDirection: No {stageLabel} as Focus Device."
-            )
-        if stageLabel not in self._pydevices:
-            super().setFocusDirection(stageLabel, sign)
-
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().setFocusDirection(stageLabel, sign)
         with self._pydevices.get_device_of_type(stageLabel, StageDevice) as device:
             device.set_focus_direction(sign)
 
     def getFocusDirection(self, stageLabel: DeviceLabel | str) -> FocusDirection:
         """Get the current focus direction of the Z stage."""
-        if stageLabel == "" or stageLabel != self.getFocusDevice():
-            raise RuntimeError(
-                f"Failed to retrieve Focus direction: No {stageLabel} as Focus Device."
-            )
-        if stageLabel not in self._pydevices:
+        if stageLabel not in self._pydevices:  # pragma: no cover
             return super().getFocusDirection(stageLabel)
         with self._pydevices.get_device_of_type(stageLabel, StageDevice) as device:
             return device.get_focus_direction()
 
-    def setOrigin(self):
+    @overload
+    def setOrigin(self) -> None: ...
+    @overload
+    def setOrigin(self, stageLabel: DeviceLabel | str) -> None: ...
+    def setOrigin(self, stageLabel: DeviceLabel | str | None = None) -> None:
         """Zero the current focus/Z stage's coordinates at the current position."""
-        try:
-            super().setOrigin()
-        except Exception:
-            z_stage = self.getFocusDevice()
-            with self._pydevices.get_device_of_type(z_stage, StageDevice) as device:
-                device.set_origin()
+        label = stageLabel or self.getFocusDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setOrigin(label)
+        with self._pydevices.get_device_of_type(label, StageDevice) as device:
+            device.set_origin()
 
     # -----------------------------------------------------------------------
     # ---------------------------- Any Stage --------------------------------
