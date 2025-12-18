@@ -289,3 +289,348 @@ def test_waiting():
     core._pydevices = pydev_mock
     core.waitForSystem()
     pydev_mock.wait_for_device_type.assert_called_once_with(DeviceType.Any, 500)
+
+
+def test_define_config_groups():
+    core = UniMMCore()
+
+    # Note: C++ is permissive with names - only validates certain characters
+    # e.g., commas in preset names are forbidden but empty names are allowed
+    core.defineConfigGroup("group1")
+    assert core.isGroupDefined("group1")
+    assert tuple(core.getAvailableConfigGroups()) == ("group1",)
+    with pytest.raises((RuntimeError, ValueError), match="already in use"):
+        core.defineConfigGroup("group1")
+
+    core.defineConfig("group1", "preset1")
+
+    core.renameConfigGroup("group1", "renamed_group")
+    assert core.isGroupDefined("renamed_group")
+    assert not core.isGroupDefined("group1")
+
+    with pytest.raises((ValueError, RuntimeError), match="not defined"):
+        core.renameConfigGroup("group1", "another_name")
+
+    # rename Config
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.renameConfig("notagroup", "nonexistent_preset", "new_name")
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.renameConfig("renamed_group", "nonexistent_preset", "new_name")
+
+    core.renameConfig("renamed_group", "preset1", "renamed_preset")
+    assert core.isConfigDefined("renamed_group", "renamed_preset")
+
+    # Cleanup
+    core.deleteConfigGroup("renamed_group")
+    assert not core.isGroupDefined("renamed_group")
+
+    with pytest.raises((ValueError, RuntimeError), match="not defined"):
+        core.deleteConfigGroup("renamed_group")
+
+    assert tuple(core.getAvailableConfigGroups()) == ()
+
+
+def test_config_group_with_c_and_py_devices():
+    core = UniMMCore()
+
+    core.defineConfigGroup("group1")
+    core.loadDevice("CDev", "DemoCamera", "DCam")
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+    core.setCameraDevice("CDev")
+
+    # Note: C++ validation is permissive - it only validates certain characters
+    # (like commas) and doesn't strictly validate empty strings or None values
+
+    core.defineConfig("group1", "preset1", "CDev", "Exposure", 50)
+    core.defineConfig("group1", "preset1", "PyDev", "propB", 25.0)
+    assert core.isConfigDefined("group1", "preset1")
+    core.defineConfig("group1", "preset2", "CDev", "Exposure", 150)
+    core.defineConfig("group1", "preset2", "PyDev", "propB", 125.0)
+    assert tuple(core.getAvailableConfigs("group1")) == ("preset1", "preset2")
+
+    # Get the config data (stored values)
+    config = core.getConfigData("group1", "preset1")
+    assert list(config) == [("CDev", "Exposure", "50"), ("PyDev", "propB", "25.0")]
+
+    # Before applying the config, current values differ from stored values
+    cfg_state_before = core.getConfigState("group1", "preset1")
+    assert cfg_state_before != config  # Current state differs from stored config
+
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.getConfigData("group1", "preset3")
+
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.getConfigState("group10", "preset3")
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.getConfigState("group1", "preset31")
+
+    assert core.getCurrentConfig("group1") == ""
+
+    # Apply the config and check core values
+    assert core.getExposure() != 50
+    assert core.getProperty("PyDev", "propB") != 25.0
+    core.setConfig("group1", "preset1")
+    assert core.getExposure() == 50
+    assert core.getProperty("PyDev", "propB") == 25.0
+
+    # After applying config, getConfigState should return values matching current state
+    cfg_state_after = core.getConfigState("group1", "preset1")
+    # The values should now match (though format may differ, e.g., "50.0000" vs "50")
+    assert list(cfg_state_after) == [
+        ("CDev", "Exposure", "50.0000"),
+        ("PyDev", "propB", "25.0"),
+    ]
+
+    cfg_group_state = core.getConfigGroupState("group1")
+    cfg_group_state_cached = core.getConfigGroupStateFromCache("group1")
+    assert (
+        list(cfg_group_state)
+        == list(cfg_group_state_cached)
+        == [
+            ("CDev", "Exposure", "50.0000"),
+            ("PyDev", "propB", "25.0"),
+        ]
+    )
+
+    assert core.getCurrentConfig("group1") == "preset1"
+    assert core.getCurrentConfigFromCache("group1") == "preset1"
+
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.setConfig("group10", "preset3")
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.setConfig("group1", "preset10")
+
+    # Clean up
+    with pytest.raises(RuntimeError, match="not found in device"):
+        core.deleteConfig("group1", "preset1", "CDev", "NotExposure")
+
+    core.deleteConfig("group1", "preset1", "CDev", "Exposure")
+    config = core.getConfigData("group1", "preset1")
+    assert list(config) == [("PyDev", "propB", "25.0")]
+
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.deleteConfig("group3", "preset1")
+
+    core.deleteConfig("group1", "preset1")
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.getConfigData("group1", "preset1")
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.deleteConfig("group1", "preset1")
+
+    core.deleteConfigGroup("group1")
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
+        core.getConfigData("group1", "preset1")
+
+
+def test_config_group_channel_groups():
+    core = UniMMCore()
+
+    core.defineConfigGroup("channel")
+    core.defineConfig("channel", "preset1")
+    core.defineConfig("channel", "preset2")
+
+    # C++ raises ValueError for invalid channel group
+    with pytest.raises((RuntimeError, ValueError)):
+        core.setChannelGroup("nonexistent_group")
+
+    # Test channelGroupChanged event
+    channel_group_changed_mock = MagicMock()
+    core.events.channelGroupChanged.connect(channel_group_changed_mock)
+
+    assert not core.getChannelGroup()
+    core.setChannelGroup("channel")
+    assert core.getChannelGroup() == "channel"
+    channel_group_changed_mock.assert_called_with("channel")
+
+    # Setting same group again should not emit event
+    channel_group_changed_mock.reset_mock()
+    core.setChannelGroup("channel")
+    channel_group_changed_mock.assert_not_called()
+
+    core.deleteConfigGroup("channel")
+    assert not core.getChannelGroup()
+
+
+def test_config_group_events():
+    """Test that config group operations emit the correct events."""
+
+    core = UniMMCore()
+
+    # Load a real device so we can set valid properties
+    core.loadDevice("Cam", "DemoCamera", "DCam")
+    core.initializeAllDevices()
+
+    # Set up mock listeners
+    config_defined_mock = MagicMock()
+    config_set_mock = MagicMock()
+    config_deleted_mock = MagicMock()
+    config_group_deleted_mock = MagicMock()
+
+    core.events.configDefined.connect(config_defined_mock)
+    core.events.configSet.connect(config_set_mock)
+    core.events.configDeleted.connect(config_deleted_mock)
+    core.events.configGroupDeleted.connect(config_group_deleted_mock)
+
+    # Test defineConfig event - creates group implicitly
+    core.defineConfig("testGroup", "preset1", "Cam", "Exposure", "50")
+    config_defined_mock.assert_called_once_with(
+        "testGroup", "preset1", "Cam", "Exposure", "50"
+    )
+    config_defined_mock.reset_mock()
+
+    # Test defineConfig event - empty preset (no device/prop/value)
+    core.defineConfig("testGroup", "preset2")
+    config_defined_mock.assert_called_once_with("testGroup", "preset2", "", "", "")
+    config_defined_mock.reset_mock()
+
+    # Test setConfig event
+    core.setConfig("testGroup", "preset1")
+    config_set_mock.assert_called_once_with("testGroup", "preset1")
+    assert core._last_config == ("testGroup", "preset1")
+
+    # Test deleteConfig event (delete property from preset)
+    core.deleteConfig("testGroup", "preset1", "Cam", "Exposure")
+    config_deleted_mock.assert_called_once_with("testGroup", "preset1")
+    config_deleted_mock.reset_mock()
+
+    # Test deleteConfig event (delete entire preset)
+    core.deleteConfig("testGroup", "preset2")
+    config_deleted_mock.assert_called_once_with("testGroup", "preset2")
+    config_deleted_mock.reset_mock()
+
+    # Test deleteConfigGroup event
+    core.deleteConfigGroup("testGroup")
+    config_group_deleted_mock.assert_called_once_with("testGroup")
+
+
+def test_wait_for_config():
+    """Test waitForConfig blocks until all devices in a config are ready."""
+    core = UniMMCore()
+
+    # Load both C++ and Python devices
+    core.loadDevice("CDev", "DemoCamera", "DCam")
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+
+    # Create a config with both device types
+    core.defineConfigGroup("testGroup")
+    core.defineConfig("testGroup", "preset1", "CDev", "Exposure", "50")
+    core.defineConfig("testGroup", "preset1", "PyDev", "propB", "25.0")
+
+    # waitForConfig should work without raising
+    core.waitForConfig("testGroup", "preset1")
+
+    # Should raise for non-existent group/preset
+    with pytest.raises((RuntimeError, ValueError)):
+        core.waitForConfig("nonexistent", "preset1")
+
+    with pytest.raises((RuntimeError, ValueError)):
+        core.waitForConfig("testGroup", "nonexistent")
+
+
+def test_system_state_includes_py_devices():
+    """Test getSystemState and getSystemStateCache include Python device properties."""
+    core = UniMMCore()
+
+    # Load both C++ and Python devices
+    core.loadDevice("CDev", "DemoCamera", "DCam")
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+
+    # Set a property value on Python device
+    core.setProperty("PyDev", "propB", 42.0)
+
+    # getSystemState should include Python device properties
+    state = core.getSystemState()
+    py_props = [(d, p, v) for d, p, v in state if d == "PyDev"]
+    assert len(py_props) > 0, "Python device properties should be in system state"
+    assert any(p == "propB" for _, p, _ in py_props), "propB should be in system state"
+
+    # getSystemStateCache should also include Python device properties
+    state_cache = core.getSystemStateCache()
+    py_props_cache = [(d, p, v) for d, p, v in state_cache if d == "PyDev"]
+    assert len(py_props_cache) > 0, "Python device properties should be in cache"
+
+    # updateSystemStateCache should populate Python device cache
+    core.updateSystemStateCache()
+    state_after_update = core.getSystemStateCache()
+    py_props_after = [(d, p, v) for d, p, v in state_after_update if d == "PyDev"]
+    assert len(py_props_after) > 0
+
+    # Native mode should return pymmcore.Configuration
+    import pymmcore_plus._pymmcore as pymmcore
+
+    native_state = core.getSystemState(native=True)
+    assert isinstance(native_state, pymmcore.Configuration)
+
+
+def test_delete_python_device_property_from_config():
+    """Test deleting a specific Python device property from a config preset."""
+    core = UniMMCore()
+
+    # Load Python device
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+
+    # Create a config with multiple Python device properties
+    core.defineConfigGroup("testGroup")
+    core.defineConfig("testGroup", "preset1", "PyDev", "propA", "valueA")
+    core.defineConfig("testGroup", "preset1", "PyDev", "propB", 42.0)
+
+    # Verify both properties are in the config
+    config = core.getConfigData("testGroup", "preset1")
+    assert list(config) == [("PyDev", "propA", "valueA"), ("PyDev", "propB", "42.0")]
+
+    # Set up event listener
+    config_deleted_mock = MagicMock()
+    core.events.configDeleted.connect(config_deleted_mock)
+
+    # Delete one Python device property
+    core.deleteConfig("testGroup", "preset1", "PyDev", "propA")
+
+    # Verify event was emitted
+    config_deleted_mock.assert_called_once_with("testGroup", "preset1")
+
+    # Verify property was removed but other property remains
+    config = core.getConfigData("testGroup", "preset1")
+    assert list(config) == [("PyDev", "propB", "42.0")]
+
+    # Try to delete non-existent Python property - should raise error
+    with pytest.raises(RuntimeError, match="not found"):
+        core.deleteConfig("testGroup", "preset1", "PyDev", "nonExistentProp")
+
+    # Try to delete already-deleted property - should raise error
+    with pytest.raises(RuntimeError, match="not found"):
+        core.deleteConfig("testGroup", "preset1", "PyDev", "propA")
+
+
+def test_config_with_only_python_devices():
+    """Test getCurrentConfig works when config only has Python device settings."""
+    core = UniMMCore()
+
+    # Load only Python device (no C++ devices in config)
+    core.loadPyDevice("PyDev", MyDevice())
+    core.initializeAllDevices()
+
+    # Create config with only Python device
+    # Note: propB has limits (0.0, 100.0)
+    core.defineConfigGroup("pyOnlyGroup")
+    core.defineConfig("pyOnlyGroup", "preset1", "PyDev", "propB", 25.0)
+    core.defineConfig("pyOnlyGroup", "preset2", "PyDev", "propB", 75.0)
+
+    # Initially no preset matches (propB default is 10.0)
+    assert core.getCurrentConfig("pyOnlyGroup") == ""
+
+    # Set property to match preset1
+    core.setProperty("PyDev", "propB", 25.0)
+    assert core.getCurrentConfig("pyOnlyGroup") == "preset1"
+    assert core.getCurrentConfigFromCache("pyOnlyGroup") == "preset1"
+
+    # Change to match preset2
+    core.setProperty("PyDev", "propB", 75.0)
+    assert core.getCurrentConfig("pyOnlyGroup") == "preset2"
+
+    # Set to non-matching value
+    core.setProperty("PyDev", "propB", 50.0)
+    assert core.getCurrentConfig("pyOnlyGroup") == ""
