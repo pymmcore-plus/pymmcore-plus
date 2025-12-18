@@ -38,13 +38,17 @@ class StageDevice(_BaseStage[float]):
     def get_position_um(self) -> float:
         """Returns the current position of the stage in microns."""
 
-    @abstractmethod
     def get_focus_direction(self) -> FocusDirection:
         """Returns the focus direction of the stage."""
+        raise NotImplementedError(  # pragma: no cover
+            "This device does not support focus direction"
+        )
 
-    @abstractmethod
     def set_focus_direction(self, sign: int) -> None:
         """Sets the focus direction of the stage."""
+        raise NotImplementedError(  # pragma: no cover
+            "This device does not support focus direction"
+        )
 
 
 # TODO: consider if we can just subclass StageDevice instead of _BaseStage
