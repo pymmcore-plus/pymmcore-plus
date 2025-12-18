@@ -424,8 +424,6 @@ def test_config_group_with_c_and_py_devices():
 
 
 def test_config_group_channel_groups():
-    from unittest.mock import MagicMock
-
     core = UniMMCore()
 
     core.defineConfigGroup("channel")
@@ -456,7 +454,6 @@ def test_config_group_channel_groups():
 
 def test_config_group_events():
     """Test that config group operations emit the correct events."""
-    from unittest.mock import MagicMock
 
     core = UniMMCore()
 
@@ -570,8 +567,6 @@ def test_system_state_includes_py_devices():
 
 def test_delete_python_device_property_from_config():
     """Test deleting a specific Python device property from a config preset."""
-    from unittest.mock import MagicMock
-
     core = UniMMCore()
 
     # Load Python device

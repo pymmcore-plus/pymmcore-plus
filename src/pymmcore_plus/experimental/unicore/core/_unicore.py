@@ -12,7 +12,6 @@ from typing import (
     Any,
     Callable,
     Literal,
-    TypeAlias,
     TypeVar,
     cast,
     overload,
@@ -50,23 +49,23 @@ if TYPE_CHECKING:
         PropertyName,
         StateLabel,
     )
+    from typing_extensions import TypeAlias
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
     PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
     _T = TypeVar("_T")
 
+    # =============================================================================
+    # Config Group Type Aliases
+    # =============================================================================
 
-# =============================================================================
-# Config Group Type Aliases
-# =============================================================================
-
-DevPropTuple = tuple[str, str]
-ConfigDict: TypeAlias = "MutableMapping[DevPropTuple, Any]"
-ConfigGroup: TypeAlias = "MutableMapping[ConfigPresetName, ConfigDict]"
-# technically the keys are ConfigGroupName (a NewType from pymmcore)
-# but to avoid all the casting, we use str here
-ConfigGroups: TypeAlias = MutableMapping[str, ConfigGroup]
+    DevPropTuple = tuple[str, str]
+    ConfigDict: TypeAlias = "MutableMapping[DevPropTuple, Any]"
+    ConfigGroup: TypeAlias = "MutableMapping[ConfigPresetName, ConfigDict]"
+    # technically the keys are ConfigGroupName (a NewType from pymmcore)
+    # but to avoid all the casting, we use str here
+    ConfigGroups: TypeAlias = MutableMapping[str, ConfigGroup]
 
 
 class BufferOverflowStop(Exception):
@@ -1814,9 +1813,9 @@ class UniMMCore(CMMCorePlus):
     ) -> None:
         if deviceLabel is None or propName is None:
             # Deleting entire preset: delete from both C++ and Python storage
-            super().deleteConfig(groupName, configName)
             py_group = self._py_config_groups.get(groupName, {})
             py_group.pop(configName, None)  # type: ignore[call-overload]
+            super().deleteConfig(groupName, configName)
 
         # Deleting a specific property from a preset
         elif deviceLabel in self._pydevices:
@@ -2156,7 +2155,7 @@ def _ensure_label(
     return cast("str", args[0]), args[1:]
 
 
-class ThreadSafeConfig(MutableMapping[DevPropTuple, Any]):
+class ThreadSafeConfig(MutableMapping["DevPropTuple", Any]):
     """A thread-safe cache for property states.
 
     Keys are tuples of (device_label, property_name), and values are the last known
