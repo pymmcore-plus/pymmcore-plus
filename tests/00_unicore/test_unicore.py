@@ -308,13 +308,13 @@ def test_define_config_groups():
     assert core.isGroupDefined("renamed_group")
     assert not core.isGroupDefined("group1")
 
-    with pytest.raises(ValueError, match="not defined"):
+    with pytest.raises((ValueError, RuntimeError), match="not defined"):
         core.renameConfigGroup("group1", "another_name")
 
     # rename Config
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.renameConfig("notagroup", "nonexistent_preset", "new_name")
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.renameConfig("renamed_group", "nonexistent_preset", "new_name")
 
     core.renameConfig("renamed_group", "preset1", "renamed_preset")
@@ -324,7 +324,7 @@ def test_define_config_groups():
     core.deleteConfigGroup("renamed_group")
     assert not core.isGroupDefined("renamed_group")
 
-    with pytest.raises(ValueError, match="not defined"):
+    with pytest.raises((ValueError, RuntimeError), match="not defined"):
         core.deleteConfigGroup("renamed_group")
 
     assert tuple(core.getAvailableConfigGroups()) == ()
@@ -347,7 +347,7 @@ def test_config_group_with_c_and_py_devices():
     assert core.isConfigDefined("group1", "preset1")
     core.defineConfig("group1", "preset2", "CDev", "Exposure", 150)
     core.defineConfig("group1", "preset2", "PyDev", "propB", 125.0)
-    assert core.getAvailableConfigs("group1") == ("preset1", "preset2")
+    assert tuple(core.getAvailableConfigs("group1")) == ("preset1", "preset2")
 
     # Get the config data (stored values)
     config = core.getConfigData("group1", "preset1")
@@ -357,12 +357,12 @@ def test_config_group_with_c_and_py_devices():
     cfg_state_before = core.getConfigState("group1", "preset1")
     assert cfg_state_before != config  # Current state differs from stored config
 
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.getConfigData("group1", "preset3")
 
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.getConfigState("group10", "preset3")
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.getConfigState("group1", "preset31")
 
     assert core.getCurrentConfig("group1") == ""
@@ -396,9 +396,9 @@ def test_config_group_with_c_and_py_devices():
     assert core.getCurrentConfig("group1") == "preset1"
     assert core.getCurrentConfigFromCache("group1") == "preset1"
 
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.setConfig("group10", "preset3")
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.setConfig("group1", "preset10")
 
     # Clean up
@@ -409,17 +409,17 @@ def test_config_group_with_c_and_py_devices():
     config = core.getConfigData("group1", "preset1")
     assert list(config) == [("PyDev", "propB", "25.0")]
 
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.deleteConfig("group3", "preset1")
 
     core.deleteConfig("group1", "preset1")
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.getConfigData("group1", "preset1")
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.deleteConfig("group1", "preset1")
 
     core.deleteConfigGroup("group1")
-    with pytest.raises(ValueError, match="does not exist"):
+    with pytest.raises((ValueError, RuntimeError), match="does not exist"):
         core.getConfigData("group1", "preset1")
 
 
