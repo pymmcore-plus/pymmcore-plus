@@ -769,6 +769,122 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices.get_device_of_type(label, StageDevice) as device:
             device.set_origin()
 
+    @overload
+    def setRelativePosition(self, d: float, /) -> None: ...
+    @overload
+    def setRelativePosition(
+        self, stageLabel: DeviceLabel | str, d: float, /
+    ) -> None: ...
+    def setRelativePosition(self, *args: Any) -> None:
+        """Sets the relative position of the stage in microns."""
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setRelativePosition(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_relative_position_um(*args)
+
+    @overload
+    def setAdapterOrigin(self, newZUm: float, /) -> None: ...
+    @overload
+    def setAdapterOrigin(
+        self, stageLabel: DeviceLabel | str, newZUm: float, /
+    ) -> None: ...
+    def setAdapterOrigin(self, *args: Any) -> None:
+        """Enable software translation of coordinates for the current focus/Z stage.
+
+        The current position of the stage becomes Z = newZUm. Only some stages
+        support this functionality; it is recommended that setOrigin() be used
+        instead where available.
+        """
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setAdapterOrigin(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_adapter_origin_um(*args)
+
+    def isStageSequenceable(self, stageLabel: DeviceLabel | str) -> bool:
+        """Queries stage if it can be used in a sequence."""
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isStageSequenceable(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_sequenceable()
+
+    def isStageLinearSequenceable(self, stageLabel: DeviceLabel | str) -> bool:
+        """Queries if the stage can be used in a linear sequence.
+
+        A linear sequence is defined by a step size and number of slices.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isStageLinearSequenceable(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_linear_sequenceable()
+
+    def getStageSequenceMaxLength(self, stageLabel: DeviceLabel | str) -> int:
+        """Gets the maximum length of a stage's position sequence."""
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().getStageSequenceMaxLength(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.get_sequence_max_length()
+
+    def loadStageSequence(
+        self,
+        stageLabel: DeviceLabel | str,
+        positionSequence: Sequence[float],
+    ) -> None:
+        """Transfer a sequence of stage positions to the stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().loadStageSequence(stageLabel, positionSequence)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        if len(positionSequence) > dev.get_sequence_max_length():
+            raise ValueError(
+                f"Sequence is too long. Max length is {dev.get_sequence_max_length()}"
+            )
+        dev.send_sequence(tuple(positionSequence))
+
+    def startStageSequence(self, stageLabel: DeviceLabel | str) -> None:
+        """Starts an ongoing sequence of triggered events in a stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().startStageSequence(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.start_sequence()
+
+    def stopStageSequence(self, stageLabel: DeviceLabel | str) -> None:
+        """Stops an ongoing sequence of triggered events in a stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().stopStageSequence(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.stop_sequence()
+
+    def setStageLinearSequence(
+        self, stageLabel: DeviceLabel | str, dZ_um: float, nSlices: int
+    ) -> None:
+        """Loads a linear sequence (defined by step size and nr. of steps)."""
+        if nSlices < 0:
+            raise ValueError("Linear sequence cannot have negative length")
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().setStageLinearSequence(stageLabel, dZ_um, nSlices)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.set_linear_sequence(dZ_um, nSlices)
+
+    def isContinuousFocusDrive(self, stageLabel: DeviceLabel | str) -> bool:
+        """Check if a stage has continuous focusing capability.
+
+        Returns True if positions can be set while continuous focus runs.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isContinuousFocusDrive(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_continuous_focus_drive()
+
     # -----------------------------------------------------------------------
     # ---------------------------- Any Stage --------------------------------
     # -----------------------------------------------------------------------

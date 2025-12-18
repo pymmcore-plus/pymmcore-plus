@@ -50,6 +50,41 @@ class StageDevice(_BaseStage[float]):
             "This device does not support focus direction"
         )
 
+    def set_relative_position_um(self, d: float) -> None:
+        """Move the stage by a relative amount.
+
+        Can be overridden for more efficient implementations.
+        """
+        pos = self.get_position_um()
+        self.set_position_um(pos + d)
+
+    def set_adapter_origin_um(self, newZUm: float) -> None:
+        """Enable software translation of coordinates.
+
+        The current position of the stage becomes Z = newZUm.
+        Only some stages support this functionality; it is recommended that
+        set_origin() be used instead where available.
+        """
+        # Default implementation does nothing - subclasses can override
+        pass
+
+    def is_linear_sequenceable(self) -> bool:
+        """Return True if the stage supports linear sequences.
+
+        A linear sequence is defined by a step size and number of slices.
+        """
+        return False
+
+    def set_linear_sequence(self, dZ_um: float, nSlices: int) -> None:
+        """Load a linear sequence defined by step size and number of slices."""
+        raise NotImplementedError(  # pragma: no cover
+            "This device does not support linear sequences"
+        )
+
+    def is_continuous_focus_drive(self) -> bool:
+        """Return True if positions can be set while continuous focus runs."""
+        return False
+
 
 # TODO: consider if we can just subclass StageDevice instead of _BaseStage
 class XYStageDevice(_BaseStage[tuple[float, float]]):
