@@ -634,3 +634,306 @@ def test_config_with_only_python_devices():
     # Set to non-matching value
     core.setProperty("PyDev", "propB", 50.0)
     assert core.getCurrentConfig("pyOnlyGroup") == ""
+
+
+# =============================================================================
+# Config file loading/saving tests
+# =============================================================================
+
+
+def test_load_system_configuration_basic(tmp_path):
+    """Test loading a basic config file with C++ devices."""
+    core = UniMMCore()
+
+    # Create a minimal config file
+    config_file = tmp_path / "test_config.cfg"
+    config_file.write_text("""
+# Test config
+Device,Camera,DemoCamera,DCam
+Property,Core,Initialize,1
+Property,Camera,Exposure,50.0
+""")
+
+    core.loadSystemConfiguration(str(config_file))
+
+    assert "Camera" in core.getLoadedDevices()
+    assert core.getExposure() == 50.0
+
+
+def test_load_system_configuration_with_python_devices(tmp_path):
+    """Test loading a config file with #py prefixed Python device lines."""
+    core = UniMMCore()
+
+    # Create a config with both C++ and Python devices
+    config_file = tmp_path / "test_mixed_config.cfg"
+    config_file.write_text(f"""
+# Test config with mixed devices
+Device,Camera,DemoCamera,DCam
+#py pyDevice,{PYDEV},{__name__},{MyDevice.__name__}
+Property,Core,Initialize,1
+Property,Camera,Exposure,100.0
+#py Property,{PYDEV},{PROP_B},42.0
+""")
+
+    core.loadSystemConfiguration(str(config_file))
+
+    # Both devices should be loaded
+    assert "Camera" in core.getLoadedDevices()
+    assert PYDEV in core.getLoadedDevices()
+
+    # Properties should be set
+    assert core.getExposure() == 100.0
+    assert core.getProperty(PYDEV, PROP_B) == 42.0
+
+
+def test_load_system_configuration_python_device_as_camera(tmp_path):
+    """Test setting a Python device as the core camera via config."""
+    from pymmcore_plus.experimental.unicore import CameraDevice
+
+    # Create a simple Python camera class
+    class SimplePyCamera(CameraDevice):
+        def __init__(self):
+            super().__init__()
+            self._exp = 10.0
+
+        def get_exposure(self):
+            return self._exp
+
+        def set_exposure(self, ms):
+            self._exp = ms
+
+        def shape(self):
+            return (512, 512)
+
+        def dtype(self):
+            return "uint16"
+
+        def start_sequence(self, n_images=None, get_buffer=None):
+            # Minimal implementation for testing
+            return iter([])
+
+    # Register it in this module's namespace for import
+    import sys
+
+    this_module = sys.modules[__name__]
+    this_module.SimplePyCamera = SimplePyCamera
+
+    try:
+        core = UniMMCore()
+
+        config_file = tmp_path / "test_pycam_config.cfg"
+        config_file.write_text(f"""
+#py pyDevice,PyCam,{__name__},SimplePyCamera
+Property,Core,Initialize,1
+#py Property,Core,Camera,PyCam
+""")
+
+        core.loadSystemConfiguration(str(config_file))
+
+        assert "PyCam" in core.getLoadedDevices()
+        assert core.getCameraDevice() == "PyCam"
+    finally:
+        # Clean up the registered class
+        delattr(this_module, "SimplePyCamera")
+
+
+def test_load_system_configuration_with_config_groups(tmp_path):
+    """Test loading config groups with both C++ and Python devices."""
+    core = UniMMCore()
+
+    config_file = tmp_path / "test_config_groups.cfg"
+    config_file.write_text(f"""
+Device,Camera,DemoCamera,DCam
+#py pyDevice,{PYDEV},{__name__},{MyDevice.__name__}
+Property,Core,Initialize,1
+ConfigGroup,TestGroup,Preset1,Camera,Exposure,25.0
+#py ConfigGroup,TestGroup,Preset1,{PYDEV},{PROP_B},10.0
+ConfigGroup,TestGroup,Preset2,Camera,Exposure,100.0
+#py ConfigGroup,TestGroup,Preset2,{PYDEV},{PROP_B},50.0
+""")
+
+    core.loadSystemConfiguration(str(config_file))
+
+    # Config groups should be defined
+    assert core.isGroupDefined("TestGroup")
+    assert "Preset1" in core.getAvailableConfigs("TestGroup")
+    assert "Preset2" in core.getAvailableConfigs("TestGroup")
+
+    # Apply preset and verify
+    core.setConfig("TestGroup", "Preset1")
+    assert core.getExposure() == 25.0
+    assert core.getProperty(PYDEV, PROP_B) == 10.0
+
+
+def test_load_system_configuration_error_handling(tmp_path):
+    """Test error handling during config loading."""
+    core = UniMMCore()
+
+    # Test file not found
+    with pytest.raises(FileNotFoundError):
+        core.loadSystemConfiguration("/nonexistent/path/config.cfg")
+
+    # Test invalid command (should fail strict)
+    config_file = tmp_path / "bad_config.cfg"
+    config_file.write_text("""
+Device,Camera,DemoCamera,DCam
+Property,Core,Initialize,1
+InvalidCommand,foo,bar
+""")
+
+    with pytest.raises(RuntimeError, match="Unknown configuration command"):
+        core.loadSystemConfiguration(str(config_file))
+
+
+def test_save_system_configuration(tmp_path):
+    """Test saving a system configuration."""
+    core = UniMMCore()
+
+    # Set up a configuration
+    core.loadDevice("Camera", "DemoCamera", "DCam")
+    core.initializeAllDevices()
+    core.setExposure(75.0)
+
+    # Save the config
+    config_file = tmp_path / "saved_config.cfg"
+    core.saveSystemConfiguration(str(config_file))
+
+    # Verify the file was created and contains expected content
+    content = config_file.read_text()
+    assert "Device,Camera,DemoCamera,DCam" in content
+    assert "Property,Core,Initialize,1" in content
+
+
+def test_save_system_configuration_with_python_devices(tmp_path):
+    """Test saving config with Python devices uses #py prefix."""
+    core = UniMMCore()
+
+    # Load both C++ and Python devices
+    core.loadDevice("Camera", "DemoCamera", "DCam")
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeAllDevices()
+    core.setProperty(PYDEV, PROP_B, 50.0)
+
+    # Save the config
+    config_file = tmp_path / "saved_mixed_config.cfg"
+    core.saveSystemConfiguration(str(config_file))
+
+    # Check the content
+    content = config_file.read_text()
+
+    # C++ device should NOT have #py prefix
+    assert "Device,Camera,DemoCamera,DCam" in content
+
+    # Python device SHOULD have #py pyDevice prefix
+    assert f"#py pyDevice,{PYDEV}," in content
+
+
+def test_config_roundtrip(tmp_path):
+    """Test that save then load produces the same configuration."""
+    core = UniMMCore()
+
+    # Set up initial configuration
+    core.loadDevice("Camera", "DemoCamera", "DCam")
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeAllDevices()
+    core.setCameraDevice("Camera")
+    core.setExposure(42.0)
+    core.setProperty(PYDEV, PROP_B, 25.0)
+
+    # Define a config group with both device types
+    core.defineConfigGroup("TestGroup")
+    core.defineConfig("TestGroup", "Preset1", "Camera", "Exposure", 100.0)
+    core.defineConfig("TestGroup", "Preset1", PYDEV, PROP_B, 75.0)
+
+    # Save the configuration
+    config_file = tmp_path / "roundtrip_config.cfg"
+    core.saveSystemConfiguration(str(config_file))
+
+    # Create a new core and load the saved config
+    core2 = UniMMCore()
+    core2.loadSystemConfiguration(str(config_file))
+
+    # Verify devices are loaded
+    assert "Camera" in core2.getLoadedDevices()
+    assert PYDEV in core2.getLoadedDevices()
+
+    # Verify config group exists and has correct settings
+    assert core2.isGroupDefined("TestGroup")
+    assert "Preset1" in core2.getAvailableConfigs("TestGroup")
+
+    # Apply the preset and verify values
+    core2.setConfig("TestGroup", "Preset1")
+    assert core2.getExposure() == 100.0
+    assert core2.getProperty(PYDEV, PROP_B) == 75.0
+
+
+def test_config_backward_compatibility():
+    """Test that regular pymmcore can load configs saved with Python devices.
+
+    The #py prefixed lines should be treated as comments.
+    """
+    import os
+    import tempfile
+
+    from pymmcore_plus import CMMCorePlus
+
+    core = UniMMCore()
+
+    # Set up with Python device
+    core.loadDevice("Camera", "DemoCamera", "DCam")
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeAllDevices()
+
+    # Define config with Python device
+    core.defineConfigGroup("Channel")
+    core.defineConfig("Channel", "DAPI", "Camera", "Exposure", 50.0)
+    core.defineConfig("Channel", "DAPI", PYDEV, PROP_B, 25.0)
+
+    # Save config
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".cfg", delete=False) as f:
+        config_path = f.name
+
+    try:
+        core.saveSystemConfiguration(config_path)
+
+        # Load with regular CMMCorePlus (not UniMMCore)
+        # The #py lines should be ignored as comments
+        regular_core = CMMCorePlus()
+        regular_core.loadSystemConfiguration(config_path)
+
+        # C++ device should be loaded
+        assert "Camera" in regular_core.getLoadedDevices()
+
+        # Python device should NOT be loaded (line was treated as comment)
+        assert PYDEV not in regular_core.getLoadedDevices()
+
+        # Config group should exist but only have C++ device settings
+        assert regular_core.isGroupDefined("Channel")
+        config = regular_core.getConfigData("Channel", "DAPI")
+        settings = list(config)
+        # Should only have Camera settings, not Python device settings
+        assert all(d != PYDEV for d, p, v in settings)
+    finally:
+        os.unlink(config_path)
+
+
+def test_load_config_with_labels_and_state_devices(tmp_path):
+    """Test loading state device labels from config."""
+    core = UniMMCore()
+
+    config_file = tmp_path / "test_labels.cfg"
+    config_file.write_text("""
+Device,Filter,DemoCamera,DWheel
+Property,Core,Initialize,1
+Label,Filter,0,DAPI
+Label,Filter,1,FITC
+Label,Filter,2,Cy5
+""")
+
+    core.loadSystemConfiguration(str(config_file))
+
+    assert "Filter" in core.getLoadedDevices()
+    labels = core.getStateLabels("Filter")
+    assert labels[0] == "DAPI"
+    assert labels[1] == "FITC"
+    assert labels[2] == "Cy5"
