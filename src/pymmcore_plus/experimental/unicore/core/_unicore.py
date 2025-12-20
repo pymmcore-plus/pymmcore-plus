@@ -258,11 +258,11 @@ class UniMMCore(CMMCorePlus):
         try:
             CMMCorePlus.loadDevice(self, label, moduleName, deviceName)
         except RuntimeError as e:
-            # it was a C++ device, should have worked ... raise the error
             if moduleName not in super().getDeviceAdapterNames():
                 pydev = self._get_py_device_instance(moduleName, deviceName)
                 self.loadPyDevice(label, pydev)
                 return
+            # it was a C++ device, should have worked ... raise the error
             if exc := self._load_error_with_info(label, moduleName, deviceName, str(e)):
                 raise exc from e
 
@@ -306,6 +306,10 @@ class UniMMCore(CMMCorePlus):
         self._pydevices.load(label, device, create_core_proxy(self))
 
     load_py_device = loadPyDevice
+
+    def isPyDevice(self, label: DeviceLabel | str) -> bool:
+        """Returns True if the specified device label corresponds to a Python device."""
+        return label in self._pydevices
 
     def unloadDevice(self, label: DeviceLabel | str) -> None:
         if label not in self._pydevices:  # pragma: no cover

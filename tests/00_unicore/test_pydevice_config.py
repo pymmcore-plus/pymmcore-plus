@@ -2,14 +2,16 @@
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
 from textwrap import dedent
+from typing import TYPE_CHECKING
 
 import pytest
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.experimental.unicore import StateDevice, UniMMCore
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # A simple Python state device that simulates a filter wheel
 # This replaces the DemoCamera DWheel device
@@ -87,179 +89,161 @@ ConfigGroup,Channel,TRITC,Emission,Label,Chroma-HQ700
 
 
 @pytest.fixture
-def config_file() -> Path:
+def mixed_cfg_path(tmp_path: Path) -> Path:
     """Create a temporary config file."""
-    with tempfile.NamedTemporaryFile(mode="w", suffix=".cfg", delete=False) as f:
-        f.write(MIXED_CONFIG)
-        return Path(f.name)
+    path = tmp_path / "config.cfg"
+    path.write_text(MIXED_CONFIG)
+    return path
 
 
-class TestMixedDeviceConfig:
-    """Tests for loading configs with both C++ and Python devices."""
+def test_load_mixed_config(mixed_cfg_path: Path) -> None:
+    """Test that UniMMCore can load a config with both device types."""
+    core = UniMMCore()
+    core.loadSystemConfiguration(str(mixed_cfg_path))
 
-    def test_load_mixed_config(self, config_file: Path) -> None:
-        """Test that UniMMCore can load a config with both device types."""
-        core = UniMMCore()
-        core.loadSystemConfiguration(str(config_file))
+    # Check C++ devices are loaded
+    assert "Camera" in core.getLoadedDevices()
+    assert "Z" in core.getLoadedDevices()
+    assert "Emission" in core.getLoadedDevices()
 
-        # Check C++ devices are loaded
-        assert "Camera" in core.getLoadedDevices()
-        assert "Z" in core.getLoadedDevices()
-        assert "Emission" in core.getLoadedDevices()
+    # Check Python device is loaded
+    assert "Dichroic" in core.getLoadedDevices()
 
-        # Check Python device is loaded
-        assert "Dichroic" in core.getLoadedDevices()
+    assert core.isPyDevice("Dichroic")
+    assert core.getDeviceLibrary("Dichroic") == "tests.00_unicore.test_pydevice_config"
+    assert core.getDeviceName("Dichroic") == "PyFilterWheel"
+    assert not core.isPyDevice("Emission")
 
-        # Verify the Python device is actually a Python device
-        dichroic = core._pydevices["Dichroic"]
-        assert dichroic is not None
-        # Class is dynamically loaded, so check name instead of isinstance
-        assert type(dichroic).__name__ == "PyFilterWheel"
 
-        # Verify Emission is a C++ device (not in _pydevices)
-        assert "Emission" not in core._pydevices
+def test_python_device_labels(mixed_cfg_path: Path) -> None:
+    """Test that labels are correctly applied to Python devices."""
+    core = UniMMCore()
+    core.loadSystemConfiguration(str(mixed_cfg_path))
 
-    def test_python_device_labels(self, config_file: Path) -> None:
-        """Test that labels are correctly applied to Python devices."""
-        core = UniMMCore()
-        core.loadSystemConfiguration(str(config_file))
+    # Check state labels were applied
+    labels = core.getStateLabels("Dichroic")
+    assert "Empty" in labels
+    assert "DAPI" in labels
+    assert "FITC" in labels
+    assert "TRITC" in labels
+    assert "Cy5" in labels
 
-        # Check state labels were applied
-        labels = core.getStateLabels("Dichroic")
-        assert "Empty" in labels
-        assert "DAPI" in labels
-        assert "FITC" in labels
-        assert "TRITC" in labels
-        assert "Cy5" in labels
 
-    def test_python_device_state_operations(self, config_file: Path) -> None:
-        """Test that Python device state can be read and set."""
-        core = UniMMCore()
-        core.loadSystemConfiguration(str(config_file))
+def test_python_device_state_operations(mixed_cfg_path: Path) -> None:
+    """Test that Python device state can be read and set."""
+    core = UniMMCore()
+    core.loadSystemConfiguration(str(mixed_cfg_path))
 
-        # Set state by position
-        core.setState("Dichroic", 2)
-        assert core.getState("Dichroic") == 2
-        assert core.getStateLabel("Dichroic") == "FITC"
+    # Set state by position
+    core.setState("Dichroic", 2)
+    assert core.getState("Dichroic") == 2
+    assert core.getStateLabel("Dichroic") == "FITC"
 
-        # Set state by label
-        core.setStateLabel("Dichroic", "DAPI")
-        assert core.getState("Dichroic") == 1
+    # Set state by label
+    core.setStateLabel("Dichroic", "DAPI")
+    assert core.getState("Dichroic") == 1
 
-    def test_config_groups_with_mixed_devices(self, config_file: Path) -> None:
-        """Test that config groups with both C++ and Python devices work correctly."""
-        core = UniMMCore()
-        core.loadSystemConfiguration(str(config_file))
 
-        # Apply the FITC channel config - should set BOTH devices
-        core.setConfig("Channel", "FITC")
-        # Check Python device (Dichroic)
-        assert core.getStateLabel("Dichroic") == "FITC"
-        # Check C++ device (Emission)
-        assert core.getStateLabel("Emission") == "Chroma-HQ535"
+def test_config_groups_with_mixed_devices(mixed_cfg_path: Path) -> None:
+    """Test that config groups with both C++ and Python devices work correctly."""
+    core = UniMMCore()
+    core.loadSystemConfiguration(str(mixed_cfg_path))
 
-        # Apply the DAPI channel config - should set BOTH devices
-        core.setConfig("Channel", "DAPI")
-        # Check Python device (Dichroic)
-        assert core.getStateLabel("Dichroic") == "DAPI"
-        # Check C++ device (Emission)
-        assert core.getStateLabel("Emission") == "Chroma-D460"
+    # Apply the FITC channel config - should set BOTH devices
+    core.setConfig("Channel", "FITC")
+    assert core.getStateLabel("Dichroic") == "FITC"
+    assert core.getStateLabel("Emission") == "Chroma-HQ535"
 
-        # Apply the TRITC channel config - should set BOTH devices
-        core.setConfig("Channel", "TRITC")
-        # Check Python device (Dichroic)
-        assert core.getStateLabel("Dichroic") == "TRITC"
-        # Check C++ device (Emission)
-        assert core.getStateLabel("Emission") == "Chroma-HQ700"
+    core.setConfig("Channel", "DAPI")
+    assert core.getStateLabel("Dichroic") == "DAPI"
+    assert core.getStateLabel("Emission") == "Chroma-D460"
 
-    def test_backward_compatibility_with_regular_core(self, config_file: Path) -> None:
-        """Test that the config file gracefully degrades with regular CMMCorePlus.
+    core.setConfig("Channel", "TRITC")
+    assert core.getStateLabel("Dichroic") == "TRITC"
+    assert core.getStateLabel("Emission") == "Chroma-HQ700"
 
-        The Python device lines are commented out with #py, so regular CMMCorePlus
-        should be able to load the file (though it will skip those devices).
-        """
-        core = CMMCorePlus()
-        # Should not raise - the #py lines are treated as comments
-        core.loadSystemConfiguration(str(config_file))
 
-        # C++ devices should be loaded
-        assert "Camera" in core.getLoadedDevices()
-        assert "Z" in core.getLoadedDevices()
-        assert "Emission" in core.getLoadedDevices()
+def test_backward_compatibility_with_regular_core(mixed_cfg_path: Path) -> None:
+    """Test that the config file gracefully degrades with regular CMMCorePlus.
 
-        # Python device is NOT loaded (it's a comment in regular pymmcore)
-        assert "Dichroic" not in core.getLoadedDevices()
+    The Python device lines are commented out with #py, so regular CMMCorePlus
+    should be able to load the file (though it will skip those devices).
+    """
+    core = CMMCorePlus()
+    # Should not raise - the #py lines are treated as comments
+    core.loadSystemConfiguration(str(mixed_cfg_path))
 
-        # Config groups should still work for C++ devices
-        core.setConfig("Channel", "FITC")
-        assert core.getStateLabel("Emission") == "Chroma-HQ535"
+    # C++ devices should be loaded
+    assert "Camera" in core.getLoadedDevices()
+    assert "Z" in core.getLoadedDevices()
+    assert "Emission" in core.getLoadedDevices()
 
-        core.setConfig("Channel", "DAPI")
-        assert core.getStateLabel("Emission") == "Chroma-D460"
+    # Python device is NOT loaded (it's a comment in regular pymmcore)
+    assert "Dichroic" not in core.getLoadedDevices()
 
-    def test_save_and_reload_mixed_config(self, config_file: Path) -> None:
-        """Test that a mixed config can be saved and reloaded."""
-        core = UniMMCore()
-        core.loadSystemConfiguration(str(config_file))
+    # Config groups should still work for C++ devices
+    core.setConfig("Channel", "FITC")
+    assert core.getStateLabel("Emission") == "Chroma-HQ535"
 
-        # Modify the Python device state
-        core.setState("Dichroic", 3)
+    core.setConfig("Channel", "DAPI")
+    assert core.getStateLabel("Emission") == "Chroma-D460"
 
-        # Save the configuration
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".cfg", delete=False) as f:
-            save_path = Path(f.name)
 
-        core.saveSystemConfiguration(str(save_path))
+def test_save_and_reload_mixed_config(mixed_cfg_path: Path, tmp_path: Path) -> None:
+    """Test that a mixed config can be saved and reloaded."""
+    core = UniMMCore()
+    core.loadSystemConfiguration(str(mixed_cfg_path))
 
-        # Load the saved config into a new core
-        core2 = UniMMCore()
-        core2.loadSystemConfiguration(str(save_path))
+    # Modify the Python device state
+    core.setState("Dichroic", 3)
 
-        # Verify Python device is still present and functional
-        assert "Dichroic" in core2.getLoadedDevices()
-        dichroic = core2._pydevices["Dichroic"]
-        # Class is dynamically loaded, so check name instead of isinstance
-        assert type(dichroic).__name__ == "PyFilterWheel"
+    # Save the configuration
+    save_path = tmp_path / "saved_config.cfg"
+    core.saveSystemConfiguration(str(save_path))
 
-        # Verify labels are preserved
-        labels = core2.getStateLabels("Dichroic")
-        assert "TRITC" in labels
+    # Load the saved config into a new core
+    core2 = UniMMCore()
+    core2.loadSystemConfiguration(str(save_path))
 
-        # Clean up
-        save_path.unlink()
+    # Verify Python device is still present and functional
+    assert "Dichroic" in core2.getLoadedDevices()
+    assert core2.isPyDevice("Dichroic")
+    # Class is dynamically loaded, so check name instead of isinstance
+    assert core2.getDeviceLibrary("Dichroic") == "tests.00_unicore.test_pydevice_config"
+    assert core2.getDeviceName("Dichroic") == "PyFilterWheel"
 
-    def test_save_without_py_prefix(self, config_file: Path) -> None:
-        """Test saving config with prefix_py_devices=False."""
-        core = UniMMCore()
-        core.loadSystemConfiguration(str(config_file))
+    # Verify labels are preserved
+    labels = core2.getStateLabels("Dichroic")
+    assert "TRITC" in labels
 
-        # Save the configuration WITHOUT #py prefix
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".cfg", delete=False) as f:
-            save_path = Path(f.name)
 
-        core.saveSystemConfiguration(str(save_path), prefix_py_devices=False)
+def test_save_without_py_prefix(mixed_cfg_path: Path, tmp_path: Path) -> None:
+    """Test saving config with prefix_py_devices=False."""
+    core = UniMMCore()
+    core.loadSystemConfiguration(str(mixed_cfg_path))
 
-        # Read the saved content
-        content = save_path.read_text()
+    # Save the configuration WITHOUT #py prefix
+    save_path = tmp_path / "saved_no_prefix.cfg"
+    core.saveSystemConfiguration(str(save_path), prefix_py_devices=False)
 
-        # Python device lines should NOT have #py prefix
-        assert "pyDevice,Dichroic," in content
-        assert "#py pyDevice,Dichroic," not in content
+    # Read the saved content
+    content = save_path.read_text()
 
-        # C++ device lines should still be normal
-        assert "Device,Camera,DemoCamera,DCam" in content
+    # Python device lines should NOT have #py prefix
+    assert "pyDevice,Dichroic," in content
+    assert "#py pyDevice,Dichroic," not in content
 
-        # UniMMCore should still be able to load it
-        core2 = UniMMCore()
-        core2.loadSystemConfiguration(str(save_path))
-        assert "Dichroic" in core2.getLoadedDevices()
-        assert "Camera" in core2.getLoadedDevices()
+    # C++ device lines should still be normal
+    assert "Device,Camera,DemoCamera,DCam" in content
 
-        # Regular CMMCorePlus should fail (pyDevice is unknown, and subsequent
-        # commands reference the non-existent Python device)
-        core3 = CMMCorePlus()
-        with pytest.raises(OSError):
-            core3.loadSystemConfiguration(str(save_path))
+    # UniMMCore should still be able to load it
+    core2 = UniMMCore()
+    core2.loadSystemConfiguration(str(save_path))
+    assert "Dichroic" in core2.getLoadedDevices()
+    assert "Camera" in core2.getLoadedDevices()
 
-        # Clean up
-        save_path.unlink()
+    # Regular CMMCorePlus should fail (pyDevice is unknown, and subsequent
+    # commands reference the non-existent Python device)
+    core3 = CMMCorePlus()
+    with pytest.raises(OSError):
+        core3.loadSystemConfiguration(str(save_path))
