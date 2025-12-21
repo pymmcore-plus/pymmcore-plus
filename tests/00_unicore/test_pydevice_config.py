@@ -245,5 +245,5 @@ def test_save_without_py_prefix(mixed_cfg_path: Path, tmp_path: Path) -> None:
     # Regular CMMCorePlus should fail (pyDevice is unknown, and subsequent
     # commands reference the non-existent Python device)
     core3 = CMMCorePlus()
-    with pytest.raises(OSError):
+    with pytest.raises((OSError, RuntimeError)):
         core3.loadSystemConfiguration(str(save_path))

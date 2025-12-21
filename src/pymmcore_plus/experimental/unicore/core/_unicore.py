@@ -339,7 +339,7 @@ class UniMMCore(CMMCorePlus):
 
     def getLoadedDevicesOfType(self, devType: int) -> tuple[DeviceLabel, ...]:
         pydevs = self._pydevices.get_labels_of_type(devType)
-        return pydevs + super().getLoadedDevicesOfType(devType)
+        return pydevs + tuple(super().getLoadedDevicesOfType(devType))
 
     def getDeviceType(self, label: str) -> DeviceType:
         if label not in self._pydevices:  # pragma: no cover
