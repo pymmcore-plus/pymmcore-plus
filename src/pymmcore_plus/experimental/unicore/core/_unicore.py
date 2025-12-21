@@ -259,7 +259,7 @@ class UniMMCore(CMMCorePlus):
 
     def getLoadedDevicesOfType(self, devType: int) -> tuple[DeviceLabel, ...]:
         pydevs = self._pydevices.get_labels_of_type(devType)
-        return pydevs + super().getLoadedDevicesOfType(devType)
+        return pydevs + tuple(super().getLoadedDevicesOfType(devType))
 
     def getDeviceType(self, label: str) -> DeviceType:
         if label not in self._pydevices:  # pragma: no cover
@@ -280,6 +280,54 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getDeviceDescription(label)
         return self._pydevices[label].description()
+
+    # ---------------------------- Parent/Hub Relationships ---------------------------
+
+    def getParentLabel(
+        self, peripheralLabel: DeviceLabel | str
+    ) -> DeviceLabel | Literal[""]:
+        if peripheralLabel not in self._pydevices:  # pragma: no cover
+            return super().getParentLabel(peripheralLabel)
+        return self._pydevices[peripheralLabel].get_parent_label()  # type: ignore[return-value]
+
+    def setParentLabel(
+        self, deviceLabel: DeviceLabel | str, parentHubLabel: DeviceLabel | str
+    ) -> None:
+        if deviceLabel not in self._pydevices:  # pragma: no cover
+            return super().setParentLabel(deviceLabel, parentHubLabel)
+        self._pydevices[deviceLabel].set_parent_label(parentHubLabel)
+
+    def getInstalledDevices(
+        self, hubLabel: DeviceLabel | str
+    ) -> tuple[DeviceName, ...]:
+        if hubLabel not in self._pydevices:  # pragma: no cover
+            return tuple(super().getInstalledDevices(hubLabel))
+
+        with self._pydevices.get_hub_device(hubLabel) as hub:
+            peripherals = hub.get_installed_peripherals()
+            return tuple(p[0] for p in peripherals if p[0])  # type: ignore[misc]
+
+    def getLoadedPeripheralDevices(
+        self, hubLabel: DeviceLabel | str
+    ) -> tuple[DeviceLabel, ...]:
+        cpp_peripherals = super().getLoadedPeripheralDevices(hubLabel)
+        py_peripherals = self._pydevices.get_loaded_peripherals(hubLabel)
+        return tuple(cpp_peripherals) + py_peripherals
+
+    def getInstalledDeviceDescription(
+        self, hubLabel: DeviceLabel | str, peripheralLabel: DeviceName | str
+    ) -> str:
+        if hubLabel not in self._pydevices:
+            return super().getInstalledDeviceDescription(hubLabel, peripheralLabel)
+
+        with self._pydevices.get_hub_device(hubLabel) as hub:
+            for p in hub.get_installed_peripherals():
+                if p[0] == peripheralLabel:
+                    return p[1] or "N/A"
+            raise RuntimeError(  # pragma: no cover
+                f"No peripheral with name {peripheralLabel!r} installed in hub "
+                f"{hubLabel!r}"
+            )
 
     # ---------------------------- Properties ---------------------------
 

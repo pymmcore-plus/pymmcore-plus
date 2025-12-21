@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, TypeVar, cast
 from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
 
 from .devices._device_base import Device
+from .devices._hub import HubDevice
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -178,3 +179,57 @@ class PyDeviceManager:
             for label, device in self._devices.items()
             if dev_type == DeviceType.Any or device.type() == dev_type
         )
+
+    def get_loaded_peripherals(self, hub_label: str) -> tuple[DeviceLabel, ...]:
+        """Get labels of all loaded devices whose parent is the given hub.
+
+        Parameters
+        ----------
+        hub_label : str
+            The label of the hub device.
+
+        Returns
+        -------
+        tuple[DeviceLabel, ...]
+            Labels of all loaded devices that have this hub as their parent.
+        """
+        # Verify the hub exists and is actually a hub device
+        if hub_label not in self._devices:
+            return ()
+        hub_device = self._devices[hub_label]
+        if hub_device.type() != DeviceType.Hub:
+            return ()
+
+        return tuple(
+            cast("DeviceLabel", label)
+            for label, device in self._devices.items()
+            if device.get_parent_label() == hub_label
+        )
+
+    def get_hub_device(self, hub_label: str) -> HubDevice:
+        """Get a hub device by label, ensuring it is a HubDevice.
+
+        Parameters
+        ----------
+        hub_label : str
+            The label of the hub device.
+
+        Returns
+        -------
+        HubDevice
+            The hub device.
+
+        Raises
+        ------
+        KeyError
+            If no device with the given label exists.
+        RuntimeError
+            If the device is not a HubDevice.
+        """
+        device = self[hub_label]
+        if not isinstance(device, HubDevice):
+            raise RuntimeError(
+                f"Device {hub_label!r} is not a HubDevice "
+                f"(type is {device.type().name})"
+            )
+        return device

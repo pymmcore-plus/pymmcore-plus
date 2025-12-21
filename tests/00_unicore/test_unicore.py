@@ -6,7 +6,12 @@ from unittest.mock import MagicMock
 import pytest
 
 from pymmcore_plus import DeviceInitializationState, DeviceType, PropertyType, _pymmcore
-from pymmcore_plus.experimental.unicore import GenericDevice, UniMMCore, pymm_property
+from pymmcore_plus.experimental.unicore import (
+    GenericDevice,
+    HubDevice,
+    UniMMCore,
+    pymm_property,
+)
 
 DOC = """Example generic device."""
 PROP_A = "propA"  # must match below
@@ -634,3 +639,219 @@ def test_config_with_only_python_devices():
     # Set to non-matching value
     core.setProperty("PyDev", "propB", 50.0)
     assert core.getCurrentConfig("pyOnlyGroup") == ""
+
+
+# ================== Hub Device Tests ==================
+
+
+class MyHub(HubDevice):
+    """Test hub device with peripheral devices."""
+
+    def get_installed_peripherals(
+        self,
+    ) -> Sequence[
+        tuple[
+            str,
+            str,
+        ]
+    ]:
+        return [
+            ("Peripheral1", "First peripheral device"),
+            ("Peripheral2", "Second peripheral device"),
+            ("Peripheral3", ""),  # No description
+        ]
+
+
+class ChildDevice(GenericDevice):
+    """A simple device that can be a peripheral of a hub."""
+
+
+def test_hub_device_basics():
+    """Test basic HubDevice functionality."""
+    core = UniMMCore()
+
+    hub = MyHub()
+    core.loadPyDevice("hub", hub)
+    core.initializeDevice("hub")
+
+    # Check device type
+    assert core.getDeviceType("hub") == DeviceType.Hub
+    assert "hub" in core.getLoadedDevicesOfType(DeviceType.Hub)
+
+
+def test_get_installed_devices():
+    """Test getInstalledDevices for Python hub devices."""
+    core = UniMMCore()
+
+    hub = MyHub()
+    core.loadPyDevice("hub", hub)
+    core.initializeDevice("hub")
+
+    installed = core.getInstalledDevices("hub")
+    assert "Peripheral1" in installed
+    assert "Peripheral2" in installed
+    assert "Peripheral3" in installed
+    assert len(installed) == 3
+
+
+def test_get_installed_device_description():
+    """Test getInstalledDeviceDescription for Python hub devices."""
+    core = UniMMCore()
+
+    hub = MyHub()
+    core.loadPyDevice("hub", hub)
+    core.initializeDevice("hub")
+
+    assert core.getInstalledDeviceDescription("hub", "Peripheral1") == (
+        "First peripheral device"
+    )
+    assert core.getInstalledDeviceDescription("hub", "Peripheral2") == (
+        "Second peripheral device"
+    )
+    # No description provided, returns "N/A"
+    assert core.getInstalledDeviceDescription("hub", "Peripheral3") == "N/A"
+
+    # Non-existent peripheral
+    with pytest.raises(RuntimeError, match="No peripheral with name"):
+        core.getInstalledDeviceDescription("hub", "NonExistent")
+
+
+def test_parent_label():
+    """Test getParentLabel and setParentLabel for Python devices."""
+    core = UniMMCore()
+
+    hub = MyHub()
+    child1 = ChildDevice()
+    child2 = ChildDevice()
+
+    core.loadPyDevice("hub", hub)
+    core.loadPyDevice("child1", child1)
+    core.loadPyDevice("child2", child2)
+    core.initializeAllDevices()
+
+    # Initially no parent
+    assert core.getParentLabel("child1") == ""
+    assert core.getParentLabel("child2") == ""
+
+    # Set parent labels
+    core.setParentLabel("child1", "hub")
+    core.setParentLabel("child2", "hub")
+
+    assert core.getParentLabel("child1") == "hub"
+    assert core.getParentLabel("child2") == "hub"
+
+    # Clear parent label
+    core.setParentLabel("child1", "")
+    assert core.getParentLabel("child1") == ""
+
+
+def test_get_loaded_peripheral_devices():
+    """Test getLoadedPeripheralDevices for Python devices."""
+    core = UniMMCore()
+
+    hub = MyHub()
+    child1 = ChildDevice()
+    child2 = ChildDevice()
+    other = ChildDevice()
+
+    core.loadPyDevice("hub", hub)
+    core.loadPyDevice("child1", child1)
+    core.loadPyDevice("child2", child2)
+    core.loadPyDevice("other", other)
+    core.initializeAllDevices()
+
+    # Set some children to have the hub as parent
+    core.setParentLabel("child1", "hub")
+    core.setParentLabel("child2", "hub")
+    # "other" has no parent
+
+    peripherals = core.getLoadedPeripheralDevices("hub")
+    assert "child1" in peripherals
+    assert "child2" in peripherals
+    assert "other" not in peripherals
+    assert len(peripherals) == 2
+
+    # Non-hub device returns empty
+    peripherals_from_non_hub = core.getLoadedPeripheralDevices("child1")
+    assert len(peripherals_from_non_hub) == 0
+
+
+def test_core_device_has_no_parent():
+    """Test that Core device returns empty parent and ignores set."""
+    core = UniMMCore()
+
+    # Core device should return empty parent label
+    assert core.getParentLabel("Core") == ""
+
+    # Setting parent on Core should be a no-op (not raise)
+    core.setParentLabel("Core", "some_hub")
+    assert core.getParentLabel("Core") == ""
+
+
+def test_hub_lazy_detection():
+    """Test that hub implementers can do lazy detection in get_installed_peripherals."""
+
+    class LazyDetectingHub(HubDevice):
+        """Hub that lazily detects peripherals on first access."""
+
+        _detected: list[tuple[str, str]] | None = None
+        detect_count = 0
+
+        def get_installed_peripherals(self) -> Sequence[tuple[str, str]]:
+            # Implementers can cache detection results themselves
+            if self._detected is None:
+                self.detect_count += 1
+                self._detected = [("Device1", "Description")]
+            return self._detected
+
+    core = UniMMCore()
+    hub = LazyDetectingHub()
+    core.loadPyDevice("hub", hub)
+    core.initializeDevice("hub")
+
+    # First call triggers detection
+    _ = core.getInstalledDevices("hub")
+    assert hub.detect_count == 1
+
+    # Subsequent calls use cached result (implementer's responsibility)
+    _ = core.getInstalledDevices("hub")
+    assert hub.detect_count == 1
+
+    _ = core.getInstalledDeviceDescription("hub", "Device1")
+    assert hub.detect_count == 1
+
+
+def test_empty_hub():
+    """Test hub with no installed devices."""
+
+    class EmptyHub(HubDevice):
+        pass  # Uses default get_installed_peripherals returning ()
+
+    core = UniMMCore()
+    hub = EmptyHub()
+    core.loadPyDevice("hub", hub)
+    core.initializeDevice("hub")
+
+    installed = core.getInstalledDevices("hub")
+    assert installed == ()
+
+
+def test_hub_device_parent_and_children_mixed():
+    """Test parent/child relationships with mixed C++ and Python devices."""
+    core = UniMMCore()
+
+    # Load a C++ camera device and a Python hub
+    core.loadDevice("CDev", "DemoCamera", "DCam")
+    hub = MyHub()
+    child = ChildDevice()
+    core.loadPyDevice("hub", hub)
+    core.loadPyDevice("child", child)
+    core.initializeAllDevices()
+
+    # Set Python child to have Python hub as parent
+    core.setParentLabel("child", "hub")
+    assert core.getParentLabel("child") == "hub"
+
+    peripherals = core.getLoadedPeripheralDevices("hub")
+    assert "child" in peripherals
+    assert "CDev" not in peripherals
