@@ -21,10 +21,11 @@ Format example:
 
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Callable
 
-from pymmcore_plus import CFGCommand, DeviceType, Keyword
+from pymmcore_plus import CFGCommand, CFGGroup, DeviceType, Keyword
 from pymmcore_plus._util import timestamp
 
 if TYPE_CHECKING:
@@ -36,11 +37,8 @@ __all__ = ["load_system_configuration", "save_system_configuration"]
 
 # Prefix for Python device lines (treated as comment by C++/regular pymmcore)
 PY_PREFIX = "#py "
-
-
-def _is_py_device(core: UniMMCore, label: str) -> bool:
-    """Check if a device is a Python device."""
-    return label in core._pydevices  # noqa: SLF001
+# Custom command names (not in CFGCommand enum)
+_PY_DEVICE_CMD = "pyDevice"
 
 
 # =============================================================================
@@ -66,8 +64,7 @@ def load_system_configuration(core: UniMMCore, filename: str | Path) -> None:
     if not path.exists():
         raise FileNotFoundError(f"Configuration file not found: {path}")
 
-    text = path.read_text()
-    load_from_string(core, text, str(path))
+    load_from_string(core, path.read_text(), str(path))
 
 
 def load_from_string(core: UniMMCore, text: str, source: str = "<string>") -> None:
@@ -82,21 +79,17 @@ def load_from_string(core: UniMMCore, text: str, source: str = "<string>") -> No
     source : str
         Source identifier for error messages.
     """
-    line_count = 0
-
-    for line in text.splitlines():
-        line_count += 1
+    for line_num, line in enumerate(text.splitlines(), start=1):
         # Strip Windows CR if present
-        line = line.rstrip("\r").strip()
-
-        if not line:
+        if not (line := line.rstrip("\r").strip()):
             continue
 
         try:
-            # Handle #py prefixed lines (Python device commands)
+            # strip #py prefix (python devices)
             if line.startswith(PY_PREFIX):
-                _run_command(core, line[len(PY_PREFIX) :])
-            elif line.startswith("#"):
+                line = line[len(PY_PREFIX) :].lstrip()
+
+            if line.startswith("#"):
                 # Regular comment - skip
                 continue
             else:
@@ -104,13 +97,20 @@ def load_from_string(core: UniMMCore, text: str, source: str = "<string>") -> No
                 _run_command(core, line)
         except Exception as e:
             raise RuntimeError(
-                f"Error in configuration file {source!r} at line {line_count}: "
+                f"Error in configuration file {source!r} at line {line_num}: "
                 f"{line!r}\n{e}"
             ) from e
 
+    # File parsing finished, apply startup configuration if defined
+    if core.isConfigDefined(CFGGroup.System, CFGGroup.System_Startup):
+        # Build system state cache before setConfig to avoid failures
+        core.waitForSystem()
+        core.updateSystemStateCache()
+        core.setConfig(CFGGroup.System, CFGGroup.System_Startup)
 
-# Custom command names (not in CFGCommand enum)
-_PY_DEVICE_CMD = "pyDevice"
+    # Final sync after all configuration is applied
+    core.waitForSystem()
+    core.updateSystemStateCache()
 
 
 def _run_command(core: UniMMCore, line: str) -> None:
@@ -122,24 +122,41 @@ def _run_command(core: UniMMCore, line: str) -> None:
     if not tokens:
         return
 
-    cmd_name = tokens[0]
+    cmd_name, *args = tokens
 
     # Handle custom commands first
     if cmd_name == _PY_DEVICE_CMD:
-        _exec_py_device(core, tokens[1:])
+        _exec_device(core, args)
         return
 
     try:
         command = CFGCommand(cmd_name)
-    except ValueError:
+    except ValueError:  # pragma: no cover
         raise ValueError(f"Unknown configuration command: {cmd_name!r}") from None
 
+    if command == CFGCommand.Configuration:  # pragma: no cover
+        warnings.warn(
+            f"Obsolete command {cmd_name!r} ignored in configuration file",
+            UserWarning,
+            stacklevel=3,
+        )
+        return
+    if command == CFGCommand.Equipment:  # pragma: no cover
+        raise ValueError("Equipment command has been removed from config format")
+    if command == CFGCommand.ImageSynchro:  # pragma: no cover
+        raise ValueError("ImageSynchro command has been removed from config format")
+
     executor = _COMMAND_EXECUTORS.get(command)
-    if executor is None:
-        # Some commands are intentionally ignored (Equipment, ImageSynchro, etc.)
+    if executor is None:  # pragma: no cover
+        # Unknown command in our executor map - should not happen for valid CFGCommand
         return
 
-    executor(core, tokens[1:])
+    try:
+        executor(core, args)
+    except Exception as e:  # pragma: no cover
+        raise RuntimeError(
+            f"Error executing command {cmd_name!r} with arguments {args!r}: {e}"
+        ) from e
 
 
 # =============================================================================
@@ -153,14 +170,6 @@ def _exec_device(core: UniMMCore, args: Sequence[str]) -> None:
         raise ValueError(f"Device command requires 3 arguments, got {len(args)}")
     label, library, device_name = args
     core.loadDevice(label, library, device_name)
-
-
-def _exec_py_device(core: UniMMCore, args: Sequence[str]) -> None:
-    """Load a Python device: pyDevice,<label>,<module>,<class_name>."""
-    if len(args) != 3:
-        raise ValueError(f"pyDevice command requires 3 arguments, got {len(args)}")
-    label, module_name, class_name = args
-    core.loadDevice(label, module_name, class_name)
 
 
 def _exec_property(core: UniMMCore, args: Sequence[str]) -> None:
@@ -180,7 +189,10 @@ def _exec_property(core: UniMMCore, args: Sequence[str]) -> None:
                 raise ValueError(
                     f"Initialize value must be integer, got {value!r}"
                 ) from None
-            if init_val == 1:
+            if init_val == 0:
+                # Unload all devices (reset state for fresh config load)
+                core.unloadAllDevices()
+            elif init_val == 1:
                 core.initializeAllDevices()
             return
         elif prop == Keyword.CoreCamera:
@@ -476,7 +488,7 @@ def _iter_devices(core: UniMMCore, prefix_py_devices: bool = True) -> Iterable[s
     for label in core.getLoadedDevices():
         if label == Keyword.CoreDevice:  # type: ignore[comparison-overlap]
             continue
-        is_py = _is_py_device(core, label)
+        is_py = core.isPyDevice(label)
         library = core.getDeviceLibrary(label)
         device_name = core.getDeviceName(label)
         # Use pyDevice command for Python devices, Device for C++ devices
@@ -498,7 +510,7 @@ def _iter_pre_init_props(
     for label in core.getLoadedDevices():
         if label == Keyword.CoreDevice:  # type: ignore[comparison-overlap]
             continue
-        is_py = _is_py_device(core, label)
+        is_py = core.isPyDevice(label)
         for prop_name in core.getDevicePropertyNames(label):
             if core.isPropertyPreInit(label, prop_name):
                 value = core.getProperty(label, prop_name)
@@ -517,7 +529,7 @@ def _iter_hub_refs(core: UniMMCore) -> Iterable[str]:
     for label in core.getLoadedDevices():
         if label == Keyword.CoreDevice:  # type: ignore[comparison-overlap]
             continue
-        is_py = _is_py_device(core, label)
+        is_py = core.isPyDevice(label)
         # Python devices don't have parent labels (yet)
         if is_py:
             continue
@@ -536,12 +548,11 @@ def _iter_delays(core: UniMMCore, prefix_py_devices: bool = True) -> Iterable[st
             continue
         delay = core.getDeviceDelayMs(label)
         if delay > 0:
-            is_py = _is_py_device(core, label)
             yield _serialize(
                 CFGCommand.Delay,
                 label,
                 delay,
-                py_device=is_py,
+                py_device=core.isPyDevice(label),
                 prefix_py_devices=prefix_py_devices,
             )
 
@@ -551,7 +562,7 @@ def _iter_focus_directions(
 ) -> Iterable[str]:
     """Iterate over focus direction commands."""
     for label in core.getLoadedDevicesOfType(DeviceType.Stage):
-        is_py = _is_py_device(core, label)
+        is_py = core.isPyDevice(label)
         direction = core.getFocusDirection(label)
         yield _serialize(
             CFGCommand.FocusDirection,
@@ -565,7 +576,7 @@ def _iter_focus_directions(
 def _iter_labels(core: UniMMCore, prefix_py_devices: bool = True) -> Iterable[str]:
     """Iterate over state device label commands."""
     for label in core.getLoadedDevicesOfType(DeviceType.State):
-        is_py = _is_py_device(core, label)
+        is_py = core.isPyDevice(label)
         labels = core.getStateLabels(label)
         for state, state_label in enumerate(labels):
             if state_label:
@@ -597,7 +608,7 @@ def _iter_config_groups(
                 device = setting.getDeviceLabel()
                 prop = setting.getPropertyName()
                 value = setting.getPropertyValue()
-                is_py = _is_py_device(core, device)
+                is_py = core.isPyDevice(device)
                 yield _serialize(
                     CFGCommand.ConfigGroup,
                     group_name,
@@ -622,7 +633,7 @@ def _iter_pixel_size_configs(
             prop = setting.getPropertyName()
             value = setting.getPropertyValue()
             # Pixel size configs typically only reference C++ devices
-            is_py = _is_py_device(core, device)
+            is_py = core.isPyDevice(device)
             yield _serialize(
                 CFGCommand.ConfigPixelSize,
                 preset_name,
@@ -675,7 +686,7 @@ def _iter_roles(core: UniMMCore, prefix_py_devices: bool = True) -> Iterable[str
         try:
             device = getter()
             if device:
-                is_py = _is_py_device(core, device)
+                is_py = core.isPyDevice(device)
                 yield _serialize(
                     CFGCommand.Property,
                     Keyword.CoreDevice,
