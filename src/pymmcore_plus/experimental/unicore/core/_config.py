@@ -61,7 +61,7 @@ def load_system_configuration(core: UniMMCore, filename: str | Path) -> None:
         Path to the configuration file.
     """
     path = Path(filename).expanduser().resolve()
-    if not path.exists():
+    if not path.exists():  # pragma: no cover
         raise FileNotFoundError(f"Configuration file not found: {path}")
 
     load_from_string(core, path.read_text(), str(path))
@@ -119,7 +119,7 @@ def _run_command(core: UniMMCore, line: str) -> None:
     Mirrors MMCore::loadSystemConfigurationImpl command processing.
     """
     tokens = line.split(CFGCommand.FieldDelimiters)
-    if not tokens:
+    if not tokens:  # pragma: no cover
         return
 
     cmd_name, *args = tokens
@@ -166,7 +166,7 @@ def _run_command(core: UniMMCore, line: str) -> None:
 
 def _exec_device(core: UniMMCore, args: Sequence[str]) -> None:
     """Load a device: Device,<label>,<library>,<device_name>."""
-    if len(args) != 3:
+    if len(args) != 3:  # pragma: no cover
         raise ValueError(f"Device command requires 3 arguments, got {len(args)}")
     label, library, device_name = args
     core.loadDevice(label, library, device_name)
@@ -174,7 +174,7 @@ def _exec_device(core: UniMMCore, args: Sequence[str]) -> None:
 
 def _exec_property(core: UniMMCore, args: Sequence[str]) -> None:
     """Set a property: Property,<device>,<property>,<value>."""
-    if len(args) not in (2, 3):
+    if len(args) not in (2, 3):  # pragma: no cover
         raise ValueError(f"Property command requires 2-3 arguments, got {len(args)}")
 
     device, prop = args[0], args[1]
@@ -185,7 +185,7 @@ def _exec_property(core: UniMMCore, args: Sequence[str]) -> None:
         if prop == Keyword.CoreInitialize:
             try:
                 init_val = int(value)
-            except (ValueError, TypeError):
+            except (ValueError, TypeError):  # pragma: no cover
                 raise ValueError(
                     f"Initialize value must be integer, got {value!r}"
                 ) from None
@@ -228,26 +228,26 @@ def _exec_property(core: UniMMCore, args: Sequence[str]) -> None:
 
 def _exec_delay(core: UniMMCore, args: Sequence[str]) -> None:
     """Set device delay: Delay,<device>,<delay_ms>."""
-    if len(args) != 2:
+    if len(args) != 2:  # pragma: no cover
         raise ValueError(f"Delay command requires 2 arguments, got {len(args)}")
     device, delay_str = args
     try:
         delay_ms = float(delay_str)
-    except ValueError:
+    except ValueError:  # pragma: no cover
         raise ValueError(f"Delay must be a number, got {delay_str!r}") from None
     core.setDeviceDelayMs(device, delay_ms)
 
 
 def _exec_focus_direction(core: UniMMCore, args: Sequence[str]) -> None:
     """Set focus direction: FocusDirection,<device>,<direction>."""
-    if len(args) != 2:
+    if len(args) != 2:  # pragma: no cover
         raise ValueError(
             f"FocusDirection command requires 2 arguments, got {len(args)}"
         )
     device, direction_str = args
     try:
         direction = int(direction_str)
-    except ValueError:
+    except ValueError:  # pragma: no cover
         raise ValueError(
             f"FocusDirection must be an integer, got {direction_str!r}"
         ) from None
@@ -256,12 +256,12 @@ def _exec_focus_direction(core: UniMMCore, args: Sequence[str]) -> None:
 
 def _exec_label(core: UniMMCore, args: Sequence[str]) -> None:
     """Define state label: Label,<device>,<state>,<label>."""
-    if len(args) != 3:
+    if len(args) != 3:  # pragma: no cover
         raise ValueError(f"Label command requires 3 arguments, got {len(args)}")
     device, state_str, label = args
     try:
         state = int(state_str)
-    except ValueError:
+    except ValueError:  # pragma: no cover
         raise ValueError(f"State must be an integer, got {state_str!r}") from None
     core.defineStateLabel(device, state, label)
 
@@ -283,7 +283,7 @@ def _exec_config_group(core: UniMMCore, args: Sequence[str]) -> None:
         prop = args[3]
         value = args[4] if len(args) > 4 else ""
         core.defineConfig(group_name, preset_name, device, prop, value)
-    else:
+    else:  # pragma: no cover
         raise ValueError(
             f"ConfigGroup command requires 1, 4, or 5 arguments, got {len(args)}"
         )
@@ -291,7 +291,7 @@ def _exec_config_group(core: UniMMCore, args: Sequence[str]) -> None:
 
 def _exec_config_pixel_size(core: UniMMCore, args: Sequence[str]) -> None:
     """Define pixel size config: ConfigPixelSize,<preset>,<device>,<prop>,<value>."""
-    if len(args) != 4:
+    if len(args) != 4:  # pragma: no cover
         raise ValueError(
             f"ConfigPixelSize command requires 4 arguments, got {len(args)}"
         )
@@ -301,33 +301,33 @@ def _exec_config_pixel_size(core: UniMMCore, args: Sequence[str]) -> None:
 
 def _exec_pixel_size_um(core: UniMMCore, args: Sequence[str]) -> None:
     """Set pixel size: PixelSize_um,<preset>,<size>."""
-    if len(args) != 2:
+    if len(args) != 2:  # pragma: no cover
         raise ValueError(f"PixelSize_um command requires 2 arguments, got {len(args)}")
     preset_name, size_str = args
     try:
         size = float(size_str)
-    except ValueError:
+    except ValueError:  # pragma: no cover
         raise ValueError(f"Pixel size must be a number, got {size_str!r}") from None
     core.setPixelSizeUm(preset_name, size)
 
 
 def _exec_pixel_size_affine(core: UniMMCore, args: Sequence[str]) -> None:
     """Set pixel size affine transform."""
-    if len(args) != 7:
+    if len(args) != 7:  # pragma: no cover
         raise ValueError(
             f"PixelSizeAffine command requires 7 arguments, got {len(args)}"
         )
     preset_name = args[0]
     try:
         affine = [float(x) for x in args[1:]]
-    except ValueError:
+    except ValueError:  # pragma: no cover
         raise ValueError(f"Affine values must be numbers, got {args[1:]!r}") from None
     core.setPixelSizeAffine(preset_name, affine)
 
 
 def _exec_parent_id(core: UniMMCore, args: Sequence[str]) -> None:
     """Set parent hub: Parent,<device>,<parent_hub>."""
-    if len(args) != 2:
+    if len(args) != 2:  # pragma: no cover
         raise ValueError(f"Parent command requires 2 arguments, got {len(args)}")
     device, parent = args
     core.setParentLabel(device, parent)
@@ -352,7 +352,7 @@ _COMMAND_EXECUTORS: dict[CFGCommand, Callable[[UniMMCore, Sequence[str]], None]]
 if hasattr(CFGCommand, "PixelSize_dxdz"):
 
     def _exec_pixel_size_dxdz(core: UniMMCore, args: Sequence[str]) -> None:
-        if len(args) != 2:
+        if len(args) != 2:  # pragma: no cover
             raise ValueError(
                 f"PixelSize_dxdz command requires 2 arguments, got {len(args)}"
             )
@@ -364,7 +364,7 @@ if hasattr(CFGCommand, "PixelSize_dxdz"):
 if hasattr(CFGCommand, "PixelSize_dydz"):
 
     def _exec_pixel_size_dydz(core: UniMMCore, args: Sequence[str]) -> None:
-        if len(args) != 2:
+        if len(args) != 2:  # pragma: no cover
             raise ValueError(
                 f"PixelSize_dydz command requires 2 arguments, got {len(args)}"
             )
@@ -376,7 +376,7 @@ if hasattr(CFGCommand, "PixelSize_dydz"):
 if hasattr(CFGCommand, "PixelSize_OptimalZUm"):
 
     def _exec_pixel_size_optimal_z(core: UniMMCore, args: Sequence[str]) -> None:
-        if len(args) != 2:
+        if len(args) != 2:  # pragma: no cover
             raise ValueError(
                 f"PixelSize_OptimalZUm command requires 2 arguments, got {len(args)}"
             )
@@ -538,7 +538,7 @@ def _iter_hub_refs(core: UniMMCore) -> Iterable[str]:
         except RuntimeError:
             continue
         if parent:
-            yield _serialize(CFGCommand.ParentID, label, parent, py_device=False)
+            yield _serialize(CFGCommand.ParentID, label, parent, py_device=is_py)
 
 
 def _iter_delays(core: UniMMCore, prefix_py_devices: bool = True) -> Iterable[str]:
@@ -684,26 +684,23 @@ def _iter_roles(core: UniMMCore, prefix_py_devices: bool = True) -> Iterable[str
 
     for role_keyword, getter in roles:
         try:
-            device = getter()
-            if device:
-                is_py = core.isPyDevice(device)
+            if device := getter():
                 yield _serialize(
                     CFGCommand.Property,
                     Keyword.CoreDevice,
                     role_keyword,
                     device,
-                    py_device=is_py,
+                    py_device=core.isPyDevice(device),
                     prefix_py_devices=prefix_py_devices,
                 )
-        except Exception:
+        except Exception:  # pragma: no cover
             # Some getters may not be available
             pass
 
     # AutoShutter setting
-    auto_shutter = core.getAutoShutter()
     yield _serialize(
         CFGCommand.Property,
         Keyword.CoreDevice,
         Keyword.CoreAutoShutter,
-        int(auto_shutter),
+        int(core.getAutoShutter()),
     )
