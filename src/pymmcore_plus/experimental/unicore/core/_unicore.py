@@ -28,6 +28,7 @@ from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
+from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
 from pymmcore_plus.experimental.unicore.devices._shutter import ShutterDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import (
@@ -263,7 +264,7 @@ class UniMMCore(CMMCorePlus):
 
     def getLoadedDevicesOfType(self, devType: int) -> tuple[DeviceLabel, ...]:
         pydevs = self._pydevices.get_labels_of_type(devType)
-        return pydevs + super().getLoadedDevicesOfType(devType)
+        return pydevs + tuple(super().getLoadedDevicesOfType(devType))
 
     def getDeviceType(self, label: str) -> DeviceType:
         if label not in self._pydevices:  # pragma: no cover
@@ -284,6 +285,67 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getDeviceDescription(label)
         return self._pydevices[label].description()
+
+    # ---------------------------- Parent/Hub Relationships ---------------------------
+
+    def getParentLabel(
+        self, peripheralLabel: DeviceLabel | str
+    ) -> DeviceLabel | Literal[""]:
+        if peripheralLabel not in self._pydevices:  # pragma: no cover
+            return super().getParentLabel(peripheralLabel)
+        return self._pydevices[peripheralLabel].get_parent_label()  # type: ignore[return-value]
+
+    def setParentLabel(
+        self, deviceLabel: DeviceLabel | str, parentHubLabel: DeviceLabel | str
+    ) -> None:
+        if deviceLabel == KW.CoreDevice:
+            return
+
+        # Reject cross-language hub/peripheral relationships
+        device_is_py = deviceLabel in self._pydevices
+        parent_is_py = parentHubLabel in self._pydevices
+        if parentHubLabel and device_is_py != parent_is_py:
+            raise RuntimeError(  # pragma: no cover
+                "Cannot set cross-language parent/child relationship between C++ and "
+                "Python devices"
+            )
+
+        if device_is_py:
+            self._pydevices[deviceLabel].set_parent_label(parentHubLabel)
+        else:
+            super().setParentLabel(deviceLabel, parentHubLabel)
+
+    def getInstalledDevices(
+        self, hubLabel: DeviceLabel | str
+    ) -> tuple[DeviceName, ...]:
+        if hubLabel not in self._pydevices:  # pragma: no cover
+            return tuple(super().getInstalledDevices(hubLabel))
+
+        with self._pydevices.get_device_of_type(hubLabel, HubDevice) as hub:
+            peripherals = hub.get_installed_peripherals()
+            return tuple(p[0] for p in peripherals if p[0])  # type: ignore[misc]
+
+    def getLoadedPeripheralDevices(
+        self, hubLabel: DeviceLabel | str
+    ) -> tuple[DeviceLabel, ...]:
+        cpp_peripherals = super().getLoadedPeripheralDevices(hubLabel)
+        py_peripherals = self._pydevices.get_loaded_peripherals(hubLabel)
+        return tuple(cpp_peripherals) + py_peripherals
+
+    def getInstalledDeviceDescription(
+        self, hubLabel: DeviceLabel | str, peripheralLabel: DeviceName | str
+    ) -> str:
+        if hubLabel not in self._pydevices:
+            return super().getInstalledDeviceDescription(hubLabel, peripheralLabel)
+
+        with self._pydevices.get_device_of_type(hubLabel, HubDevice) as hub:
+            for p in hub.get_installed_peripherals():
+                if p[0] == peripheralLabel:
+                    return p[1] or "N/A"
+            raise RuntimeError(  # pragma: no cover
+                f"No peripheral with name {peripheralLabel!r} installed in hub "
+                f"{hubLabel!r}"
+            )
 
     # ---------------------------- Properties ---------------------------
 
