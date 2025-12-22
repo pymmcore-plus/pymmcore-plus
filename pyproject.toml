@@ -56,7 +56,7 @@ dependencies = [
 [project.optional-dependencies]
 cli = ["typer >=0.13.0", "rich >=10.2.0"]
 io = ["tifffile >=2021.6.14", "zarr >=2.15,<3"]
-simulate = ["pillow >=9.0"]
+simulate = ["pillow >=11.0"]
 PySide2 = ["PySide2 >=5.15.2.1"]
 PySide6 = ["PySide6 ==6.7.3"]
 PyQt5 = ["PyQt5 >=5.15.4"]
