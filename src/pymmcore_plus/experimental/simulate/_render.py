@@ -275,9 +275,17 @@ class RenderEngine:
             ksize = int(blur_radius * 6) | 1  # kernel size must be odd
             return cv2.GaussianBlur(arr, (ksize, ksize), blur_radius)  # type: ignore [no-any-return]
         else:
-            img = Image.fromarray(arr, mode="F")
+            max_val = arr.max()
+            if max_val > 0:
+                normalized = (arr * 255.0 / max_val).astype(np.uint8)
+            else:
+                normalized = np.zeros_like(arr, dtype=np.uint8)
+            img = Image.fromarray(normalized, mode="L")
             blurred = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
-            return np.asarray(blurred, dtype=np.float32)
+            result = np.asarray(blurred, dtype=np.float32)
+            if max_val > 0:
+                result = result * max_val / 255.0
+            return result
 
 
 # -----------------------------------------------------------------------------

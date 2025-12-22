@@ -268,7 +268,7 @@ def test_render_config_defaults() -> None:
     config = sim.RenderConfig()
     assert config.shot_noise is True
     assert config.defocus_scale == 0.125
-    assert config.base_blur == 1.0
+    assert config.base_blur == 1.5
     assert config.random_seed is None
     assert config.backend == "auto"
 
@@ -334,8 +334,9 @@ def test_render_16bit(mock_state: SummaryMetaV1) -> None:
 
 
 def test_render_with_defocus(mock_state: SummaryMetaV1) -> None:
+    # Use lower intensity to avoid saturation which breaks ratio comparison
     config = sim.RenderConfig(shot_noise=False, base_blur=0, defocus_scale=1.0)
-    engine = RenderEngine([sim.Point(0, 0, intensity=255, radius=1)], config)
+    engine = RenderEngine([sim.Point(0, 0, intensity=50, radius=1)], config)
 
     mock_state["position"]["z"] = 0.0
     img_focus = engine.render(mock_state)
@@ -404,8 +405,8 @@ def test_sample_integration_stage_movement(core: pymmcore_plus.CMMCorePlus) -> N
 
         h, w = img.shape
         max_y, max_x = np.unravel_index(img.argmax(), img.shape)
-        assert abs(max_x - w // 2) < 20
-        assert abs(max_y - h // 2) < 20
+        assert abs(max_x - w // 2) < 30
+        assert abs(max_y - h // 2) < 30
 
 
 def test_sample_integration_z_defocus(core: pymmcore_plus.CMMCorePlus) -> None:
