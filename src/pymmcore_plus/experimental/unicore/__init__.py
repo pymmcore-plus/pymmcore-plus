@@ -2,6 +2,7 @@ from .core._unicore import UniMMCore
 from .devices._camera import CameraDevice
 from .devices._device_base import Device
 from .devices._generic_device import GenericDevice
+from .devices._hub import HubDevice
 from .devices._properties import PropertyInfo, pymm_property
 from .devices._shutter import ShutterDevice
 from .devices._slm import SLMDevice
@@ -12,6 +13,7 @@ __all__ = [
     "CameraDevice",
     "Device",
     "GenericDevice",
+    "HubDevice",
     "PropertyInfo",
     "SLMDevice",
     "ShutterDevice",

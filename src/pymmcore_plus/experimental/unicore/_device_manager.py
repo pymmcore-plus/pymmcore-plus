@@ -178,3 +178,29 @@ class PyDeviceManager:
             for label, device in self._devices.items()
             if dev_type == DeviceType.Any or device.type() == dev_type
         )
+
+    def get_loaded_peripherals(self, hub_label: str) -> tuple[DeviceLabel, ...]:
+        """Get labels of all loaded devices whose parent is the given hub.
+
+        Parameters
+        ----------
+        hub_label : str
+            The label of the hub device.
+
+        Returns
+        -------
+        tuple[DeviceLabel, ...]
+            Labels of all loaded devices that have this hub as their parent.
+        """
+        # Verify the hub exists and is actually a hub device
+        if hub_label not in self._devices:
+            return ()
+        hub_device = self._devices[hub_label]
+        if hub_device.type() != DeviceType.Hub:
+            return ()
+
+        return tuple(
+            cast("DeviceLabel", label)
+            for label, device in self._devices.items()
+            if device.get_parent_label() == hub_label
+        )
