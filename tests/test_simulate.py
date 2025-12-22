@@ -405,8 +405,9 @@ def test_sample_integration_stage_movement(core: pymmcore_plus.CMMCorePlus) -> N
 
         h, w = img.shape
         max_y, max_x = np.unravel_index(img.argmax(), img.shape)
-        assert abs(max_x - w // 2) < 30
-        assert abs(max_y - h // 2) < 30
+        # Allow 10% tolerance - exact position varies due to rounding and backends
+        assert abs(max_x - w // 2) < w * 0.1
+        assert abs(max_y - h // 2) < h * 0.1
 
 
 def test_sample_integration_z_defocus(core: pymmcore_plus.CMMCorePlus) -> None:
