@@ -28,6 +28,7 @@ from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
+from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
 from pymmcore_plus.experimental.unicore.devices._shutter import ShutterDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
@@ -316,7 +317,7 @@ class UniMMCore(CMMCorePlus):
         if hubLabel not in self._pydevices:  # pragma: no cover
             return tuple(super().getInstalledDevices(hubLabel))
 
-        with self._pydevices.get_hub_device(hubLabel) as hub:
+        with self._pydevices.get_device_of_type(hubLabel, HubDevice) as hub:
             peripherals = hub.get_installed_peripherals()
             return tuple(p[0] for p in peripherals if p[0])  # type: ignore[misc]
 
@@ -333,7 +334,7 @@ class UniMMCore(CMMCorePlus):
         if hubLabel not in self._pydevices:
             return super().getInstalledDeviceDescription(hubLabel, peripheralLabel)
 
-        with self._pydevices.get_hub_device(hubLabel) as hub:
+        with self._pydevices.get_device_of_type(hubLabel, HubDevice) as hub:
             for p in hub.get_installed_peripherals():
                 if p[0] == peripheralLabel:
                     return p[1] or "N/A"

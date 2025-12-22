@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, TypeVar, cast
 from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
 
 from .devices._device_base import Device
-from .devices._hub import HubDevice
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -205,31 +204,3 @@ class PyDeviceManager:
             for label, device in self._devices.items()
             if device.get_parent_label() == hub_label
         )
-
-    def get_hub_device(self, hub_label: str) -> HubDevice:
-        """Get a hub device by label, ensuring it is a HubDevice.
-
-        Parameters
-        ----------
-        hub_label : str
-            The label of the hub device.
-
-        Returns
-        -------
-        HubDevice
-            The hub device.
-
-        Raises
-        ------
-        KeyError
-            If no device with the given label exists.
-        RuntimeError
-            If the device is not a HubDevice.
-        """
-        device = self[hub_label]
-        if not isinstance(device, HubDevice):
-            raise RuntimeError(
-                f"Device {hub_label!r} is not a HubDevice "
-                f"(type is {device.type().name})"
-            )
-        return device
