@@ -2092,13 +2092,13 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().deleteConfig(*args)
         self.events.configDeleted.emit(groupName, configName)
 
-    def deleteConfigGroup(self, group: str) -> None:
+    def deleteConfigGroup(self, groupName: str) -> None:
         """Deletes an entire configuration `group`.
 
         **Why Override?** To emit a `configGroupDeleted` event.
         """
-        super().deleteConfigGroup(group)
-        self.events.configGroupDeleted.emit(group)
+        super().deleteConfigGroup(groupName)
+        self.events.configGroupDeleted.emit(groupName)
 
     @overload
     def defineConfig(self, groupName: str, configName: str) -> None: ...

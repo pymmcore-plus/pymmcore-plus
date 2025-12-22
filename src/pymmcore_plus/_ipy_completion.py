@@ -291,7 +291,7 @@ LABEL_COMPLETERS: dict[tuple[str, int], tuple[int, CoreLabelCompleter]] = {
 # fmt: on
 
 
-@context_matcher()  # type: ignore[misc]
+@context_matcher()  # type: ignore[untyped-decorator]
 def cmmcoreplus_matcher(ctx: CompletionContext) -> SimpleMatcherResult:
     """
     Offer string completions for CMMCorePlus calls such as.
