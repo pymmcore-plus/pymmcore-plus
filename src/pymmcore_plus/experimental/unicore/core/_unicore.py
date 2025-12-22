@@ -20,38 +20,57 @@ from typing import (
 import numpy as np
 
 import pymmcore_plus._pymmcore as pymmcore
-from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
+from pymmcore_plus.core import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus.core import Keyword as KW
+from pymmcore_plus.core._config import Configuration
 from pymmcore_plus.core._constants import PixelType
 from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
+from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
 from pymmcore_plus.experimental.unicore.devices._shutter import ShutterDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
+from pymmcore_plus.experimental.unicore.devices._stage import (
+    StageDevice,
+    XYStageDevice,
+    _BaseStage,
+)
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice
 
 from ._sequence_buffer import SequenceBuffer
 
 if TYPE_CHECKING:
-    from collections.abc import Mapping, Sequence
+    from collections.abc import Iterator, Mapping, Sequence
     from typing import Literal, NewType
 
     from numpy.typing import DTypeLike
     from pymmcore import (
         AdapterName,
         AffineTuple,
+        ConfigPresetName,
         DeviceLabel,
         DeviceName,
         PropertyName,
         StateLabel,
     )
+    from typing_extensions import TypeAlias
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
     PyDeviceLabel = NewType("PyDeviceLabel", DeviceLabel)
     _T = TypeVar("_T")
+
+    # =============================================================================
+    # Config Group Type Aliases
+    # =============================================================================
+
+    DevPropTuple = tuple[str, str]
+    ConfigDict: TypeAlias = "MutableMapping[DevPropTuple, Any]"
+    ConfigGroup: TypeAlias = "MutableMapping[ConfigPresetName, ConfigDict]"
+    # technically the keys are ConfigGroupName (a NewType from pymmcore)
+    # but to avoid all the casting, we use str here
+    ConfigGroups: TypeAlias = MutableMapping[str, ConfigGroup]
 
 
 class BufferOverflowStop(Exception):
@@ -78,7 +97,7 @@ class _CoreDevice:
     determine which real device to use.
     """
 
-    def __init__(self, state_cache: PropertyStateCache) -> None:
+    def __init__(self, state_cache: ThreadSafeConfig) -> None:
         self._state_cache = state_cache
         self._pycurrent: dict[Keyword, PyDeviceLabel | None] = {}
         self.reset_current()
@@ -102,11 +121,15 @@ class UniMMCore(CMMCorePlus):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._pydevices = PyDeviceManager()  # manager for python devices
-        self._state_cache = PropertyStateCache()  # threadsafe cache for property states
+        self._state_cache = ThreadSafeConfig()  # threadsafe cache for property states
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
         self._stop_event: threading.Event = threading.Event()
         self._acquisition_thread: AcquisitionThread | None = None  # TODO: implement
         self._seq_buffer = SequenceBuffer(size_mb=_DEFAULT_BUFFER_SIZE_MB)
+        # Storage for Python device settings in config groups.
+        # Groups and presets are ALWAYS also created in C++ (via super() calls).
+        # This dict only stores (device, property) -> value for Python devices.
+        self._py_config_groups: ConfigGroups = {}
 
         super().__init__(*args, **kwargs)
 
@@ -136,7 +159,8 @@ class UniMMCore(CMMCorePlus):
         super().waitForDeviceType(DeviceType.AnyType)
         self.unloadAllDevices()
         self._pycore.reset_current()
-        super().reset()
+        self._py_config_groups.clear()  # Clear Python device config settings
+        super().reset()  # Clears C++ config groups and channel group
 
     # ------------------------------------------------------------------------
     # ----------------- Functionality for All Devices ------------------------
@@ -240,7 +264,7 @@ class UniMMCore(CMMCorePlus):
 
     def getLoadedDevicesOfType(self, devType: int) -> tuple[DeviceLabel, ...]:
         pydevs = self._pydevices.get_labels_of_type(devType)
-        return pydevs + super().getLoadedDevicesOfType(devType)
+        return pydevs + tuple(super().getLoadedDevicesOfType(devType))
 
     def getDeviceType(self, label: str) -> DeviceType:
         if label not in self._pydevices:  # pragma: no cover
@@ -261,6 +285,67 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getDeviceDescription(label)
         return self._pydevices[label].description()
+
+    # ---------------------------- Parent/Hub Relationships ---------------------------
+
+    def getParentLabel(
+        self, peripheralLabel: DeviceLabel | str
+    ) -> DeviceLabel | Literal[""]:
+        if peripheralLabel not in self._pydevices:  # pragma: no cover
+            return super().getParentLabel(peripheralLabel)
+        return self._pydevices[peripheralLabel].get_parent_label()  # type: ignore[return-value]
+
+    def setParentLabel(
+        self, deviceLabel: DeviceLabel | str, parentHubLabel: DeviceLabel | str
+    ) -> None:
+        if deviceLabel == KW.CoreDevice:
+            return
+
+        # Reject cross-language hub/peripheral relationships
+        device_is_py = deviceLabel in self._pydevices
+        parent_is_py = parentHubLabel in self._pydevices
+        if parentHubLabel and device_is_py != parent_is_py:
+            raise RuntimeError(  # pragma: no cover
+                "Cannot set cross-language parent/child relationship between C++ and "
+                "Python devices"
+            )
+
+        if device_is_py:
+            self._pydevices[deviceLabel].set_parent_label(parentHubLabel)
+        else:
+            super().setParentLabel(deviceLabel, parentHubLabel)
+
+    def getInstalledDevices(
+        self, hubLabel: DeviceLabel | str
+    ) -> tuple[DeviceName, ...]:
+        if hubLabel not in self._pydevices:  # pragma: no cover
+            return tuple(super().getInstalledDevices(hubLabel))
+
+        with self._pydevices.get_device_of_type(hubLabel, HubDevice) as hub:
+            peripherals = hub.get_installed_peripherals()
+            return tuple(p[0] for p in peripherals if p[0])  # type: ignore[misc]
+
+    def getLoadedPeripheralDevices(
+        self, hubLabel: DeviceLabel | str
+    ) -> tuple[DeviceLabel, ...]:
+        cpp_peripherals = super().getLoadedPeripheralDevices(hubLabel)
+        py_peripherals = self._pydevices.get_loaded_peripherals(hubLabel)
+        return tuple(cpp_peripherals) + py_peripherals
+
+    def getInstalledDeviceDescription(
+        self, hubLabel: DeviceLabel | str, peripheralLabel: DeviceName | str
+    ) -> str:
+        if hubLabel not in self._pydevices:
+            return super().getInstalledDeviceDescription(hubLabel, peripheralLabel)
+
+        with self._pydevices.get_device_of_type(hubLabel, HubDevice) as hub:
+            for p in hub.get_installed_peripherals():
+                if p[0] == peripheralLabel:
+                    return p[1] or "N/A"
+            raise RuntimeError(  # pragma: no cover
+                f"No peripheral with name {peripheralLabel!r} installed in hub "
+                f"{hubLabel!r}"
+            )
 
     # ---------------------------- Properties ---------------------------
 
@@ -299,6 +384,12 @@ class UniMMCore(CMMCorePlus):
     def setProperty(
         self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
+        # FIXME:
+        # this single case is probably just the tip of the iceberg when label is "Core"
+        if label == KW.CoreDevice and propName == KW.CoreChannelGroup:
+            self.setChannelGroup(str(propValue))
+            return
+
         if label not in self._pydevices:  # pragma: no cover
             return super().setProperty(label, propName, propValue)
         with self._pydevices[label] as dev:
@@ -418,7 +509,21 @@ class UniMMCore(CMMCorePlus):
             return super().waitForDevice(label)
         self._pydevices.wait_for(label, self.getTimeoutMs())
 
-    # def waitForConfig
+    def waitForConfig(self, group: str, configName: str) -> None:
+        # Get config data (merged from C++ and Python)
+        cfg = self.getConfigData(group, configName, native=True)
+
+        # Wait for each unique device in the config
+        devs_to_await: set[str] = set()
+        for i in range(cfg.size()):
+            devs_to_await.add(cfg.getSetting(i).getDeviceLabel())
+
+        for device in devs_to_await:
+            try:
+                self.waitForDevice(device)
+            except Exception:
+                # Like C++, trap exceptions and keep quiet
+                pass
 
     # probably only needed because C++ method is not virtual
     def systemBusy(self) -> bool:
@@ -655,6 +760,192 @@ class UniMMCore(CMMCorePlus):
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.stop_sequence()
+
+    # ########################################################################
+    # ----------------------------- StageDevice ------------------------------
+    # ########################################################################
+
+    def getFocusDevice(self) -> DeviceLabel | Literal[""]:
+        """Return the current Focus Device."""
+        return self._pycore.current(KW.CoreFocus) or super().getFocusDevice()
+
+    def setFocusDevice(self, focusLabel: str) -> None:
+        """Set new current Focus Device."""
+        try:
+            super().setFocusDevice(focusLabel)
+        except Exception:
+            # python device
+            if focusLabel in self._pydevices:
+                if self.getDeviceType(focusLabel) == DeviceType.StageDevice:
+                    # assign focus device
+                    label = self._set_current_if_pydevice(KW.CoreFocus, focusLabel)
+                    super().setFocusDevice(label)
+        # otherwise do nothing
+
+    @overload
+    def getPosition(self) -> float: ...
+    @overload
+    def getPosition(self, stageLabel: str) -> float: ...
+    def getPosition(self, stageLabel: str | None = None) -> float:
+        label = stageLabel or self.getFocusDevice()
+        if label not in self._pydevices:
+            return super().getPosition(label)
+        with self._pydevices.get_device_of_type(label, StageDevice) as device:
+            return device.get_position_um()
+
+    @overload
+    def setPosition(self, position: float, /) -> None: ...
+    @overload
+    def setPosition(
+        self, stageLabel: DeviceLabel | str, position: float, /
+    ) -> None: ...
+    def setPosition(self, *args: Any) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setPosition(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_position_um(*args)
+
+    def setFocusDirection(self, stageLabel: DeviceLabel | str, sign: int) -> None:
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().setFocusDirection(stageLabel, sign)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as device:
+            device.set_focus_direction(sign)
+
+    def getFocusDirection(self, stageLabel: DeviceLabel | str) -> FocusDirection:
+        """Get the current focus direction of the Z stage."""
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().getFocusDirection(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as device:
+            return device.get_focus_direction()
+
+    @overload
+    def setOrigin(self) -> None: ...
+    @overload
+    def setOrigin(self, stageLabel: DeviceLabel | str) -> None: ...
+    def setOrigin(self, stageLabel: DeviceLabel | str | None = None) -> None:
+        """Zero the current focus/Z stage's coordinates at the current position."""
+        label = stageLabel or self.getFocusDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setOrigin(label)
+        with self._pydevices.get_device_of_type(label, StageDevice) as device:
+            device.set_origin()
+
+    @overload
+    def setRelativePosition(self, d: float, /) -> None: ...
+    @overload
+    def setRelativePosition(
+        self, stageLabel: DeviceLabel | str, d: float, /
+    ) -> None: ...
+    def setRelativePosition(self, *args: Any) -> None:
+        """Sets the relative position of the stage in microns."""
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setRelativePosition(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_relative_position_um(*args)
+
+    @overload
+    def setAdapterOrigin(self, newZUm: float, /) -> None: ...
+    @overload
+    def setAdapterOrigin(
+        self, stageLabel: DeviceLabel | str, newZUm: float, /
+    ) -> None: ...
+    def setAdapterOrigin(self, *args: Any) -> None:
+        """Enable software translation of coordinates for the current focus/Z stage.
+
+        The current position of the stage becomes Z = newZUm. Only some stages
+        support this functionality; it is recommended that setOrigin() be used
+        instead where available.
+        """
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setAdapterOrigin(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_adapter_origin_um(*args)
+
+    def isStageSequenceable(self, stageLabel: DeviceLabel | str) -> bool:
+        """Queries stage if it can be used in a sequence."""
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isStageSequenceable(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_sequenceable()
+
+    def isStageLinearSequenceable(self, stageLabel: DeviceLabel | str) -> bool:
+        """Queries if the stage can be used in a linear sequence.
+
+        A linear sequence is defined by a step size and number of slices.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isStageLinearSequenceable(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_linear_sequenceable()
+
+    def getStageSequenceMaxLength(self, stageLabel: DeviceLabel | str) -> int:
+        """Gets the maximum length of a stage's position sequence."""
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().getStageSequenceMaxLength(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.get_sequence_max_length()
+
+    def loadStageSequence(
+        self,
+        stageLabel: DeviceLabel | str,
+        positionSequence: Sequence[float],
+    ) -> None:
+        """Transfer a sequence of stage positions to the stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().loadStageSequence(stageLabel, positionSequence)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        if len(positionSequence) > dev.get_sequence_max_length():
+            raise ValueError(
+                f"Sequence is too long. Max length is {dev.get_sequence_max_length()}"
+            )
+        dev.send_sequence(tuple(positionSequence))
+
+    def startStageSequence(self, stageLabel: DeviceLabel | str) -> None:
+        """Starts an ongoing sequence of triggered events in a stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().startStageSequence(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.start_sequence()
+
+    def stopStageSequence(self, stageLabel: DeviceLabel | str) -> None:
+        """Stops an ongoing sequence of triggered events in a stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().stopStageSequence(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.stop_sequence()
+
+    def setStageLinearSequence(
+        self, stageLabel: DeviceLabel | str, dZ_um: float, nSlices: int
+    ) -> None:
+        """Loads a linear sequence (defined by step size and nr. of steps)."""
+        if nSlices < 0:
+            raise ValueError("Linear sequence cannot have negative length")
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().setStageLinearSequence(stageLabel, dZ_um, nSlices)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.set_linear_sequence(dZ_um, nSlices)
+
+    def isContinuousFocusDrive(self, stageLabel: DeviceLabel | str) -> bool:
+        """Check if a stage has continuous focusing capability.
+
+        Returns True if positions can be set while continuous focus runs.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isContinuousFocusDrive(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_continuous_focus_drive()
 
     # -----------------------------------------------------------------------
     # ---------------------------- Any Stage --------------------------------
@@ -1663,6 +1954,437 @@ class UniMMCore(CMMCorePlus):
         with shutter:
             shutter.set_open(state)
 
+    # ########################################################################
+    # -------------------- Configuration Group Methods -----------------------
+    # ########################################################################
+    #
+    # HYBRID PATTERN: Config groups exist in both C++ and Python.
+    # - Groups and presets are ALWAYS created in C++ (via super())
+    # - _config_groups only stores settings for PYTHON devices
+    # - Methods merge results from both systems where appropriate
+    #
+    # This ensures:
+    # - C++ CoreCallback can find configs and emit proper events
+    # - defineStateLabel in C++ can update configs referencing C++ devices
+    # - loadSystemConfiguration works correctly
+    # - Python device settings are properly tracked and applied
+
+    # -------------------------------------------------------------------------
+    # Group-level operations
+    # -------------------------------------------------------------------------
+
+    def defineConfigGroup(self, groupName: str) -> None:
+        # Create group in C++ (handles validation and events)
+        super().defineConfigGroup(groupName)
+        # Also create empty group in Python for potential Python device settings
+        self._py_config_groups[groupName] = {}
+
+    def deleteConfigGroup(self, groupName: str) -> None:
+        # Delete from C++ (handles validation and events)
+        super().deleteConfigGroup(groupName)
+        self._py_config_groups.pop(groupName, None)
+
+    def renameConfigGroup(self, oldGroupName: str, newGroupName: str) -> None:
+        # Rename in C++ (handles validation)
+        super().renameConfigGroup(oldGroupName, newGroupName)
+        if oldGroupName in self._py_config_groups:
+            self._py_config_groups[newGroupName] = self._py_config_groups.pop(
+                oldGroupName
+            )
+
+    # -------------------------------------------------------------------------
+    # Preset-level operations
+    # -------------------------------------------------------------------------
+
+    @overload
+    def defineConfig(self, groupName: str, configName: str) -> None: ...
+    @overload
+    def defineConfig(
+        self,
+        groupName: str,
+        configName: str,
+        deviceLabel: str,
+        propName: str,
+        value: Any,
+    ) -> None: ...
+    def defineConfig(
+        self,
+        groupName: str,
+        configName: str,
+        deviceLabel: str | None = None,
+        propName: str | None = None,
+        value: Any | None = None,
+    ) -> None:
+        # Route to appropriate storage based on device type
+        if deviceLabel is None or propName is None or value is None:
+            # No device specified: just create empty group/preset in C++
+            super().defineConfig(groupName, configName)
+            # Also ensure Python storage has the structure
+            group = self._py_config_groups.setdefault(groupName, {})
+            group.setdefault(cast("ConfigPresetName", configName), {})
+
+        elif deviceLabel in self._pydevices:
+            # Python device: store in our _config_groups
+            # But first ensure the group/preset exists in C++ too
+            if not super().isGroupDefined(groupName):
+                super().defineConfigGroup(groupName)
+                self._py_config_groups[groupName] = {}
+            if not super().isConfigDefined(groupName, configName):
+                super().defineConfig(groupName, configName)
+
+            # Store Python device setting locally
+            group = self._py_config_groups.setdefault(groupName, {})
+            preset = group.setdefault(cast("ConfigPresetName", configName), {})
+            preset[(deviceLabel, propName)] = value
+            # Emit event (C++ won't emit for Python device settings)
+            self.events.configDefined.emit(
+                groupName, configName, deviceLabel, propName, str(value)
+            )
+        else:
+            # C++ device: let C++ handle it entirely
+            # C++ expects string values, so convert
+            super().defineConfig(
+                groupName, configName, deviceLabel, propName, str(value)
+            )
+            # Ensure our Python storage has the group/preset structure
+            group = self._py_config_groups.setdefault(groupName, {})
+            group.setdefault(cast("ConfigPresetName", configName), {})
+
+    @overload
+    def deleteConfig(self, groupName: str, configName: str) -> None: ...
+    @overload
+    def deleteConfig(
+        self, groupName: str, configName: str, deviceLabel: str, propName: str
+    ) -> None: ...
+    def deleteConfig(
+        self,
+        groupName: str,
+        configName: str,
+        deviceLabel: str | None = None,
+        propName: str | None = None,
+    ) -> None:
+        if deviceLabel is None or propName is None:
+            # Deleting entire preset: delete from both C++ and Python storage
+            py_group = self._py_config_groups.get(groupName, {})
+            py_group.pop(configName, None)  # type: ignore[call-overload]
+            super().deleteConfig(groupName, configName)
+
+        # Deleting a specific property from a preset
+        elif deviceLabel in self._pydevices:
+            # Python device: remove from our storage
+            py_group = self._py_config_groups.get(groupName, {})
+            py_preset = py_group.get(configName, {})  # type: ignore[call-overload]
+            key = (deviceLabel, propName)
+            if key in py_preset:
+                del py_preset[key]
+                self.events.configDeleted.emit(groupName, configName)
+            else:
+                raise RuntimeError(
+                    f"Property '{propName}' not found in preset '{configName}'"
+                )
+        else:
+            # C++ device: let C++ handle it
+            super().deleteConfig(groupName, configName, deviceLabel, propName)
+
+    def renameConfig(
+        self, groupName: str, oldConfigName: str, newConfigName: str
+    ) -> None:
+        # Rename in C++ (handles validation)
+        super().renameConfig(groupName, oldConfigName, newConfigName)
+        # Also rename in Python storage if present
+        py_group = self._py_config_groups.get(groupName, {})
+        if oldConfigName in py_group:
+            py_group[newConfigName] = py_group.pop(oldConfigName)  # type: ignore
+
+    @overload
+    def getConfigData(
+        self, configGroup: str, configName: str, *, native: Literal[True]
+    ) -> pymmcore.Configuration: ...
+    @overload
+    def getConfigData(
+        self, configGroup: str, configName: str, *, native: Literal[False] = False
+    ) -> Configuration: ...
+    def getConfigData(
+        self, configGroup: str, configName: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        # Get C++ config data (includes all C++ device settings)
+        cpp_cfg: pymmcore.Configuration = super().getConfigData(
+            configGroup, configName, native=True
+        )
+
+        # Add Python device settings from our storage
+        py_group = self._py_config_groups.get(configGroup, {})
+        py_preset = py_group.get(configName, {})  # type: ignore[call-overload]
+        for (dev, prop), value in py_preset.items():
+            cpp_cfg.addSetting(pymmcore.PropertySetting(dev, prop, str(value)))
+
+        if native:
+            return cpp_cfg
+        return Configuration.from_configuration(cpp_cfg)
+
+    # -------------------------------------------------------------------------
+    # Applying configurations
+    # -------------------------------------------------------------------------
+
+    def setConfig(self, groupName: str, configName: str) -> None:
+        # Apply C++ device settings via super() - this handles validation,
+        # error retry logic, and state cache updates for C++ devices
+        super().setConfig(groupName, configName)
+
+        # Now apply Python device settings from our storage
+        py_group = self._py_config_groups.get(groupName, {})
+        py_preset = py_group.get(configName, {})  # type: ignore[call-overload]
+
+        if py_preset:
+            failed: list[tuple[DevPropTuple, Any]] = []
+            for (device, prop), value in py_preset.items():
+                try:
+                    self.setProperty(device, prop, value)
+                except Exception:
+                    failed.append(((device, prop), value))
+
+            # Retry failed properties (handles dependency chains)
+            if failed:
+                errors: list[str] = []
+                for (device, prop), value in failed:
+                    try:
+                        self.setProperty(device, prop, value)
+                    except Exception as e:
+                        errors.append(f"{device}.{prop}={value}: {e}")
+                if errors:
+                    raise RuntimeError("Failed to apply: " + "; ".join(errors))
+
+    # -------------------------------------------------------------------------
+    # Current config detection
+    # -------------------------------------------------------------------------
+
+    def getCurrentConfig(self, groupName: str) -> ConfigPresetName | Literal[""]:
+        return self._getCurrentConfig(groupName, from_cache=False)
+
+    def getCurrentConfigFromCache(
+        self, groupName: str
+    ) -> ConfigPresetName | Literal[""]:
+        return self._getCurrentConfig(groupName, from_cache=True)
+
+    def _getCurrentConfig(
+        self, groupName: str, from_cache: bool
+    ) -> ConfigPresetName | Literal[""]:
+        """Find the first preset whose settings all match current device state.
+
+        This checks both C++ device settings (via super()) and Python device settings.
+        """
+        # Get C++ result first
+        if from_cache:
+            cpp_result = super().getCurrentConfigFromCache(groupName)
+        else:
+            cpp_result = super().getCurrentConfig(groupName)
+
+        # If no Python device settings exist for this group, C++ result is sufficient
+        py_group = self._py_config_groups.get(groupName, {})
+        has_py_settings = any(py_group.values())
+        if not has_py_settings:
+            return cpp_result
+
+        # We have Python device settings - need to verify they match too
+        # Get current state of all Python device properties in this group
+        getter = self.getPropertyFromCache if from_cache else self.getProperty
+        current_py_state: ConfigDict = {}
+        seen_keys: set[DevPropTuple] = set()
+        for preset in py_group.values():
+            for key in preset:
+                if key not in seen_keys:
+                    seen_keys.add(key)
+                    with suppress(Exception):
+                        current_py_state[key] = getter(*key)
+
+        # Check each preset to see if Python device settings match
+        for preset_name in self.getAvailableConfigs(groupName):
+            py_preset = py_group.get(preset_name, {})
+            if all(
+                _values_match(current_py_state.get(k), v) for k, v in py_preset.items()
+            ):
+                # Python settings match - but only return if C++ also matches
+                # (or if there are no C++ settings for this preset)
+                cpp_cfg = super().getConfigData(groupName, preset_name, native=True)
+                if cpp_cfg.size() == 0:
+                    # No C++ settings, Python match is sufficient
+                    return preset_name
+                # Check each C++ setting with numeric-aware comparison
+                # (C++ getCurrentConfig uses strict string comparison which fails
+                # for values like "50.0000" vs "50")
+                all_cpp_match = True
+                for i in range(cpp_cfg.size()):
+                    setting = cpp_cfg.getSetting(i)
+                    current_val = getter(
+                        setting.getDeviceLabel(), setting.getPropertyName()
+                    )
+                    if not _values_match(current_val, setting.getPropertyValue()):
+                        all_cpp_match = False
+                        break
+                if all_cpp_match:
+                    return preset_name
+
+        return ""
+
+    # -------------------------------------------------------------------------
+    # State queries
+    # -------------------------------------------------------------------------
+
+    def getConfigState(
+        self, group: str, config: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        # Get C++ config state (current values for C++ device properties)
+        cpp_state: pymmcore.Configuration = super().getConfigState(
+            group, config, native=True
+        )
+
+        # Add current values for Python device properties
+        py_group = self._py_config_groups.get(group, {})
+        py_preset = py_group.get(config, {})  # type: ignore[call-overload]
+        for dev, prop in py_preset:
+            current_value = self.getProperty(dev, prop)
+            cpp_state.addSetting(
+                pymmcore.PropertySetting(dev, prop, str(current_value))
+            )
+
+        if native:
+            return cpp_state
+        return Configuration.from_configuration(cpp_state)
+
+    @overload
+    def getConfigGroupState(
+        self, group: str, *, native: Literal[True]
+    ) -> pymmcore.Configuration: ...
+    @overload
+    def getConfigGroupState(
+        self, group: str, *, native: Literal[False] = False
+    ) -> Configuration: ...
+    def getConfigGroupState(
+        self, group: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        return self._getConfigGroupState(group, from_cache=False, native=native)
+
+    @overload
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native: Literal[True]
+    ) -> pymmcore.Configuration: ...
+    @overload
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native: Literal[False] = False
+    ) -> Configuration: ...
+    def getConfigGroupStateFromCache(
+        self, group: str, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        return self._getConfigGroupState(group, from_cache=True, native=native)
+
+    def _getConfigGroupState(
+        self, group: str, from_cache: bool, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        """Get current values for all properties in a group."""
+        # Get C++ group state
+        if from_cache:
+            cpp_state: pymmcore.Configuration = super().getConfigGroupStateFromCache(
+                group, native=True
+            )
+        else:
+            cpp_state = super().getConfigGroupState(group, native=True)
+
+        # Add Python device property values
+        py_group = self._py_config_groups.get(group, {})
+        getter = self.getPropertyFromCache if from_cache else self.getProperty
+        for preset in py_group.values():
+            for device, prop in preset:
+                value = str(getter(device, prop))
+                cpp_state.addSetting(pymmcore.PropertySetting(device, prop, value))
+
+        if native:
+            return cpp_state
+        return Configuration.from_configuration(cpp_state)
+
+    # ########################################################################
+    # ----------------------- System State Methods ---------------------------
+    # ########################################################################
+
+    # currently we still allow C++ to cache the system state for C++ devices,
+    # but we could choose to just own it all ourselves in the future.
+
+    def getSystemState(
+        self, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        """Return the entire system state including Python device properties.
+
+        This method iterates through all devices (C++ and Python) and returns
+        all property values. Following the C++ implementation pattern.
+        """
+        return self._getSystemStateCache(cache=False, native=native)
+
+    @overload
+    def getSystemStateCache(
+        self, *, native: Literal[True]
+    ) -> pymmcore.Configuration: ...
+    @overload
+    def getSystemStateCache(
+        self, *, native: Literal[False] = False
+    ) -> Configuration: ...
+    def getSystemStateCache(
+        self, *, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        return self._getSystemStateCache(cache=True, native=native)
+
+    def _getSystemStateCache(
+        self, cache: bool, native: bool = False
+    ) -> Configuration | pymmcore.Configuration:
+        """Return the entire system state from cache, including Python devices.
+
+        For Python devices, returns cached values from our state cache.
+        Falls back to live values if not in cache.
+        """
+        # Get the C++ system state cache first
+        if cache:
+            cpp_cfg: pymmcore.Configuration = super().getSystemStateCache(native=True)
+        else:
+            cpp_cfg = super().getSystemState(native=True)
+
+        # Add Python device properties from our cache
+        for label in self._pydevices:
+            with suppress(Exception):  # Skip devices that can't be accessed
+                with self._pydevices[label] as dev:
+                    for prop_name in dev.get_property_names():
+                        with suppress(Exception):  # Skip properties that fail
+                            key = (label, prop_name)
+                            if cache and key in self._state_cache:
+                                value = self._state_cache[key]
+                            else:
+                                value = dev.get_property_value(prop_name)
+                            cpp_cfg.addSetting(
+                                pymmcore.PropertySetting(
+                                    label,
+                                    prop_name,
+                                    str(value),
+                                    dev.is_property_read_only(prop_name),
+                                )
+                            )
+
+        return cpp_cfg if native else Configuration.from_configuration(cpp_cfg)
+
+    def updateSystemStateCache(self) -> None:
+        """Update the system state cache for all devices including Python devices.
+
+        This populates our Python-side cache with current values from all
+        Python devices, then calls the C++ updateSystemStateCache.
+        """
+        # Update Python device properties in our cache
+        for label in self._pydevices:
+            with suppress(Exception):  # Skip devices that can't be accessed
+                with self._pydevices[label] as dev:
+                    for prop_name in dev.get_property_names():
+                        with suppress(Exception):  # Skip properties that fail
+                            value = dev.get_property_value(prop_name)
+                            self._state_cache[(label, prop_name)] = value
+
+        # Call C++ updateSystemStateCache
+        super().updateSystemStateCache()
+
 
 # -------------------------------------------------------------------------------
 
@@ -1685,7 +2407,7 @@ def _ensure_label(
     return cast("str", args[0]), args[1:]
 
 
-class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
+class ThreadSafeConfig(MutableMapping["DevPropTuple", Any]):
     """A thread-safe cache for property states.
 
     Keys are tuples of (device_label, property_name), and values are the last known
@@ -1693,24 +2415,24 @@ class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
     """
 
     def __init__(self) -> None:
-        self._store: dict[tuple[str, str], Any] = {}
+        self._store: dict[DevPropTuple, Any] = {}
         self._lock = threading.Lock()
 
-    def __getitem__(self, key: tuple[str, str]) -> Any:
+    def __getitem__(self, key: DevPropTuple) -> Any:
         with self._lock:
             try:
                 return self._store[key]
             except KeyError:  # pragma: no cover
-                prop, dev = key
+                dev, prop = key
                 raise KeyError(
                     f"Property {prop!r} of device {dev!r} not found in cache"
                 ) from None
 
-    def __setitem__(self, key: tuple[str, str], value: Any) -> None:
+    def __setitem__(self, key: DevPropTuple, value: Any) -> None:
         with self._lock:
             self._store[key] = value
 
-    def __delitem__(self, key: tuple[str, str]) -> None:
+    def __delitem__(self, key: DevPropTuple) -> None:
         with self._lock:
             del self._store[key]
 
@@ -1718,7 +2440,7 @@ class PropertyStateCache(MutableMapping[tuple[str, str], Any]):
         with self._lock:
             return key in self._store
 
-    def __iter__(self) -> Iterator[tuple[str, str]]:
+    def __iter__(self) -> Iterator[DevPropTuple]:
         with self._lock:
             return iter(self._store.copy())  # Prevent modifications during iteration
 
@@ -1769,4 +2491,19 @@ class AcquisitionThread(threading.Thread):
             ) from e
 
 
-# -------------------------------------------------------------------------------
+# --------- helpers -------------------------------------------------------
+
+
+def _values_match(current: Any, expected: Any) -> bool:
+    """Compare property values, handling numeric string comparisons.
+
+    Unlike C++ MMCore which does strict string comparison, this performs
+    numeric-aware comparison to handle cases like "50.0000" == 50.
+    """
+    if current == expected:
+        return True
+    # Try numeric comparison
+    try:
+        return float(current) == float(expected)
+    except (ValueError, TypeError):
+        return str(current) == str(expected)
