@@ -209,7 +209,8 @@ def image_infos(core: CMMCorePlus) -> tuple[ImageInfo, ...]:
                     infos.append(image_info(core))
     finally:
         # set the camera back to the originally selected device
-        core.setCameraDevice(selected)
+        with suppress(RuntimeError):
+            core.setCameraDevice(selected)
     return tuple(infos)
 
 
