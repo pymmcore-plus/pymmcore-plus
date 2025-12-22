@@ -293,9 +293,22 @@ class UniMMCore(CMMCorePlus):
     def setParentLabel(
         self, deviceLabel: DeviceLabel | str, parentHubLabel: DeviceLabel | str
     ) -> None:
-        if deviceLabel not in self._pydevices:  # pragma: no cover
-            return super().setParentLabel(deviceLabel, parentHubLabel)
-        self._pydevices[deviceLabel].set_parent_label(parentHubLabel)
+        if deviceLabel == KW.CoreDevice:
+            return
+
+        # Reject cross-language hub/peripheral relationships
+        device_is_py = deviceLabel in self._pydevices
+        parent_is_py = parentHubLabel in self._pydevices
+        if parentHubLabel and device_is_py != parent_is_py:
+            raise RuntimeError(  # pragma: no cover
+                "Cannot set cross-language parent/child relationship between C++ and "
+                "Python devices"
+            )
+
+        if device_is_py:
+            self._pydevices[deviceLabel].set_parent_label(parentHubLabel)
+        else:
+            super().setParentLabel(deviceLabel, parentHubLabel)
 
     def getInstalledDevices(
         self, hubLabel: DeviceLabel | str
