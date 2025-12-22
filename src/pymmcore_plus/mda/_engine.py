@@ -16,6 +16,7 @@ from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
 from pymmcore_plus.core._constants import FocusDirection, Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent, iter_sequenced_events
+from pymmcore_plus.mda.events import RunStatus
 from pymmcore_plus.metadata import (
     FrameMetaV1,
     PropertyValue,
@@ -675,8 +676,31 @@ class MDAEngine(PMDAEngine):
         n_channels = core.getNumberOfCameraChannels()
         count = 0
         iter_events = product(event.events, range(n_channels))
+
+        # to make sure we emit the pause warnings only once
+        pause_logged: bool = False
+
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
+            # NOTE: there is not a way to pause a hardware sequence acquisition.
+            # So we just log a warning once if pause is requested.
+            if self.mmcore.mda.is_pause_requested():
+                if not pause_logged:
+                    pause_logged = True
+                    logger.warning(
+                        "MDA: Pause has been requested, but sequenced acquisition "
+                        "cannot be yet paused, only canceled."
+                    )
+
+            # check if acquisition is canceled and stop the sequence if so
+            if self.mmcore.mda.is_cancel_requested():
+                self.mmcore.stopSequenceAcquisition()
+                self.mmcore.mda.status = RunStatus.CANCELED
+                logger.warning("MDA Canceled: %s", event)
+                self.mmcore.mda.events.sequenceCanceled.emit(event)
+                return
+
+            # pop images as they become available
             if remaining := core.getRemainingImageCount():
                 yield self._next_seqimg_payload(
                     *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
@@ -688,10 +712,9 @@ class MDAEngine(PMDAEngine):
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
 
-        while remaining := core.getRemainingImageCount():
-            yield self._next_seqimg_payload(
-                *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
-            )
+        # collect any remaining images from the buffer
+        for payload in self._collect_remaining_images(core, iter_events, event_t0_ms):
+            yield payload
             count += 1
 
         # necessary?
@@ -745,6 +768,46 @@ class MDAEngine(PMDAEngine):
         # https://github.com/python/mypy/issues/4976
         return ImagePayload(img, event, meta)  # type: ignore[return-value]
 
+    def _collect_remaining_images(
+        self,
+        core: CMMCorePlus,
+        iter_events: Iterator[tuple[MDAEvent, int]],
+        event_t0_ms: float,
+    ) -> Iterator[PImagePayload]:
+        """Collect any remaining images from the circular buffer after sequence ends.
+
+        This method is called after the main acquisition loop has finished.
+
+        Parameters
+        ----------
+        core : CMMCorePlus
+            The core instance.
+        iter_events : Iterator[tuple[MDAEvent, int]]
+            Iterator of (event, channel) tuples.
+        event_t0_ms : float
+            The start time of the event in milliseconds.
+
+        Yields
+        ------
+        PImagePayload
+            Image payloads for the remaining images in the buffer.
+        """
+        remainings_logged: bool = False
+        while remaining := core.getRemainingImageCount():
+            # if canceled, stop collecting images
+            if self.mmcore.mda.is_cancel_requested() or self.mmcore.mda.is_canceled():
+                return
+            # log only once when we start collecting remaining images
+            if not remainings_logged:
+                remainings_logged = True
+                logger.info(
+                    f"MDA: Collecting {remaining} remaining images from circular "
+                    "buffer..."
+                )
+            yield self._next_seqimg_payload(
+                *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
+            )
+
     # ===================== EXTRA =====================
 
     def _execute_autofocus(self, action: HardwareAutofocus) -> float:
@@ -787,7 +850,10 @@ class MDAEngine(PMDAEngine):
             return
 
         # Retrieve the last commanded XY position.
-        last_x, last_y = core._last_xy_position.get(None) or (None, None)  # noqa: SLF001
+        last_x, last_y = core._last_xy_position.get(None) or (  # noqa: SLF001
+            None,
+            None,
+        )
         if (
             not self.force_set_xy_position
             and (event_x is None or event_x == last_x)
