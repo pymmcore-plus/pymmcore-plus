@@ -1,6 +1,8 @@
+from __future__ import annotations
+
 import weakref
-from collections.abc import Sequence
 from types import ModuleType
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 import pytest
@@ -12,6 +14,9 @@ from pymmcore_plus.experimental.unicore import (
     UniMMCore,
     pymm_property,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Sequence
 
 DOC = """Example generic device."""
 PROP_A = "propA"  # must match below
