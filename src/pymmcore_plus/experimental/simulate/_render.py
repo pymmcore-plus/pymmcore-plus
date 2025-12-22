@@ -280,7 +280,7 @@ class RenderEngine:
                 normalized = (arr * 255.0 / max_val).astype(np.uint8)
             else:
                 normalized = np.zeros_like(arr, dtype=np.uint8)
-            img = Image.fromarray(normalized, mode="L")
+            img = Image.fromarray(normalized)
             blurred = img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
             result = np.asarray(blurred, dtype=np.float32)
             if max_val > 0:
