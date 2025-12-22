@@ -20,7 +20,7 @@ from typing import (
 import numpy as np
 
 import pymmcore_plus._pymmcore as pymmcore
-from pymmcore_plus.core import CMMCorePlus, DeviceType, Keyword
+from pymmcore_plus.core import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._config import Configuration
 from pymmcore_plus.core._constants import PixelType
@@ -31,7 +31,11 @@ from pymmcore_plus.experimental.unicore.devices._device_base import Device
 from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
 from pymmcore_plus.experimental.unicore.devices._shutter import ShutterDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-from pymmcore_plus.experimental.unicore.devices._stage import XYStageDevice, _BaseStage
+from pymmcore_plus.experimental.unicore.devices._stage import (
+    StageDevice,
+    XYStageDevice,
+    _BaseStage,
+)
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice
 
 from ._sequence_buffer import SequenceBuffer
@@ -756,6 +760,192 @@ class UniMMCore(CMMCorePlus):
 
         with self._pydevices.get_device_of_type(label, XYStageDevice) as dev:
             dev.stop_sequence()
+
+    # ########################################################################
+    # ----------------------------- StageDevice ------------------------------
+    # ########################################################################
+
+    def getFocusDevice(self) -> DeviceLabel | Literal[""]:
+        """Return the current Focus Device."""
+        return self._pycore.current(KW.CoreFocus) or super().getFocusDevice()
+
+    def setFocusDevice(self, focusLabel: str) -> None:
+        """Set new current Focus Device."""
+        try:
+            super().setFocusDevice(focusLabel)
+        except Exception:
+            # python device
+            if focusLabel in self._pydevices:
+                if self.getDeviceType(focusLabel) == DeviceType.StageDevice:
+                    # assign focus device
+                    label = self._set_current_if_pydevice(KW.CoreFocus, focusLabel)
+                    super().setFocusDevice(label)
+        # otherwise do nothing
+
+    @overload
+    def getPosition(self) -> float: ...
+    @overload
+    def getPosition(self, stageLabel: str) -> float: ...
+    def getPosition(self, stageLabel: str | None = None) -> float:
+        label = stageLabel or self.getFocusDevice()
+        if label not in self._pydevices:
+            return super().getPosition(label)
+        with self._pydevices.get_device_of_type(label, StageDevice) as device:
+            return device.get_position_um()
+
+    @overload
+    def setPosition(self, position: float, /) -> None: ...
+    @overload
+    def setPosition(
+        self, stageLabel: DeviceLabel | str, position: float, /
+    ) -> None: ...
+    def setPosition(self, *args: Any) -> None:  # pyright: ignore[reportIncompatibleMethodOverride]
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setPosition(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_position_um(*args)
+
+    def setFocusDirection(self, stageLabel: DeviceLabel | str, sign: int) -> None:
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().setFocusDirection(stageLabel, sign)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as device:
+            device.set_focus_direction(sign)
+
+    def getFocusDirection(self, stageLabel: DeviceLabel | str) -> FocusDirection:
+        """Get the current focus direction of the Z stage."""
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().getFocusDirection(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as device:
+            return device.get_focus_direction()
+
+    @overload
+    def setOrigin(self) -> None: ...
+    @overload
+    def setOrigin(self, stageLabel: DeviceLabel | str) -> None: ...
+    def setOrigin(self, stageLabel: DeviceLabel | str | None = None) -> None:
+        """Zero the current focus/Z stage's coordinates at the current position."""
+        label = stageLabel or self.getFocusDevice()
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setOrigin(label)
+        with self._pydevices.get_device_of_type(label, StageDevice) as device:
+            device.set_origin()
+
+    @overload
+    def setRelativePosition(self, d: float, /) -> None: ...
+    @overload
+    def setRelativePosition(
+        self, stageLabel: DeviceLabel | str, d: float, /
+    ) -> None: ...
+    def setRelativePosition(self, *args: Any) -> None:
+        """Sets the relative position of the stage in microns."""
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setRelativePosition(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_relative_position_um(*args)
+
+    @overload
+    def setAdapterOrigin(self, newZUm: float, /) -> None: ...
+    @overload
+    def setAdapterOrigin(
+        self, stageLabel: DeviceLabel | str, newZUm: float, /
+    ) -> None: ...
+    def setAdapterOrigin(self, *args: Any) -> None:
+        """Enable software translation of coordinates for the current focus/Z stage.
+
+        The current position of the stage becomes Z = newZUm. Only some stages
+        support this functionality; it is recommended that setOrigin() be used
+        instead where available.
+        """
+        label, args = _ensure_label(args, min_args=2, getter=self.getFocusDevice)
+        if label not in self._pydevices:  # pragma: no cover
+            return super().setAdapterOrigin(label, *args)
+        with self._pydevices.get_device_of_type(label, StageDevice) as dev:
+            dev.set_adapter_origin_um(*args)
+
+    def isStageSequenceable(self, stageLabel: DeviceLabel | str) -> bool:
+        """Queries stage if it can be used in a sequence."""
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isStageSequenceable(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_sequenceable()
+
+    def isStageLinearSequenceable(self, stageLabel: DeviceLabel | str) -> bool:
+        """Queries if the stage can be used in a linear sequence.
+
+        A linear sequence is defined by a step size and number of slices.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isStageLinearSequenceable(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_linear_sequenceable()
+
+    def getStageSequenceMaxLength(self, stageLabel: DeviceLabel | str) -> int:
+        """Gets the maximum length of a stage's position sequence."""
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().getStageSequenceMaxLength(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.get_sequence_max_length()
+
+    def loadStageSequence(
+        self,
+        stageLabel: DeviceLabel | str,
+        positionSequence: Sequence[float],
+    ) -> None:
+        """Transfer a sequence of stage positions to the stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().loadStageSequence(stageLabel, positionSequence)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        if len(positionSequence) > dev.get_sequence_max_length():
+            raise ValueError(
+                f"Sequence is too long. Max length is {dev.get_sequence_max_length()}"
+            )
+        dev.send_sequence(tuple(positionSequence))
+
+    def startStageSequence(self, stageLabel: DeviceLabel | str) -> None:
+        """Starts an ongoing sequence of triggered events in a stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().startStageSequence(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.start_sequence()
+
+    def stopStageSequence(self, stageLabel: DeviceLabel | str) -> None:
+        """Stops an ongoing sequence of triggered events in a stage.
+
+        This should only be called for stages that are sequenceable.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().stopStageSequence(stageLabel)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.stop_sequence()
+
+    def setStageLinearSequence(
+        self, stageLabel: DeviceLabel | str, dZ_um: float, nSlices: int
+    ) -> None:
+        """Loads a linear sequence (defined by step size and nr. of steps)."""
+        if nSlices < 0:
+            raise ValueError("Linear sequence cannot have negative length")
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().setStageLinearSequence(stageLabel, dZ_um, nSlices)
+        with self._pydevices.get_device_of_type(stageLabel, StageDevice) as dev:
+            dev.set_linear_sequence(dZ_um, nSlices)
+
+    def isContinuousFocusDrive(self, stageLabel: DeviceLabel | str) -> bool:
+        """Check if a stage has continuous focusing capability.
+
+        Returns True if positions can be set while continuous focus runs.
+        """
+        if stageLabel not in self._pydevices:  # pragma: no cover
+            return super().isContinuousFocusDrive(stageLabel)
+        dev = self._pydevices.get_device_of_type(stageLabel, StageDevice)
+        return dev.is_continuous_focus_drive()
 
     # -----------------------------------------------------------------------
     # ---------------------------- Any Stage --------------------------------
