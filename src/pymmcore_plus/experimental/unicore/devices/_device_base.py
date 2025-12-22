@@ -64,6 +64,7 @@ class Device(_Lockable, ABC):
             {}, self._cls_prop_controllers
         )
         self._core_proxy_: CMMCoreProxy | None = None
+        self._parent_label_: str = ""  # label of the parent hub device
 
     @property
     def core(self) -> CMMCoreProxy:
@@ -242,6 +243,18 @@ class Device(_Lockable, ABC):
     def is_property_read_only(self, prop_name: str) -> bool:
         """Return `True` if the property is read-only."""
         return self._get_prop_or_raise(prop_name).is_read_only
+
+    # PARENT HUB RELATIONSHIP
+
+    @final  # may not be overridden
+    def get_parent_label(self) -> str:
+        """Return the label of the parent hub device, or empty string if none."""
+        return self._parent_label_
+
+    @final  # may not be overridden
+    def set_parent_label(self, parent_label: str) -> None:
+        """Set the label of the parent hub device."""
+        self._parent_label_ = parent_label
 
 
 SeqT = TypeVar("SeqT")
