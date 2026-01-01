@@ -1,26 +1,6 @@
-from enum import Enum
 from typing import ClassVar, Protocol, runtime_checkable
 
 from pymmcore_plus.core.events._protocol import PSignal
-
-
-class RunStatus(str, Enum):
-    """Enumeration of the possible states of the MDA runner."""
-
-    IDLE = "idle"
-    RUNNING = "running"
-    PAUSE_TOGGLED = "pause toggled"
-    PAUSED = "paused"
-    CANCELING = "canceling"
-    CANCELED = "canceled"
-    ERROR = "error"
-    COMPLETED = "completed"
-
-    def __str__(self) -> str:
-        return str(self.value)
-
-    def __repr__(self) -> str:
-        return f"RunStatus.{self.name}"
 
 
 @runtime_checkable
