@@ -103,9 +103,7 @@ class StateDevice(Device):
                 f"Available states: {self._state_to_label.keys()}"
             )
         self.set_property_value(Keyword.State, pos)  # will trigger set_state
-        #self.core.events.propertyChanged.emit(self.get_label(), Keyword.State.value, pos)
         self.set_property_value(Keyword.Label.value, label)
-        #self.core.events.propertyChanged.emit(self.get_label(), Keyword.Label.value, label)
         
 
     def assign_label_to_position(self, pos: int, label: str) -> None:
