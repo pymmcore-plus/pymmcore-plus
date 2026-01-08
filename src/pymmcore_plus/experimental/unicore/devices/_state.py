@@ -103,7 +103,10 @@ class StateDevice(Device):
                 f"Available states: {self._state_to_label.keys()}"
             )
         self.set_property_value(Keyword.State, pos)  # will trigger set_state
+        #self.core.events.propertyChanged.emit(self.get_label(), Keyword.State.value, pos)
         self.set_property_value(Keyword.Label.value, label)
+        #self.core.events.propertyChanged.emit(self.get_label(), Keyword.Label.value, label)
+        
 
     def assign_label_to_position(self, pos: int, label: str) -> None:
         """Assign a User-defined label to a position."""
@@ -135,8 +138,10 @@ class StateDevice(Device):
         # internal method to set the state, called by the property setter
         # to keep the label and state property in sync
         self.set_state(state)  # call the device-specific method
+        self.core.events.propertyChanged.emit(self.get_label(), Keyword.State.value, state)
         label = self._state_to_label.get(state, "")
         self.set_property_value(Keyword.Label, label)
+        self.core.events.propertyChanged.emit(self.get_label(), Keyword.Label.value, label)
 
     def _get_current_label(self) -> str:
         # internal method to get the current label, called by the property getter
