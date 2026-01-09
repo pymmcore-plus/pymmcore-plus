@@ -79,6 +79,9 @@ class _5DWriterBase(Generic[T]):
         # list of {dim_name: size} map for each position in the sequence
         self._position_sizes: list[dict[str, int]] = []
 
+        # map of position index to position key
+        self._position_key_map: dict[int, str] = {}
+
         # actual timestamps for each frame
         self._timestamps: list[float] = []
 
@@ -129,12 +132,15 @@ class _5DWriterBase(Generic[T]):
         This key will be used for subclasses like Zarr that need a directory structure
         for each position.  And may also be used to index into `self.position_arrays`.
         """
-        pos_name = event.pos_name
-        if pos_name is not None:
-            return str(pos_name)
-        else:
-            position_index = event.index.get("p", 0)
-            return f"{POS_PREFIX}{position_index}"
+        pos_index = event.index.get("p", 0)
+        if pos_index in self._position_key_map:
+            return self._position_key_map[pos_index]
+
+        pos_key = event.pos_name
+        if pos_key is None:
+            pos_key = f"{POS_PREFIX}{pos_index}"
+        self._position_key_map[pos_index] = pos_key
+        return pos_key
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
@@ -286,7 +292,7 @@ class _5DWriterBase(Generic[T]):
             raise IndexError(
                 f"Position index {p_index} out of range for {len(self.position_sizes)}"
             ) from e
-        data = self.position_arrays[self.get_position_key(p_index)]
+        data = self.position_arrays[self._position_key_map[p_index]]
         full = slice(None, None)
         index = tuple(indexers.get(k, full) for k in sizes)
         return data[index]  # type: ignore
