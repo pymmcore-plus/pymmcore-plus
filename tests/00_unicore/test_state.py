@@ -363,6 +363,7 @@ def test_concurrent_state_operations(unicore: UniMMCore) -> None:
         unicore.setState(DEV, 1)
         assert unicore.getState(DEV) == 1
 
+
 def test_emission_of_state_and_property() -> None:
     """Test the event onPropertyChange emitted by the StateDevice"""
     core = UniMMCore()
@@ -394,4 +395,3 @@ def test_emission_of_state_and_property() -> None:
     assert core.getState(dev) == 2
     assert prop_changed.call_count == 2
     prop_changed.assert_has_calls([call(dev, "State", 2), call(dev, "Label", "Blue")])
-
