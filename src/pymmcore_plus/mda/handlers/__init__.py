@@ -4,12 +4,14 @@ from pathlib import Path
 
 from ._img_sequence_writer import ImageSequenceWriter
 from ._ome_tiff_writer import OMETiffWriter
+from ._ome_writer_handler import OMEWriterHandler
 from ._ome_zarr_writer import OMEZarrWriter
 from ._tensorstore_handler import TensorStoreHandler
 
 __all__ = [
     "ImageSequenceWriter",
     "OMETiffWriter",
+    "OMEWriterHandler",
     "OMEZarrWriter",
     "TensorStoreHandler",
     "handler_for_path",
@@ -22,14 +24,16 @@ def handler_for_path(path: str | Path) -> object:
     This method picks from the built-in handlers based on the extension of the path.
     """
     if str(path).rstrip("/").rstrip(":").lower() == "memory":
+        # For memory stores, use TensorStoreHandler
         return TensorStoreHandler(kvstore="memory://")
 
     path = str(Path(path).expanduser().resolve())
+
     if path.endswith(".zarr"):
-        return OMEZarrWriter(path)
+        return OMEWriterHandler(path, backend="tensorstore")
 
     if path.endswith((".tiff", ".tif")):
-        return OMETiffWriter(path)
+        return OMEWriterHandler(path, backend="tiff")
 
     # FIXME: ugly hack for the moment to represent a non-existent directory
     # there are many features that ImageSequenceWriter supports, and it's unclear
