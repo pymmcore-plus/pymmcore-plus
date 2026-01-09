@@ -123,13 +123,18 @@ class _5DWriterBase(Generic[T]):
         self.finalize_metadata()
         self.frame_metadatas.clear()
 
-    def get_position_key(self, position_index: int) -> str:
-        """Get the position key for a specific position index.
+    def get_position_key(self, event: useq.MDAEvent) -> str:
+        """Get the position key for a specific MDA event.
 
         This key will be used for subclasses like Zarr that need a directory structure
         for each position.  And may also be used to index into `self.position_arrays`.
         """
-        return f"{POS_PREFIX}{position_index}"
+        pos_name = event.pos_name
+        if pos_name is not None:
+            return str(pos_name)
+        else:
+            position_index = event.index.get("p", 0)
+            return f"{POS_PREFIX}{position_index}"
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
@@ -137,7 +142,7 @@ class _5DWriterBase(Generic[T]):
         """Write frame to the zarr array for the appropriate position."""
         # get the position key to store the array in the group
         p_index = event.index.get("p", 0)
-        key = self.get_position_key(p_index)
+        key = self.get_position_key(event)
         pos_sizes = self.position_sizes[p_index]
         if key in self.position_arrays:
             ary = self.position_arrays[key]
