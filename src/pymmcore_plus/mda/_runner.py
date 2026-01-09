@@ -97,6 +97,8 @@ class MDARunner:
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
         self._canceled = False
+        self._was_canceled = False  # True after cancel is fully processed
+        self._in_pause_loop = False  # True while actually waiting in pause loop
         self._sequence: MDASequence | None = None
         # timer for the full sequence, reset only once at the beginning of the sequence
         self._sequence_t0: float = 0.0
@@ -144,14 +146,15 @@ class MDARunner:
         This will return True at any point between the emission of the
         [`sequenceStarted`][pymmcore_plus.mda.PMDASignaler.sequenceStarted] and
         [`sequenceFinished`][pymmcore_plus.mda.PMDASignaler.sequenceFinished] signals,
-        including when the acquisition is currently paused.
+        including when the acquisition is currently paused. Once cancel has been
+        requested, this returns False even if cleanup is still in progress.
 
         Returns
         -------
         bool
             Whether an acquisition is underway.
         """
-        return self._running
+        return self._running and not self._canceled
 
     def is_paused(self) -> bool:
         """Return True if the acquisition is currently paused.
@@ -163,7 +166,19 @@ class MDARunner:
         bool
             Whether the current acquisition is paused.
         """
-        return self._paused
+        return self._in_pause_loop
+
+    def is_pause_requested(self) -> bool:
+        """Return True if pause requested but not yet in the pause loop."""
+        return self._paused and not self._in_pause_loop
+
+    def is_cancel_requested(self) -> bool:
+        """Return True if cancel has been requested."""
+        return self._canceled
+
+    def is_canceled(self) -> bool:
+        """Return True if the acquisition was canceled."""
+        return self._was_canceled
 
     def cancel(self) -> None:
         """Cancel the currently running acquisition.
@@ -174,6 +189,8 @@ class MDARunner:
         be emitted.
         """
         self._canceled = True
+        self._paused = False  # clear pause state on cancel
+        self._in_pause_loop = False  # immediately clear pause loop state
         self._paused_time = 0
 
     def toggle_pause(self) -> None:
@@ -344,7 +361,7 @@ class MDARunner:
                 # we pop it off after the event is executed.
                 event.metadata["runner_t0"] = self._sequence_t0
                 output = engine.exec_event(event) or ()  # in case output is None
-                for payload in output:
+                for payload in self._iter_with_signals(output):
                     img, event, meta = payload
                     event.metadata.pop("runner_t0", None)
                     # if the engine calculated its own time, don't overwrite it
@@ -354,6 +371,43 @@ class MDARunner:
                         self._signals.frameReady.emit(img, event, meta)
             finally:
                 teardown_event(event)
+
+    def _iter_with_signals(self, iterable: Iterable) -> Iterator:
+        """Iterate over output, sending cancel/pause signals to generators.
+
+        This allows the runner to communicate with generator-based engines
+        (like exec_sequenced_event) without the engine needing to know about
+        runner internals. Signals are sent via generator.send().
+
+        Works with any iterable - if it's not a generator or doesn't handle
+        signals, they're simply ignored.
+        """
+        gen = iter(iterable)
+        is_generator = hasattr(gen, "send")
+
+        try:
+            item = next(gen)
+            while True:
+                yield item
+
+                # Determine signal based on current runner state
+                signal = None
+                if self._canceled:
+                    signal = "cancel"
+                elif self._paused:
+                    signal = "pause"
+
+                try:
+                    # Send signal if it's a generator, otherwise just get next
+                    item = gen.send(signal) if is_generator else next(gen)  # type: ignore
+                except StopIteration:
+                    break
+        except StopIteration:
+            pass
+
+        # If generator stopped while cancel was requested, process the cancel
+        if self._canceled:
+            self._check_canceled()
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
@@ -369,6 +423,7 @@ class MDARunner:
         self._running = True
         self._paused = False
         self._paused_time = 0.0
+        self._was_canceled = False
         self._sequence = sequence
 
         meta = self._engine.setup_sequence(sequence)
@@ -391,6 +446,7 @@ class MDARunner:
             Whether the MDA has been canceled.
         """
         if self._canceled:
+            self._was_canceled = True
             logger.warning("MDA Canceled: %s", self._sequence)
             self._signals.sequenceCanceled.emit(self._sequence)
             self._canceled = False
@@ -410,16 +466,21 @@ class MDARunner:
         bool
             Whether the MDA was cancelled while waiting.
         """
-        if not self.is_running():
+        if not self._running:
             return False  # pragma: no cover
         if self._check_canceled():
             return True
-        while self.is_paused() and not self._canceled:
-            self._paused_time += self._pause_interval  # fixme: be more precise
-            time.sleep(self._pause_interval)
 
-            if self._check_canceled():
-                return True
+        # Handle pause if requested
+        if self._paused and not self._canceled:
+            self._in_pause_loop = True
+            while self._paused and not self._canceled:
+                self._paused_time += self._pause_interval
+                time.sleep(self._pause_interval)
+                if self._check_canceled():
+                    self._in_pause_loop = False
+                    return True
+            self._in_pause_loop = False
 
         # FIXME: this is actually the only place where the runner assumes our event is
         # an MDAevent.  For everything else, the engine is technically the only thing
@@ -432,10 +493,15 @@ class MDARunner:
             remaining_wait_time = go_at - self.event_seconds_elapsed()
             while remaining_wait_time > 0:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
-                while self._paused and not self._canceled:
-                    self._paused_time += self._pause_interval  # fixme: be more precise
-                    remaining_wait_time += self._pause_interval
-                    time.sleep(self._pause_interval)
+
+                # Handle pause if requested during wait
+                if self._paused and not self._canceled:
+                    self._in_pause_loop = True
+                    while self._paused and not self._canceled:
+                        self._paused_time += self._pause_interval
+                        remaining_wait_time += self._pause_interval
+                        time.sleep(self._pause_interval)
+                    self._in_pause_loop = False
 
                 if self._canceled:
                     break

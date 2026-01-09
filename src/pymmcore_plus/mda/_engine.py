@@ -675,13 +675,28 @@ class MDAEngine(PMDAEngine):
         n_channels = core.getNumberOfCameraChannels()
         count = 0
         iter_events = product(event.events, range(n_channels))
+        pause_warned = False
+
         # block until the sequence is done, popping images in the meantime
         while core.isSequenceRunning():
             if remaining := core.getRemainingImageCount():
-                yield self._next_seqimg_payload(
+                payload = self._next_seqimg_payload(
                     *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
                 )
                 count += 1
+                # Yield payload and receive signal from runner via generator.send()
+                signal = yield payload
+
+                # Handle signals sent by runner (keeps engine decoupled from runner)
+                if signal == "cancel":
+                    core.stopSequenceAcquisition()
+                    return
+                if signal == "pause" and not pause_warned:
+                    pause_warned = True
+                    logger.warning(
+                        "MDA: Pause has been requested, but sequenced acquisition "
+                        "cannot be yet paused, only canceled."
+                    )
             else:
                 time.sleep(0.001)
 
@@ -689,10 +704,13 @@ class MDAEngine(PMDAEngine):
             raise MemoryError("Buffer overflowed")
 
         while remaining := core.getRemainingImageCount():
-            yield self._next_seqimg_payload(
+            payload = self._next_seqimg_payload(
                 *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
             )
             count += 1
+            signal = yield payload
+            if signal == "cancel":
+                return
 
         # necessary?
         expected_images = n_events * n_channels
