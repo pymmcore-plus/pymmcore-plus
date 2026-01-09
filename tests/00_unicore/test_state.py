@@ -1,8 +1,8 @@
 from __future__ import annotations
 
+from unittest.mock import Mock, call
+
 import pytest
-from collections import deque
-import threading
 
 from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.experimental.unicore import StateDevice
