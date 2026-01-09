@@ -6,6 +6,7 @@ from collections.abc import Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from datetime import datetime
 from itertools import count
+from pathlib import Path
 from time import perf_counter_ns
 from typing import (
     TYPE_CHECKING,
@@ -38,6 +39,7 @@ from pymmcore_plus.experimental.unicore.devices._stage import (
 )
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice
 
+from ._config import load_system_configuration, save_system_configuration
 from ._sequence_buffer import SequenceBuffer
 
 if TYPE_CHECKING:
@@ -162,6 +164,76 @@ class UniMMCore(CMMCorePlus):
         self._py_config_groups.clear()  # Clear Python device config settings
         super().reset()  # Clears C++ config groups and channel group
 
+    def loadSystemConfiguration(
+        self, fileName: str | Path = "MMConfig_demo.cfg"
+    ) -> None:
+        """Load a system config file conforming to the MM `.cfg` format.
+
+        This is a Python implementation that supports both C++ and Python devices.
+        Lines prefixed with `#py ` are processed as Python device commands but
+        are ignored by upstream C++/pymmcore implementations.
+
+        Format example::
+
+            # C++ devices
+            Device, Camera, DemoCamera, DCam
+            Property, Core, Initialize, 1
+
+            # Python devices (hidden from upstream via comment prefix)
+            # py pyDevice,PyCamera,mypackage.cameras,MyCameraClass
+            # py Property,PyCamera,Exposure,50.0
+
+        https://micro-manager.org/Micro-Manager_Configuration_Guide#configuration-file-syntax
+
+        For relative paths, the current working directory is first checked, then
+        the device adapter path is checked.
+
+        Parameters
+        ----------
+        fileName : str | Path
+            Path to the configuration file. Defaults to "MMConfig_demo.cfg".
+        """
+        fpath = Path(fileName).expanduser()
+        if not fpath.exists() and not fpath.is_absolute() and self._mm_path:
+            fpath = Path(self._mm_path) / fileName
+        if not fpath.exists():
+            raise FileNotFoundError(f"Path does not exist: {fpath}")
+
+        cfg_path = str(fpath.resolve())
+        try:
+            load_system_configuration(self, cfg_path)
+        except Exception:
+            # On failure, unload all devices to avoid leaving loaded but
+            # uninitialized devices that could cause crashes
+            with suppress(Exception):
+                self.unloadAllDevices()
+            raise
+
+        self._last_sys_config = cfg_path
+        # Emit system configuration loaded event
+        self.events.systemConfigurationLoaded.emit()
+
+    def saveSystemConfiguration(
+        self, filename: str | Path, *, prefix_py_devices: bool = True
+    ) -> None:
+        """Save the current system configuration to a text file.
+
+        This saves both C++ and Python devices.  Python device lines are prefixed
+        with `#py ` by default so they are ignored by upstream C++/pymmcore.
+
+        Parameters
+        ----------
+        filename : str | Path
+            Path to save the configuration file.
+        prefix_py_devices : bool, optional
+            If True (default), Python device lines are prefixed with `#py ` so
+            they are ignored by upstream C++/pymmcore implementations, allowing
+            config files to work with regular pymmcore. If False, Python device
+            lines are saved without the prefix (config will only be loadable by
+            UniMMCore).
+        """
+        save_system_configuration(self, filename, prefix_py_devices=prefix_py_devices)
+
     # ------------------------------------------------------------------------
     # ----------------- Functionality for All Devices ------------------------
     # ------------------------------------------------------------------------
@@ -187,11 +259,11 @@ class UniMMCore(CMMCorePlus):
         try:
             CMMCorePlus.loadDevice(self, label, moduleName, deviceName)
         except RuntimeError as e:
-            # it was a C++ device, should have worked ... raise the error
             if moduleName not in super().getDeviceAdapterNames():
                 pydev = self._get_py_device_instance(moduleName, deviceName)
                 self.loadPyDevice(label, pydev)
                 return
+            # it was a C++ device, should have worked ... raise the error
             if exc := self._load_error_with_info(label, moduleName, deviceName, str(e)):
                 raise exc from e
 
@@ -235,6 +307,10 @@ class UniMMCore(CMMCorePlus):
         self._pydevices.load(label, device, create_core_proxy(self))
 
     load_py_device = loadPyDevice
+
+    def isPyDevice(self, label: DeviceLabel | str) -> bool:
+        """Returns True if the specified device label corresponds to a Python device."""
+        return label in self._pydevices
 
     def unloadDevice(self, label: DeviceLabel | str) -> None:
         if label not in self._pydevices:  # pragma: no cover
