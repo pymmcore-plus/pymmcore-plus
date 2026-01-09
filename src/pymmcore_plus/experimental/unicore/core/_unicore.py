@@ -39,6 +39,7 @@ from pymmcore_plus.experimental.unicore.devices._stage import (
 )
 from pymmcore_plus.experimental.unicore.devices._state import StateDevice
 
+from ._config import load_system_configuration, save_system_configuration
 from ._sequence_buffer import SequenceBuffer
 
 if TYPE_CHECKING:
@@ -192,18 +193,15 @@ class UniMMCore(CMMCorePlus):
         fileName : str | Path
             Path to the configuration file. Defaults to "MMConfig_demo.cfg".
         """
-        from ._config import load_system_configuration
-
         fpath = Path(fileName).expanduser()
         if not fpath.exists() and not fpath.is_absolute() and self._mm_path:
             fpath = Path(self._mm_path) / fileName
         if not fpath.exists():
             raise FileNotFoundError(f"Path does not exist: {fpath}")
 
-        self._last_sys_config = str(fpath.resolve())
-
+        cfg_path = str(fpath.resolve())
         try:
-            load_system_configuration(self, self._last_sys_config)
+            load_system_configuration(self, cfg_path)
         except Exception:
             # On failure, unload all devices to avoid leaving loaded but
             # uninitialized devices that could cause crashes
@@ -211,17 +209,17 @@ class UniMMCore(CMMCorePlus):
                 self.unloadAllDevices()
             raise
 
+        self._last_sys_config = cfg_path
         # Emit system configuration loaded event
-        if hasattr(self, "events"):
-            if hasattr(self.events, "systemConfigurationLoaded"):
-                self.events.systemConfigurationLoaded.emit()
+        self.events.systemConfigurationLoaded.emit()
 
     def saveSystemConfiguration(
         self, filename: str | Path, *, prefix_py_devices: bool = True
     ) -> None:
         """Save the current system configuration to a text file.
 
-        This saves both C++ and Python devices.
+        This saves both C++ and Python devices.  Python device lines are prefixed
+        with `#py ` by default so they are ignored by upstream C++/pymmcore.
 
         Parameters
         ----------
@@ -234,8 +232,6 @@ class UniMMCore(CMMCorePlus):
             lines are saved without the prefix (config will only be loadable by
             UniMMCore).
         """
-        from ._config import save_system_configuration
-
         save_system_configuration(self, filename, prefix_py_devices=prefix_py_devices)
 
     # ------------------------------------------------------------------------
