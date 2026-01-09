@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from unittest.mock import Mock, call
+
 import pytest
 
 from pymmcore_plus.core._constants import Keyword
@@ -360,3 +362,36 @@ def test_concurrent_state_operations(unicore: UniMMCore) -> None:
 
         unicore.setState(DEV, 1)
         assert unicore.getState(DEV) == 1
+
+
+def test_emission_of_state_and_property() -> None:
+    """Test the event onPropertyChange emitted by the StateDevice"""
+    core = UniMMCore()
+    prop_changed = Mock()
+    core.events.propertyChanged.connect(prop_changed)
+
+    my_state_device = MyStateDevice({0: "Red", 1: "Green", 2: "Blue"})
+    dev = "MyStateDevice"
+    core.loadPyDevice(dev, my_state_device)
+
+    core.setProperty(dev, "State", 2)
+    assert core.getState(dev) == 2
+    assert prop_changed.call_count == 2
+    prop_changed.assert_has_calls([call(dev, "State", 2), call(dev, "Label", "Blue")])
+
+    prop_changed.reset_mock()
+    core.setProperty(dev, "Label", "Green")
+    assert prop_changed.call_count == 2
+    prop_changed.assert_has_calls([call(dev, "State", 1), call(dev, "Label", "Green")])
+
+    prop_changed.reset_mock()
+    core.setState(dev, 0)
+    assert core.getState(dev) == 0
+    assert prop_changed.call_count == 2
+    prop_changed.assert_has_calls([call(dev, "State", 0), call(dev, "Label", "Red")])
+
+    prop_changed.reset_mock()
+    core.setStateLabel(dev, "Blue")
+    assert core.getState(dev) == 2
+    assert prop_changed.call_count == 2
+    prop_changed.assert_has_calls([call(dev, "State", 2), call(dev, "Label", "Blue")])
