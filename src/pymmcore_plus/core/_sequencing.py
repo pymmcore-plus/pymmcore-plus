@@ -348,6 +348,8 @@ class EventCombiner:
             z_pos=first_event.z_pos,
             exposure=first_event.exposure,
             channel=first_event.channel,
+            min_start_time=first_event.min_start_time,
+            reset_event_timer=first_event.reset_event_timer,
         )
 
     # -------------- helper methods to query props & max lengths ----------------
