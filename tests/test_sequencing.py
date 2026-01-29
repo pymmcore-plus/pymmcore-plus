@@ -6,7 +6,6 @@ from math import prod
 from typing import cast
 from unittest.mock import MagicMock, call
 
-import numpy as np
 import pytest
 import useq
 
@@ -184,26 +183,19 @@ def test_sequence_actions(core: CMMCorePlus) -> None:
     assert len(events) == EXPECTED_SEQUENCES
 
 
-def test_sequencing_respects_min_interval(core: CMMCorePlus) -> None:
+@pytest.mark.parametrize("interval", [0, 1])
+def test_sequencing_respects_min_interval(core: CMMCorePlus, interval: float) -> None:
     # Create sequence and generate events
-    interval = 0.5
     seq = useq.MDASequence(
         z_plan={"range": 1.0, "step": 1.0},
-        time_plan={"interval": interval, "loops": 2},
+        time_plan={"interval": interval, "loops": 3},
     )
 
     core.setExposure(1)
     core.setProperty("Z", "UseSequences", "Yes")
-
-    timestamps = []
-    core.mda.events.frameReady.connect(
-        lambda *a: timestamps.append(a[2]["runner_time_ms"])
-    )
-
     core.mda.engine.use_hardware_sequencing = True
-    core.mda.run(seq)
-
-    # ensure that intervals between frames are about interval (+/- 100 ms)
-    # increase atol if test is flaky on CI
-    intervals = np.diff(timestamps[::2])
-    np.testing.assert_allclose(intervals, interval * 1000, atol=100)
+    merged = list(iter_sequenced_events(core, seq))
+    assert len(list(seq)) == 6
+    assert len(merged) == 1 if interval == 0 else 3
+    expected_interval = [0, 1 * interval, 2 * interval] if interval else [0]
+    assert [e.min_start_time for e in merged] == expected_interval
