@@ -166,6 +166,7 @@ class OMEWriterHandler:
         plate: omew.Plate | None = None
         if isinstance(sequence.stage_positions, useq.WellPlatePlan):
             plate = _useq_plate_to_omew(sequence.stage_positions)
+            print(plate)
 
         # Create acquisition settings and stream
         settings = self._omew.AcquisitionSettings(
