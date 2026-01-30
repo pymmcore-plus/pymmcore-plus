@@ -44,9 +44,9 @@ else:
 
 # Sequence
 seq = useq.MDASequence(
-    axis_order="pzc",
+    axis_order="pc",
     channels=["DAPI", "FITC"],
-    z_plan={"range": 2, "step": 0.4},
+    # z_plan={"range": 2, "step": 0.4},
     # stage_positions=((0, 0), (100, 100)),
     stage_positions=useq.WellPlatePlan(
         plate=useq.WellPlate.from_str("96-well"),
