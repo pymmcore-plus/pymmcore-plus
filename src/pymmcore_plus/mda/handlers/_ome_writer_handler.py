@@ -6,7 +6,6 @@ import contextlib
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
 import useq
-from rich import print
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -159,7 +158,9 @@ class OMEWriterHandler:
             pixel_size_um=pixel_size,
         )
 
+        from rich import print
         print(dims)
+
 
         # Convert useq plate to ome-writers plate
         plate: omew.Plate | None = None
