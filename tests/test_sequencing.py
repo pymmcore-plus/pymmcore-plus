@@ -181,3 +181,21 @@ def test_sequence_actions(core: CMMCorePlus) -> None:
     engine.use_hardware_sequencing = True
     events = list(engine.event_iterator(mda))
     assert len(events) == EXPECTED_SEQUENCES
+
+
+@pytest.mark.parametrize("interval", [0, 1])
+def test_sequencing_respects_min_interval(core: CMMCorePlus, interval: float) -> None:
+    # Create sequence and generate events
+    seq = useq.MDASequence(
+        z_plan={"range": 1.0, "step": 1.0},
+        time_plan={"interval": interval, "loops": 3},
+    )
+
+    core.setExposure(1)
+    core.setProperty("Z", "UseSequences", "Yes")
+    core.mda.engine.use_hardware_sequencing = True
+    merged = list(iter_sequenced_events(core, seq))
+    assert len(list(seq)) == 6
+    assert len(merged) == 1 if interval == 0 else 3
+    expected_interval = [0, 1 * interval, 2 * interval] if interval else [0]
+    assert [e.min_start_time for e in merged] == expected_interval
