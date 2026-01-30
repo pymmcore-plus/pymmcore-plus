@@ -23,6 +23,7 @@ def handler_for_path(path: str | Path) -> object:
 
     This method picks from the built-in handlers based on the extension of the path.
     """
+    # TODO: "memory://" path is not yet supported by ome-writers tensorstore backend
     if str(path).rstrip("/").rstrip(":").lower() == "memory":
         # For memory stores, use TensorStoreHandler
         return TensorStoreHandler(kvstore="memory://")
@@ -33,7 +34,7 @@ def handler_for_path(path: str | Path) -> object:
         return OMEWriterHandler(path, backend="tensorstore")
 
     if path.endswith((".tiff", ".tif")):
-        return OMEWriterHandler(path, backend="tiff")
+        return OMEWriterHandler(path, backend="tifffile")
 
     # FIXME: ugly hack for the moment to represent a non-existent directory
     # there are many features that ImageSequenceWriter supports, and it's unclear

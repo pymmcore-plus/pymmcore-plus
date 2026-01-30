@@ -2,19 +2,24 @@
 
 from __future__ import annotations
 
+import contextlib
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
-import numpy as np
+import useq
+from rich import print
 
 if TYPE_CHECKING:
     from pathlib import Path
 
-    import useq
+    import numpy as np
+    import ome_writers as omew
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
 
-BackendName: TypeAlias = Literal["acquire-zarr", "tensorstore", "zarr", "tiff"]
+BackendName: TypeAlias = Literal[
+    "acquire-zarr", "tensorstore", "zarrs-python", "zarr-python", "tifffile"
+]
 
 
 class OMEWriterHandler:
@@ -25,9 +30,11 @@ class OMEWriterHandler:
 
     - "tensorstore": High-performance zarr writing using `tensorstore` backend
     - "acquire-zarr": High-performance zarr writing using `acquire-zarr` backend
-    - "zarr": Standard zarr-python backend
-    - "tiff": OME-TIFF format using `tifffile` backend
-    - "auto": Automatically determine backend based on file extension
+    - "zarr-python": Standard zarr writing using `zarr-python` library
+    - "zarrs-python": Standard zarr writing using using `zarrs-python` library
+    - "tifffile": OME-TIFF writing using `tifffile` library
+    - "auto": Automatically select backend based on the file extension and available
+      libraries
 
     Parameters
     ----------
@@ -37,8 +44,9 @@ class OMEWriterHandler:
         - `.tif` or `.tiff` for OME-TIFF
     backend : BackendName, optional
         Backend to use for writing. Default is "auto" which infers from path extension.
-        Available options are "tensorstore", "acquire-zarr", "zarr", "tiff", and "auto".
-    dtype : np.dtype | None, optional
+        Available options are "tensorstore", "acquire-zarr", "zarr-python",
+        "zarrs-python", "tifffile", and "auto".
+    dtype : str | None, optional
         Data type for the output. If None, inferred from first frame. Default is None.
     overwrite : bool, optional
         Whether to overwrite existing files/directories. Default is False.
@@ -78,7 +86,6 @@ class OMEWriterHandler:
         path: str | Path,
         *,
         backend: BackendName | Literal["auto"] = "auto",
-        dtype: np.dtype | None = None,
         overwrite: bool = False,
     ) -> None:
         try:
@@ -94,7 +101,6 @@ class OMEWriterHandler:
         self._path = str(path)
         self._backend = backend
         self._overwrite = overwrite
-        self._dtype = dtype
 
         self._stream: omew.OMEStream | None = None
         self._current_sequence: useq.MDASequence | None = None
@@ -113,29 +119,63 @@ class OMEWriterHandler:
         """Initialize the stream when sequence starts."""
         self._current_sequence = sequence
 
-        # Determine dtype from metadata if not provided
-        if self._dtype is None:
-            # Try to get from metadata, default to uint16
-            pixel_type = meta.get("PixelType", "uint16")
-            self._dtype = np.dtype(str(pixel_type))
+        image_info = meta.get("image_infos")
+        if image_info is None:
+            raise ValueError(
+                "Metadata must contain 'image_infos' to determine image properties."
+            )
+        image_info = image_info[0]
+
+        # Get dtype from metadata
+        _dtype = image_info.get("dtype")
+        if _dtype is None:
+            raise ValueError(
+                "Data type not specified and could not be inferred from metadata."
+            )
 
         # Get image dimensions from metadata
-        width = meta.get("Width", 512)
-        height = meta.get("Height", 512)
+        width = image_info.get("width")
+        height = image_info.get("height")
+        if width is None or height is None:
+            raise ValueError(
+                "Metadata 'image_infos' must contain 'width' and 'height' keys."
+            )
+
+        # Get pixel size from metadata (optional)
+        pixel_size = image_info.get("pixel_size_um")
+
+        # Get z pixel size from sequence
+        z_units: dict[str, tuple[float, str]] = {}
+        if sequence.z_plan is not None:
+            with contextlib.suppress(AttributeError):
+                z_units = {"z": (sequence.z_plan.step, "micrometer")}
 
         # Convert useq sequence to ome-writers dimensions
         dims = self._omew.dims_from_useq(
-            sequence, image_width=width, image_height=height
+            sequence,
+            image_width=width,
+            image_height=height,
+            units=z_units,
+            pixel_size_um=pixel_size,
         )
 
-        # Create the stream
-        self._stream = self._omew.create_stream(
-            path=self._path,
+        print(dims)
+
+        # Convert useq plate to ome-writers plate
+        plate: omew.Plate | None = None
+        if isinstance(sequence.stage_positions, useq.WellPlatePlan):
+            plate = _useq_plate_to_omew(sequence.stage_positions)
+
+        # Create acquisition settings and stream
+        settings = self._omew.AcquisitionSettings(
+            root_path=self._path,
             dimensions=dims,
-            dtype=self._dtype,
+            plate=plate,
+            dtype=_dtype,
             backend=self._backend,
             overwrite=self._overwrite,
         )
+        self._stream = self._omew.create_stream(settings)
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
@@ -152,8 +192,55 @@ class OMEWriterHandler:
         self._stream.append(frame)
 
     def sequenceFinished(self, sequence: useq.MDASequence) -> None:
-        """Flush and close the stream when sequence finishes."""
+        """Close the stream when sequence finishes."""
         if self._stream is not None:
-            self._stream.flush()
+            self._stream.close()
             self._stream = None
         self._current_sequence = None
+
+
+# ---------------HELPER FUNCTION----------------- #
+# TODO: maybe move it to ome-writers?
+
+
+def _useq_plate_to_omew(useq_plate: useq.WellPlatePlan) -> Any:
+    """Convert a useq WellPlatePlan to an ome-writers Plate.
+
+    Parameters
+    ----------
+    omew_module : module
+        The ome_writers module.
+    useq_plate : useq.WellPlatePlan
+        The useq WellPlatePlan to convert.
+
+    Returns
+    -------
+    omew_module.Plate
+        The converted ome-writers Plate.
+    """
+    import re
+
+    import ome_writers as omew
+
+    plate = useq_plate.plate
+    well_names = plate.all_well_names
+
+    # Extract row names from first column (e.g., A1, B1, C1... -> A, B, C...)
+    row_names = []
+    for name in well_names[:, 0]:
+        match = re.match(r"^([A-Za-z]+)", str(name))
+        if match:
+            row_names.append(match.group(1))
+
+    # Extract column names from first row (e.g., A1, A2, A3... -> 1, 2, 3...)
+    column_names = []
+    for name in well_names[0, :]:
+        match = re.search(r"(\d+)$", str(name))
+        if match:
+            column_names.append(match.group(1))
+
+    return omew.Plate(
+        row_names=row_names,
+        column_names=column_names,
+        name=plate.name or None,
+    )
