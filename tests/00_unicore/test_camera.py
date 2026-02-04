@@ -68,10 +68,6 @@ class MyCamera(CameraDevice):
             buffer[:] = FRAME
             yield {"random_key": f"value_{i}"}  # Example metadata, can be anything.
 
-    def get_number_of_camera_channels(self) -> int:
-        """Returns the number of components the default camera is returning."""
-        return 1
-
 
 class SequenceableCamera(MyCamera):
     """Camera device that supports exposure sequencing."""
