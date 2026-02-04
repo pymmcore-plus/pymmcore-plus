@@ -44,6 +44,13 @@ class CameraDevice(Device):
         """Return the data type of the image buffer."""
 
     @abstractmethod
+    def get_number_of_camera_channels(self) -> int:
+        """Returns the number of components the default camera is returning.
+
+        This metadata is needed to run a MDA Acquisition.
+        """
+
+    @abstractmethod
     def start_sequence(
         self,
         n: int | None,

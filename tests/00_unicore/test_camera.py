@@ -68,6 +68,10 @@ class MyCamera(CameraDevice):
             buffer[:] = FRAME
             yield {"random_key": f"value_{i}"}  # Example metadata, can be anything.
 
+    def get_number_of_camera_channels(self) -> int:
+        """Returns the number of components the default camera is returning."""
+        return 1
+
 
 class SequenceableCamera(MyCamera):
     """Camera device that supports exposure sequencing."""
@@ -274,41 +278,17 @@ def test_buffer_methods(device: str) -> None:
     assert core.isBufferOverflowed()
     core.clearCircularBuffer()
 
-class CameraWithChannel(MyCamera):
-
-    def getNumberOfCameraChannels(self) -> int:
-        """Return the number of channel of a classic camera for gray images."""
-        return 1
-
 
 def test_camera_channels_numbers() -> None:
     """
     Test the function to return the numbers of camera channels.
-
-    If isn't implemented in the python camera device, will raise an excemption.
     """
     core = UniMMCore()
 
-    core.loadPyDevice(DEV, CameraWithChannel())
+    core.loadPyDevice(DEV, MyCamera())
     core.initializeDevice(DEV)
 
     core.setCameraDevice(DEV)
     assert core.getCameraDevice() == DEV
 
     assert core.getNumberOfCameraChannels() == 1
-
-    core.unloadAllDevices()
-
-    core.loadPyDevice(DEV, MyCamera())
-    core.initializeDevice(DEV)
-    core.setCameraDevice(DEV)
-
-    assert core.getCameraDevice() == DEV
-
-    with pytest.raises(NotImplementedError, match="getNumberOfCameraChannels is not implemented for Python cameras."):
-        core.getNumberOfCameraChannels()
-
-
-
-
-
