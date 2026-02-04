@@ -273,3 +273,18 @@ def test_buffer_methods(device: str) -> None:
         timeout -= 0.1
     assert core.isBufferOverflowed()
     core.clearCircularBuffer()
+
+
+def test_camera_channels_numbers() -> None:
+    """
+    Test the function to return the numbers of camera channels.
+    """
+    core = UniMMCore()
+
+    core.loadPyDevice(DEV, MyCamera())
+    core.initializeDevice(DEV)
+
+    core.setCameraDevice(DEV)
+    assert core.getCameraDevice() == DEV
+
+    assert core.getNumberOfCameraChannels() == 1
