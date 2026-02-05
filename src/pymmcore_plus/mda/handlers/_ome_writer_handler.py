@@ -4,11 +4,12 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
 
+import ome_writers as omew
+
 if TYPE_CHECKING:
     from pathlib import Path
 
     import numpy as np
-    import ome_writers as omew
     import useq
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
@@ -80,16 +81,6 @@ class OMEWriterHandler:
         backend: BackendName | Literal["auto"] = "auto",
         overwrite: bool = False,
     ) -> None:
-        try:
-            import ome_writers as omew
-        except ImportError as e:
-            raise ImportError(
-                "ome-writers is required to use this handler. "
-                "Install with: pip install ome-writers"
-            ) from e
-
-        self._omew = omew
-
         self._path = str(path)
         self._backend = backend
         self._overwrite = overwrite
@@ -153,14 +144,14 @@ class OMEWriterHandler:
         pixel_size = image_info.get("pixel_size_um")
 
         # Convert useq sequence to ome-writers dimensions
-        from_useq = self._omew.useq_to_acquisition_settings(
+        from_useq = omew.useq_to_acquisition_settings(
             sequence,
             image_width=width,
             image_height=height,
             pixel_size_um=pixel_size,
         )
 
-        settings = self._omew.AcquisitionSettings(
+        settings = omew.AcquisitionSettings(
             root_path=self._path,
             dtype=dtype,
             overwrite=self._overwrite,
@@ -168,7 +159,7 @@ class OMEWriterHandler:
             **from_useq,
         )
 
-        self._stream = self._omew.create_stream(settings=settings)
+        self._stream = omew.create_stream(settings=settings)
         self._arrays = self._stream._backend._arrays  # noqa: SLF001  # type: ignore
 
     def frameReady(
@@ -198,7 +189,7 @@ class OMEWriterHandler:
             return  # Auto mode will determine the correct backend
 
         path_lower = str(self._path).lower()
-        is_zarr = path_lower.endswith(".zarr")
+        is_zarr = path_lower.endswith(".zarr") or path_lower == "memory://"
         is_tiff = path_lower.endswith((".tif", ".tiff", ".ome.tif", ".ome.tiff"))
 
         if is_zarr and self._backend == "tifffile":
@@ -215,14 +206,4 @@ class OMEWriterHandler:
             raise ValueError(
                 f"Backend '{self._backend}' cannot be used with TIFF path "
                 f"'{self._path}'. Use 'tifffile' backend instead."
-            )
-        elif not (is_zarr or is_tiff):
-            # Warn if path doesn't have a recognized extension
-            import warnings
-
-            warnings.warn(
-                f"Path '{self._path}' does not have a recognized extension "
-                "(.zarr, .tif, .tiff). This may cause issues.",
-                UserWarning,
-                stacklevel=3,
             )

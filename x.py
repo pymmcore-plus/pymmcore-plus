@@ -39,8 +39,8 @@ from pathlib import Path
 
 import useq
 import yaozarrs
-from ome_types import from_tiff, __version__
-print(__version__)
+from ome_types import from_tiff
+
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.handlers import OMEWriterHandler
 from pymmcore_plus.mda.handlers._img_sequence_writer import ImageSequenceWriter
@@ -97,10 +97,9 @@ else:
 
 # Sequence
 seq = useq.MDASequence(
-    axis_order="pc",
+    axis_order="pzc",
     channels=["DAPI", "FITC"],
-    # z_plan={"range": 2, "step": 0.4},
-    # stage_positions=((0, 0), (100, 100)),
+    z_plan={"range": 2, "step": 1.0},
     stage_positions=useq.WellPlatePlan(
         plate=useq.WellPlate.from_str("96-well"),
         a1_center_xy=(0, 0),
