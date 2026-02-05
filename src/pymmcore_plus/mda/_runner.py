@@ -4,6 +4,7 @@ import time
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
@@ -23,6 +24,7 @@ if TYPE_CHECKING:
     import numpy as np
     from useq import MDAEvent
 
+    from pymmcore_plus.mda.handlers._ome_writer_handler import BackendName
     from pymmcore_plus.metadata.schema import FrameMetaV1
 
     from ._engine import MDAEngine
@@ -52,11 +54,55 @@ if TYPE_CHECKING:
 
 SupportsFrameReady: TypeAlias = "FrameReady0 | FrameReady1 | FrameReady2 | FrameReady3"
 SingleOutput: TypeAlias = "Path | str | SupportsFrameReady"
+FormatLike: TypeAlias = (
+    "Format | Path | str | tuple[str | BackendName] | SupportsFrameReady"
+)
 
 MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
     "length & shape. Iterating over it has no effect."
 )
+
+
+@dataclass
+class Format:
+    """Output format specification for MDA acquisition.
+
+    This class specifies where and how to write MDA acquisition data.
+
+    Parameters
+    ----------
+    path : str | Path | None
+        Output path for the data. File extension determines format:
+        - `.zarr` or `.ome.zarr` for OME-Zarr
+        - `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff` for OME-TIFF
+        - No extension for ImageSequenceWriter
+        If None, a temporary directory will be created.
+    backend : BackendName | None
+        Storage backend to use. Default is None which auto-detects based on
+        path extension and available libraries.
+        - "tensorstore": High-performance zarr writing
+        - "acquire-zarr": Alternative zarr backend
+        - "zarr_python": Pure Python zarr
+        - "zarrs_python": Rust-based zarr
+        - "tifffile": OME-TIFF writing
+
+    Examples
+    --------
+    ```python
+    # Auto-detect backend from path extension
+    Format("output.ome.zarr")
+
+    # Explicit backend
+    Format("output.zarr", backend="tensorstore")
+
+    # Temporary directory with specific backend
+    Format(backend="tensorstore")
+    ```
+    """
+
+    path: str | Path
+    backend: BackendName | None = None
 
 
 class GeneratorMDASequence(MDASequence):
@@ -192,6 +238,7 @@ class MDARunner:
         events: Iterable[MDAEvent],
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
+        format: FormatLike | Sequence[FormatLike] | None = None,
     ) -> None:
         """Run the multi-dimensional acquisition defined by `sequence`.
 
@@ -205,26 +252,30 @@ class MDARunner:
         events : Iterable[MDAEvent]
             An iterable of `useq.MDAEvents` objects to execute.
         output : SingleOutput | Sequence[SingleOutput] | None, optional
-            The output handler(s) to use.  If None, no output will be saved.
-            The value may be either a single output or a sequence of outputs,
-            where a "single output" can be any of the following:
+            **Deprecated.** Use `format` parameter instead.
+            The output handler(s) to use. If None, no output will be saved.
+        format : FormatLike | Sequence[FormatLike] | None, optional
+            Output format specification(s). Can be:
 
-            - A string or Path to a directory to save images to. A handler will be
-                created automatically based on the extension of the path.
-                - `.zarr` files will be handled by `OMEZarrWriter`
-                - `.ome.tiff` files will be handled by `OMETiffWriter`
-                - A directory with no extension will be handled by `ImageSequenceWriter`
-            - A handler object that implements the `DataHandler` protocol, currently
-                meaning it has a `frameReady` method.  See `mda_listeners_connected`
-                for more details.
+            - A `Format` object specifying path and backend
+            - A string or `Path` (backend auto-detected from extension)
+            - A tuple of `(path, backend)`
+            - A handler object with a `frameReady` method (e.g., `OMEWriterHandler`)
+            - A list of any of the above for multiple outputs
+
+            File extensions determine the format:
+            - `.zarr` or `.ome.zarr` -> OME-Zarr (via OMEWriterHandler)
+            - `.tif`, `.tiff`, `.ome.tiff` -> OME-TIFF (via OMEWriterHandler)
+            - No extension -> ImageSequenceWriter
+
+            If `path` is None in a Format, a temporary directory is used.
 
             During the course of the sequence, the `get_output_handlers` method can be
-            used to get the currently connected output handlers (including those that
-            were created automatically based on file paths).
+            used to get the currently connected output handlers.
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-        with self._outputs_connected(output):
+        with self._outputs_connected(output=output, format=format):
             # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
             # called inside the context manager, since the `mda_listeners_connected`
             # context manager expects to see both of those signals.
@@ -276,40 +327,92 @@ class MDARunner:
         return time.perf_counter() - self._t0
 
     def _outputs_connected(
-        self, output: SingleOutput | Sequence[SingleOutput] | None
+        self,
+        output: SingleOutput | Sequence[SingleOutput] | None = None,
+        format: FormatLike | Sequence[FormatLike] | None = None,
     ) -> AbstractContextManager:
-        """Context in which output handlers are connected to the frameReady signal."""
-        if output is None:
+        """Context in which output handlers are connected to the frameReady signal.
+
+        Parameters
+        ----------
+        output : SingleOutput | Sequence[SingleOutput] | None
+            Legacy output parameter (deprecated). Accepts paths or handler objects.
+        format : FormatLike | Sequence[FormatLike] | None
+            Accepts FormatLike or sequences of FormatLike to create handlers.
+        """
+        if output is None and format is None:
             return nullcontext()
 
-        if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
-            output = [output]
-
-        # convert all items to handler objects, preserving order
         _handlers: list[SupportsFrameReady] = []
-        for item in output:
-            if isinstance(item, (str, Path)):
-                _handlers.append(self._handler_for_path(item))
+
+        if format is not None:
+            # Normalize to list
+            formats_list: list[FormatLike]
+            if callable(getattr(format, "frameReady", None)):
+                # It's a handler object
+                formats_list = [format]  # type: ignore[list-item]
+            elif isinstance(format, (str, Path, Format)):
+                formats_list = [format]
+            elif isinstance(format, tuple) and len(format) == 2:
+                # (path, backend) tuple
+                formats_list = [format]  # type: ignore[list-item]
             else:
-                if not callable(getattr(item, "frameReady", None)):
-                    raise TypeError(
-                        "Output handlers must have a callable frameReady method. "
-                        f"Got {item} with type {type(item)}."
+                formats_list = list(format)  # type: ignore[arg-type]
+
+            for item in formats_list:
+                if isinstance(item, (str, Path)):
+                    _handlers.append(self._handler_for_format(Format(path=item)))
+                elif isinstance(item, Format):
+                    _handlers.append(self._handler_for_format(item))
+                elif isinstance(item, tuple) and len(item) == 2:
+                    # (path, backend) tuple
+                    _handlers.append(
+                        self._handler_for_format(Format(path=item[0], backend=item[1]))
                     )
-                _handlers.append(item)
+                elif callable(getattr(item, "frameReady", None)):
+                    # Handler object - use directly
+                    _handlers.append(item)  # type: ignore[arg-type]
+                else:
+                    raise TypeError(
+                        f"Invalid format item: {item!r}. Expected Format, path, "
+                        "(path, backend) tuple, or handler object."
+                    )
+
+        if output is not None:
+            if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
+                output = [output]
+
+            for item in output:
+                if isinstance(item, (str, Path)):
+                    _handlers.append(self._handler_for_format(Format(path=item)))
+                else:
+                    if not callable(getattr(item, "frameReady", None)):
+                        raise TypeError(
+                            "Output handlers must have a callable frameReady method. "
+                            f"Got {item} with type {type(item)}."
+                        )
+                    _handlers.append(item)
 
         self._handlers.clear()
         self._handlers.update(_handlers)
         return mda_listeners_connected(*_handlers, mda_events=self._signals)
 
-    def _handler_for_path(self, path: str | Path) -> SupportsFrameReady:
-        """Convert a string or Path into a handler object.
+    def _handler_for_format(self, fmt: Format) -> SupportsFrameReady:
+        """Create a handler from a Format specification.
 
-        This method picks from the built-in handlers based on the extension of the path.
+        Parameters
+        ----------
+        fmt : Format
+            Format specification with path and backend.
+
+        Returns
+        -------
+        SupportsFrameReady
+            A handler object for the specified format.
         """
-        from pymmcore_plus.mda.handlers import handler_for_path
+        from pymmcore_plus.mda.handlers import handler_for_format
 
-        return cast("SupportsFrameReady", handler_for_path(path))
+        return cast("SupportsFrameReady", handler_for_format(fmt))
 
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""

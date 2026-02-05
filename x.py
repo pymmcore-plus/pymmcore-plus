@@ -24,14 +24,16 @@ Arguments:
 
     OPTION: Handler integration method (default: 1)
         - 1: Manual signal connections (sequenceStarted, frameReady, sequenceFinished)
-        - 2: Pass handler object to mmc.mda.run(output=handler)
-        - 3: Pass path string to mmc.mda.run(output=path)
+        - 2: Pass handler object to mmc.mda.run(format=handler)
+        - 3: Pass Format object to mmc.mda.run(format=Format(path, backend))
+        - 4: Pass path string to mmc.mda.run(format=path)
 
 Examples
 --------
     uv run x.py zarr 1
     uv run x.py zarr-memory 2
     uv run x.py tiff 3
+    uv run x.py zarr 4
 """
 
 import sys
@@ -42,6 +44,7 @@ import yaozarrs
 from ome_types import from_tiff
 
 from pymmcore_plus import CMMCorePlus
+from pymmcore_plus.mda import Format
 from pymmcore_plus.mda.handlers import OMEWriterHandler
 from pymmcore_plus.mda.handlers._img_sequence_writer import ImageSequenceWriter
 
@@ -53,8 +56,10 @@ FORMAT = sys.argv[1] if len(sys.argv) > 1 else "zarr"
 # Set OPTION from command line argument or default
 # OPTION determines how to pass the handler to mda.run():
 #   1 = Manual signal connections (sequenceStarted, frameReady, sequenceFinished)
-#   2 = Pass handler object to mmc.mda.run(output=handler)
-#   3 = Pass path string to mmc.mda.run(output=path)
+#   2 = Pass handler object to mmc.mda.run(format=handler)
+#   3 = Pass Format object to mmc.mda.run(format=Format(path, backend))
+#   4 = Pass path string to mmc.mda.run(format=path)
+#   5 = Pass list of Format objects to mmc.mda.run(format=[Format1, Format2])
 OPTION = int(sys.argv[2]) if len(sys.argv) > 2 else 1
 
 # Output directory on desktop
@@ -80,19 +85,16 @@ mmc = CMMCorePlus.instance()
 mmc.loadSystemConfiguration("/Users/fdrgsp/Desktop/test_config.cfg")
 mmc.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
 
-# Configure paths and backend based on FORMAT
+# Configure Format based on FORMAT
 if FORMAT == "zarr":
-    output_path = f"{OUTPUT_DIR}/test{OPTION}.ome.zarr"
-    backend = "tensorstore"
+    fmt = Format(f"{OUTPUT_DIR}/test{OPTION}.ome.zarr", backend="tensorstore")
 elif FORMAT == "tiff":
-    output_path = f"{OUTPUT_DIR}/test{OPTION}.ome.tiff"
-    backend = "tifffile"
+    fmt = Format(f"{OUTPUT_DIR}/test{OPTION}.ome.tiff", backend="tifffile")
 elif FORMAT == "zarr-memory":
-    output_path = "memory://"
-    backend = "tensorstore"
+    fmt = Format("memory://", backend="tensorstore")
 elif FORMAT == "tiff-sequence":
-    output_path = f"{OUTPUT_DIR}/test{OPTION}_sequence"
-    backend = ""
+    # No backend needed for ImageSequenceWriter
+    fmt = Format(f"{OUTPUT_DIR}/test{OPTION}_sequence")
 else:
     raise ValueError(f"Unknown FORMAT: {FORMAT}")
 
@@ -111,29 +113,48 @@ seq = useq.MDASequence(
 
 # Run based on OPTION
 if OPTION == 1:
-    if FORMAT == "tiff-sequence":
-        handler = ImageSequenceWriter(output_path, overwrite=True)
-    else:
-        handler = OMEWriterHandler(output_path, backend=backend, overwrite=True)
-
     # Option 1: Manual signal connections
+    if FORMAT == "tiff-sequence":
+        handler = ImageSequenceWriter(fmt.path, overwrite=True)
+    else:
+        handler = OMEWriterHandler(fmt.path, backend=fmt.backend, overwrite=True)
+
     mmc.mda.events.sequenceStarted.connect(handler.sequenceStarted)
     mmc.mda.events.frameReady.connect(handler.frameReady)
     mmc.mda.events.sequenceFinished.connect(handler.sequenceFinished)
     mmc.mda.run(seq)
 
 elif OPTION == 2:
+    # Option 2: Pass handler object directly to format
     if FORMAT == "tiff-sequence":
-        handler = ImageSequenceWriter(output_path, overwrite=True)
+        handler = ImageSequenceWriter(fmt.path, overwrite=True)
     else:
-        handler = OMEWriterHandler(output_path, backend=backend, overwrite=True)
+        handler = OMEWriterHandler(fmt.path, backend=fmt.backend, overwrite=True)
 
-    # Option 2: Pass handler object to run()
-    mmc.mda.run(seq, output=handler)
+    mmc.mda.run(seq, format=handler)
 
 elif OPTION == 3:
-    # Option 3: Pass path string to run()
-    mmc.mda.run(seq, output=output_path)
+    # Option 3: Pass Format object to format
+    mmc.mda.run(seq, format=fmt)
+
+elif OPTION == 4:
+    # Option 4: Pass path string to format
+    mmc.mda.run(seq, format=fmt.path)
+
+elif OPTION == 5:
+    # Option 5: Pass list of Format objects
+    if FORMAT == "tiff-sequence":
+        mmc.mda.run(seq, format=[fmt.path, f"{fmt.path}_1"])
+    else:
+        path_str = str(fmt.path)
+        if fmt.backend == "tifffile":
+            out1 = path_str.replace(".ome.tiff", "_1.ome.tiff")
+        else:
+            out1 = path_str.replace(".ome.zarr", "_1.ome.zarr")
+        mmc.mda.run(
+            seq,
+            format=[fmt, Format(out1, backend=fmt.backend)],
+        )
 
 # Validate output
-validate_output(output_path, FORMAT)
+validate_output(str(fmt.path), FORMAT)

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import tempfile
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from ._img_sequence_writer import ImageSequenceWriter
 from ._ome_tiff_writer import OMETiffWriter
@@ -9,39 +9,71 @@ from ._ome_writer_handler import OMEWriterHandler
 from ._ome_zarr_writer import OMEZarrWriter
 from ._tensorstore_handler import TensorStoreHandler
 
+if TYPE_CHECKING:
+    from pymmcore_plus.mda._runner import Format
+
 __all__ = [
     "ImageSequenceWriter",
     "OMETiffWriter",
     "OMEWriterHandler",
     "OMEZarrWriter",
     "TensorStoreHandler",
+    "handler_for_format",
     "handler_for_path",
 ]
 
 
-def handler_for_path(path: str | Path) -> object:
+def handler_for_format(fmt: Format) -> object:
+    """Create a handler from a Format specification.
+
+    Parameters
+    ----------
+    fmt : Format
+        Format specification with path and backend.
+
+    Returns
+    -------
+    object
+        A handler object for the specified format.
+    """
+    path = fmt.path
+    path_str = str(path).rstrip("/").rstrip(":") if path else ""
+
+    # Handle "memory://" -> use OMEWriterHandler in temp directory
+    if not path or path_str.lower() == "memory":
+        return OMEWriterHandler.from_format(fmt)
+
+    path_resolved = str(Path(path).expanduser().resolve())
+
+    # Zarr or TIFF -> use OMEWriterHandler
+    path_lower = path_resolved.lower()
+    if path_lower.endswith(".zarr") or path_lower.endswith((".tiff", ".tif")):
+        return OMEWriterHandler.from_format(fmt)
+
+    # No extension - use ImageSequenceWriter
+    if not (Path(path_resolved).suffix or Path(path_resolved).exists()):
+        return ImageSequenceWriter(path_resolved)
+
+    raise ValueError(f"Could not infer a writer handler for path: '{path}'")
+
+
+def handler_for_path(path: str | Path, backend: str | None = None) -> object:
     """Convert a string or Path into a handler object.
 
     This method picks from the built-in handlers based on the extension of the path.
+
+    Parameters
+    ----------
+    path : str | Path
+        Path to the output file or directory.
+    backend : str | None, optional
+        Backend to use. Default is None which auto-detects from extension.
+
+    Returns
+    -------
+    object
+        A handler object for the specified path.
     """
-    # for backward compatibility with "memory://"
-    if str(path).rstrip("/").rstrip(":").lower() == "memory":
-        # Use a temporary path for in-memory storage
-        temp_path = Path(tempfile.gettempdir()) / "_pymmcore_plus_tmp.ome.zarr"
-        return OMEWriterHandler(temp_path, backend="tensorstore", overwrite=True)
+    from pymmcore_plus.mda._runner import Format
 
-    path = str(Path(path).expanduser().resolve())
-
-    if path.endswith(".zarr"):
-        return OMEWriterHandler(path, backend="tensorstore")
-
-    if path.endswith((".tiff", ".tif")):
-        return OMEWriterHandler(path, backend="tifffile")
-
-    # FIXME: ugly hack for the moment to represent a non-existent directory
-    # there are many features that ImageSequenceWriter supports, and it's unclear
-    # how to infer them all from a single string.
-    if not (Path(path).suffix or Path(path).exists()):
-        return ImageSequenceWriter(path)
-
-    raise ValueError(f"Could not infer a writer handler for path: '{path}'")
+    return handler_for_format(Format(path=path, backend=backend))  # type: ignore[arg-type]
