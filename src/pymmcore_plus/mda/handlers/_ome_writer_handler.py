@@ -2,22 +2,20 @@
 
 from __future__ import annotations
 
-import contextlib
 from typing import TYPE_CHECKING, Any, Literal, TypeAlias
-
-import useq
 
 if TYPE_CHECKING:
     from pathlib import Path
 
     import numpy as np
     import ome_writers as omew
+    import useq
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
 
 BackendName: TypeAlias = Literal[
-    "acquire-zarr", "tensorstore", "zarrs-python", "zarr-python", "tifffile"
+    "acquire-zarr", "tensorstore", "tifffile", "zarr_python", "zarrs_python"
 ]
 
 
@@ -29,9 +27,7 @@ class OMEWriterHandler:
 
     - "tensorstore": High-performance zarr writing using `tensorstore` backend
     - "acquire-zarr": High-performance zarr writing using `acquire-zarr` backend
-    - "zarr-python": Standard zarr writing using `zarr-python` library
-    - "zarrs-python": Standard zarr writing using using `zarrs-python` library
-    - "tifffile": OME-TIFF writing using `tifffile` library
+    - "tiff": OME-TIFF writing using `tifffile` library
     - "auto": Automatically select backend based on the file extension and available
       libraries
 
@@ -43,10 +39,7 @@ class OMEWriterHandler:
         - `.tif` or `.tiff` for OME-TIFF
     backend : BackendName, optional
         Backend to use for writing. Default is "auto" which infers from path extension.
-        Available options are "tensorstore", "acquire-zarr", "zarr-python",
-        "zarrs-python", "tifffile", and "auto".
-    dtype : str | None, optional
-        Data type for the output. If None, inferred from first frame. Default is None.
+        Available options are "tensorstore", "acquire-zarr", "tiff", and "auto".
     overwrite : bool, optional
         Whether to overwrite existing files/directories. Default is False.
 
@@ -103,6 +96,10 @@ class OMEWriterHandler:
 
         self._stream: omew.OMEStream | None = None
         self._current_sequence: useq.MDASequence | None = None
+        self._arrays: list = []
+
+        # Validate backend matches path extension
+        self._validate_backend_path_combination()
 
     @property
     def stream(self) -> Any:
@@ -113,6 +110,11 @@ class OMEWriterHandler:
     def path(self) -> str:
         """Return the output path."""
         return self._path
+
+    @property
+    def arrays(self) -> list:
+        """Return the list of arrays written (for debugging purposes)."""
+        return self._arrays
 
     def sequenceStarted(self, sequence: useq.MDASequence, meta: SummaryMetaV1) -> None:
         """Initialize the stream when sequence starts."""
@@ -140,44 +142,34 @@ class OMEWriterHandler:
                 "Metadata 'image_infos' must contain 'width' and 'height' keys."
             )
 
-        # Get pixel size from metadata (optional)
+        # Get dtype from metadata
+        dtype = image_info.get("dtype")
+        if dtype is None:
+            raise ValueError(
+                "Data type not specified and could not be inferred from metadata."
+            )
+
+        # Get pixel size from metadata
         pixel_size = image_info.get("pixel_size_um")
 
-        # Get z pixel size from sequence
-        z_units: dict[str, tuple[float, str]] = {}
-        if sequence.z_plan is not None:
-            with contextlib.suppress(AttributeError):
-                z_units = {"z": (sequence.z_plan.step, "micrometer")}
-
         # Convert useq sequence to ome-writers dimensions
-        dims = self._omew.dims_from_useq(
+        from_useq = self._omew.useq_to_acquisition_settings(
             sequence,
             image_width=width,
             image_height=height,
-            units=z_units,
             pixel_size_um=pixel_size,
         )
 
-        from rich import print
-        print(dims)
-
-
-        # Convert useq plate to ome-writers plate
-        plate: omew.Plate | None = None
-        if isinstance(sequence.stage_positions, useq.WellPlatePlan):
-            plate = _useq_plate_to_omew(sequence.stage_positions)
-            print(plate)
-
-        # Create acquisition settings and stream
         settings = self._omew.AcquisitionSettings(
             root_path=self._path,
-            dimensions=dims,
-            plate=plate,
-            dtype=_dtype,
-            backend=self._backend,
+            dtype=dtype,
             overwrite=self._overwrite,
+            format=self._backend,
+            **from_useq,
         )
-        self._stream = self._omew.create_stream(settings)
+
+        self._stream = self._omew.create_stream(settings=settings)
+        self._arrays = self._stream._backend._arrays  # noqa: SLF001  # type: ignore
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
@@ -200,49 +192,37 @@ class OMEWriterHandler:
             self._stream = None
         self._current_sequence = None
 
+    def _validate_backend_path_combination(self) -> None:
+        """Validate that backend is compatible with the file path extension."""
+        if self._backend == "auto":
+            return  # Auto mode will determine the correct backend
 
-# ---------------HELPER FUNCTION----------------- #
-# TODO: maybe move it to ome-writers?
+        path_lower = str(self._path).lower()
+        is_zarr = path_lower.endswith(".zarr")
+        is_tiff = path_lower.endswith((".tif", ".tiff", ".ome.tif", ".ome.tiff"))
 
+        if is_zarr and self._backend == "tifffile":
+            raise ValueError(
+                f"Backend 'tifffile' cannot be used with zarr path '{self._path}'. "
+                "Use 'tensorstore' or 'acquire-zarr' instead."
+            )
+        elif is_tiff and self._backend in (
+            "tensorstore",
+            "acquire-zarr",
+            "zarr_python",
+            "zarrs_python",
+        ):
+            raise ValueError(
+                f"Backend '{self._backend}' cannot be used with TIFF path "
+                f"'{self._path}'. Use 'tifffile' backend instead."
+            )
+        elif not (is_zarr or is_tiff):
+            # Warn if path doesn't have a recognized extension
+            import warnings
 
-def _useq_plate_to_omew(useq_plate: useq.WellPlatePlan) -> Any:
-    """Convert a useq WellPlatePlan to an ome-writers Plate.
-
-    Parameters
-    ----------
-    omew_module : module
-        The ome_writers module.
-    useq_plate : useq.WellPlatePlan
-        The useq WellPlatePlan to convert.
-
-    Returns
-    -------
-    omew_module.Plate
-        The converted ome-writers Plate.
-    """
-    import re
-
-    import ome_writers as omew
-
-    plate = useq_plate.plate
-    well_names = plate.all_well_names
-
-    # Extract row names from first column (e.g., A1, B1, C1... -> A, B, C...)
-    row_names = []
-    for name in well_names[:, 0]:
-        match = re.match(r"^([A-Za-z]+)", str(name))
-        if match:
-            row_names.append(match.group(1))
-
-    # Extract column names from first row (e.g., A1, A2, A3... -> 1, 2, 3...)
-    column_names = []
-    for name in well_names[0, :]:
-        match = re.search(r"(\d+)$", str(name))
-        if match:
-            column_names.append(match.group(1))
-
-    return omew.Plate(
-        row_names=row_names,
-        column_names=column_names,
-        name=plate.name or None,
-    )
+            warnings.warn(
+                f"Path '{self._path}' does not have a recognized extension "
+                "(.zarr, .tif, .tiff). This may cause issues.",
+                UserWarning,
+                stacklevel=3,
+            )

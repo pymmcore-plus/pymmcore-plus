@@ -1,20 +1,65 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "pymmcore-plus",
+#     "useq-schema",
+#     "yaozarrs",
+#     "ome-types",
+# ]
+#
+# [tool.uv.sources]
+# pymmcore-plus = { path = "." }
+# ///
+"""Test script for OME writer handlers.
+
+Usage:
+    uv run x.py [FORMAT] [OPTION]
+
+Arguments:
+    FORMAT: Output format (default: zarr)
+        - zarr: Write to OME-Zarr using tensorstore backend
+        - tiff: Write to OME-TIFF using tifffile backend
+        - zarr-memory: Write to temporary in-memory zarr store
+        - tiff-sequence: Write to image sequence directory
+
+    OPTION: Handler integration method (default: 1)
+        - 1: Manual signal connections (sequenceStarted, frameReady, sequenceFinished)
+        - 2: Pass handler object to mmc.mda.run(output=handler)
+        - 3: Pass path string to mmc.mda.run(output=path)
+
+Examples
+--------
+    uv run x.py zarr 1
+    uv run x.py zarr-memory 2
+    uv run x.py tiff 3
+"""
+
+import sys
+from pathlib import Path
+
 import useq
 import yaozarrs
-from ome_types import from_tiff
-
+from ome_types import from_tiff, __version__
+print(__version__)
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda.handlers import OMEWriterHandler
+from pymmcore_plus.mda.handlers._img_sequence_writer import ImageSequenceWriter
 
 # ==================== CONFIGURATION ====================
-# Set OPTION to 1, 2, or 3:
+# Set FORMAT from command line argument or default
+FORMAT = sys.argv[1] if len(sys.argv) > 1 else "zarr"
+# Valid options: "zarr", "tiff", "zarr-memory", "tiff-sequence"
+
+# Set OPTION from command line argument or default
+# OPTION determines how to pass the handler to mda.run():
 #   1 = Manual signal connections (sequenceStarted, frameReady, sequenceFinished)
 #   2 = Pass handler object to mmc.mda.run(output=handler)
 #   3 = Pass path string to mmc.mda.run(output=path)
-OPTION = 1
+OPTION = int(sys.argv[2]) if len(sys.argv) > 2 else 1
 
-# Set FORMAT to "zarr" or "tiff"
-FORMAT = "zarr"
-# FORMAT = "tiff"
+# Output directory on desktop
+OUTPUT_DIR = Path.home() / "Desktop" / "pymmcore_writers_examples"
+OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 # =======================================================
 
 
@@ -36,11 +81,19 @@ mmc.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
 
 # Configure paths and backend based on FORMAT
 if FORMAT == "zarr":
-    output_path = f"/Users/fdrgsp/Desktop/out/test{OPTION}.ome.zarr"
+    output_path = f"{OUTPUT_DIR}/test{OPTION}.ome.zarr"
     backend = "tensorstore"
-else:
-    output_path = f"/Users/fdrgsp/Desktop/out/test{OPTION}.ome.tiff"
+elif FORMAT == "tiff":
+    output_path = f"{OUTPUT_DIR}/test{OPTION}.ome.tiff"
     backend = "tifffile"
+elif FORMAT == "zarr-memory":
+    output_path = "memory://"
+    backend = "tensorstore"
+elif FORMAT == "tiff-sequence":
+    output_path = f"{OUTPUT_DIR}/test{OPTION}_sequence"
+    backend = ""
+else:
+    raise ValueError(f"Unknown FORMAT: {FORMAT}")
 
 # Sequence
 seq = useq.MDASequence(
@@ -58,16 +111,24 @@ seq = useq.MDASequence(
 
 # Run based on OPTION
 if OPTION == 1:
+    if FORMAT == "tiff-sequence":
+        handler = ImageSequenceWriter(output_path, overwrite=True)
+    else:
+        handler = OMEWriterHandler(output_path, backend=backend, overwrite=True)
+
     # Option 1: Manual signal connections
-    handler = OMEWriterHandler(output_path, backend=backend, overwrite=True)
     mmc.mda.events.sequenceStarted.connect(handler.sequenceStarted)
     mmc.mda.events.frameReady.connect(handler.frameReady)
     mmc.mda.events.sequenceFinished.connect(handler.sequenceFinished)
     mmc.mda.run(seq)
 
 elif OPTION == 2:
+    if FORMAT == "tiff-sequence":
+        handler = ImageSequenceWriter(output_path, overwrite=True)
+    else:
+        handler = OMEWriterHandler(output_path, backend=backend, overwrite=True)
+
     # Option 2: Pass handler object to run()
-    handler = OMEWriterHandler(output_path, backend=backend, overwrite=True)
     mmc.mda.run(seq, output=handler)
 
 elif OPTION == 3:

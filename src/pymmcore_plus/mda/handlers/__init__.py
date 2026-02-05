@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import tempfile
 from pathlib import Path
 
 from ._img_sequence_writer import ImageSequenceWriter
@@ -23,10 +24,11 @@ def handler_for_path(path: str | Path) -> object:
 
     This method picks from the built-in handlers based on the extension of the path.
     """
-    # TODO: "memory://" path is not yet supported by ome-writers tensorstore backend
+    # for backward compatibility with "memory://"
     if str(path).rstrip("/").rstrip(":").lower() == "memory":
-        # For memory stores, use TensorStoreHandler
-        return TensorStoreHandler(kvstore="memory://")
+        # Use a temporary path for in-memory storage
+        temp_path = Path(tempfile.gettempdir()) / "_pymmcore_plus_tmp.ome.zarr"
+        return OMEWriterHandler(temp_path, backend="tensorstore", overwrite=True)
 
     path = str(Path(path).expanduser().resolve())
 

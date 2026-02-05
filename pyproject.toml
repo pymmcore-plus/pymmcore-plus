@@ -49,7 +49,7 @@ dependencies = [
     "typer >=0.13.0",
     "rich >=10.2.0",
     "ome-types >=0.6.0",
-    "ome-writers @ git+https://github.com/pymmcore-plus/ome-writers@main",
+    "ome-writers",
 ]
 
 # extras
@@ -103,7 +103,6 @@ dev = [
 
 [tool.uv.sources]
 pymmcore-plus = { workspace = true }
-ome-writers = { git = "https://github.com/fdrgsp/ome-writers", rev = "useq-g-axis" }
 
 [tool.uv]
 override-dependencies = [
