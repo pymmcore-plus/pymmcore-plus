@@ -64,6 +64,7 @@ OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def validate_output(path: str, fmt: str) -> None:
+    """Validate the output file or directory."""
     if fmt == "zarr":
         yaozarrs.validate_zarr_store(path)
         print("✓ Zarr store is valid")
