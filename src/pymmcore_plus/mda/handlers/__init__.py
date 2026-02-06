@@ -10,7 +10,7 @@ from ._ome_zarr_writer import OMEZarrWriter
 from ._tensorstore_handler import TensorStoreHandler
 
 if TYPE_CHECKING:
-    from pymmcore_plus.mda._runner import Format
+    from pymmcore_plus.mda._runner import Output
 
 __all__ = [
     "ImageSequenceWriter",
@@ -18,62 +18,39 @@ __all__ = [
     "OMEWriterHandler",
     "OMEZarrWriter",
     "TensorStoreHandler",
-    "handler_for_format",
-    "handler_for_path",
+    "handler_for_output",
 ]
 
 
-def handler_for_format(fmt: Format) -> object:
-    """Create a handler from a Format specification.
+def handler_for_output(out: Output) -> object:
+    """Create a handler from an Output specification.
 
     Parameters
     ----------
-    fmt : Format
-        Format specification with path and backend.
+    out : Output
+        Output specification with path and format.
 
     Returns
     -------
     object
-        A handler object for the specified format.
+        A handler object for the specified output.
     """
-    path = fmt.path
+    path = out.path
     path_str = str(path).rstrip("/").rstrip(":") if path else ""
 
     # Handle "memory://" -> use OMEWriterHandler in temp directory
     if not path or path_str.lower() == "memory":
-        return OMEWriterHandler.from_format(fmt)
+        return OMEWriterHandler.from_output(out)
 
     path_resolved = str(Path(path).expanduser().resolve())
 
     # Zarr or TIFF -> use OMEWriterHandler
     path_lower = path_resolved.lower()
     if path_lower.endswith(".zarr") or path_lower.endswith((".tiff", ".tif")):
-        return OMEWriterHandler.from_format(fmt)
+        return OMEWriterHandler.from_output(out)
 
     # No extension - use ImageSequenceWriter
     if not (Path(path_resolved).suffix or Path(path_resolved).exists()):
         return ImageSequenceWriter(path_resolved)
 
     raise ValueError(f"Could not infer a writer handler for path: '{path}'")
-
-
-def handler_for_path(path: str | Path, backend: str | None = None) -> object:
-    """Convert a string or Path into a handler object.
-
-    This method picks from the built-in handlers based on the extension of the path.
-
-    Parameters
-    ----------
-    path : str | Path
-        Path to the output file or directory.
-    backend : str | None, optional
-        Backend to use. Default is None which auto-detects from extension.
-
-    Returns
-    -------
-    object
-        A handler object for the specified path.
-    """
-    from pymmcore_plus.mda._runner import Format
-
-    return handler_for_format(Format(path=path, backend=backend))  # type: ignore[arg-type]

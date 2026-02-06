@@ -18,7 +18,7 @@ if TYPE_CHECKING:
     import useq
     from typing_extensions import Self
 
-    from pymmcore_plus.mda._runner import Format
+    from pymmcore_plus.mda._runner import Output
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
 ZARR_BACKENDS = ["tensorstore", "acquire-zarr", "zarr_python", "zarrs_python"]
@@ -126,6 +126,49 @@ class OMEWriterHandler:
         return self._arrays
 
     @classmethod
+    def from_output(cls, out: Output, **kwargs: Any) -> Self:
+        """Create OMEWriterHandler from an Output specification.
+
+        Parameters
+        ----------
+        out : Output
+            Output specification with path and format.
+        **kwargs
+            Additional kwargs passed to `OMEWriterHandler.__init__`.
+
+        Returns
+        -------
+        OMEWriterHandler
+            Handler configured according to the Output specification.
+        """
+        from pathlib import Path
+
+        path = out.path
+        fmt = out.format
+
+        # Extract backend from format (could be string or ome-writers Format object)
+        backend: BackendName | None = None
+        if isinstance(fmt, str):
+            backend = fmt  # type: ignore[assignment]
+        elif fmt is not None:
+            # It's an ome-writers Format object (OmeTiffFormat or OmeZarrFormat)
+            backend = getattr(fmt, "backend", None)
+
+        # Handle memory:// or None path -> use temp directory
+        if not path or str(path).rstrip("/").rstrip(":").lower() == "memory":
+            return cls.in_tmpdir(backend=backend, **kwargs)
+
+        # If path has no extension but backend is specified, add appropriate extension
+        path_str = str(path).rstrip("/")
+        if not Path(path_str).suffix and backend is not None:
+            if backend in ZARR_BACKENDS:
+                path_str = f"{path_str}.ome.zarr"
+            elif backend == TIFF_BACKEND:
+                path_str = f"{path_str}.ome.tiff"
+
+        return cls(path=path_str, backend=backend, **kwargs)
+
+    @classmethod
     def in_tmpdir(
         cls,
         suffix: str | None = ".ome.zarr",
@@ -153,45 +196,13 @@ class OMEWriterHandler:
         **kwargs
             Remaining kwargs are passed to `OMEWriterHandler.__init__`.
         """
+        # Create a unique temp directory path, then remove the directory
+        # because ome-writers expects to create the directory itself
         path = tempfile.mkdtemp(suffix=suffix, prefix=prefix, dir=dir)
+        os.rmdir(path)  # Remove empty dir so ome-writers can create it
         if cleanup_atexit:
             _register_cleanup_atexit(path)
         return cls(path=path, overwrite=True, **kwargs)
-
-    @classmethod
-    def from_format(cls, fmt: Format, **kwargs: Any) -> Self:
-        """Create OMEWriterHandler from a Format specification.
-
-        Parameters
-        ----------
-        fmt : Format
-            Format specification with path and backend.
-        **kwargs
-            Additional kwargs passed to `OMEWriterHandler.__init__`.
-
-        Returns
-        -------
-        OMEWriterHandler
-            Handler configured according to the Format specification.
-        """
-        from pathlib import Path
-
-        path = fmt.path
-        backend = fmt.backend
-
-        # Handle memory:// or None path -> use temp directory
-        if path is None or str(path).rstrip("/").rstrip(":").lower() == "memory":
-            return cls.in_tmpdir(backend=backend, **kwargs)
-
-        # If path has no extension but backend is specified, add appropriate extension
-        path_str = str(path).rstrip("/")
-        if not Path(path_str).suffix and backend is not None:
-            if backend in ZARR_BACKENDS:
-                path_str = f"{path_str}.ome.zarr"
-            elif backend == TIFF_BACKEND:
-                path_str = f"{path_str}.ome.tiff"
-
-        return cls(path=path_str, backend=backend, **kwargs)
 
     def sequenceStarted(self, sequence: useq.MDASequence, meta: SummaryMetaV1) -> None:
         """Initialize the stream when sequence starts."""
@@ -250,7 +261,10 @@ class OMEWriterHandler:
         settings = omew.AcquisitionSettings(**settings_kwargs)
 
         self._stream = omew.create_stream(settings=settings)
-        self._arrays = self._stream._backend._arrays  # noqa: SLF001  # type: ignore
+        # Only zarr backends have _arrays attribute
+        backend = getattr(self._stream, "_backend", None)
+        if backend is not None and hasattr(backend, "_arrays"):
+            self._arrays = backend._arrays  # noqa: SLF001
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
@@ -279,6 +293,7 @@ class OMEWriterHandler:
         # This is for backward compatibility with previous TensorStoreHandler behavior
         if str(self._path).rstrip("/").rstrip(":").lower() == "memory":
             self._path = tempfile.mkdtemp(suffix=".ome.zarr", prefix="_pmmcp_tmp_")
+            os.rmdir(self._path)  # Remove empty dir so ome-writers can create it
             _register_cleanup_atexit(self._path)
 
         path_lower = str(self._path).lower()
