@@ -268,29 +268,32 @@ def test_mixed_list_of_outputs(tmp_path: Path, core: CMMCorePlus) -> None:
 
 
 # -----------------------------------------------------------------------------
-# Test: memory:// for temp directory
+# Test: memory:// backward compatibility (uses TensorStoreHandler)
 # -----------------------------------------------------------------------------
 
 
-def test_memory_output(core: CMMCorePlus) -> None:
-    """Test memory:// creates temp directory via OMEWriterHandler.from_output."""
+def test_memory_output_uses_tensorstore(core: CMMCorePlus) -> None:
+    """Test memory:// uses TensorStoreHandler for backward compatibility."""
+    from pymmcore_plus.mda.handlers import TensorStoreHandler, handler_for_output
+
     out = Output(path="memory://", format="tensorstore")
-    handler = OMEWriterHandler.from_output(out)
+    handler = handler_for_output(out)
+
+    # Should return TensorStoreHandler, not OMEWriterHandler
+    assert isinstance(handler, TensorStoreHandler)
+
     core.mda.run(SIMPLE_MDA, output=handler)
 
-    # Verify a temp path was created
-    assert isinstance(handler, OMEWriterHandler)
-    assert "_pmmcp_tmp_" in handler.path
 
+def test_empty_path_raises_error() -> None:
+    """Test that empty path raises ValueError."""
+    # OMEWriterHandler with empty path
+    with pytest.raises(ValueError, match="path is required"):
+        OMEWriterHandler("")
 
-def test_empty_path_with_format(core: CMMCorePlus) -> None:
-    """Test empty path with format creates temp directory."""
-    out = Output(format="tensorstore")
-    handler = OMEWriterHandler.from_output(out)
-    core.mda.run(SIMPLE_MDA, output=handler)
-
-    assert isinstance(handler, OMEWriterHandler)
-    assert "_pmmcp_tmp_" in handler.path
+    # Output with empty path
+    with pytest.raises(ValueError, match="`path` argument is required for Output"):
+        Output("")
 
 
 # -----------------------------------------------------------------------------
@@ -329,16 +332,6 @@ def test_from_output_with_path(tmp_path: Path, core: CMMCorePlus) -> None:
     core.mda.run(SIMPLE_MDA, output=handler)
 
     assert (tmp_path / "test.ome.zarr").exists()
-
-
-def test_from_output_with_memory(core: CMMCorePlus) -> None:
-    """Test OMEWriterHandler.from_output with memory://."""
-    out = Output(path="memory://", format="tensorstore")
-    handler = OMEWriterHandler.from_output(out)
-
-    core.mda.run(SIMPLE_MDA, output=handler)
-
-    assert "_pmmcp_tmp_" in handler.path
 
 
 def test_from_output_adds_extension(tmp_path: Path, core: CMMCorePlus) -> None:

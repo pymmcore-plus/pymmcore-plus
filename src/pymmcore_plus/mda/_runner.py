@@ -6,7 +6,7 @@ from collections.abc import Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Literal, cast
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from typing import Protocol, TypeAlias
 
     import numpy as np
+    from ome_writers import OmeTiffFormat, OmeZarrFormat
     from useq import MDAEvent
 
     from pymmcore_plus.mda.handlers._ome_writer_handler import BackendName
@@ -71,17 +72,17 @@ class Output:
 
     Parameters
     ----------
-    path : str | Path | None
+    path : str | Path
         Output path for the data. File extension determines format:
         - `.zarr` or `.ome.zarr` for OME-Zarr
         - `.tif`, `.tiff`, `.ome.tif`, `.ome.tiff` for OME-TIFF
         - No extension for ImageSequenceWriter
-        If None or "memory://", a temporary directory will be created.
-    format : BackendName | OmeTiffFormat | OmeZarrFormat | None
+    format : BackendName | OmeTiffFormat | OmeZarrFormat, optional
         Output format specification. Can be:
-        - A backend name string: "tensorstore", "acquire-zarr", "tifffile", etc.
+        - One of the backend name string: "tensorstore", "acquire-zarr", "tifffile",
+        "zarr-python", "zarrs-python".
         - An ome-writers format object: OmeTiffFormat(...) or OmeZarrFormat(...)
-        - None to auto-detect based on path extension
+        - "auto" (default) to auto-detect from path extension.
 
     Examples
     --------
@@ -94,14 +95,15 @@ class Output:
 
     # With ome-writers format object for advanced configuration
     Output("output.zarr", format=OmeZarrFormat(backend="tensorstore"))
-
-    # Temporary directory with specific format
-    Output(format="tensorstore")
     ```
     """
 
-    path: str | Path = ""
-    format: BackendName | Any | None = None  # Any = OmeTiffFormat | OmeZarrFormat
+    path: str | Path
+    format: BackendName | Literal["auto"] | OmeTiffFormat | OmeZarrFormat = "auto"
+
+    def __post_init__(self) -> None:
+        if not str(self.path).strip():
+            raise ValueError("`path` argument is required for Output.")
 
 
 class GeneratorMDASequence(MDASequence):
@@ -263,8 +265,6 @@ class MDARunner:
             - `.tif`, `.tiff`, `.ome.tiff` -> OME-TIFF (via OMEWriterHandler)
             - No extension -> ImageSequenceWriter
 
-            If `path` is `"memory://"` in an Output, a temp directory is used.
-
             During the course of the sequence, the `get_output_handlers` method can be
             used to get the currently connected output handlers.
         """
@@ -362,7 +362,7 @@ class MDARunner:
                 )
             elif callable(getattr(item, "frameReady", None)):
                 # Handler object - use directly
-                _handlers.append(item)  # type: ignore[arg-type]
+                _handlers.append(item)
             else:
                 raise TypeError(
                     f"Invalid output item: {item!r}. Expected Output, path, "

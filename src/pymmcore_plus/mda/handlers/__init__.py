@@ -1,16 +1,15 @@
 from __future__ import annotations
 
+from logging import warning
 from pathlib import Path
-from typing import TYPE_CHECKING
+
+from pymmcore_plus.mda._runner import Output
 
 from ._img_sequence_writer import ImageSequenceWriter
 from ._ome_tiff_writer import OMETiffWriter
 from ._ome_writer_handler import OMEWriterHandler
 from ._ome_zarr_writer import OMEZarrWriter
 from ._tensorstore_handler import TensorStoreHandler
-
-if TYPE_CHECKING:
-    from pymmcore_plus.mda._runner import Output
 
 __all__ = [
     "ImageSequenceWriter",
@@ -37,11 +36,11 @@ def handler_for_output(out: Output) -> object:
         A handler object for the specified output.
     """
     path = out.path
-    path_str = str(path).rstrip("/").rstrip(":") if path else ""
+    path_str = str(path).rstrip("/").rstrip(":")
 
-    # Handle "memory://" -> use OMEWriterHandler in temp directory
-    if not path or path_str.lower() == "memory":
-        return OMEWriterHandler.from_output(out)
+    # Handle "memory://" -> use TensorStoreHandler for backward compatibility
+    if path_str.lower() == "memory":
+        return TensorStoreHandler()
 
     path_resolved = str(Path(path).expanduser().resolve())
 
@@ -57,23 +56,16 @@ def handler_for_output(out: Output) -> object:
     raise ValueError(f"Could not infer a writer handler for path: '{path}'")
 
 
-def handler_for_path(path: str | Path, format: str | None = None) -> object:
+def handler_for_path(path: str | Path) -> object:
     """Convert a string or Path into a handler object.
 
-    This method picks from the built-in handlers based on the extension of the path.
-
-    Parameters
-    ----------
-    path : str | Path
-        Path to the output file or directory.
-    format : str | None, optional
-        Format/backend to use. Default is None which auto-detects from extension.
-
-    Returns
-    -------
-    object
-        A handler object for the specified path.
+    Deprecated: This function is deprecated and will be removed in a future release.
+    Use `handler_for_output` instead.
     """
-    from pymmcore_plus.mda._runner import Output
-
-    return handler_for_output(Output(path=path, format=format))  # type: ignore[arg-type]
+    warning(
+        "`handler_for_path` is deprecated and will be removed in a future release. "
+        "Use `handler_for_output` instead.",
+        DeprecationWarning,
+        stacklevel=2,
+    )
+    return handler_for_output(Output(path=path))

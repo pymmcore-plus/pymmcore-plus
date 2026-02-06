@@ -58,7 +58,7 @@ if TYPE_CHECKING:
     from pymmcore import DeviceLabel
     from useq import MDAEvent
 
-    from pymmcore_plus.mda._runner import SingleOutput
+    from pymmcore_plus.mda._runner import OutputLike
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
@@ -1642,7 +1642,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         self,
         events: Iterable[MDAEvent],
         *,
-        output: SingleOutput | Sequence[SingleOutput] | None = None,
+        output: OutputLike | Sequence[OutputLike] | None = None,
         block: bool = False,
     ) -> Thread:
         """Run a sequence of [useq.MDAEvent][] on a new thread.
@@ -1660,9 +1660,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         events : Iterable[useq.MDAEvent]
             An iterable of [useq.MDAEvent][] to execute.  This may be an instance
             of [useq.MDASequence][], or any other iterable of [useq.MDAEvent][].
-        output : SingleOutput | Sequence[SingleOutput] | None, optional
+        output : OutputLike | Sequence[OutputLike] | None, optional
             The output handler(s) to use.  If None, no output will be saved.
-            "SingleOutput" can be any of the following:
+            "OutputLike" can be any of the following:
 
             - A string or Path to a directory to save images to. A handler will be
                 created automatically based on the extension of the path.

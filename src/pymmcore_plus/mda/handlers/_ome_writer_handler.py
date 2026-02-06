@@ -42,13 +42,7 @@ class OMEWriterHandler:
     """MDA handler that writes to OME-ZARR or OME-TIFF using ome-writers library.
 
     This handler wraps the `ome-writers` library to provide a unified interface for
-    writing microscopy data in OME formats. It supports multiple backends:
-
-    - "tensorstore": High-performance zarr writing using `tensorstore` backend
-    - "acquire-zarr": High-performance zarr writing using `acquire-zarr` backend
-    - "tiff": OME-TIFF writing using `tifffile` library
-    - None: Automatically select backend based on the file extension and available
-      libraries
+    writing microscopy data in OME formats.
 
     Parameters
     ----------
@@ -56,15 +50,21 @@ class OMEWriterHandler:
         Path to the output file or directory. File extension determines format:
         - `.zarr` for OME-Zarr
         - `.tif` or `.tiff` for OME-TIFF
-    backend : BackendName | None, optional
-        Backend to use for writing. Default is None which infers from path extension.
-        Available options are "tensorstore", "acquire-zarr", "tifffile", or None.
+    backend : BackendName | Literal["auto"] , optional
+        Backend to use for writing. Default is "auto" which infers from path extension.
+        Available options are  "tensorstore", "acquire-zarr", "zarr_python",
+        "zarrs_python", "tifffile" or "auto" (which is the same as None).
     overwrite : bool, optional
         Whether to overwrite existing files/directories. Default is False.
 
+    Alternative constructors are available via classmethods:
+
+    - `OMEWriterHandler.from_output(output)`: Create from an `Output` specification
+    - `OMEWriterHandler.in_tmpdir()`: Create handler writing to a temporary directory
+
     Examples
     --------
-    Write to OME-Zarr using tensorstore backend:
+    Basic setup (used in all examples below):
 
     ```python
     from pymmcore_plus import CMMCorePlus
@@ -79,15 +79,39 @@ class OMEWriterHandler:
         time_plan={"interval": 2, "loops": 3},
         z_plan={"range": 4, "step": 0.5},
     )
-
-    handler = OMEWriterHandler("output.zarr", backend="tensorstore", overwrite=True)
-    core.mda.run(sequence, output=handler)
     ```
+
+    Simplest usage - just provide a path (format auto-detected from extension):
 
     Write to OME-TIFF:
 
     ```python
-    handler = OMEWriterHandler("output.ome.tif", overwrite=True)
+    handler = OMEWriterHandler("output.ome.tiff")
+    core.mda.run(sequence, output=handler)
+    ```
+
+    Provide path with explicit backend (e.g. for OME Zarr):
+
+    ```python
+    handler = OMEWriterHandler("output.ome.zarr", backend="tensorstore")
+    core.mda.run(sequence, output=handler)
+    ```
+
+    Create from an `Output` specification:
+
+    ```python
+    from pymmcore_plus.mda import Output
+
+    out = Output(path="output.ome.zarr", format="tensorstore")
+    handler = OMEWriterHandler.from_output(out, overwrite=True)
+    core.mda.run(sequence, output=handler)
+    ```
+
+    Write to a temporary directory (auto-cleaned on exit):
+
+    ```python
+    handler = OMEWriterHandler.in_tmpdir(backend="tensorstore")  # OME Zarr in temp dir
+    print(handler.path)  # e.g., /tmp/_pmmcp_tmp_abc123.ome.zarr
     core.mda.run(sequence, output=handler)
     ```
     """
@@ -96,10 +120,17 @@ class OMEWriterHandler:
         self,
         path: str | Path,
         *,
-        backend: BackendName | None = None,
+        backend: BackendName | Literal["auto"] = "auto",
         overwrite: bool = False,
     ) -> None:
-        self._path = str(path)
+        path_str = str(path).strip()
+        if not path_str:
+            raise ValueError(
+                "path is required. Use OMEWriterHandler.in_tmpdir() for temporary "
+                "directory, or pass 'memory://' to from_output() for temp storage."
+            )
+
+        self._path = path_str
         self._backend = backend
         self._overwrite = overwrite
 
@@ -143,23 +174,17 @@ class OMEWriterHandler:
         """
         from pathlib import Path
 
-        path = out.path
-        fmt = out.format
+        path, fmt = out.path, out.format
 
         # Extract backend from format (could be string or ome-writers Format object)
-        backend: BackendName | None = None
+        backend: BackendName | Literal["auto"] = "auto"
         if isinstance(fmt, str):
             backend = fmt  # type: ignore[assignment]
-        elif fmt is not None:
-            # It's an ome-writers Format object (OmeTiffFormat or OmeZarrFormat)
-            backend = getattr(fmt, "backend", None)
-
-        # Handle memory:// or None path -> use temp directory
-        if not path or str(path).rstrip("/").rstrip(":").lower() == "memory":
-            return cls.in_tmpdir(backend=backend, **kwargs)
+        elif isinstance(fmt, omew.OmeTiffFormat) or isinstance(fmt, omew.OmeZarrFormat):
+            backend = fmt.backend
 
         # If path has no extension but backend is specified, add appropriate extension
-        path_str = str(path).rstrip("/")
+        path_str = str(path)
         if not Path(path_str).suffix and backend is not None:
             if backend in ZARR_BACKENDS:
                 path_str = f"{path_str}.ome.zarr"
@@ -194,7 +219,8 @@ class OMEWriterHandler:
             Whether to automatically cleanup the temporary directory when the python
             process exits. Default is True.
         **kwargs
-            Remaining kwargs are passed to `OMEWriterHandler.__init__`.
+            Remaining kwargs are passed to `OMEWriterHandler.__init__` (e.g. backend,
+            overwrite).
         """
         # Create a unique temp directory path, then remove the directory
         # because ome-writers expects to create the directory itself
@@ -208,12 +234,12 @@ class OMEWriterHandler:
         """Initialize the stream when sequence starts."""
         self._current_sequence = sequence
 
-        image_info = meta.get("image_infos")
-        if image_info is None:
+        image_infos = meta.get("image_infos")
+        if not image_infos:
             raise ValueError(
                 "Metadata must contain 'image_infos' to determine image properties."
             )
-        image_info = image_info[0]
+        image_info = image_infos[0]
 
         # Get dtype from metadata
         _dtype = image_info.get("dtype")
@@ -289,13 +315,6 @@ class OMEWriterHandler:
 
     def _validate_backend_path_combination(self) -> None:
         """Validate that backend is compatible with the file path extension."""
-        # Use a temporary directory for in-memory storage if memory:// is specified
-        # This is for backward compatibility with previous TensorStoreHandler behavior
-        if str(self._path).rstrip("/").rstrip(":").lower() == "memory":
-            self._path = tempfile.mkdtemp(suffix=".ome.zarr", prefix="_pmmcp_tmp_")
-            os.rmdir(self._path)  # Remove empty dir so ome-writers can create it
-            _register_cleanup_atexit(self._path)
-
         path_lower = str(self._path).lower()
 
         if self._backend is None:
