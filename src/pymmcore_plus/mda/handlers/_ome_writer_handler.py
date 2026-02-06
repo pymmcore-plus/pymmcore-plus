@@ -268,16 +268,13 @@ class OMEWriterHandler:
             pixel_size_um=pixel_size,
         )
 
-        # Build settings, only include format if explicitly specified
-        settings_kwargs: dict[str, Any] = {
-            "root_path": self._path,
-            "dtype": dtype,
-            "overwrite": self._overwrite,
-            "format": self._backend,
+        settings = omew.AcquisitionSettings(
+            root_path=self._path,
+            dtype=dtype,
+            overwrite=self._overwrite,
+            format=self._backend,
             **from_useq,
-        }
-
-        settings = omew.AcquisitionSettings(**settings_kwargs)
+        )
 
         self._stream = omew.create_stream(settings=settings)
 
