@@ -1467,9 +1467,8 @@ class UniMMCore(CMMCorePlus):
     def getNumberOfCameraChannels(self) -> int:
         if self._py_camera() is None:  # pragma: no cover
             return super().getNumberOfCameraChannels()
-        raise NotImplementedError(
-            "getNumberOfCameraChannels is not implemented for Python cameras."
-        )
+
+        return 1
 
     def getCameraChannelName(self, channelNr: int) -> str:
         """Get the name of the camera channel."""

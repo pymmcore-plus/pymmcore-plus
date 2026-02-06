@@ -170,7 +170,14 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
         "datetime",
     }
     sf_mock.assert_called_once_with(mda)
-    xystage_mock.assert_has_calls((call("XY", 1.0, 1.0),))
+    # device adapter will have slightly different position than requested
+    # round Y,X to 1 decimal place for comparison
+    xy_moves = [
+        (round(y, 1), round(x, 1))
+        for ((dev, y, x), kwargs) in xystage_mock.call_args_list
+    ]
+    assert (0, 0) in xy_moves
+    assert (1, 1) in xy_moves
     exp_mock.assert_has_calls((call("Camera", 1.0),))
     stage_mock.assert_has_calls(
         [
