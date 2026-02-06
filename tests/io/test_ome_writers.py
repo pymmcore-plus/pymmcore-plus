@@ -415,22 +415,3 @@ def test_default_output(tmp_path: Path, core: CMMCorePlus) -> None:
     tiff_files = list(tmp_path.glob("*.tiff")) + list(tmp_path.glob("*.tif"))
     assert len(zarr_files) == 0
     assert len(tiff_files) == 0
-
-
-# -----------------------------------------------------------------------------
-# Test: Arrays property access
-# -----------------------------------------------------------------------------
-
-
-def test_arrays_property(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test that arrays property returns written arrays."""
-    handler = OMEWriterHandler(
-        tmp_path / "test.ome.zarr", backend="tensorstore", overwrite=True
-    )
-    core.mda.run(SIMPLE_MDA, output=handler)
-
-    # After run, arrays should have been populated during the sequence
-    # and stream should be closed
-    assert handler.stream is None
-    # Arrays list was populated during writing
-    assert isinstance(handler.arrays, list)

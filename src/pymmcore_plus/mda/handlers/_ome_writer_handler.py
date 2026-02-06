@@ -136,7 +136,6 @@ class OMEWriterHandler:
 
         self._stream: omew.OMEStream | None = None
         self._current_sequence: useq.MDASequence | None = None
-        self._arrays: list = []
 
         # Validate backend matches path extension
         self._validate_backend_path_combination()
@@ -150,11 +149,6 @@ class OMEWriterHandler:
     def path(self) -> str:
         """Return the output path."""
         return self._path
-
-    @property
-    def arrays(self) -> list:
-        """Return the list of arrays written (for debugging purposes)."""
-        return self._arrays
 
     @classmethod
     def from_output(cls, out: Output, **kwargs: Any) -> Self:
@@ -286,10 +280,6 @@ class OMEWriterHandler:
         settings = omew.AcquisitionSettings(**settings_kwargs)
 
         self._stream = omew.create_stream(settings=settings)
-        # Only zarr backends have _arrays attribute
-        backend = getattr(self._stream, "_backend", None)
-        if backend is not None and hasattr(backend, "_arrays"):
-            self._arrays = backend._arrays  # noqa: SLF001
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
