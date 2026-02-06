@@ -19,6 +19,7 @@ __all__ = [
     "OMEZarrWriter",
     "TensorStoreHandler",
     "handler_for_output",
+    "handler_for_path",
 ]
 
 
@@ -54,3 +55,25 @@ def handler_for_output(out: Output) -> object:
         return ImageSequenceWriter(path_resolved)
 
     raise ValueError(f"Could not infer a writer handler for path: '{path}'")
+
+
+def handler_for_path(path: str | Path, format: str | None = None) -> object:
+    """Convert a string or Path into a handler object.
+
+    This method picks from the built-in handlers based on the extension of the path.
+
+    Parameters
+    ----------
+    path : str | Path
+        Path to the output file or directory.
+    format : str | None, optional
+        Format/backend to use. Default is None which auto-detects from extension.
+
+    Returns
+    -------
+    object
+        A handler object for the specified path.
+    """
+    from pymmcore_plus.mda._runner import Output
+
+    return handler_for_output(Output(path=path, format=format))  # type: ignore[arg-type]
