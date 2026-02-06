@@ -16,11 +16,11 @@ sequence = MDASequence(
     z_plan={"range": 4, "step": 0.5},
 )
 
-# Set the wanted backend for to write either OME-Zarr:
-# ome-zarr: "tensorstore", "acquire-zarr", or "zarr"
+# Set the wanted backend for to write either OME-Zarr or OME-TIFF.
+# e.g "tensorstore" for OME-Zarr with tensorstore
 writer = OMEWriterHandler(path="example_ts.zarr", backend="tensorstore", overwrite=True)
 
-# or OME-TIFF: "tiff"
+# or e.g. "tifffile" for OME-TIFF with tifffile
 # writer = OMEWriterHandler(path="example.ome.tif", backend="tiff", overwrite=True)
 
 core.mda.run(sequence, output=writer)
