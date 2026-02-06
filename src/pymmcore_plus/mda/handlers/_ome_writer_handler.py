@@ -21,11 +21,11 @@ if TYPE_CHECKING:
     from pymmcore_plus.mda._runner import Output
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
-ZARR_BACKENDS = ["tensorstore", "acquire-zarr", "zarr_python", "zarrs_python"]
+ZARR_BACKENDS = ["tensorstore", "acquire-zarr", "zarr-python", "zarrs-python"]
 TIFF_BACKEND = "tifffile"
 
 BackendName: TypeAlias = Literal[
-    "tensorstore", "acquire-zarr", "zarr_python", "zarrs_python", "tifffile"
+    "tensorstore", "acquire-zarr", "zarr-python", "zarrs-python", "tifffile"
 ]
 
 
@@ -52,8 +52,8 @@ class OMEWriterHandler:
         - `.tif` or `.tiff` for OME-TIFF
     backend : BackendName | Literal["auto"] , optional
         Backend to use for writing. Default is "auto" which infers from path extension.
-        Available options are  "tensorstore", "acquire-zarr", "zarr_python",
-        "zarrs_python", "tifffile" or "auto" (which is the same as None).
+        Available options are  "tensorstore", "acquire-zarr", "zarr-python",
+        "zarrs-python", "tifffile" or "auto" (which is the same as None).
     overwrite : bool, optional
         Whether to overwrite existing files/directories. Default is False.
 
@@ -279,10 +279,9 @@ class OMEWriterHandler:
             "root_path": self._path,
             "dtype": dtype,
             "overwrite": self._overwrite,
+            "format": self._backend,
             **from_useq,
         }
-        if self._backend is not None:
-            settings_kwargs["format"] = self._backend
 
         settings = omew.AcquisitionSettings(**settings_kwargs)
 
