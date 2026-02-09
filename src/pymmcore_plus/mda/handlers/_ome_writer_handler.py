@@ -126,6 +126,7 @@ class OMEWriterHandler:
 
         self._settings: omew.AcquisitionSettings | None = None
         self._stream: omew.OMEStream | None = None
+        self._arrays: dict[int, Any] = {}
 
         # Validate backend matches path extension
         _validate_backend_path_combination(self._path, self._backend)
@@ -139,6 +140,11 @@ class OMEWriterHandler:
     def stream(self) -> Any:
         """Return the current ome-writers stream, or None if not initialized."""
         return self._stream
+
+    @property
+    def arrays(self) -> dict[int, Any]:
+        """Return the list of arrays that have been written to the stream."""
+        return self._arrays
 
     @classmethod
     def in_tmpdir(
@@ -229,6 +235,9 @@ class OMEWriterHandler:
         between sequence start and the first frameReady event, and we want to ensure
         that the stream is created before appending frames.
         """
+        self._stream = self._settings = None
+        self._arrays.clear()
+
         self._settings = _prepare_stream_settings(
             path=self._path,
             backend=self._backend,
@@ -248,6 +257,7 @@ class OMEWriterHandler:
                 )
             else:
                 self._stream = omew.create_stream(settings=self._settings)
+                self._arrays = _to_array_dict(self._backend, self._stream)
 
         # Simply append the frame - ome-writers handles ordering based on
         # the dimensions and axis_order from the sequence
@@ -324,3 +334,67 @@ def _prepare_stream_settings(
             pixel_size_um=pixel_size,
         ),
     )
+
+
+def _to_array_dict(
+    backend: BackendName | Literal["auto"], stream: omew.OMEStream
+) -> dict[int, Any]:
+    """Convert arrays to a dictionary with displayable arrays/paths for ndv.
+
+    For tensorstore, zarr-python, zarrs-python: keeps arrays as-is.
+    For acquire-zarr: converts _ArrayPlaceholder objects to zarr paths.
+    For tifffile: not yet implemented.
+
+    Parameters
+    ----------
+    arrays : list[Any] | None
+        List of array objects from the backend, or None for tifffile.
+    backend : BackendName | Literal["auto"]
+        The backend type being used.
+    stream : Any
+        The OMEStream instance.
+
+    Returns
+    -------
+    dict[int, Any]
+        Dictionary mapping position index to displayable array or path.
+    """
+    if stream is None:
+        return {}
+
+    if backend in ZARR_BACKENDS:
+        arrays = stream._backend._arrays  # noqa: SLF001
+        if arrays is None:
+            return {}
+
+        # For tensorstore, zarr-python, zarrs-python: arrays are directly displayable
+        if backend in ["tensorstore", "zarr-python", "zarrs-python"]:
+            return dict(enumerate(arrays))
+
+        # For acquire-zarr: convert _ArrayPlaceholder to paths
+        if backend == "acquire-zarr":
+            result = {}
+            try:
+                root = stream._backend._root  # noqa: SLF001
+                for idx, ary in enumerate(arrays):
+                    if hasattr(ary, "output_key"):
+                        result[idx] = str(root / ary.output_key)
+                    else:
+                        result[idx] = ary
+            except Exception as e:
+                print(f"Failed to get acquire-zarr array paths: {e}")
+                return {}
+            return result
+
+    # NOTE: this wont work if we want to open the data while acquiring because the
+    # stream has to be closed to access the data.
+    # For tifffile: extract paths from position managers
+    # elif backend == TIFF_BACKEND:
+    #     result = {}
+    #     position_managers = stream._backend._position_managers
+    #     for pos_idx, manager in position_managers.items():
+    #         result[pos_idx] = manager.file_path
+
+    #     return result
+
+    return {}

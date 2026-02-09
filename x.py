@@ -5,6 +5,7 @@
 #     "useq-schema",
 #     "yaozarrs",
 #     "ome-types",
+#     "ndv[qt,vispy]",
 # ]
 #
 # [tool.uv.sources]
@@ -40,6 +41,7 @@ import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 import useq
 import yaozarrs
@@ -150,6 +152,7 @@ mmc.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
 
 # Configure Outputs for each backend
 ZARR_BACKENDS = ["tensorstore", "acquire-zarr", "zarr-python", "zarrs-python"]
+handler = None
 outputs = []
 
 for idx, backend in enumerate(BACKENDS):
@@ -247,3 +250,137 @@ if OPTION == 5:
     if os.path.isdir(handler.path):  # type: ignore
         shutil.rmtree(handler.path, ignore_errors=True)  # type: ignore
         print(f"✓ Cleaned up temporary directory: {handler.path}")  # type: ignore
+
+
+class PositionDataWrapper:
+    """DataWrapper for ndv that exposes positions as a dimension with slider."""
+
+    def __init__(self, arrays: dict[int, Any]) -> None:
+        """Initialize with dictionary mapping position index to array/path.
+
+        Parameters
+        ----------
+        arrays : dict[int, Any]
+            Dictionary mapping position index to array-like object or path string.
+        """
+        self._arrays_dict = arrays
+        self._loaded_arrays: dict[int, Any] = {}
+        self._positions = sorted(arrays.keys())
+
+        if not self._positions:
+            raise ValueError("No positions in arrays dictionary")
+
+        # Load first position to get shape/dtype info
+        self._sample_array = self._load_array(self._positions[0])
+
+    def _load_array(self, pos_idx: int) -> Any:
+        """Load array for a given position index (lazy loading)."""
+        if pos_idx in self._loaded_arrays:
+            return self._loaded_arrays[pos_idx]
+
+        ary = self._arrays_dict.get(pos_idx)
+        if ary is None:
+            raise ValueError(f"Position {pos_idx} not found in arrays")
+
+        # Convert string paths to array-like objects
+        if isinstance(ary, str):
+            import zarr
+
+            if ary.endswith(".zarr"):
+                ary = zarr.open(ary, mode="r")
+            else:
+                raise ValueError(
+                    f"Unsupported array type for position {pos_idx}: {type(ary)}"
+                )
+
+        self._loaded_arrays[pos_idx] = ary
+        return ary
+
+    @property
+    def shape(self) -> tuple[int, ...]:
+        """Return shape with position as first dimension."""
+        return (len(self._positions), *self._sample_array.shape)
+
+    @property
+    def dtype(self):
+        """Return dtype from sample array."""
+        return self._sample_array.dtype
+
+    @property
+    def ndim(self) -> int:
+        """Return number of dimensions (positions + array dims)."""
+        return len(self.shape)
+
+    def __array__(self) -> Any:
+        """Convert to numpy array (loads all data - use with caution!)."""
+        import numpy as np
+
+        # Load all positions and stack them
+        arrays = [self._load_array(idx)[...] for idx in self._positions]
+        return np.stack(arrays, axis=0)
+
+    def __getitem__(self, key: Any) -> Any:
+        """Get data slice, handling position indexing."""
+        # Normalize key to tuple
+        if not isinstance(key, tuple):
+            key = (key,)
+
+        # First index is position
+        pos_key = key[0]
+
+        # Handle different position indexing types
+        if isinstance(pos_key, int):
+            # Single position
+            pos_idx = self._positions[pos_key]
+            ary = self._load_array(pos_idx)
+            # Apply remaining indices to the array
+            if len(key) > 1:
+                return ary[key[1:]]
+            return ary[...]
+
+        elif isinstance(pos_key, slice):
+            # Slice of positions - return concatenated
+            import numpy as np
+
+            start, stop, step = pos_key.start, pos_key.stop, pos_key.step
+            selected_positions = self._positions[start:stop:step]
+
+            # Load all arrays and stack them
+            arrays = [
+                self._load_array(idx)[key[1:] if len(key) > 1 else ...]
+                for idx in selected_positions
+            ]
+            return np.stack(arrays, axis=0)
+
+        else:
+            # Fallback for other key types
+            ary = self._load_array(self._positions[0])
+            return ary[key[1:] if len(key) > 1 else ...]
+
+
+def visualize_array(arrays: dict[int, Any]) -> None:
+    """Visualize arrays with position slider using ndv.
+
+    Parameters
+    ----------
+    arrays : dict[int, Any]
+        Dictionary mapping position index to array-like object or path string.
+    """
+    try:
+        import ndv
+
+        if len(arrays) == 0:
+            print("No arrays to visualize")
+            return
+
+        wrapper = PositionDataWrapper(arrays)
+        ndv.imshow(wrapper)
+
+    except Exception as e:
+        print(f"Could not visualize array: {e}")
+        import traceback
+
+        traceback.print_exc()
+
+
+visualize_array(handler.arrays)
