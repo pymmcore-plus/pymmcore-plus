@@ -25,6 +25,7 @@ Arguments:
         - 2: Pass handler object(s) to mmc.mda.run(output=handler)
         - 3: Pass Output object(s) to mmc.mda.run(output=Output(path, format))
         - 4: Pass path string(s) to mmc.mda.run(output=path)
+        - 5: Create in temporary directory using OMEWriterHandler.in_tmpdir()
 
 Examples
 --------
@@ -34,6 +35,8 @@ Examples
     uv run x.py tensorstore zarr_python tifffile 4  # Three outputs
 """
 
+import os
+import shutil
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -215,15 +218,32 @@ elif OPTION == 4:
     paths = [out.path for out in (outputs if isinstance(outputs, list) else [outputs])]
     mmc.mda.run(seq, output=paths if len(paths) > 1 else paths[0])
 
+elif OPTION == 5:
+    # Option 5: Create in temporary directory using OMEWriterHandler.in_tmpdir()
+    handler = OMEWriterHandler.in_tmpdir(backend=BACKENDS[0], cleanup_atexit=False)
+    print(f"Using temporary directory for output: {handler.path}")
+    mmc.mda.run(seq, output=handler)
+
 # Validate outputs
 validation_paths = []
 validation_formats = []
 
-outputs_list = outputs if isinstance(outputs, list) else [outputs]
-for idx, out in enumerate(outputs_list):
-    validation_paths.append(str(out.path))
-    # Use the backend from BACKENDS list to determine format
-    backend = BACKENDS[idx] if idx < len(BACKENDS) else BACKENDS[0]
-    validation_formats.append(backend)
+if OPTION == 5:
+    # For OPTION 5, validate the temporary directory created by in_tmpdir()
+    validation_paths.append(handler.path)  # type: ignore
+    validation_formats.append(BACKENDS[0])
+else:
+    outputs_list = outputs if isinstance(outputs, list) else [outputs]
+    for idx, out in enumerate(outputs_list):
+        validation_paths.append(str(out.path))
+        # Use the backend from BACKENDS list to determine format
+        backend = BACKENDS[idx] if idx < len(BACKENDS) else BACKENDS[0]
+        validation_formats.append(backend)
 
 validate_output(validation_paths, validation_formats)
+
+if OPTION == 5:
+    # Cleanup temporary directory after validation
+    if os.path.isdir(handler.path):  # type: ignore
+        shutil.rmtree(handler.path, ignore_errors=True)  # type: ignore
+        print(f"✓ Cleaned up temporary directory: {handler.path}")  # type: ignore
