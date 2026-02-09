@@ -82,25 +82,24 @@ class OMEWriterHandler:
     ```
 
     Write to OME-TIFF:
-
     ```python
     handler = OMEWriterHandler("output.ome.tiff")
-    # or handler = OMEWriterHandler("output.ome.tiff", backend="tifffile")
     core.mda.run(sequence, output=handler)
     ```
 
     Write OME-ZARR:
-
     ```python
     handler = OMEWriterHandler("output.ome.zarr")
-    # or handler = OMEWriterHandler("output.ome.zarr", backend="tensorstore")
+    # or, to specify the backend explicitly:
+    # handler = OMEWriterHandler("output.ome.zarr", backend="tensorstore")
     core.mda.run(sequence, output=handler)
     ```
 
     Write OME-TIFF or OME-ZARR to a temporary directory (auto-cleaned on exit):
-
     ```python
-    # e.g. for OME-ZARR
+    # to save in a temporary directory (default: `ome.zarr` with `tensorstore` backend):
+    handler = OMEWriterHandler.in_tmpdir()
+    # or, to specify backend and suffix explicitly:
     handler = OMEWriterHandler.in_tmpdir(backend="tensorstore", suffix=".ome.zarr")
     print(handler.path)  # e.g., /tmp/_pmmcp_tmp_abc123.ome.zarr
     core.mda.run(sequence, output=handler)
@@ -210,12 +209,12 @@ class OMEWriterHandler:
         backend: BackendName | Literal["auto"] = "auto"
         if isinstance(fmt, str):
             backend = fmt  # type: ignore[assignment]
-        elif isinstance(fmt, omew.OmeTiffFormat) or isinstance(fmt, omew.OmeZarrFormat):
+        elif isinstance(fmt, (omew.OmeTiffFormat, omew.OmeZarrFormat)):
             backend = fmt.backend
 
         # If path has no extension but backend is specified, add appropriate extension
         path_str = str(path)
-        if not Path(path_str).suffix and backend is not None:
+        if not Path(path_str).suffix and backend != "auto":
             if backend in ZARR_BACKENDS:
                 path_str = f"{path_str}.ome.zarr"
             elif backend == TIFF_BACKEND:
@@ -270,8 +269,8 @@ def _validate_backend_path_combination(
     """Validate that backend is compatible with the file path extension."""
     path_lower = str(path).lower()
 
-    if backend is None:
-        return  # None means auto-detect from path extension
+    if backend == "auto":
+        return
 
     is_zarr = path_lower.endswith(".zarr")
     is_tiff = path_lower.endswith((".tif", ".tiff", ".ome.tif", ".ome.tiff"))
