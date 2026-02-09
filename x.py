@@ -152,7 +152,7 @@ mmc.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
 
 # Configure Outputs for each backend
 ZARR_BACKENDS = ["tensorstore", "acquire-zarr", "zarr-python", "zarrs-python"]
-handler = None
+handlers = []
 outputs = []
 
 for idx, backend in enumerate(BACKENDS):
@@ -286,12 +286,10 @@ class PositionDataWrapper:
         if isinstance(ary, str):
             import zarr
 
-            if ary.endswith(".zarr"):
+            try:
                 ary = zarr.open(ary, mode="r")
-            else:
-                raise ValueError(
-                    f"Unsupported array type for position {pos_idx}: {type(ary)}"
-                )
+            except Exception as e:
+                raise ValueError(f"Could not load array from path '{ary}',") from e
 
         self._loaded_arrays[pos_idx] = ary
         return ary
@@ -383,4 +381,5 @@ def visualize_array(arrays: dict[int, Any]) -> None:
         traceback.print_exc()
 
 
-visualize_array(handler.arrays)
+for hdl in handlers:
+    visualize_array(hdl.arrays)

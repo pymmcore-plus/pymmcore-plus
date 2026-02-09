@@ -372,6 +372,7 @@ def _to_array_dict(
             return dict(enumerate(arrays))
 
         # For acquire-zarr: convert _ArrayPlaceholder to paths
+        # TODO: Temporary, we need to find a better way to get the arrayu directly
         if backend == "acquire-zarr":
             result = {}
             try:
@@ -386,15 +387,7 @@ def _to_array_dict(
                 return {}
             return result
 
-    # NOTE: this wont work if we want to open the data while acquiring because the
-    # stream has to be closed to access the data.
-    # For tifffile: extract paths from position managers
-    # elif backend == TIFF_BACKEND:
-    #     result = {}
-    #     position_managers = stream._backend._position_managers
-    #     for pos_idx, manager in position_managers.items():
-    #         result[pos_idx] = manager.file_path
-
-    #     return result
+    # NOTE: for tifffile backend, we currently do not have a way to get the arrays
+    # directky from the stream, we need to see how to do that.
 
     return {}
