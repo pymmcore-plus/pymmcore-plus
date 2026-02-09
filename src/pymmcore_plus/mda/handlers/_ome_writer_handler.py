@@ -48,12 +48,12 @@ class OMEWriterHandler:
     ----------
     path : str | Path
         Path to the output file or directory. File extension determines format:
-        - `.zarr` for OME-Zarr
-        - `.tif` or `.tiff` for OME-TIFF
+        - `(.ome).zarr` for OME-ZARR
+        - `(.ome).tif` or `(.ome).tiff` for OME-TIFF
     backend : BackendName | Literal["auto"] , optional
         Backend to use for writing. Default is "auto" which infers from path extension.
         Available options are  "tensorstore", "acquire-zarr", "zarr-python",
-        "zarrs-python", "tifffile" or "auto" (which is the same as None).
+        "zarrs-python", "tifffile" or "auto".
     overwrite : bool, optional
         Whether to overwrite existing files/directories. Default is False.
 
@@ -81,36 +81,27 @@ class OMEWriterHandler:
     )
     ```
 
-    Simplest usage - just provide a path (format auto-detected from extension):
-
     Write to OME-TIFF:
 
     ```python
     handler = OMEWriterHandler("output.ome.tiff")
+    # or handler = OMEWriterHandler("output.ome.tiff", backend="tifffile")
     core.mda.run(sequence, output=handler)
     ```
 
-    Provide path with explicit backend (e.g. for OME Zarr):
+    Write OME-ZARR:
 
     ```python
-    handler = OMEWriterHandler("output.ome.zarr", backend="tensorstore")
+    handler = OMEWriterHandler("output.ome.zarr")
+    # or handler = OMEWriterHandler("output.ome.zarr", backend="tensorstore")
     core.mda.run(sequence, output=handler)
     ```
 
-    Create from an `Output` specification:
+    Write OME-TIFF or OME-ZARR to a temporary directory (auto-cleaned on exit):
 
     ```python
-    from pymmcore_plus.mda import Output
-
-    out = Output(path="output.ome.zarr", format="tensorstore")
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-    core.mda.run(sequence, output=handler)
-    ```
-
-    Write to a temporary directory (auto-cleaned on exit):
-
-    ```python
-    handler = OMEWriterHandler.in_tmpdir(backend="tensorstore")  # OME Zarr in temp dir
+    # e.g. for OME-ZARR
+    handler = OMEWriterHandler.in_tmpdir(backend="tensorstore", suffix=".ome.zarr")
     print(handler.path)  # e.g., /tmp/_pmmcp_tmp_abc123.ome.zarr
     core.mda.run(sequence, output=handler)
     ```
@@ -126,29 +117,74 @@ class OMEWriterHandler:
         path_str = str(path).strip()
         if not path_str:
             raise ValueError(
-                "path is required. Use OMEWriterHandler.in_tmpdir() for temporary "
-                "directory, or pass 'memory://' to from_output() for temp storage."
+                "`path` is required. Use OMEWriterHandler.in_tmpdir() for temporary "
+                "directory."
             )
 
         self._path = path_str
         self._backend = backend
         self._overwrite = overwrite
 
+        self._settings: omew.AcquisitionSettings | None = None
         self._stream: omew.OMEStream | None = None
-        self._current_sequence: useq.MDASequence | None = None
 
         # Validate backend matches path extension
-        self._validate_backend_path_combination()
+        _validate_backend_path_combination(self._path, self._backend)
+
+    @property
+    def path(self) -> str:
+        """Return the output path."""
+        return self._path
 
     @property
     def stream(self) -> Any:
         """Return the current ome-writers stream, or None if not initialized."""
         return self._stream
 
-    @property
-    def path(self) -> str:
-        """Return the output path."""
-        return self._path
+    @classmethod
+    def in_tmpdir(
+        cls,
+        backend: BackendName = "tensorstore",
+        suffix: str = "",
+        prefix: str | None = "_pmmcp_tmp_",
+        dir: str | PathLike[str] | None = None,
+        cleanup_atexit: bool = True,
+        **kwargs: Any,
+    ) -> Self:
+        """Create OMEWriterHandler that writes to a temporary directory.
+
+        Parameters
+        ----------
+        backend : BackendName , optional
+            Backend to use for writing. Default is "tensorstore". Available options are
+            "tensorstore", "acquire-zarr", "zarr-python", "zarrs-python", "tifffile".
+        suffix : str, optional
+            If suffix is specified, the file name will end with that suffix. Empty by
+            default, will be determined by backend.
+        prefix : str, optional
+            If prefix is specified, the file name will begin with that prefix.
+            Default is "_pmmcp_tmp_".
+        dir : str or PathLike, optional
+            If dir is specified, the file will be created in that directory, otherwise
+            a default directory is used (tempfile.gettempdir()).
+        cleanup_atexit : bool, optional
+            Whether to automatically cleanup the temporary directory when the python
+            process exits. Default is True.
+        **kwargs
+            Remaining kwargs are passed to `OMEWriterHandler.__init__` (e.g. overwrite).
+        """
+        # Determine suffix based on backend if not provided or validate combination
+        if not suffix:
+            suffix = ".ome.zarr" if backend in ZARR_BACKENDS else ".ome.tiff"
+        else:
+            _validate_backend_path_combination(suffix, backend)
+        # Create a unique temp directory path, then remove the directory
+        # because ome-writers expects to create the directory itself
+        path = tempfile.mkdtemp(suffix=suffix, prefix=prefix, dir=dir)
+        os.rmdir(path)  # Remove empty dir so ome-writers can create it
+        if cleanup_atexit:
+            _register_cleanup_atexit(path)
+        return cls(path=path, backend=backend, overwrite=True, **kwargs)
 
     @classmethod
     def from_output(cls, out: Output, **kwargs: Any) -> Self:
@@ -187,106 +223,32 @@ class OMEWriterHandler:
 
         return cls(path=path_str, backend=backend, **kwargs)
 
-    @classmethod
-    def in_tmpdir(
-        cls,
-        suffix: str | None = ".ome.zarr",
-        prefix: str | None = "_pmmcp_tmp_",
-        dir: str | PathLike[str] | None = None,
-        cleanup_atexit: bool = True,
-        **kwargs: Any,
-    ) -> Self:
-        """Create OMEWriterHandler that writes to a temporary directory.
-
-        Parameters
-        ----------
-        suffix : str, optional
-            If suffix is specified, the file name will end with that suffix.
-            Default is ".ome.zarr".
-        prefix : str, optional
-            If prefix is specified, the file name will begin with that prefix.
-            Default is "_pmmcp_tmp_".
-        dir : str or PathLike, optional
-            If dir is specified, the file will be created in that directory, otherwise
-            a default directory is used (tempfile.gettempdir()).
-        cleanup_atexit : bool, optional
-            Whether to automatically cleanup the temporary directory when the python
-            process exits. Default is True.
-        **kwargs
-            Remaining kwargs are passed to `OMEWriterHandler.__init__` (e.g. backend,
-            overwrite).
-        """
-        # Create a unique temp directory path, then remove the directory
-        # because ome-writers expects to create the directory itself
-        path = tempfile.mkdtemp(suffix=suffix, prefix=prefix, dir=dir)
-        os.rmdir(path)  # Remove empty dir so ome-writers can create it
-        if cleanup_atexit:
-            _register_cleanup_atexit(path)
-        return cls(path=path, overwrite=True, **kwargs)
-
     def sequenceStarted(self, sequence: useq.MDASequence, meta: SummaryMetaV1) -> None:
-        """Initialize the stream when sequence starts."""
-        self._current_sequence = sequence
+        """Prepare the settings to create the stream.
 
-        image_infos = meta.get("image_infos")
-        if not image_infos:
-            raise ValueError(
-                "Metadata must contain 'image_infos' to determine image properties."
-            )
-        image_info = image_infos[0]
-
-        # Get dtype from metadata
-        _dtype = image_info.get("dtype")
-        if _dtype is None:
-            raise ValueError(
-                "Data type not specified and could not be inferred from metadata."
-            )
-
-        # Get image dimensions from metadata
-        width = image_info.get("width")
-        height = image_info.get("height")
-        if width is None or height is None:
-            raise ValueError(
-                "Metadata 'image_infos' must contain 'width' and 'height' keys."
-            )
-
-        # Get dtype from metadata
-        dtype = image_info.get("dtype")
-        if dtype is None:
-            raise ValueError(
-                "Data type not specified and could not be inferred from metadata."
-            )
-
-        # Get pixel size from metadata
-        pixel_size = image_info.get("pixel_size_um")
-
-        # Convert useq sequence to ome-writers dimensions
-        from_useq = omew.useq_to_acquisition_settings(
-            sequence,
-            image_width=width,
-            image_height=height,
-            pixel_size_um=pixel_size,
-        )
-
-        settings = omew.AcquisitionSettings(
-            root_path=self._path,
-            dtype=dtype,
+        NOTE: we are not initializing the stream here because there might be delays
+        between sequence start and the first frameReady event, and we want to ensure
+        that the stream is created before appending frames.
+        """
+        self._settings = _prepare_stream_settings(
+            path=self._path,
+            backend=self._backend,
             overwrite=self._overwrite,
-            format=self._backend,
-            **from_useq,
+            sequence=sequence,
+            meta=meta,
         )
-
-        self._stream = omew.create_stream(settings=settings)
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
     ) -> None:
         """Write frame to the stream."""
         if self._stream is None:
-            raise RuntimeError(
-                "Stream not initialized. This should not happen - "
-                "sequenceStarted should be called first."
-            )
+            if self._settings is None:
+                raise RuntimeError(
+                    "Stream AcquisitionSettings not available to create stream!"
+                )
+            else:
+                self._stream = omew.create_stream(settings=self._settings)
 
         # Simply append the frame - ome-writers handles ordering based on
         # the dimensions and axis_order from the sequence
@@ -297,25 +259,69 @@ class OMEWriterHandler:
         if self._stream is not None:
             self._stream.close()
             self._stream = None
-        self._current_sequence = None
 
-    def _validate_backend_path_combination(self) -> None:
-        """Validate that backend is compatible with the file path extension."""
-        path_lower = str(self._path).lower()
 
-        if self._backend is None:
-            return  # None means auto-detect from path extension
+# --------------------------HELPER FUNCTIONS--------------------------
 
-        is_zarr = path_lower.endswith(".zarr")
-        is_tiff = path_lower.endswith((".tif", ".tiff", ".ome.tif", ".ome.tiff"))
 
-        if is_zarr and self._backend == TIFF_BACKEND:
-            raise ValueError(
-                f"Backend 'tifffile' cannot be used with zarr path '{self._path}'. "
-                "Use 'tensorstore' or 'acquire-zarr' instead."
-            )
-        elif is_tiff and self._backend in ZARR_BACKENDS:
-            raise ValueError(
-                f"Backend '{self._backend}' cannot be used with TIFF path "
-                f"'{self._path}'. Use 'tifffile' backend instead."
-            )
+def _validate_backend_path_combination(
+    path: str | Path, backend: BackendName | Literal["auto"]
+) -> None:
+    """Validate that backend is compatible with the file path extension."""
+    path_lower = str(path).lower()
+
+    if backend is None:
+        return  # None means auto-detect from path extension
+
+    is_zarr = path_lower.endswith(".zarr")
+    is_tiff = path_lower.endswith((".tif", ".tiff", ".ome.tif", ".ome.tiff"))
+
+    if is_zarr and backend == TIFF_BACKEND:
+        raise ValueError(
+            f"Backend '{backend}' cannot be used with ZARR path '{path}'. "
+            "Use 'tensorstore' or 'acquire-zarr' instead."
+        )
+    elif is_tiff and backend in ZARR_BACKENDS:
+        raise ValueError(
+            f"Backend '{backend}' cannot be used with TIFF path "
+            f"'{path}'. Use 'tifffile' backend instead."
+        )
+
+
+def _prepare_stream_settings(
+    path: str | Path,
+    backend: BackendName | Literal["auto"],
+    overwrite: bool,
+    sequence: useq.MDASequence,
+    meta: SummaryMetaV1,
+) -> omew.AcquisitionSettings:
+    """Prepare the AcquisitionSettings for creating the OMEStream."""
+    image_infos = meta.get("image_infos")
+    if not image_infos:
+        raise ValueError(
+            "Metadata must contain 'image_infos' to determine image properties."
+        )
+    image_info = image_infos[0]
+    width = image_info.get("width")
+    height = image_info.get("height")
+    dtype = image_info.get("dtype")
+    pixel_size = image_info.get("pixel_size_um")
+
+    if width is None or height is None or dtype is None:
+        raise ValueError(
+            "Metadata 'image_infos' must contain 'width', 'height', and 'dtype' keys."
+        )
+
+    # Create acquisition settings based on sequence and metadata
+    return omew.AcquisitionSettings(
+        root_path=str(path),
+        dtype=dtype,
+        overwrite=overwrite,
+        format=backend,
+        **omew.useq_to_acquisition_settings(
+            sequence,
+            image_width=width,
+            image_height=height,
+            pixel_size_um=pixel_size,
+        ),
+    )
