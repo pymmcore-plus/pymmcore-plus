@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
@@ -31,11 +30,7 @@ TProp = TypeVar("TProp")
 TLim = TypeVar("TLim", bound=int | float)
 
 
-slots_true = {"slots": True} if sys.version_info >= (3, 10) else {}
-kw_only_true = {"kw_only": True} if sys.version_info >= (3, 10) else {}
-
-
-@dataclass(**kw_only_true, **slots_true)
+@dataclass(kw_only=True, slots=True)
 class PropertyInfo(Generic[TProp]):
     """State of a property of a device.
 

@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import abc
-import sys
 import weakref
 from abc import ABC, abstractmethod
 from collections.abc import Sequence
@@ -147,16 +146,13 @@ class FloatChangeAccumulator(AbstractChangeAccumulator[float]):
         return a + b
 
 
-ZIP_STRICT = {"strict": True} if sys.version_info >= (3, 10) else {}
-
-
 class SequenceChangeAccumulator(AbstractChangeAccumulator[Sequence[float]]):
     def __init__(self, sequence_length: int) -> None:
         self.sequence_length = sequence_length
         super().__init__(zero=[0.0] * sequence_length)
 
     def _add(self, a: Sequence[float], b: Sequence[float]) -> Sequence[float]:
-        return [x + y for x, y in zip(a, b, strict=False, **ZIP_STRICT)]
+        return [x + y for x, y in zip(a, b, strict=False)]
 
 
 class DeviceAccumulator(abc.ABC, Generic[DT]):
