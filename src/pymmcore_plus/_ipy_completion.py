@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from IPython import get_ipython  # pyright: ignore
 from IPython.core.completer import SimpleCompletion, context_matcher
@@ -9,7 +9,7 @@ from IPython.core.completer import SimpleCompletion, context_matcher
 from pymmcore_plus import CMMCorePlus, DeviceType
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from IPython.core.completer import (
         CompletionContext,

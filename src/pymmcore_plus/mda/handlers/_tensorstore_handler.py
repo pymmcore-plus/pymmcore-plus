@@ -289,7 +289,7 @@ class TensorStoreHandler:
                     max_sizes[k] = max(max_sizes.get(k, 0), v)
 
             # remove axes with length 0
-            labels, sizes = zip(*(x for x in max_sizes.items() if x[1]))
+            labels, sizes = zip(*(x for x in max_sizes.items() if x[1]), strict=False)
             full_shape: tuple[int, ...] = (*sizes, *frame_shape)
         else:
             labels = (FRAME_DIM,)
@@ -350,7 +350,7 @@ class TensorStoreHandler:
         The return value is safe to use as an index to self._store[...]
         """
         if self._nd_storage:
-            keys, values = zip(*index.items())
+            keys, values = zip(*index.items(), strict=False)
             return self._ts.d[keys][values]
 
         if any(isinstance(v, slice) for v in index.values()):
@@ -374,7 +374,7 @@ class TensorStoreHandler:
 
         indices: list[int] = []
         for p in product(*axis_indices.values()):
-            key = frozenset(dict(zip(axis_indices.keys(), p)).items())
+            key = frozenset(dict(zip(axis_indices.keys(), p, strict=False)).items())
             try:
                 indices.append(self._frame_indices[key])
             except KeyError:  # pragma: no cover

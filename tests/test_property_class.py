@@ -1,12 +1,15 @@
 import gc
 import re
 import weakref
-from typing import Callable
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
 
 from pymmcore_plus import CMMCorePlus, DeviceProperty, DeviceType, PropertyType
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 def test_mmproperty(core: CMMCorePlus):

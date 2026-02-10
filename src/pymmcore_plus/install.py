@@ -13,7 +13,7 @@ from contextlib import contextmanager, nullcontext
 from functools import cache
 from pathlib import Path
 from platform import machine, system
-from typing import TYPE_CHECKING, Callable, Protocol
+from typing import TYPE_CHECKING, Protocol
 from urllib.request import urlopen, urlretrieve
 
 import typer
@@ -22,7 +22,7 @@ from pymmcore_plus import _pymmcore
 from pymmcore_plus._util import USER_DATA_MM_PATH
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterator
     from contextlib import AbstractContextManager
 
     class _MsgLogger(Protocol):

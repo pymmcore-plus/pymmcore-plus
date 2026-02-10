@@ -2,14 +2,14 @@ from __future__ import annotations
 
 from abc import abstractmethod
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Callable, ClassVar, Literal
+from typing import TYPE_CHECKING, ClassVar, Literal
 
 from pymmcore_plus.core._constants import DeviceType, Keyword, PixelFormat
 
 from ._device_base import Device
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
 
     import numpy as np
     from numpy.typing import DTypeLike
