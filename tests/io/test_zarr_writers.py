@@ -21,13 +21,6 @@ else:
     zarr = pytest.importorskip("zarr")
     import zarr.storage  # noqa: F811
 
-# Check zarr version - OMEZarrWriter is only compatible with zarr v2
-ZARR_VERSION = int(zarr.__version__.split(".")[0])
-requires_zarr_v2 = pytest.mark.skipif(
-    ZARR_VERSION >= 3,
-    reason="OMEZarrWriter is not compatible with zarr v3.",
-)
-
 try:
     import xarray as xr
 except ImportError:
@@ -102,7 +95,6 @@ CASES: list[str | None, useq.MDASequence, dict[str, dict]] = [
 ]
 
 
-@requires_zarr_v2
 @pytest.mark.parametrize("store, mda, expected_shapes", CASES)
 def test_ome_zarr_writer(
     store: str | None,
