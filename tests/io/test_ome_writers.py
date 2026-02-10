@@ -311,31 +311,6 @@ def test_from_output_with_path(tmp_path: Path, core: CMMCorePlus) -> None:
     assert (tmp_path / "test.ome.zarr").exists()
 
 
-def test_from_output_adds_extension(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test that from_output adds extension based on backend."""
-    # Path without extension + zarr backend -> adds .ome.zarr
-    out = Output(path=tmp_path / "test_no_ext", format="tensorstore")
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-    assert handler.path.endswith(".ome.zarr")
-
-    # Path without extension + tiff backend -> adds .ome.tiff
-    out = Output(path=tmp_path / "test_no_ext2", format="tifffile")
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-    assert handler.path.endswith(".ome.tiff")
-
-
-def test_from_output_no_extension_with_auto(tmp_path: Path) -> None:
-    """Test from_output with path without extension and format='auto'."""
-    out = Output(path=tmp_path / "test_no_ext", format="auto")
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-
-    # Should not add extension when format is "auto"
-    assert not handler.path.endswith(".ome.zarr")
-    assert not handler.path.endswith(".ome.tiff")
-    # Path should be as provided
-    assert handler.path.endswith("test_no_ext")
-
-
 def test_from_output_with_ome_zarr_format_object(
     tmp_path: Path, core: CMMCorePlus
 ) -> None:
@@ -359,22 +334,6 @@ def test_from_output_with_ome_tiff_format_object(
     core.mda.run(SIMPLE_MDA, output=handler)
     tiff_files = list(tmp_path.glob("*.tiff")) + list(tmp_path.glob("*.tif"))
     assert len(tiff_files) >= 1
-
-
-def test_from_output_format_object_adds_extension(tmp_path: Path) -> None:
-    """Test from_output adds extension when using Format object."""
-    # OmeZarrFormat with no extension -> adds .ome.zarr
-    zarr_format = omew.OmeZarrFormat(backend="tensorstore")
-    out = Output(path=tmp_path / "test_zarr", format=zarr_format)
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-    assert handler.path.endswith(".ome.zarr")
-
-    # OmeTiffFormat with no extension -> adds .ome.tiff
-    # Note: OmeTiffFormat backend is 'tifffile' by default
-    tiff_format = omew.OmeTiffFormat(backend="tifffile")
-    out = Output(path=tmp_path / "test_tiff", format=tiff_format)
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-    assert handler.path.endswith(".ome.tiff")
 
 
 # -----------------------------------------------------------------------------

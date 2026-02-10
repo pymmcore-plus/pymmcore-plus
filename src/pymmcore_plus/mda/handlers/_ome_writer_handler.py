@@ -59,8 +59,8 @@ class OMEWriterHandler:
 
     Alternative constructors are available via classmethods:
 
-    - `OMEWriterHandler.from_output(output)`: Create from an `Output` specification
     - `OMEWriterHandler.in_tmpdir()`: Create handler writing to a temporary directory
+    - `OMEWriterHandler.from_output(output)`: Create from an `Output` specification
 
     Examples
     --------
@@ -128,7 +128,6 @@ class OMEWriterHandler:
         self._stream: omew.OMEStream | None = None
         self._arrays: dict[int, Any] = {}
 
-        # Validate backend matches path extension
         _validate_backend_path_combination(self._path, self._backend)
 
     @property
@@ -207,8 +206,6 @@ class OMEWriterHandler:
         OMEWriterHandler
             Handler configured according to the Output specification.
         """
-        from pathlib import Path
-
         path, fmt = out.path, out.format
 
         # Extract backend from format (could be string or ome-writers Format object)
@@ -218,15 +215,7 @@ class OMEWriterHandler:
         elif isinstance(fmt, (omew.OmeTiffFormat, omew.OmeZarrFormat)):
             backend = fmt.backend
 
-        # If path has no extension but backend is specified, add appropriate extension
-        path_str = str(path)
-        if not Path(path_str).suffix and backend != "auto":
-            if backend in ZARR_BACKENDS:
-                path_str = f"{path_str}.ome.zarr"
-            elif backend == TIFF_BACKEND:
-                path_str = f"{path_str}.ome.tiff"
-
-        return cls(path=path_str, backend=backend, **kwargs)
+        return cls(path=str(path), backend=backend, **kwargs)
 
     def sequenceStarted(self, sequence: useq.MDASequence, meta: SummaryMetaV1) -> None:
         """Prepare the settings to create the stream.
