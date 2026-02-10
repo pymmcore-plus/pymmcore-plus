@@ -24,8 +24,7 @@ except Exception as e:
 
 import ctypes as c
 import time
-from collections.abc import Iterator, Mapping, Sequence
-from typing import Callable
+from collections.abc import Callable, Iterator, Mapping, Sequence
 
 import numpy as np
 from numpy.typing import DTypeLike

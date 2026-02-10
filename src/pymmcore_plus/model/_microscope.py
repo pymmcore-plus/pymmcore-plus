@@ -4,7 +4,7 @@ import os
 from copy import deepcopy
 from dataclasses import dataclass, field, fields
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from pymmcore_plus import DeviceType, Keyword
 
@@ -14,7 +14,7 @@ from ._device import AvailableDevice, Device, get_available_devices
 from ._pixel_size_config import PixelSizeGroup
 
 if TYPE_CHECKING:
-    from collections.abc import Container, Iterable
+    from collections.abc import Callable, Container, Iterable
 
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.metadata.schema import SummaryMetaV1

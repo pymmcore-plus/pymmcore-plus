@@ -5,11 +5,9 @@ from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Generic,
     Literal,
     TypeVar,
-    Union,
     cast,
     overload,
 )
@@ -17,9 +15,10 @@ from typing import (
 from pymmcore_plus.core._constants import PropertyType
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
+    from typing import TypeAlias
 
-    from typing_extensions import Self, TypeAlias
+    from typing_extensions import Self
 
     from ._device_base import Device
 
@@ -29,7 +28,7 @@ if TYPE_CHECKING:
 
 TDev = TypeVar("TDev", bound="Device")
 TProp = TypeVar("TProp")
-TLim = TypeVar("TLim", bound=Union[int, float])
+TLim = TypeVar("TLim", bound=int | float)
 
 
 slots_true = {"slots": True} if sys.version_info >= (3, 10) else {}

@@ -128,7 +128,7 @@ def test_ome_zarr_writer(
         if k not in writer.position_arrays:
             continue  # not a position array
 
-        actual_shape = dict(zip(v.attrs["_ARRAY_DIMENSIONS"], v.shape))
+        actual_shape = dict(zip(v.attrs["_ARRAY_DIMENSIONS"], v.shape, strict=False))
         assert expected_shapes[k] == actual_shape
 
         # check that the MDASequence was stored
@@ -176,7 +176,7 @@ def test_tensorstore_writer(
     if len(expected_shapes) > 1:
         expected_sizes["p"] = len(expected_shapes)
 
-    sizes = dict(zip(writer.store.domain.labels, writer.store.shape))
+    sizes = dict(zip(writer.store.domain.labels, writer.store.shape, strict=False))
     assert sizes == expected_sizes
 
     if store_path := getattr(writer.store.kvstore, "path", None):

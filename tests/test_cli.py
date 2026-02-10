@@ -9,7 +9,7 @@ import time
 from multiprocessing import Process, Queue
 from pathlib import Path
 from time import sleep
-from typing import Any, Callable, cast
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import Mock, patch
 
 import pytest
@@ -31,6 +31,9 @@ from pymmcore_plus import (
     _logger,
     install,
 )
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 runner = CliRunner()
 subrun = subprocess.run

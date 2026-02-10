@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import time
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 import numpy as np
 import pytest
@@ -15,7 +15,7 @@ from pymmcore_plus.experimental.unicore.core._sequence_buffer import SequenceBuf
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
 
     from numpy.typing import DTypeLike
 

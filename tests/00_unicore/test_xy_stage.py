@@ -192,7 +192,7 @@ def test_unicore_xy_stepper_stage_sequenceable():
         core.loadXYStageSequence(XYDEV, range(100), range(100))
 
     core.loadXYStageSequence(XYDEV, range(10), range(10, 20))
-    assert dev.SEQ_SENT == tuple(zip(range(10), range(10, 20)))
+    assert dev.SEQ_SENT == tuple(zip(range(10), range(10, 20), strict=False))
 
     core.startXYStageSequence(XYDEV)
     assert dev.SEQ_STARTED

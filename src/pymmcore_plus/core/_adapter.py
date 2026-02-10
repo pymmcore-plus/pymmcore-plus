@@ -64,7 +64,7 @@ class DeviceAdapter:
                 type=DeviceType(dt),
                 description=desc,
             )
-            for dev_name, dt, desc in zip(devs, types, descriptions)
+            for dev_name, dt, desc in zip(devs, types, descriptions, strict=False)
         )
 
     @property

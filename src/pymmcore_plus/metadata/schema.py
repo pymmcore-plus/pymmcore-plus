@@ -1,4 +1,4 @@
-from typing import Any, Literal, Optional, TypedDict, Union
+from typing import Any, Literal, TypedDict
 
 import useq
 from typing_extensions import NotRequired
@@ -50,7 +50,7 @@ class PropertyInfo(TypedDict):
     """
 
     name: str
-    value: Optional[str]
+    value: str | None
     data_type: Literal["undefined", "float", "int", "str"]
     is_read_only: bool
     allowed_values: NotRequired[tuple[str, ...]]
@@ -160,7 +160,7 @@ class SystemInfo(TypedDict):
     mmcore_version: str
     device_api_version: str
     device_adapter_search_paths: tuple[str, ...]
-    system_configuration_file: Optional[str]
+    system_configuration_file: str | None
     primary_log_file: str
     sequence_buffer_size_mb: int
     continuous_focus_enabled: bool
@@ -250,7 +250,7 @@ class StagePosition(TypedDict):
     """Represents the position of a single stage device."""
 
     device_label: str
-    position: Union[float, tuple[float, float]]
+    position: float | tuple[float, float]
 
 
 class Position(TypedDict):
@@ -479,7 +479,7 @@ class FrameMetaV1(TypedDict):
     format: Literal["frame-dict"]
     version: Literal["1.0"]
     pixel_size_um: float
-    camera_device: Optional[str]
+    camera_device: str | None
     exposure_ms: float
     property_values: tuple[PropertyValue, ...]
     runner_time_ms: float
