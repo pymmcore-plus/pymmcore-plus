@@ -15,7 +15,7 @@ on:
 
 jobs:
   test:
-    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }} ${{ matrix.nano }} ${{ matrix.resolution }}
+    name: ${{ matrix.os }} py${{ matrix.python-version }} ${{ matrix.add-group }} ${{ matrix.nano }} ${{ matrix.resolution }} ${{ matrix.extras }}
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -55,6 +55,14 @@ jobs:
             resolution: "lowest-direct"
             add-group: "PyQt6"
 
+          # test optional zarr backends
+          - os: macos-latest
+            python-version: "3.13"
+            extras: "acquire-zarr,zarr-python,zarrs-python"
+          - os: windows-latest
+            python-version: "3.13"
+            extras: "acquire-zarr,zarr-python,zarrs-python"
+
     env:
       UV_NO_SYNC: "1"
     steps:
@@ -65,7 +73,17 @@ jobs:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
 
-      - run: uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution ${{ matrix.resolution || 'highest'}}
+      - name: Install dependencies
+        shell: bash
+        run: |
+          EXTRAS=""
+          if [ -n "${{ matrix.extras }}" ]; then
+            IFS=',' read -ra EXTRA_LIST <<< "${{ matrix.extras }}"
+            for e in "${EXTRA_LIST[@]}"; do
+              EXTRAS="$EXTRAS --extra $e"
+            done
+          fi
+          uv sync --no-dev --group test --group ${{ matrix.add-group || 'test' }} --resolution ${{ matrix.resolution || 'highest'}} $EXTRAS
 
       - if: matrix.nano != ''
         run: |
@@ -87,7 +105,7 @@ jobs:
       - name: Upload coverage
         uses: actions/upload-artifact@v6
         with:
-          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}-${{ matrix.resolution }}
+          name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}-${{ matrix.resolution }}-${{ matrix.extras }}
           path: ./.coverage*
           include-hidden-files: true
 

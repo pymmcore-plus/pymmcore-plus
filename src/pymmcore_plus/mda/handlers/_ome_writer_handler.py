@@ -50,11 +50,17 @@ class OMEWriterHandler:
         - `(.ome).zarr` for OME-ZARR
         - `(.ome).tif` or `(.ome).tiff` for OME-TIFF
     backend : BackendName | Literal["auto"] , optional
-        Backend to use for writing. If the path extension is specified and backend
-        is "auto" (default), the backend will be inferred based on the extension.
-        Otherwise, ...
-        Available options are  "tensorstore", "acquire-zarr", "zarr-python",
-        "zarrs-python", "tifffile" or "auto".
+        Backend to use for writing. Default is "auto". Available options are
+        "tensorstore", "acquire-zarr", "zarr-python", "zarrs-python", "tifffile",
+        or "auto".
+        - If `path` has a recognized extension (`.zarr`, `.tif`, `.tiff`,
+          or their `.ome.*` variants) and `backend` is `"auto"`, the format
+          is inferred from the extension.
+        - If `path` has no recognized extension and `backend` is `"auto"`,
+          `ome-writers` picks the first available backend (typically
+          `tensorstore`) and emits a warning.
+        - If `backend` is set explicitly, that backend is used regardless of the
+          path extension.
     overwrite : bool, optional
         Whether to overwrite existing files/directories. Default is False.
 
@@ -128,6 +134,11 @@ class OMEWriterHandler:
         _validate_backend_path_combination(self._path, self._backend)
 
     @property
+    def path(self) -> str:
+        """Return the output path."""
+        return self._path
+
+    @property
     def stream(self) -> omew.OMEStream | None:
         """Return the current ome-writers stream, or None if not initialized."""
         return self._stream
@@ -178,7 +189,7 @@ class OMEWriterHandler:
         return cls(path=path, backend=backend, overwrite=True, **kwargs)
 
     def sequenceStarted(self, sequence: useq.MDASequence, meta: SummaryMetaV1) -> None:
-        """Prepare the settings to create the stream."""
+        """Create the ome-writers stream from sequence and metadata."""
         self._stream = None
         settings = _prepare_stream_settings(
             path=self._path,
@@ -192,7 +203,7 @@ class OMEWriterHandler:
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
     ) -> None:
-        """Write frame to the stream."""
+        """Append a single frame to the stream."""
         if self._stream is not None:
             self._stream.append(frame)
         else:

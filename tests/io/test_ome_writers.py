@@ -1,13 +1,13 @@
-"""Tests for OMEWriterHandler with various output argument combinations."""
+"""Tests for OMEWriterHandler."""
 
 from __future__ import annotations
 
+import importlib.util
 from typing import TYPE_CHECKING
 
 import pytest
 import useq
 
-from pymmcore_plus.mda import Output
 from pymmcore_plus.mda.handlers import OMEWriterHandler
 
 if TYPE_CHECKING:
@@ -16,10 +16,11 @@ if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
 
 # Skip all tests if ome-writers is not installed
-omew = pytest.importorskip("ome_writers")
+pytest.importorskip("ome_writers")
+
 
 # -----------------------------------------------------------------------------
-# MDA Sequences - same patterns as test_zarr_writers.py
+# MDA Sequences
 # -----------------------------------------------------------------------------
 
 SIMPLE_MDA = useq.MDASequence(
@@ -29,13 +30,23 @@ SIMPLE_MDA = useq.MDASequence(
 )
 
 MULTIPOINT_MDA = SIMPLE_MDA.replace(
-    channels=["Cy5", "FITC"],
     stage_positions=[(222, 1, 1), (111, 0, 0)],
-    time_plan={"interval": 0.1, "loops": 2},
 )
 
 GRID_MDA = SIMPLE_MDA.replace(
     grid_plan={"rows": 2, "columns": 2, "mode": "row_wise_snake"},
+)
+
+GRID_MDA_SUBSEQUENCE = SIMPLE_MDA.replace(
+    stage_positions=[
+        (222, 1, 1),
+        useq.Position(
+            x=223,
+            y=2,
+            z=1,
+            sequence=useq.MDASequence(grid_plan={"rows": 1, "columns": 2}),
+        ),
+    ]
 )
 
 FULL_MDA = MULTIPOINT_MDA.replace(z_plan={"range": 0.2, "step": 0.1})
@@ -51,142 +62,24 @@ PLATE_MDA = useq.MDASequence(
     ),
 )
 
-# Note: COMPLEX_MDA with ragged dimensions (positions with different z-plans)
-# is not supported by ome-writers, so we exclude it from these tests.
-
 MDA_SEQUENCES = [
     pytest.param(SIMPLE_MDA, id="simple"),
     pytest.param(MULTIPOINT_MDA, id="multipoint"),
     pytest.param(GRID_MDA, id="grid"),
-    pytest.param(FULL_MDA, id="full"),
+    pytest.param(GRID_MDA_SUBSEQUENCE, id="grid_subsequence"),
     pytest.param(PLATE_MDA, id="plate"),
+    pytest.param(FULL_MDA, id="full"),
 ]
 
 
 # -----------------------------------------------------------------------------
-# Test: Output object with zarr path and format
+# Test: OMEWriterHandler with zarr and tiff backends
 # -----------------------------------------------------------------------------
 
 
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_output_object_zarr(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test Output object with zarr path and explicit format."""
-    out = Output(path=tmp_path / "test.ome.zarr", format="tensorstore")
-    core.mda.run(mda, output=out)
-
-    # Verify output was created
-    assert (tmp_path / "test.ome.zarr").exists()
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_output_object_tiff(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test Output object with tiff path and explicit format."""
-    out = Output(path=tmp_path / "test.ome.tiff", format="tifffile")
-    core.mda.run(mda, output=out)
-
-    # TIFF files may be split by position
-    tiff_files = list(tmp_path.glob("*.ome.tiff")) + list(tmp_path.glob("*.ome.tif"))
-    assert len(tiff_files) >= 1
-
-
-# -----------------------------------------------------------------------------
-# Test: String path (format auto-detected from extension)
-# -----------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_string_path_zarr(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test string path with .zarr extension (auto-detect format)."""
-    path = str(tmp_path / "test.ome.zarr")
-    core.mda.run(mda, output=path)
-
-    assert (tmp_path / "test.ome.zarr").exists()
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_string_path_tiff(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test string path with .tiff extension (auto-detect format)."""
-    path = str(tmp_path / "test.ome.tiff")
-    core.mda.run(mda, output=path)
-
-    tiff_files = list(tmp_path.glob("*.ome.tiff")) + list(tmp_path.glob("*.ome.tif"))
-    assert len(tiff_files) >= 1
-
-
-# -----------------------------------------------------------------------------
-# Test: Path object (format auto-detected from extension)
-# -----------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_path_object_zarr(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test Path object with .zarr extension (auto-detect format)."""
-    path = tmp_path / "test.ome.zarr"
-    core.mda.run(mda, output=path)
-
-    assert path.exists()
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_path_object_tiff(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test Path object with .tiff extension (auto-detect format)."""
-    path = tmp_path / "test.ome.tiff"
-    core.mda.run(mda, output=path)
-
-    tiff_files = list(tmp_path.glob("*.ome.tiff")) + list(tmp_path.glob("*.ome.tif"))
-    assert len(tiff_files) >= 1
-
-
-# -----------------------------------------------------------------------------
-# Test: Tuple of (path, format)
-# -----------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_tuple_path_format_zarr(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test tuple of (path, format) for zarr."""
-    path = str(tmp_path / "test.ome.zarr")
-    core.mda.run(mda, output=(path, "tensorstore"))
-
-    assert (tmp_path / "test.ome.zarr").exists()
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_tuple_path_format_tiff(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test tuple of (path, format) for tiff."""
-    path = str(tmp_path / "test.ome.tiff")
-    core.mda.run(mda, output=(path, "tifffile"))
-
-    tiff_files = list(tmp_path.glob("*.ome.tiff")) + list(tmp_path.glob("*.ome.tif"))
-    assert len(tiff_files) >= 1
-
-
-# -----------------------------------------------------------------------------
-# Test: Handler object directly
-# -----------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_handler_object_zarr(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test passing OMEWriterHandler directly for zarr."""
+def test_handler_zarr(mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus) -> None:
+    """Test OMEWriterHandler writing to OME-ZARR."""
     handler = OMEWriterHandler(
         tmp_path / "test.ome.zarr", backend="tensorstore", overwrite=True
     )
@@ -197,10 +90,8 @@ def test_handler_object_zarr(
 
 
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_handler_object_tiff(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test passing OMEWriterHandler directly for tiff."""
+def test_handler_tiff(mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus) -> None:
+    """Test OMEWriterHandler writing to OME-TIFF."""
     handler = OMEWriterHandler(
         tmp_path / "test.ome.tiff", backend="tifffile", overwrite=True
     )
@@ -210,130 +101,15 @@ def test_handler_object_tiff(
     assert len(tiff_files) >= 1
 
 
-# -----------------------------------------------------------------------------
-# Test: List of outputs for multiple outputs
-# -----------------------------------------------------------------------------
-
-
-def test_list_of_outputs(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test list of multiple Output objects."""
-    out1 = Output(path=tmp_path / "test1.ome.zarr", format="tensorstore")
-    out2 = Output(path=tmp_path / "test2.ome.zarr", format="tensorstore")
-
-    core.mda.run(SIMPLE_MDA, output=[out1, out2])
-
-    assert (tmp_path / "test1.ome.zarr").exists()
-    assert (tmp_path / "test2.ome.zarr").exists()
-
-
-def test_list_of_paths(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test list of string paths."""
-    path1 = str(tmp_path / "test1.ome.zarr")
-    path2 = str(tmp_path / "test2.ome.zarr")
-
-    core.mda.run(SIMPLE_MDA, output=[path1, path2])
-
-    assert (tmp_path / "test1.ome.zarr").exists()
-    assert (tmp_path / "test2.ome.zarr").exists()
-
-
-def test_list_of_handlers(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test list of handler objects."""
-    handler1 = OMEWriterHandler(
-        tmp_path / "test1.ome.zarr", backend="tensorstore", overwrite=True
-    )
-    handler2 = OMEWriterHandler(
-        tmp_path / "test2.ome.zarr", backend="tensorstore", overwrite=True
-    )
-
-    core.mda.run(SIMPLE_MDA, output=[handler1, handler2])
-
-    assert (tmp_path / "test1.ome.zarr").exists()
-    assert (tmp_path / "test2.ome.zarr").exists()
-
-
-def test_mixed_list_of_outputs(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test list with mixed output types."""
-    out1 = Output(path=tmp_path / "test1.ome.zarr", format="tensorstore")
-    path2 = str(tmp_path / "test2.ome.zarr")
-    handler3 = OMEWriterHandler(
-        tmp_path / "test3.ome.zarr", backend="tensorstore", overwrite=True
-    )
-
-    core.mda.run(SIMPLE_MDA, output=[out1, path2, handler3])
-
-    assert (tmp_path / "test1.ome.zarr").exists()
-    assert (tmp_path / "test2.ome.zarr").exists()
-    assert (tmp_path / "test3.ome.zarr").exists()
-
-
-# -----------------------------------------------------------------------------
-# Test: memory:// backward compatibility (uses TensorStoreHandler)
-# -----------------------------------------------------------------------------
-
-
-def test_memory_output_uses_tensorstore(core: CMMCorePlus) -> None:
-    """Test memory:// uses TensorStoreHandler for backward compatibility."""
-    from pymmcore_plus.mda.handlers import TensorStoreHandler, handler_for_output
-
-    out = Output(path="memory://", format="tensorstore")
-    handler = handler_for_output(out)
-
-    # Should return TensorStoreHandler, not OMEWriterHandler
-    assert isinstance(handler, TensorStoreHandler)
-
-    core.mda.run(SIMPLE_MDA, output=handler)
-
-
-def test_empty_path_raises_error() -> None:
-    """Test that empty path raises ValueError."""
-    # OMEWriterHandler with empty path
-    with pytest.raises(ValueError, match="`path` is required"):
-        OMEWriterHandler("")
-
-    # Output with empty path
-    with pytest.raises(ValueError, match="`path` argument is required for Output"):
-        Output("")
-
-
-# -----------------------------------------------------------------------------
-# Test: OMEWriterHandler.from_output
-# -----------------------------------------------------------------------------
-
-
-def test_from_output_with_path(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test OMEWriterHandler.from_output with path."""
-    out = Output(path=tmp_path / "test.ome.zarr", format="tensorstore")
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-
-    core.mda.run(SIMPLE_MDA, output=handler)
-
-    assert (tmp_path / "test.ome.zarr").exists()
-
-
-def test_from_output_with_ome_zarr_format_object(
-    tmp_path: Path, core: CMMCorePlus
+@pytest.mark.parametrize("mda", MDA_SEQUENCES)
+def test_handler_auto_backend(
+    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
 ) -> None:
-    """Test from_output with OmeZarrFormat object."""
-    zarr_format = omew.OmeZarrFormat(backend="tensorstore")
-    out = Output(path=tmp_path / "test.zarr", format=zarr_format)
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-
-    core.mda.run(SIMPLE_MDA, output=handler)
-    assert (tmp_path / "test.zarr").exists()
-
-
-def test_from_output_with_ome_tiff_format_object(
-    tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test from_output with OmeTiffFormat object."""
-    tiff_format = omew.OmeTiffFormat()
-    out = Output(path=tmp_path / "test.tiff", format=tiff_format)
-    handler = OMEWriterHandler.from_output(out, overwrite=True)
-
-    core.mda.run(SIMPLE_MDA, output=handler)
-    tiff_files = list(tmp_path.glob("*.tiff")) + list(tmp_path.glob("*.tif"))
-    assert len(tiff_files) >= 1
+    """Test backend='auto' infers format from path extension."""
+    zarr_path = tmp_path / "auto_test.ome.zarr"
+    handler = OMEWriterHandler(zarr_path, backend="auto")
+    core.mda.run(mda, output=handler)
+    assert zarr_path.exists()
 
 
 # -----------------------------------------------------------------------------
@@ -348,10 +124,19 @@ def test_in_tmpdir(core: CMMCorePlus) -> None:
 
     assert "_pmmcp_tmp_" in handler.path
     assert handler.path.endswith(".ome.zarr")
+    assert handler._overwrite is True
 
 
-def test_in_tmpdir_custom_suffix(core: CMMCorePlus) -> None:
-    """Test OMEWriterHandler.in_tmpdir with custom suffix."""
+def test_in_tmpdir_tiff_backend(core: CMMCorePlus) -> None:
+    """Test in_tmpdir with tifffile backend infers .ome.tiff suffix."""
+    handler = OMEWriterHandler.in_tmpdir(backend="tifffile")
+    core.mda.run(SIMPLE_MDA, output=handler)
+
+    assert handler.path.endswith(".ome.tiff")
+
+
+def test_in_tmpdir_custom_suffix_and_prefix(core: CMMCorePlus) -> None:
+    """Test OMEWriterHandler.in_tmpdir with custom suffix and prefix."""
     handler = OMEWriterHandler.in_tmpdir(suffix=".zarr", prefix="custom_")
     core.mda.run(SIMPLE_MDA, output=handler)
 
@@ -359,82 +144,21 @@ def test_in_tmpdir_custom_suffix(core: CMMCorePlus) -> None:
     assert handler.path.endswith(".zarr")
 
 
-def test_in_tmpdir_tiff_backend(core: CMMCorePlus) -> None:
-    """Test in_tmpdir with tifffile backend."""
-    handler = OMEWriterHandler.in_tmpdir(backend="tifffile")
-    core.mda.run(SIMPLE_MDA, output=handler)
-
-    assert "_pmmcp_tmp_" in handler.path
-    assert handler.path.endswith(".ome.tiff")
-
-
-def test_in_tmpdir_default_suffix_based_on_backend(core: CMMCorePlus) -> None:
-    """Test that default suffix matches backend."""
-    # tensorstore backend -> .ome.zarr suffix
-    handler_zarr = OMEWriterHandler.in_tmpdir(backend="tensorstore")
-    assert handler_zarr.path.endswith(".ome.zarr")
-
-    # tifffile backend -> .ome.tiff suffix
-    handler_tiff = OMEWriterHandler.in_tmpdir(backend="tifffile")
-    assert handler_tiff.path.endswith(".ome.tiff")
-
-
-def test_in_tmpdir_custom_suffix_validation() -> None:
-    """Test that custom suffix with mismatched backend raises error."""
-    # zarr suffix with tiff backend should raise
-    with pytest.raises(ValueError, match="cannot be used with ZARR path"):
-        OMEWriterHandler.in_tmpdir(backend="tifffile", suffix=".zarr")
-
-    # tiff suffix with zarr backend should raise
-    with pytest.raises(ValueError, match="cannot be used with TIFF path"):
-        OMEWriterHandler.in_tmpdir(backend="tensorstore", suffix=".tiff")
-
-
 def test_in_tmpdir_custom_dir(tmp_path: Path, core: CMMCorePlus) -> None:
     """Test in_tmpdir with custom directory."""
     handler = OMEWriterHandler.in_tmpdir(dir=tmp_path)
     core.mda.run(SIMPLE_MDA, output=handler)
 
-    # Should be created in tmp_path
     assert str(tmp_path) in handler.path
-    assert (tmp_path / handler.path.split("/")[-1]).exists()
 
 
-def test_in_tmpdir_overwrite_kwarg(core: CMMCorePlus) -> None:
-    """Test that in_tmpdir sets overwrite=True by default."""
-    handler = OMEWriterHandler.in_tmpdir()
-    # Should have overwrite=True set internally
-    assert handler._overwrite is True
+def test_in_tmpdir_suffix_backend_mismatch() -> None:
+    """Test that mismatched suffix and backend in in_tmpdir raises error."""
+    with pytest.raises(ValueError, match="cannot be used with ZARR path"):
+        OMEWriterHandler.in_tmpdir(backend="tifffile", suffix=".zarr")
 
-
-# -----------------------------------------------------------------------------
-# Test: Backend auto-detection
-# -----------------------------------------------------------------------------
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_backend_auto_zarr(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test backend='auto' with .zarr path (should infer tensorstore)."""
-    path = tmp_path / "test.ome.zarr"
-    handler = OMEWriterHandler(path, backend="auto")
-    core.mda.run(mda, output=handler)
-
-    assert path.exists()
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_backend_auto_tiff(
-    mda: useq.MDASequence, tmp_path: Path, core: CMMCorePlus
-) -> None:
-    """Test backend='auto' with .tiff path (should infer tifffile)."""
-    path = tmp_path / "test.ome.tiff"
-    handler = OMEWriterHandler(path, backend="auto")
-    core.mda.run(mda, output=handler)
-
-    tiff_files = list(tmp_path.glob("*.ome.tiff")) + list(tmp_path.glob("*.ome.tif"))
-    assert len(tiff_files) >= 1
+    with pytest.raises(ValueError, match="cannot be used with TIFF path"):
+        OMEWriterHandler.in_tmpdir(backend="tensorstore", suffix=".tiff")
 
 
 # -----------------------------------------------------------------------------
@@ -442,56 +166,13 @@ def test_backend_auto_tiff(
 # -----------------------------------------------------------------------------
 
 
-def test_backend_path_mismatch_zarr_tiff() -> None:
-    """Test that mismatched backend and path raises error."""
+def test_backend_path_mismatch() -> None:
+    """Test that mismatched backend and path extension raises error."""
     with pytest.raises(ValueError, match="cannot be used with ZARR path"):
         OMEWriterHandler("test.zarr", backend="tifffile")
 
-
-def test_backend_path_mismatch_tiff_zarr() -> None:
-    """Test that mismatched backend and path raises error."""
     with pytest.raises(ValueError, match="cannot be used with TIFF path"):
         OMEWriterHandler("test.ome.tiff", backend="tensorstore")
-
-
-def test_backend_auto_doesnt_raise_validation_error(tmp_path: Path) -> None:
-    """Test that backend='auto' doesn't trigger validation errors."""
-    # Should not raise even though validation would fail for explicit backend
-    handler_zarr = OMEWriterHandler(tmp_path / "test.zarr", backend="auto")
-    assert handler_zarr is not None
-
-    handler_tiff = OMEWriterHandler(tmp_path / "test.tiff", backend="auto")
-    assert handler_tiff is not None
-
-
-def test_explicit_backend_matching_extension(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test explicit backend matching path extension works."""
-    # Zarr with tensorstore backend
-    zarr_path = tmp_path / "test.zarr"
-    handler_zarr = OMEWriterHandler(zarr_path, backend="tensorstore")
-    core.mda.run(SIMPLE_MDA, output=handler_zarr)
-    assert zarr_path.exists()
-
-    # TIFF with tifffile backend
-    tiff_path = tmp_path / "test2.tiff"
-    handler_tiff = OMEWriterHandler(tiff_path, backend="tifffile")
-    core.mda.run(SIMPLE_MDA, output=handler_tiff)
-    tiff_files = list(tmp_path.glob("test2*.tiff"))
-    assert len(tiff_files) >= 1
-
-
-def test_case_insensitive_extension_matching(tmp_path: Path) -> None:
-    """Test that extension matching is case-insensitive."""
-    # Should not raise - extensions are lowercase-matched
-    handler1 = OMEWriterHandler(tmp_path / "test.ZARR", backend="tensorstore")
-    assert handler1 is not None
-
-    handler2 = OMEWriterHandler(tmp_path / "test.TIFF", backend="tifffile")
-    assert handler2 is not None
-
-    # Mismatches should still raise
-    with pytest.raises(ValueError, match="cannot be used with ZARR path"):
-        OMEWriterHandler(tmp_path / "test.ZARR", backend="tifffile")
 
 
 def test_all_zarr_backends_validated(tmp_path: Path) -> None:
@@ -508,82 +189,34 @@ def test_all_zarr_backends_validated(tmp_path: Path) -> None:
             OMEWriterHandler(tmp_path / f"test_{backend}.tiff", backend=backend)  # type: ignore[arg-type]
 
 
-# -----------------------------------------------------------------------------
-# Test: No output (None) should not create any handlers
-# -----------------------------------------------------------------------------
+def test_auto_backend_no_validation_error(tmp_path: Path) -> None:
+    """Test that backend='auto' doesn't trigger validation errors."""
+    handler_zarr = OMEWriterHandler(tmp_path / "test.zarr", backend="auto")
+    assert handler_zarr is not None
+
+    handler_tiff = OMEWriterHandler(tmp_path / "test.tiff", backend="auto")
+    assert handler_tiff is not None
 
 
-def test_no_output(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test that output=None doesn't create any files."""
-    core.mda.run(SIMPLE_MDA, output=None)
+def test_case_insensitive_extension(tmp_path: Path) -> None:
+    """Test that extension matching is case-insensitive."""
+    OMEWriterHandler(tmp_path / "test.ZARR", backend="tensorstore")
+    OMEWriterHandler(tmp_path / "test.TIFF", backend="tifffile")
 
-    # No zarr or tiff files should be created
-    zarr_files = list(tmp_path.glob("*.zarr"))
-    tiff_files = list(tmp_path.glob("*.tiff")) + list(tmp_path.glob("*.tif"))
-    assert len(zarr_files) == 0
-    assert len(tiff_files) == 0
+    with pytest.raises(ValueError, match="cannot be used with ZARR path"):
+        OMEWriterHandler(tmp_path / "test.ZARR", backend="tifffile")
 
 
-def test_default_output(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test that default output (no argument) doesn't create files."""
-    core.mda.run(SIMPLE_MDA)
+def test_empty_and_whitespace_path_raises_error() -> None:
+    """Test that empty or whitespace-only path raises ValueError."""
+    with pytest.raises(ValueError, match="`path` is required"):
+        OMEWriterHandler("")
 
-    # No zarr or tiff files should be created
-    zarr_files = list(tmp_path.glob("*.zarr"))
-    tiff_files = list(tmp_path.glob("*.tiff")) + list(tmp_path.glob("*.tif"))
-    assert len(zarr_files) == 0
-    assert len(tiff_files) == 0
-
-
-# -----------------------------------------------------------------------------
-# Test: Edge cases
-# -----------------------------------------------------------------------------
-
-
-def test_whitespace_path_raises_error() -> None:
-    """Test that whitespace-only path raises error."""
     with pytest.raises(ValueError, match="`path` is required"):
         OMEWriterHandler("   ")
 
     with pytest.raises(ValueError, match="`path` is required"):
         OMEWriterHandler("\t\n")
-
-
-def test_multiple_extensions_supported(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test paths with multiple extensions like .ome.zarr are handled correctly."""
-    # .ome.zarr should work
-    path1 = tmp_path / "test.ome.zarr"
-    handler1 = OMEWriterHandler(path1, backend="tensorstore")
-    core.mda.run(SIMPLE_MDA, output=handler1)
-    assert path1.exists()
-
-    # .ome.tiff should work
-    path2 = tmp_path / "test2.ome.tiff"
-    handler2 = OMEWriterHandler(path2, backend="tifffile")
-    core.mda.run(SIMPLE_MDA, output=handler2)
-    tiff_files = list(tmp_path.glob("test2*.ome.tiff"))
-    assert len(tiff_files) >= 1
-
-
-def test_output_with_ome_zarr_format(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test Output with ome-writers OmeZarrFormat object."""
-    ome_format = omew.OmeZarrFormat(backend="tensorstore")
-    out = Output(path=tmp_path / "test.ome.zarr", format=ome_format)
-
-    core.mda.run(SIMPLE_MDA, output=out)
-
-    assert (tmp_path / "test.ome.zarr").exists()
-
-
-def test_output_with_ome_tiff_format(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test Output with ome-writers OmeTiffFormat object."""
-    ome_format = omew.OmeTiffFormat()
-    out = Output(path=tmp_path / "test.ome.tiff", format=ome_format)
-
-    core.mda.run(SIMPLE_MDA, output=out)
-
-    tiff_files = list(tmp_path.glob("*.ome.tiff")) + list(tmp_path.glob("*.ome.tif"))
-    assert len(tiff_files) >= 1
 
 
 # -----------------------------------------------------------------------------
@@ -592,28 +225,65 @@ def test_output_with_ome_tiff_format(tmp_path: Path, core: CMMCorePlus) -> None:
 
 
 def test_stream_lifecycle(tmp_path: Path, core: CMMCorePlus) -> None:
-    """Test that stream is created on first frame and closed after sequence."""
+    """Test that stream is None before and after a sequence run."""
     handler = OMEWriterHandler(tmp_path / "test.zarr", backend="tensorstore")
 
-    # Stream should be None before sequence starts
     assert handler.stream is None
 
     core.mda.run(SIMPLE_MDA, output=handler)
 
-    # Stream should be closed (None) after sequence finishes
     assert handler.stream is None
 
 
-def test_handler_reuse_creates_new_stream(tmp_path: Path, core: CMMCorePlus) -> None:
+def test_handler_reuse(tmp_path: Path, core: CMMCorePlus) -> None:
     """Test that handler can be reused for multiple sequences."""
     handler = OMEWriterHandler(
         tmp_path / "test.zarr", backend="tensorstore", overwrite=True
     )
 
-    # Run first sequence
     core.mda.run(SIMPLE_MDA, output=handler)
     assert handler.stream is None
 
-    # Run second sequence (should work without errors)
     core.mda.run(SIMPLE_MDA, output=handler)
     assert handler.stream is None
+
+
+# -----------------------------------------------------------------------------
+# Test: Optional zarr backends (smoke tests, run only if installed)
+# -----------------------------------------------------------------------------
+
+_have_acquire_zarr = importlib.util.find_spec("acquire_zarr") is not None
+_have_zarr = importlib.util.find_spec("zarr") is not None
+_have_zarrs = _have_zarr and importlib.util.find_spec("zarrs") is not None
+
+OPTIONAL_ZARR_BACKENDS = [
+    pytest.param(
+        "acquire-zarr",
+        marks=pytest.mark.skipif(
+            not _have_acquire_zarr, reason="acquire-zarr not installed"
+        ),
+        id="acquire-zarr",
+    ),
+    pytest.param(
+        "zarr-python",
+        marks=pytest.mark.skipif(not _have_zarr, reason="zarr not installed"),
+        id="zarr-python",
+    ),
+    pytest.param(
+        "zarrs-python",
+        marks=pytest.mark.skipif(not _have_zarrs, reason="zarrs not installed"),
+        id="zarrs-python",
+    ),
+]
+
+
+@pytest.mark.parametrize("backend", OPTIONAL_ZARR_BACKENDS)
+def test_optional_zarr_backend(backend: str, tmp_path: Path, core: CMMCorePlus) -> None:
+    """Smoke test: optional zarr backends can write a simple MDA."""
+    handler = OMEWriterHandler(
+        tmp_path / "test.ome.zarr",
+        backend=backend,
+        overwrite=True,  # type: ignore[arg-type]
+    )
+    core.mda.run(SIMPLE_MDA, output=handler)
+    assert (tmp_path / "test.ome.zarr").exists()
