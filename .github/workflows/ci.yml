@@ -55,6 +55,13 @@ jobs:
             resolution: "lowest-direct"
             add-group: "PyQt6"
 
+          # test optional zarr backends
+          - os: macos-latest
+            python-version: "3.13"
+            add-group: "test-extra-io"
+          - os: windows-latest
+            python-version: "3.13"
+            add-group: "test-extra-io"
 
     env:
       UV_NO_SYNC: "1"
@@ -98,37 +105,6 @@ jobs:
     uses: pyapp-kit/workflows/.github/workflows/upload-coverage.yml@v2
     secrets:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
-
-  test-extra-io:
-    name: test extra IO backends (${{ matrix.os }})
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [macos-latest, windows-latest]
-    env:
-      UV_NO_SYNC: "1"
-    steps:
-      - uses: actions/checkout@v6
-
-      - uses: astral-sh/setup-uv@v7
-        with:
-          python-version: "3.13"
-          enable-cache: true
-
-      - run: uv sync --no-dev --group test-extra-io
-
-      - name: Get pymmcore version (env)
-        shell: bash
-        run: |
-          ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
-          echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
-
-      - uses: pymmcore-plus/setup-mm-test-adapters@main
-        with:
-          version: ${{ env.PYMM_VERSION }}
-
-      - run: uv run pytest -v --color=yes tests/io/test_ome_writers.py
 
   test-pymmcore-widgets:
     name: test pymmcore-widgets
