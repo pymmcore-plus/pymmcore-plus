@@ -8,10 +8,11 @@ from pymmcore_plus import CMMCorePlus, PropertyType
 from ._core_link import CoreObject
 
 if TYPE_CHECKING:
-    from collections.abc import Container
-    from typing import Any, Callable
-
-    from typing_extensions import TypeAlias  # py310
+    from collections.abc import Callable, Container
+    from typing import (
+        Any,
+        TypeAlias,  # py310
+    )
 
     from ._core_link import ErrCallback
 

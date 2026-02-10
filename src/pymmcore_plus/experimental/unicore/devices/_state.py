@@ -72,7 +72,7 @@ class StateDevice(Device):
 
     def register_standard_properties(self) -> None:
         """Inspect the class for standard properties and register them."""
-        states, labels = zip(*self._state_to_label.items())
+        states, labels = zip(*self._state_to_label.items(), strict=False)
         cls = type(self)
         self.register_property(
             name=Keyword.State,

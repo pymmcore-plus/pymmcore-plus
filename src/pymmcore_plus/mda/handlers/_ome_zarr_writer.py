@@ -263,7 +263,7 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
 
     def new_array(self, key: str, dtype: np.dtype, sizes: dict[str, int]) -> zarr.Array:
         """Create a new array in the group, under `key`."""
-        dims, shape = zip(*sizes.items())
+        dims, shape = zip(*sizes.items(), strict=False)
         ary: zarr.Array = self._group.create(
             key,
             shape=shape,
