@@ -9,7 +9,7 @@ name = "pymmcore-plus"
 description = "pymmcore superset providing improved APIs, event handling, and a pure python acquisition engine"
 keywords = ["microscope", "micro-manager", "smart-microscopy"]
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 license = { text = "BSD 3-Clause License" }
 authors = [
     { name = "Talley Lambert", email = "talley.lambert@gmail.com" },
@@ -24,11 +24,11 @@ classifiers = [
     "Operating System :: OS Independent",
     "Programming Language :: Python",
     "Programming Language :: Python :: 3",
-    "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: 3.13",
+    "Programming Language :: Python :: 3.14",
     "Topic :: System :: Hardware",
     "Topic :: System :: Hardware :: Hardware Drivers",
     "Topic :: Utilities",
@@ -134,7 +134,7 @@ sources = ["src"]
 # https://docs.astral.sh/ruff/rules/
 [tool.ruff]
 line-length = 88
-target-version = "py39"
+target-version = "py310"
 fix = true
 unsafe-fixes = true
 
