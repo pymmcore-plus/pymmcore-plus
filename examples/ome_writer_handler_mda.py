@@ -21,6 +21,6 @@ sequence = MDASequence(
 writer = OMEWriterHandler(path="example_ts.zarr", backend="tensorstore", overwrite=True)
 
 # or e.g. "tifffile" for OME-TIFF with tifffile
-# writer = OMEWriterHandler(path="example.ome.tif", backend="tiff", overwrite=True)
+# writer = OMEWriterHandler(path="example.ome.tif", overwrite=True)
 
 core.mda.run(sequence, output=writer)

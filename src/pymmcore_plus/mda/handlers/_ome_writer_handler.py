@@ -18,7 +18,6 @@ if TYPE_CHECKING:
     import useq
     from typing_extensions import Self
 
-    from pymmcore_plus.mda._runner import Output
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 
 ZARR_BACKENDS = ["tensorstore", "acquire-zarr", "zarr-python", "zarrs-python"]
@@ -51,16 +50,16 @@ class OMEWriterHandler:
         - `(.ome).zarr` for OME-ZARR
         - `(.ome).tif` or `(.ome).tiff` for OME-TIFF
     backend : BackendName | Literal["auto"] , optional
-        Backend to use for writing. Default is "auto" which infers from path extension.
+        Backend to use for writing. If the path extension is specified and backend
+        is "auto" (default), the backend will be inferred based on the extension.
+        Otherwise, ...
         Available options are  "tensorstore", "acquire-zarr", "zarr-python",
         "zarrs-python", "tifffile" or "auto".
     overwrite : bool, optional
         Whether to overwrite existing files/directories. Default is False.
 
-    Alternative constructors are available via classmethods:
-
-    - `OMEWriterHandler.in_tmpdir()`: Create handler writing to a temporary directory
-    - `OMEWriterHandler.from_output(output)`: Create from an `Output` specification
+    To create a handler that writes to a temporary directory, you can use the
+    `in_tmpdir` class method.
 
     Examples
     --------
@@ -124,26 +123,14 @@ class OMEWriterHandler:
         self._backend = backend
         self._overwrite = overwrite
 
-        self._settings: omew.AcquisitionSettings | None = None
         self._stream: omew.OMEStream | None = None
-        self._arrays: dict[int, Any] = {}
 
         _validate_backend_path_combination(self._path, self._backend)
 
     @property
-    def path(self) -> str:
-        """Return the output path."""
-        return self._path
-
-    @property
-    def stream(self) -> Any:
+    def stream(self) -> omew.OMEStream | None:
         """Return the current ome-writers stream, or None if not initialized."""
         return self._stream
-
-    @property
-    def arrays(self) -> dict[int, Any]:
-        """Return the list of arrays that have been written to the stream."""
-        return self._arrays
 
     @classmethod
     def in_tmpdir(
@@ -190,68 +177,29 @@ class OMEWriterHandler:
             _register_cleanup_atexit(path)
         return cls(path=path, backend=backend, overwrite=True, **kwargs)
 
-    @classmethod
-    def from_output(cls, out: Output, **kwargs: Any) -> Self:
-        """Create OMEWriterHandler from an Output specification.
-
-        Parameters
-        ----------
-        out : Output
-            Output specification with path and format.
-        **kwargs
-            Additional kwargs passed to `OMEWriterHandler.__init__`.
-
-        Returns
-        -------
-        OMEWriterHandler
-            Handler configured according to the Output specification.
-        """
-        path, fmt = out.path, out.format
-
-        # Extract backend from format (could be string or ome-writers Format object)
-        backend: BackendName | Literal["auto"] = "auto"
-        if isinstance(fmt, str):
-            backend = fmt  # type: ignore[assignment]
-        elif isinstance(fmt, (omew.OmeTiffFormat, omew.OmeZarrFormat)):
-            backend = fmt.backend
-
-        return cls(path=str(path), backend=backend, **kwargs)
-
     def sequenceStarted(self, sequence: useq.MDASequence, meta: SummaryMetaV1) -> None:
-        """Prepare the settings to create the stream.
-
-        NOTE: we are not initializing the stream here because there might be delays
-        between sequence start and the first frameReady event, and we want to ensure
-        that the stream is created before appending frames.
-        """
-        self._stream = self._settings = None
-        self._arrays.clear()
-
-        self._settings = _prepare_stream_settings(
+        """Prepare the settings to create the stream."""
+        self._stream = None
+        settings = _prepare_stream_settings(
             path=self._path,
             backend=self._backend,
             overwrite=self._overwrite,
             sequence=sequence,
             meta=meta,
         )
+        self._stream = omew.create_stream(settings=settings)
 
     def frameReady(
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
     ) -> None:
         """Write frame to the stream."""
-        # Create the stream if it hasn't been created yet.
-        if self._stream is None:
-            if self._settings is None:
-                raise RuntimeError(
-                    "Stream AcquisitionSettings not available to create stream!"
-                )
-            else:
-                self._stream = omew.create_stream(settings=self._settings)
-                self._arrays = _to_array_dict(self._backend, self._stream)
-
-        # Simply append the frame - ome-writers handles ordering based on
-        # the dimensions and axis_order from the sequence
-        self._stream.append(frame)
+        if self._stream is not None:
+            self._stream.append(frame)
+        else:
+            raise RuntimeError(
+                "Stream is not initialized. Ensure sequenceStarted() is called before "
+                "frameReady()."
+            )
 
     def sequenceFinished(self, sequence: useq.MDASequence) -> None:
         """Close the stream when sequence finishes."""
@@ -324,60 +272,3 @@ def _prepare_stream_settings(
             pixel_size_um=pixel_size,
         ),
     )
-
-
-def _to_array_dict(
-    backend: BackendName | Literal["auto"], stream: omew.OMEStream
-) -> dict[int, Any]:
-    """Convert arrays to a dictionary with displayable arrays/paths for ndv.
-
-    For tensorstore, zarr-python, zarrs-python: keeps arrays as-is.
-    For acquire-zarr: converts _ArrayPlaceholder objects to zarr paths.
-    For tifffile: not yet implemented.
-
-    Parameters
-    ----------
-    arrays : list[Any] | None
-        List of array objects from the backend, or None for tifffile.
-    backend : BackendName | Literal["auto"]
-        The backend type being used.
-    stream : Any
-        The OMEStream instance.
-
-    Returns
-    -------
-    dict[int, Any]
-        Dictionary mapping position index to displayable array or path.
-    """
-    if stream is None:
-        return {}
-
-    if backend in ZARR_BACKENDS:
-        arrays = stream._backend._arrays  # noqa: SLF001
-        if arrays is None:
-            return {}
-
-        # For tensorstore, zarr-python, zarrs-python: arrays are directly displayable
-        if backend in ["tensorstore", "zarr-python", "zarrs-python"]:
-            return dict(enumerate(arrays))
-
-        # For acquire-zarr: convert _ArrayPlaceholder to paths
-        # TODO: Temporary, we need to find a better way to get the arrayu directly
-        if backend == "acquire-zarr":
-            result = {}
-            try:
-                root = stream._backend._root  # noqa: SLF001
-                for idx, ary in enumerate(arrays):
-                    if hasattr(ary, "output_key"):
-                        result[idx] = str(root / ary.output_key)
-                    else:
-                        result[idx] = ary
-            except Exception as e:
-                print(f"Failed to get acquire-zarr array paths: {e}")
-                return {}
-            return result
-
-    # NOTE: for tifffile backend, we currently do not have a way to get the arrays
-    # directky from the stream, we need to see how to do that.
-
-    return {}
