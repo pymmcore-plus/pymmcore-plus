@@ -83,6 +83,10 @@ test = [
     "xarray >=2024.1",
     "lxml >=6.0",
 ]
+test-extra-io = [
+    { include-group = "test" },
+    "pymmcore-plus[acquire-zarr,zarr-python,zarrs-python]",
+]
 test-codspeed = [{ include-group = "test" }, "pytest-codspeed >=3.2.0"]
 test-qt = [{ include-group = 'test' }, "pytest-qt ==4.4", "qtpy >=2"]
 PyQt6 = [{ include-group = 'test-qt' }, "pymmcore-plus[PyQt6]"]
