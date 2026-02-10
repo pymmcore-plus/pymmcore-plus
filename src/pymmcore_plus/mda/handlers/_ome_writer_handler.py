@@ -239,6 +239,7 @@ class OMEWriterHandler:
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
     ) -> None:
         """Write frame to the stream."""
+        # Create the stream if it hasn't been created yet.
         if self._stream is None:
             if self._settings is None:
                 raise RuntimeError(
