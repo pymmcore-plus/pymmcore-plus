@@ -152,7 +152,7 @@ class SequenceChangeAccumulator(AbstractChangeAccumulator[Sequence[float]]):
         super().__init__(zero=[0.0] * sequence_length)
 
     def _add(self, a: Sequence[float], b: Sequence[float]) -> Sequence[float]:
-        return [x + y for x, y in zip(a, b, strict=True)]
+        return [x + y for x, y in zip(a, b, strict=False)]
 
 
 class DeviceAccumulator(abc.ABC, Generic[DT]):
