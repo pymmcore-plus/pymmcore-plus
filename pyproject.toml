@@ -83,7 +83,6 @@ test = [
     "xarray >=2024.1",
     "lxml >=6.0",
 ]
-test-zarr2 = [{ include-group = "test" }, "zarr <3"]  # for testing OMEZarrWriter (temporarily until OMEZarrWriter is deprecated and removed)
 test-codspeed = [{ include-group = "test" }, "pytest-codspeed >=3.2.0"]
 test-qt = [{ include-group = 'test' }, "pytest-qt ==4.4", "qtpy >=2"]
 PyQt6 = [{ include-group = 'test-qt' }, "pymmcore-plus[PyQt6]"]
