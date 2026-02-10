@@ -28,10 +28,9 @@ from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator, Sequence
-    from typing import TypeAlias
+    from typing import TypeAlias, TypedDict
 
     from numpy.typing import NDArray
-    from typing_extensions import TypedDict
 
     from pymmcore_plus.core import CMMCorePlus
 

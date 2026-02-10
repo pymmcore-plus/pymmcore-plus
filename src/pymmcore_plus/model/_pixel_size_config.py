@@ -9,9 +9,7 @@ if TYPE_CHECKING:
     from collections.abc import Container, Iterable, MutableMapping
     from typing import Any, Final, TypeAlias
 
-    from typing_extensions import (
-        Self,  # py310
-    )
+    from typing_extensions import Self  # py311
 
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.metadata.schema import PixelSizeConfigPreset

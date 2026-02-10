@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import sys
 from dataclasses import dataclass
 from typing import (
     TYPE_CHECKING,
@@ -18,7 +17,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
     from typing import TypeAlias
 
-    from typing_extensions import Self
+    from typing_extensions import Self  # py311
 
     from ._device_base import Device
 
@@ -31,8 +30,8 @@ TProp = TypeVar("TProp")
 TLim = TypeVar("TLim", bound=int | float)
 
 
-slots_true = {"slots": True} if sys.version_info >= (3, 10) else {}
-kw_only_true = {"kw_only": True} if sys.version_info >= (3, 10) else {}
+slots_true = {"slots": True}
+kw_only_true = {"kw_only": True}
 
 
 @dataclass(**kw_only_true, **slots_true)

@@ -17,7 +17,7 @@ from pymmcore_plus.metadata.serialize import json_dumps
 from ._util import get_full_sequence_axes
 
 if TYPE_CHECKING:
-    from typing import TypeAlias  # py310
+    from typing import TypeAlias
 
     import numpy as np
     import numpy.typing as npt

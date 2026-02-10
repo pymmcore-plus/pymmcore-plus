@@ -16,7 +16,6 @@ from threading import Thread
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     NamedTuple,
     TypeVar,
     cast,
@@ -51,8 +50,8 @@ from ._property import DeviceProperty
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Sequence
-    from typing import Literal, Never, TypeAlias, TypedDict, Union, Unpack
+    from collections.abc import Callable, Iterable, Iterator, Sequence
+    from typing import Literal, Never, TypeAlias, TypedDict, Unpack
 
     import numpy as np
     from pymmcore import DeviceLabel
@@ -64,7 +63,7 @@ if TYPE_CHECKING:
     _T = TypeVar("_T")
     _DT = TypeVar("_DT", bound=_device.Device)
     ListOrTuple = list[_T] | tuple[_T, ...]
-    DeviceTypesWithCurrent: TypeAlias = Union[
+    DeviceTypesWithCurrent: TypeAlias = (
         Literal[DeviceType.CameraDevice]
         | Literal[DeviceType.ShutterDevice]
         | Literal[DeviceType.StageDevice]
@@ -73,7 +72,7 @@ if TYPE_CHECKING:
         | Literal[DeviceType.SLMDevice]
         | Literal[DeviceType.GalvoDevice]
         | Literal[DeviceType.ImageProcessorDevice]
-    ]
+    )
 
     class PropertySchema(TypedDict, total=False):
         """JSON schema `dict` describing a device property."""
@@ -2336,7 +2335,9 @@ class CMMCorePlus(pymmcore.CMMCore):
                     devices = self.getAvailableDevices(adapt)
                     descriptions = self.getAvailableDeviceDescriptions(adapt)
                     types = self.getAvailableDeviceTypes(adapt)
-                    for dev, desc, type_ in zip(devices, descriptions, types):
+                    for dev, desc, type_ in zip(
+                        devices, descriptions, types, strict=False
+                    ):
                         avail_data["Library, DeviceName"].append(f"{adapt!r}, {dev!r}")
                         avail_data["Type"].append(str(DeviceType(type_)))
                         avail_data["Description"].append(desc)

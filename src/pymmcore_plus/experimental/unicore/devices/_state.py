@@ -12,7 +12,7 @@ if TYPE_CHECKING:
     from typing import ClassVar, Literal
 
     from pymmcore import StateLabel
-    from typing_extensions import Self
+    from typing_extensions import Self  # py311
 
 
 class StateDevice(Device):

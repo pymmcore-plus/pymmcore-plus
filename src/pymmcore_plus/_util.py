@@ -25,9 +25,7 @@ if TYPE_CHECKING:
 
     QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
 
-    from typing import TypeGuard  # py310
-
-    from typing_extensions import ParamSpec
+    from typing import ParamSpec, TypeGuard
 
     from .core.events._protocol import PSignalInstance
 

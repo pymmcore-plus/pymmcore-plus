@@ -7,12 +7,7 @@ from typing import TYPE_CHECKING, Protocol
 if TYPE_CHECKING:
     from collections.abc import Callable, Container, Iterable
     from dataclasses import Field
-    from typing import (
-        Any,
-        ClassVar,
-        TypeAlias,  # py310
-        TypeVar,
-    )
+    from typing import Any, ClassVar, TypeAlias, TypeVar
 
     from pymmcore_plus import CMMCorePlus
 

@@ -9,7 +9,10 @@ from typing import (
     runtime_checkable,
 )
 
-from typing_extensions import Self
+from typing_extensions import Self  # py311
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 if TYPE_CHECKING:
     from collections.abc import Callable

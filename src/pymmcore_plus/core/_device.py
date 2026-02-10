@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from pymmcore import StateLabel
-    from typing_extensions import Self
+    from typing_extensions import Self  # py311
 
     from pymmcore_plus._accumulator import (
         PositionChangeAccumulator,

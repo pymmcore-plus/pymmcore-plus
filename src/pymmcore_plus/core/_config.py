@@ -9,7 +9,7 @@ import pymmcore_plus._pymmcore as pymmcore
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
-    from typing import TypeAlias  # py310
+    from typing import TypeAlias
 
 DevPropValueTuple: TypeAlias = tuple[str, str, str]
 DevPropTuple: TypeAlias = tuple[str, str]

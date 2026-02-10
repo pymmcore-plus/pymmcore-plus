@@ -9,10 +9,7 @@ from ._core_link import CoreObject
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Container
-    from typing import (
-        Any,
-        TypeAlias,  # py310
-    )
+    from typing import Any, TypeAlias
 
     from ._core_link import ErrCallback
 
