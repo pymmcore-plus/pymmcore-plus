@@ -42,19 +42,20 @@ dependencies = [
     "pymmcore >=11.10.0.74.0",
     "typing-extensions >=4",                                   # not actually required at runtime
     "useq-schema >=0.7.2",
-    "tensorstore >=0.1.71,!=0.1.72; python_version >= '3.13'",
-    "tensorstore >=0.1.67,!=0.1.72",
     # cli requirements included by default for now
     "typer >=0.13.0",
     "rich >=10.2.0",
     "ome-types >=0.6.0",
+    "ome-writers[tifffile, tensorstore] >=0.1.0",
 ]
 
 # extras
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
 cli = ["typer >=0.13.0", "rich >=10.2.0"]
-io = ["tifffile >=2021.6.14", "zarr >=2.15,<3"]
+acquire-zarr = ["ome-writers[acquire-zarr]"]
+zarr-python = ["ome-writers[zarr-python]"]
+zarrs-python = ["ome-writers[zarrs-python]"]
 simulate = ["pillow >=11.0"]
 PySide2 = ["PySide2 >=5.15.2.1"]
 PySide6 = ["PySide6 ==6.7.3"]
@@ -72,7 +73,7 @@ docs = [
     "mkdocs-typer ==0.0.3",
 ]
 test = [
-    "pymmcore-plus[io,simulate]",
+    "pymmcore-plus[simulate]",
     "msgspec >= 0.19",
     "msgpack >=1",
     "pytest-cov >=7",
@@ -80,6 +81,10 @@ test = [
     "pytest >=8",
     "xarray >=2024.1",
     "lxml >=6.0",
+]
+test-extra-io = [
+    { include-group = "test" },
+    "pymmcore-plus[acquire-zarr,zarr-python,zarrs-python]",
 ]
 test-codspeed = [{ include-group = "test" }, "pytest-codspeed >=3.2.0"]
 test-qt = [{ include-group = 'test' }, "pytest-qt ==4.4", "qtpy >=2"]

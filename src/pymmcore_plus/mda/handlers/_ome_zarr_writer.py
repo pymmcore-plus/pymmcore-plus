@@ -122,6 +122,12 @@ class OMEZarrWriter(_5DWriterBase["zarr.Array"]):
                 "zarr is required to use this handler. Install with `pip install zarr`"
             ) from e
 
+        if int(zarr.__version__.split(".")[0]) >= 3:
+            raise ImportError(
+                "OMEZarrWriter requires zarr < 3. "
+                "Consider using OMEWriterHandler instead."
+            )
+
         super().__init__()
 
         # main zarr group
