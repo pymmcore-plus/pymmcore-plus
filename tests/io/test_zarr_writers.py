@@ -103,6 +103,9 @@ def test_ome_zarr_writer(
     tmp_path: Path,
     core: CMMCorePlus,
 ) -> None:
+    if int(zarr.__version__.split(".")[0]) >= 3:
+        pytest.skip("OMEZarrWriter requires zarr < 3")
+
     if store == "tmp":
         writer = OMEZarrWriter.in_tmpdir()
     elif store is None:

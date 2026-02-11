@@ -46,7 +46,7 @@ dependencies = [
     "typer >=0.13.0",
     "rich >=10.2.0",
     "ome-types >=0.6.0",
-    "ome-writers[tifffile, tensorstore]",
+    "ome-writers[tifffile, tensorstore] >=0.1.0",
 ]
 
 # extras
@@ -73,7 +73,7 @@ docs = [
     "mkdocs-typer ==0.0.3",
 ]
 test = [
-    "pymmcore-plus[io,simulate]",
+    "pymmcore-plus[simulate]",
     "msgspec >= 0.19",
     "msgpack >=1",
     "pytest-cov >=7",
