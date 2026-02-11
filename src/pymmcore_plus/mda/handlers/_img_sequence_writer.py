@@ -7,20 +7,21 @@ provided.
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from itertools import count
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, cast
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from pymmcore_plus.metadata.serialize import json_dumps
 
 from ._util import get_full_sequence_axes
 
 if TYPE_CHECKING:
+    from typing import TypeAlias  # py310
+
     import numpy as np
     import numpy.typing as npt
     import useq
-    from typing_extensions import TypeAlias  # py310
 
     from pymmcore_plus.metadata.schema import FrameMetaV1
 

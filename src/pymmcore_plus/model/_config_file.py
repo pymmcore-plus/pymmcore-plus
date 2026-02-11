@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import warnings
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from pymmcore_plus import CFGCommand, DeviceType, FocusDirection, Keyword, _pymmcore
 from pymmcore_plus._util import timestamp
@@ -15,7 +15,7 @@ from ._pixel_size_config import DEFAULT_AFFINE, PixelSizePreset
 
 if TYPE_CHECKING:
     import io
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
     from typing import TypeAlias
 
     Executor: TypeAlias = Callable[[Microscope, Sequence[str]], None]

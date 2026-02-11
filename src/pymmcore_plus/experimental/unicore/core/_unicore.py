@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import threading
 import warnings
-from collections.abc import Iterator, MutableMapping, Sequence
+from collections.abc import Callable, Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from datetime import datetime
 from itertools import count
@@ -11,7 +11,6 @@ from time import perf_counter_ns
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     Literal,
     TypeVar,
     cast,
@@ -44,7 +43,7 @@ from ._sequence_buffer import SequenceBuffer
 
 if TYPE_CHECKING:
     from collections.abc import Iterator, Mapping, Sequence
-    from typing import Literal, NewType
+    from typing import Literal, NewType, TypeAlias
 
     from numpy.typing import DTypeLike
     from pymmcore import (
@@ -56,7 +55,6 @@ if TYPE_CHECKING:
         PropertyName,
         StateLabel,
     )
-    from typing_extensions import TypeAlias
 
     from pymmcore_plus.core._constants import DeviceInitializationState, PropertyType
 
@@ -733,7 +731,7 @@ class UniMMCore(CMMCorePlus):
         if len(xSequence) != len(ySequence):
             raise ValueError("xSequence and ySequence must have the same length")
         dev = self._pydevices.get_device_of_type(xyStageLabel, XYStageDevice)
-        seq = tuple(zip(xSequence, ySequence))
+        seq = tuple(zip(xSequence, ySequence, strict=False))
         if len(seq) > dev.get_sequence_max_length():
             raise ValueError(
                 f"Sequence is too long. Max length is {dev.get_sequence_max_length()}"

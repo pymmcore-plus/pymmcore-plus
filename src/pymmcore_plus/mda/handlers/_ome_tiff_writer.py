@@ -109,7 +109,7 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
         """Create a new tifffile file and memmap for this position."""
         from tifffile import imwrite, memmap
 
-        dims, shape = zip(*sizes.items())
+        dims, shape = zip(*sizes.items(), strict=False)
 
         metadata: dict[str, Any] = self._sequence_metadata()
         metadata["axes"] = "".join(dims).upper()

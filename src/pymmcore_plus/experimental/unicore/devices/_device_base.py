@@ -4,7 +4,7 @@ import threading
 from abc import ABC
 from collections import ChainMap
 from enum import EnumMeta
-from typing import TYPE_CHECKING, Any, Callable, ClassVar, Generic, TypeVar, final
+from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
 from pymmcore_plus.core._constants import PropertyType
@@ -14,7 +14,7 @@ from pymmcore_plus.experimental.unicore.devices._properties import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import KeysView, Sequence
+    from collections.abc import Callable, KeysView, Sequence
 
     from typing_extensions import Any, Self
 

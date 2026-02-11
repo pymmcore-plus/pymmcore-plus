@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING
 
 from qtpy.QtCore import QObject, Signal
 
@@ -56,7 +56,7 @@ class QCoreSignaler(QObject):
         self.property_callbacks: PropKeyDict = {}
 
     def devicePropertyChanged(
-        self, device: str, property: Optional[str] = None
+        self, device: str, property: str | None = None
     ) -> _PropertySignal:
         """Return object to connect/disconnect to device/property-specific changes.
 

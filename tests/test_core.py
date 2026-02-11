@@ -1,8 +1,8 @@
 import os
 import re
-from collections.abc import Mapping
+from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -150,7 +150,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
     with qtbot.waitSignal(core.mda._signals.sequenceFinished):
         core.mda.run(mda)
     assert fr_mock.call_count == len(list(mda))
-    for event, _call in zip(mda, fr_mock.call_args_list):
+    for event, _call in zip(mda, fr_mock.call_args_list, strict=False):
         assert isinstance(_call.args[0], np.ndarray)
         assert _call.args[1] == event
 

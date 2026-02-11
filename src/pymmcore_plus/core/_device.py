@@ -663,7 +663,7 @@ class XYStageDevice(_StageBase):
         Provided as a wrapper for loadXYStageSequence, for API parity with other
         sequencaable devices.
         """
-        xSequence, ySequence = zip(*sequence)
+        xSequence, ySequence = zip(*sequence, strict=False)
         self._mmc.loadXYStageSequence(self.label, xSequence, ySequence)
 
     isSequenceable = isXYStageSequenceable

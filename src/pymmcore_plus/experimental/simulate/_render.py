@@ -30,7 +30,7 @@ from PIL import Image, ImageDraw, ImageFilter
 from pymmcore_plus.core._constants import Keyword
 
 if TYPE_CHECKING:
-    from typing_extensions import Literal, TypeAlias
+    from typing import Literal, TypeAlias
 
     from pymmcore_plus.metadata.schema import DeviceInfo, SummaryMetaV1
 

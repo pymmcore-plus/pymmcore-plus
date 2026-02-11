@@ -23,13 +23,13 @@ from __future__ import annotations
 
 import warnings
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Callable
+from typing import TYPE_CHECKING, Any
 
 from pymmcore_plus import CFGCommand, CFGGroup, DeviceType, Keyword
 from pymmcore_plus._util import timestamp
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Sequence
+    from collections.abc import Callable, Iterable, Sequence
 
     from ._unicore import UniMMCore
 

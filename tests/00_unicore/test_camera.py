@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import time
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 import numpy as np
 import pytest
@@ -12,7 +12,7 @@ from pymmcore_plus.experimental.unicore import CameraDevice
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator, Mapping, Sequence
+    from collections.abc import Callable, Iterator, Mapping, Sequence
 
     from numpy.typing import DTypeLike
 
