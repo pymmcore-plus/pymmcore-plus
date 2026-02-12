@@ -6,21 +6,16 @@ from pymmcore_plus.mda.handlers import StreamSettings
 mmc = CMMCorePlus()
 mmc.loadSystemConfiguration()
 
-sequence = useq.MDASequence(channels=["DAPI", "FITC"])
+sequence = useq.MDASequence(
+    channels=["DAPI", "FITC"],
+    time_plan={"interval": 1, "loops": 3},
+)
 
 stream_settings_zarr = StreamSettings(root_path="example.ome.zarr", overwrite=True)
 
 
-# @mmc.mda.events.sequenceStarted.connect
-# def info():
-#     for h in mmc.mda.get_writer_handlers():
-#         print(h)
-#         print(h.stream_settings)
-#         print(h.stream._backend)
-
-
-# runner will create the handler
-mmc.run_mda(sequence, writer=stream_settings_zarr)
+settings = [stream_settings_zarr]
+mmc.run_mda(sequence, writer=settings)
 
 
 # manual handler creation

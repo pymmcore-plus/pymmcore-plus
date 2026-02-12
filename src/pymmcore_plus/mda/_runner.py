@@ -12,7 +12,10 @@ from weakref import WeakSet
 from useq import MDASequence
 
 from pymmcore_plus._logger import exceptions_logged, logger
-from pymmcore_plus.mda.handlers._runner_handler import OMERunnerHandler
+from pymmcore_plus.mda.handlers._runner_handler import (
+    OMERunnerHandler,
+    OMERunnerHandlerGroup,
+)
 
 from ._protocol import PMDAEngine
 from ._thread_relay import mda_listeners_connected
@@ -107,7 +110,8 @@ class MDARunner:
         # event clock, reset whenever `event.reset_event_timer` is True
         self._t0: float = 0.0
 
-        self._runner_handlers: list[OMERunnerHandler] = []
+        # Internal handlers for runner-managed writers (OMERunnerHandler instances).
+        self._runner_handlers = OMERunnerHandlerGroup()
 
     def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
         """Set the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] to use for the MDA run."""  # noqa: E501
@@ -236,6 +240,7 @@ class MDARunner:
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
 
+        # set up runner handlers
         self._runner_handlers = self._collect_runner_handlers(writer)
 
         with self._outputs_connected(output):
@@ -310,11 +315,11 @@ class MDARunner:
 
     def _collect_runner_handlers(
         self, writer: WriterOutput | Sequence[WriterOutput] | None
-    ) -> list[OMERunnerHandler]:
-        """Convert writer arg to OMERunnerHandler instances."""
+    ) -> OMERunnerHandlerGroup:
+        """Convert writer arg to OMERunnerHandlerGroup."""
         if writer is None:
-            return []
-        _runner_handlers: list[OMERunnerHandler] = []
+            return OMERunnerHandlerGroup()
+        handlers: list[OMERunnerHandler] = []
         items: Sequence[WriterOutput] = (
             writer
             if isinstance(writer, Sequence) and not isinstance(writer, (str, Path))
@@ -322,14 +327,12 @@ class MDARunner:
         )
         for item in items:
             if isinstance(item, OMERunnerHandler):
-                _runner_handlers.append(item)
+                handlers.append(item)
             elif isinstance(item, StreamSettings):
-                _runner_handlers.append(OMERunnerHandler(item))
+                handlers.append(OMERunnerHandler(item))
             elif isinstance(item, (str, Path)):
-                _runner_handlers.append(
-                    OMERunnerHandler(self._writer_settings_from_path(item))
-                )
-        return _runner_handlers
+                handlers.append(OMERunnerHandler(self._writer_settings_from_path(item)))
+        return OMERunnerHandlerGroup(handlers)
 
     @staticmethod
     def _writer_settings_from_path(path: str | Path) -> StreamSettings:
@@ -424,13 +427,7 @@ class MDARunner:
                         meta["runner_time_ms"] = runner_time_ms
 
                     # write frame to runner handlers.
-                    try:
-                        for handler in self._runner_handlers:
-                            handler.writeframe(img, event, meta)
-                    except Exception as e:
-                        raise RuntimeError(
-                            f"Error in runner handler while processing event {event}."
-                        ) from e
+                    self._runner_handlers.writeframe(img, event, meta)
 
                     with exceptions_logged():
                         self._signals.frameReady.emit(img, event, meta)
@@ -456,8 +453,7 @@ class MDARunner:
         meta = self._engine.setup_sequence(sequence)
 
         # prepare runner handlers
-        for handler in self._runner_handlers:
-            handler.prepare(sequence, meta)
+        self._runner_handlers.prepare(sequence, meta)
 
         self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
@@ -549,9 +545,7 @@ class MDARunner:
 
         logger.info("MDA Finished: %s", sequence)
 
-        # clear handlers at the end of the run
-        for handler in self._runner_handlers:
-            handler.cleanup()
-        self._runner_handlers.clear()
+        # cleanup runner handlers
+        self._runner_handlers.cleanup()
 
         self._signals.sequenceFinished.emit(sequence)

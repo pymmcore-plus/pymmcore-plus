@@ -10,11 +10,13 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ome_writers as omew
+from ome_writers._schema import DimensionList, DTypeStr  # noqa: TC002
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
+
     import numpy as np
     import useq
-    from ome_writers._schema import DimensionList, DTypeStr
     from typing_extensions import Self
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
@@ -41,6 +43,11 @@ class StreamSettings(omew.AcquisitionSettings):
         if self.dimensions is None:
             return self
         return super()._validate_plate_positions()  # type: ignore[no-any-return]
+
+    def _warn_chunk_buffer_memory(self) -> StreamSettings:
+        if self.dimensions is None:
+            return self
+        return super()._warn_chunk_buffer_memory()  # type: ignore[no-any-return]
 
 
 def _register_cleanup_atexit(path: str) -> None:
@@ -143,13 +150,51 @@ class OMERunnerHandler:
         self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
     ) -> None:
         """Write frame to the stream."""
-        if self._stream is not None:
-            self._stream.append(frame)
-        else:
-            raise RuntimeError("Stream is not initialized. Call `prepare()` first.")
+        self._stream.append(frame)  # type: ignore[union-attr]
 
     def cleanup(self) -> None:
         """Close the stream when sequence finishes."""
         if self._stream is not None:
             self._stream.close()
             self._stream = None
+
+
+class OMERunnerHandlerGroup:
+    """Container that manages multiple OMERunnerHandler instances.
+
+    Delegates `prepare`, `writeframe`, and `cleanup` calls to all handlers.
+    """
+
+    def __init__(self, handlers: list[OMERunnerHandler] | None = None) -> None:
+        self._handlers: list[OMERunnerHandler] = handlers or []
+
+    def __iter__(self) -> Iterator[OMERunnerHandler]:
+        return iter(self._handlers)
+
+    def __len__(self) -> int:
+        return len(self._handlers)
+
+    def __bool__(self) -> bool:
+        return bool(self._handlers)
+
+    def get_handlers(self) -> list[OMERunnerHandler]:
+        """Get the list of handlers in the group."""
+        return self._handlers
+
+    def prepare(self, sequence: useq.MDASequence, meta: SummaryMetaV1 | None) -> None:
+        """Prepare all handlers for the acquisition."""
+        for handler in self._handlers:
+            handler.prepare(sequence, meta)
+
+    def writeframe(
+        self, frame: np.ndarray, event: useq.MDAEvent, meta: FrameMetaV1
+    ) -> None:
+        """Write a frame to all handlers."""
+        for handler in self._handlers:
+            handler.writeframe(frame, event, meta)
+
+    def cleanup(self) -> None:
+        """Close all handlers and clear the group."""
+        for handler in self._handlers:
+            handler.cleanup()
+        self._handlers.clear()
