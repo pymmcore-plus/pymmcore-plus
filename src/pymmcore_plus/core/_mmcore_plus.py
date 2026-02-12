@@ -57,7 +57,7 @@ if TYPE_CHECKING:
     from pymmcore import DeviceLabel
     from useq import MDAEvent
 
-    from pymmcore_plus.mda._runner import SingleOutput
+    from pymmcore_plus.mda._runner import SingleOutput, WriterOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
@@ -1644,6 +1644,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         events: Iterable[MDAEvent],
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
+        writer: WriterOutput | Sequence[WriterOutput] | None = None,
         block: bool = False,
     ) -> Thread:
         """Run a sequence of [useq.MDAEvent][] on a new thread.
@@ -1671,6 +1672,9 @@ class CMMCorePlus(pymmcore.CMMCore):
                 meaning it has a `frameReady` method.  See `mda_listeners_connected`
                 for more details.
             - A sequence of either of the above. (all will be connected)
+        writer : WriterOutput | Sequence[WriterOutput] | None, optional
+            Runner-managed writer(s) for streaming output. Can be a
+            `StreamSettings` or a pre-created `OMERunnerHandler` instance.
         block : bool, optional
             If True, block until the sequence is complete, by default False.
 
@@ -1684,7 +1688,11 @@ class CMMCorePlus(pymmcore.CMMCore):
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self.mda.run, args=(events,), kwargs={"output": output})
+        th = Thread(
+            target=self.mda.run,
+            args=(events,),
+            kwargs={"output": output, "writer": writer},
+        )
         th.start()
         if block:
             th.join()
