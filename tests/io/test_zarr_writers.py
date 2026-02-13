@@ -18,7 +18,7 @@ if TYPE_CHECKING:
 
     from pymmcore_plus import CMMCorePlus
 else:
-    zarr = pytest.importorskip("zarr")
+    zarr = pytest.importorskip("zarr", exc_type=ImportError)
     import zarr.storage  # noqa: F811
 
 try:

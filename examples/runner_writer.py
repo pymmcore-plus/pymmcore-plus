@@ -1,7 +1,7 @@
 import useq
 
 from pymmcore_plus import CMMCorePlus
-from pymmcore_plus.mda.handlers import StreamSettings
+from pymmcore_plus.mda.handlers import OMERunnerHandler, StreamSettings  # noqa: F401
 
 mmc = CMMCorePlus()
 mmc.loadSystemConfiguration()
@@ -11,19 +11,21 @@ sequence = useq.MDASequence(
     time_plan={"interval": 0.1, "loops": 3},
 )
 
-stream_settings_zarr = StreamSettings(
-    root_path="example.ome.zarr", overwrite=True, asynchronous=True
-)
-stream_settings_tiff = StreamSettings(
-    root_path="example.ome.tiff", overwrite=True, asynchronous=True
-)
 
-settings = [stream_settings_zarr, stream_settings_tiff]
+# ------------------------------------------------------
+# simply pass the path WITH extension
+# ------------------------------------------------------
+mmc.run_mda(sequence, writer="example.ome.zarr")
 
+# ------------------------------------------------------
+# or use StreamSettings for more control
+# ------------------------------------------------------
+# stream_settings = StreamSettings(root_path="example.ome.zarr", overwrite=True, asynchronous=True)  #  noqa: E501
+# mmc.run_mda(sequence, writer=stream_settings)
 
-mmc.run_mda(sequence, writer=settings)
-
-
-# manual handler creation
-# handler = OMERunnerHandler(stream_settings_zarr)
+# ------------------------------------------------------
+# or manually create the handler and pass it to run_mda
+# ------------------------------------------------------
+# stream_settings = StreamSettings(root_path="example.ome.zarr", overwrite=True, asynchronous=True)  #  noqa: E501
+# handler = OMERunnerHandler(stream_settings)
 # mmc.run_mda(sequence, writer=handler)
