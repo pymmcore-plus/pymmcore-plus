@@ -1688,6 +1688,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
+
         th = Thread(
             target=self.mda.run,
             args=(events,),

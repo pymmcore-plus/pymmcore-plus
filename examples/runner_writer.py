@@ -14,11 +14,16 @@ sequence = useq.MDASequence(
 stream_settings_zarr = StreamSettings(
     root_path="example.ome.zarr", overwrite=True, asynchronous=True
 )
+stream_settings_tiff = StreamSettings(
+    root_path="example.ome.tiff", overwrite=True, asynchronous=True
+)
+
+settings = [stream_settings_zarr, stream_settings_tiff]
 
 
-settings = [stream_settings_zarr]
 mmc.run_mda(sequence, writer=settings)
 
+
 # manual handler creation
-# handler = OMERunnerHandler(stream_settings)
+# handler = OMERunnerHandler(stream_settings_zarr)
 # mmc.run_mda(sequence, writer=handler)

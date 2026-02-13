@@ -49,6 +49,30 @@ class StreamSettings(omew.AcquisitionSettings):
     asynchronous: bool = True
     queue_maxsize: int = 100
 
+    def model_post_init(self, __context: object) -> None:
+        """Eagerly import the backend module after model creation.
+
+        Modules like tifffile register threading atexit handlers on import.
+        When run_mda starts a background thread, the main thread may exit and
+        begin interpreter shutdown before the lazy import occurs on the worker
+        thread, causing ``RuntimeError: can't register atexit after shutdown``
+        on Python 3.12+.  Importing the backend here (on the main thread at
+        settings-creation time) prevents that race.
+        """
+        super().model_post_init(__context)
+        from ome_writers._stream import AVAILABLE_BACKENDS
+
+        fmt = self.format
+        backend_name: str = getattr(fmt, "backend", "auto")
+        if backend_name == "auto":
+            target = getattr(fmt, "name", None)
+            for meta in AVAILABLE_BACKENDS.values():
+                if meta.format == target:
+                    __import__(meta.module_path)
+                    break
+        elif backend_name in AVAILABLE_BACKENDS:
+            __import__(AVAILABLE_BACKENDS[backend_name].module_path)
+
     def _validate_storage_order(self) -> StreamSettings:
         if self.dimensions is None:
             return self
