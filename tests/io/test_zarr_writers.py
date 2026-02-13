@@ -18,8 +18,11 @@ if TYPE_CHECKING:
 
     from pymmcore_plus import CMMCorePlus
 else:
-    zarr = pytest.importorskip("zarr", exc_type=ImportError)
-    import zarr.storage  # noqa: F811
+    try:
+        import zarr
+        import zarr.storage
+    except ImportError:
+        pytest.skip("zarr not available", allow_module_level=True)
 
 try:
     import xarray as xr
