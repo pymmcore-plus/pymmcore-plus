@@ -8,15 +8,16 @@ mmc.loadSystemConfiguration()
 
 sequence = useq.MDASequence(
     channels=["DAPI", "FITC"],
-    time_plan={"interval": 1, "loops": 3},
+    time_plan={"interval": 0.1, "loops": 3},
 )
 
-stream_settings_zarr = StreamSettings(root_path="example.ome.zarr", overwrite=True)
+stream_settings_zarr = StreamSettings(
+    root_path="example.ome.zarr", overwrite=True, asynchronous=True
+)
 
 
 settings = [stream_settings_zarr]
 mmc.run_mda(sequence, writer=settings)
-
 
 # manual handler creation
 # handler = OMERunnerHandler(stream_settings)
