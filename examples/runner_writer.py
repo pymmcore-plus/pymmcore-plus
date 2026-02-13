@@ -12,20 +12,26 @@ sequence = useq.MDASequence(
 )
 
 
-# ------------------------------------------------------
+# ------------------------------------------------------------------
 # simply pass the path WITH extension
-# ------------------------------------------------------
+# ------------------------------------------------------------------
 mmc.run_mda(sequence, writer="example.ome.zarr")
 
-# ------------------------------------------------------
+# ------------------------------------------------------------------
 # or use StreamSettings for more control
-# ------------------------------------------------------
+# ------------------------------------------------------------------
 # stream_settings = StreamSettings(root_path="example.ome.zarr", overwrite=True, asynchronous=True)  #  noqa: E501
 # mmc.run_mda(sequence, writer=stream_settings)
 
-# ------------------------------------------------------
+# ------------------------------------------------------------------
 # or manually create the handler and pass it to run_mda
-# ------------------------------------------------------
+# ------------------------------------------------------------------
 # stream_settings = StreamSettings(root_path="example.ome.zarr", overwrite=True, asynchronous=True)  #  noqa: E501
 # handler = OMERunnerHandler(stream_settings)
 # mmc.run_mda(sequence, writer=handler)
+
+
+# ------------------------------------------------------------------
+# for multiple writers, pass a list of paths, settings, or handlers
+# ------------------------------------------------------------------
+# mmc.run_mda(sequence, writer=["example.ome.zarr", "example1.ome.zarr"])
