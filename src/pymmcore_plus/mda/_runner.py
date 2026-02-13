@@ -57,7 +57,7 @@ if TYPE_CHECKING:
 
 
 SupportsFrameReady: TypeAlias = "FrameReady0 | FrameReady1 | FrameReady2 | FrameReady3"
-SingleOutput: TypeAlias = "Path | str | SupportsFrameReady | StreamSettings"
+SingleOutput: TypeAlias = "Path | str | SupportsFrameReady"
 WriterOutput: TypeAlias = "str | Path | StreamSettings | OMERunnerHandler"
 
 MSG = (
