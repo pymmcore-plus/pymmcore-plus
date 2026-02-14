@@ -6,6 +6,7 @@ from math import prod
 from typing import cast
 from unittest.mock import MagicMock, call
 
+import numpy as np
 import pytest
 import useq
 
@@ -199,3 +200,54 @@ def test_sequencing_respects_min_interval(core: CMMCorePlus, interval: float) ->
     assert len(merged) == 1 if interval == 0 else 3
     expected_interval = [0, 1 * interval, 2 * interval] if interval else [0]
     assert [e.min_start_time for e in merged] == expected_interval
+
+
+@pytest.fixture
+def multicam_tester() -> Iterator[CMMCorePlus]:
+    """Multi-camera SequenceTester fixture."""
+    core = CMMCorePlus()
+    core.loadDevice("THub", "SequenceTester", "THub")
+
+    core.initializeDevice("THub")
+
+    # Load two test cameras (each with unique adapter name)
+    for cam_name, adapter_name in [("TCam1", "TCamera1"), ("TCam2", "TCamera2")]:
+        core.loadDevice(cam_name, "SequenceTester", adapter_name)
+        core.setParentLabel(cam_name, "THub")
+        core.setProperty(cam_name, "ImageMode", "MachineReadable")
+        core.setProperty(cam_name, "ImageWidth", 128)
+        core.setProperty(cam_name, "ImageHeight", 128)
+        core.initializeDevice(cam_name)
+
+    # Create Multi Camera and assign physical cameras
+    core.loadDevice("MCam", "Utilities", "Multi Camera")
+    core.initializeDevice("MCam")
+    core.setProperty("MCam", "Physical Camera 1", "TCam1")
+    core.setProperty("MCam", "Physical Camera 2", "TCam2")
+    core.setCameraDevice("MCam")
+
+    yield core
+
+
+def test_sequenced_multicam_events(multicam_tester: CMMCorePlus) -> None:
+    """Verify multi-camera frames are emitted in sequential (t,c) order.
+
+    Even though cameras produce frames asynchronously, the engine should buffer
+    and emit them in predictable order: (t=0,c=0), (t=0,c=1), (t=1,c=0), (t=1,c=1)...
+    """
+    core = multicam_tester
+    frames: list[tuple[int, int, str]] = []  # (timepoint, channel, camera_name)
+
+    @core.mda.events.frameReady.connect
+    def on_frame(img: np.ndarray, event: useq.MDAEvent) -> None:
+        info = decode_image(img)
+        frames.append((event.index["t"], event.index["cam"], info.camera_info.name))
+
+    core.mda.run(useq.MDASequence(time_plan={"interval": 0, "loops": 5}))
+
+    # Verify we got all frames (5 timepoints x 2 cameras = 10 frames)
+    assert len(frames) == 10
+
+    # Verify frames arrive in perfect sequential order
+    expected = [(t, c, f"TCamera{c + 1}") for t in range(5) for c in range(2)]
+    assert frames == expected
