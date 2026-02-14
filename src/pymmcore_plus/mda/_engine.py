@@ -753,10 +753,6 @@ class MDAEngine(PMDAEngine):
         acquisitions where images arrive asynchronously.
         """
         core = self.mmcore
-
-        # Note: channel is set in event.index by the buffer when emitting, not here,
-        # to avoid mutating shared event objects when buffering for ordered emission.
-
         try:
             seq_time = float(mm_meta.get(Keyword.Elapsed_Time_ms))
         except Exception:
