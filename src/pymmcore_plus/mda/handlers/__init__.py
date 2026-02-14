@@ -5,12 +5,15 @@ from pathlib import Path
 from ._img_sequence_writer import ImageSequenceWriter
 from ._ome_tiff_writer import OMETiffWriter
 from ._ome_zarr_writer import OMEZarrWriter
+from ._runner_handler import OMERunnerHandler, StreamSettings
 from ._tensorstore_handler import TensorStoreHandler
 
 __all__ = [
     "ImageSequenceWriter",
+    "OMERunnerHandler",
     "OMETiffWriter",
     "OMEZarrWriter",
+    "StreamSettings",
     "TensorStoreHandler",
     "handler_for_path",
 ]
