@@ -757,7 +757,6 @@ class MDAEngine(PMDAEngine):
             seq_time = float(mm_meta.get(Keyword.Elapsed_Time_ms))
         except Exception:
             seq_time = 0.0
-
         try:
             # note, when present in circular buffer meta, this key is called "Camera".
             # It's NOT actually Keyword.CoreCamera (but it's the same value)
