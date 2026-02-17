@@ -8,10 +8,10 @@ import queue
 import shutil
 import tempfile
 import threading
-from pathlib import Path
 from typing import TYPE_CHECKING
 
 import ome_writers as omew
+from ome_writers._array_view import AcquisitionView
 from ome_writers._schema import DimensionList, DTypeStr  # noqa: TC002
 
 from pymmcore_plus._logger import logger
@@ -132,6 +132,9 @@ class OMERunnerHandler:
         self._writer_thread: threading.Thread | None = None
         self._write_error: BaseException | None = None
 
+        # view
+        self._view: AcquisitionView | None = None
+
     @property
     def stream(self) -> omew.OMEStream | None:
         """The OMEStream object used for writing frames."""
@@ -151,21 +154,61 @@ class OMERunnerHandler:
         """
         return self._queue
 
+    @property
+    def view(self) -> AcquisitionView | None:
+        """AcquisitionView for reading back the stream after writing."""
+        return self._view
+
     @classmethod
-    def in_tempdir(cls, stream_settings: StreamSettings) -> Self:
-        """Create an OMERunnerHandler with a temporary directory as the stream path."""
-        temp_dir = tempfile.mkdtemp(prefix="pymmcp_ome_runner_")
-        _register_cleanup_atexit(temp_dir)
-        stream_settings = StreamSettings(
-            root_path=str(Path(temp_dir) / (stream_settings.root_path or "pymmcp")),
-            format=stream_settings.format,
-            overwrite=stream_settings.overwrite,
-        )
-        return cls(stream_settings)
+    def in_tempdir(
+        cls,
+        suffix: str | None = "",
+        prefix: str | None = "pymmcp_ome_runner_",
+        dir: str | os.PathLike[str] | None = None,
+        cleanup_atexit: bool = True,
+        stream_settings: StreamSettings | None = None,
+    ) -> Self:
+        """Create an OMERunnerHandler that writes to a temporary directory.
+
+        Parameters
+        ----------
+        suffix : str, optional
+            If specified, the directory name will end with this suffix.
+        prefix : str, optional
+            If specified, the directory name will begin with this prefix.
+        dir : str or PathLike, optional
+            If specified, the temp directory will be created inside this directory,
+            otherwise a default directory is used (tempfile.gettempdir()).
+        cleanup_atexit : bool, optional
+            Whether to automatically cleanup the temporary directory when the python
+            process exits. Default is True.
+        stream_settings : StreamSettings, optional
+            Settings describing the output format. If ``root_path`` is set, it
+            will be joined inside the temporary directory. If None, default
+            settings with ``format="tensorstore"`` are used.
+        """
+        temp_dir = tempfile.mkdtemp(suffix=suffix, prefix=prefix, dir=dir)
+        if cleanup_atexit:
+            _register_cleanup_atexit(temp_dir)
+
+        if stream_settings is None:
+            root_path = temp_dir
+            settings = StreamSettings(root_path=root_path, format="tensorstore")
+        else:
+            root_path = temp_dir
+            if stream_settings.root_path:
+                root_path = os.path.join(temp_dir, stream_settings.root_path)
+            settings = StreamSettings(
+                root_path=root_path,
+                format=stream_settings.format,
+                overwrite=stream_settings.overwrite,
+            )
+        return cls(settings)
 
     def prepare(self, sequence: useq.MDASequence, meta: SummaryMetaV1 | None) -> None:
         """Prepare the settings to create the stream."""
         self._stream = None
+        self._view = None
 
         if meta is None:
             raise ValueError("meta is required for OMERunnerHandler")
@@ -215,6 +258,8 @@ class OMERunnerHandler:
             plate=plate,
         )
         self._stream = omew.create_stream(settings=acq_settings)
+        self._view = AcquisitionView.from_stream(self._stream)
+
         self._write_error = None
 
         if self._asynchronous:

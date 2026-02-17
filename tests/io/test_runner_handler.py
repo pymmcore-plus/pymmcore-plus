@@ -129,7 +129,7 @@ def test_handler_properties(zarr_settings: StreamSettings) -> None:
 
 def test_handler_in_tempdir() -> None:
     settings = StreamSettings(root_path="test.ome.zarr", overwrite=True)
-    handler = OMERunnerHandler.in_tempdir(settings)
+    handler = OMERunnerHandler.in_tempdir(stream_settings=settings)
     assert handler.stream_settings.root_path
     assert "pymmcp_ome_runner_" in str(handler.stream_settings.root_path)
 

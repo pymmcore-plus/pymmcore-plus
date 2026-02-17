@@ -23,6 +23,11 @@ else:
         import zarr.storage
     except ImportError:
         pytest.skip("zarr not available", allow_module_level=True)
+    else:
+        if tuple(int(x) for x in zarr.__version__.split(".")[:1]) >= (3,):
+            pytest.skip(
+                "zarr v2 required, got v" + zarr.__version__, allow_module_level=True
+            )
 
 try:
     import xarray as xr
