@@ -151,6 +151,19 @@ def test_config_completions(shell_core: CMMCorePlus) -> None:
     assert completions == expect
 
 
+def test_load_device_adapter_completions(shell_core: CMMCorePlus) -> None:
+    completions = _get_completions(f"{CORE_NAME}.loadDevice('MyLabel', ")
+    expect = set(shell_core.getDeviceAdapterNames())
+    assert completions == expect
+
+
+def test_load_device_name_completions(shell_core: CMMCorePlus) -> None:
+    adapter = "DemoCamera"
+    completions = _get_completions(f"{CORE_NAME}.loadDevice('MyLabel', '{adapter}', ")
+    expect = set(shell_core.getAvailableDevices(adapter))
+    assert completions == expect
+
+
 def test_install_script() -> None:
     # CREATE a new ipython shell instance
     from IPython.testing.globalipapp import get_ipython
