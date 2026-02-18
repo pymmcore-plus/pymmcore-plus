@@ -503,6 +503,7 @@ def _build_ome_plate(
             plate_plan.selected_well_indices,
             plate_plan.selected_well_names,
             plate_plan.selected_well_positions,
+            strict=False,
         )
     ):
         # get all acquisition indices for this well

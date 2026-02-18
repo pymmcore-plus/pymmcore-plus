@@ -185,7 +185,7 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     assert pixels.tiff_data_blocks is not None
     assert len(pixels.tiff_data_blocks) == len(pixels.planes)
 
-    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes):
+    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes, strict=False):
         assert tiff_data.first_z == plane.the_z
         assert tiff_data.first_c == plane.the_c
         assert tiff_data.first_t == plane.the_t
@@ -263,7 +263,7 @@ def test_ome_generation_from_events() -> None:
     assert pixels.tiff_data_blocks is not None
     assert len(pixels.tiff_data_blocks) == len(pixels.planes)
 
-    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes):
+    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes, strict=False):
         assert tiff_data.first_z == plane.the_z
         assert tiff_data.first_c == plane.the_c
         assert tiff_data.first_t == plane.the_t
