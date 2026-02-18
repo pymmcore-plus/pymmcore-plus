@@ -11,7 +11,6 @@ import threading
 from typing import TYPE_CHECKING
 
 import ome_writers as omew
-from ome_writers._array_view import AcquisitionView
 
 from pymmcore_plus._logger import logger
 
@@ -69,9 +68,6 @@ class OMERunnerHandler(BaseRunnerHandler):
         self._writer_thread: threading.Thread | None = None
         self._write_error: BaseException | None = None
 
-        # view
-        self._view: AcquisitionView | None = None
-
     @property
     def stream(self) -> omew.OMEStream | None:
         """The OMEStream object used for writing frames."""
@@ -90,11 +86,6 @@ class OMERunnerHandler(BaseRunnerHandler):
         queue depth or replacing with a custom queue type).
         """
         return self._queue
-
-    @property
-    def view(self) -> AcquisitionView | None:
-        """AcquisitionView for reading back the stream after writing."""
-        return self._view
 
     @classmethod
     def in_tempdir(
@@ -152,7 +143,6 @@ class OMERunnerHandler(BaseRunnerHandler):
     def prepare(self, sequence: useq.MDASequence, meta: SummaryMetaV1 | None) -> None:
         """Prepare the settings to create the stream."""
         self._stream = None
-        self._view = None
 
         if meta is None:
             raise ValueError("meta is required for OMERunnerHandler")
@@ -202,7 +192,6 @@ class OMERunnerHandler(BaseRunnerHandler):
             plate=plate,
         )
         self._stream = omew.create_stream(settings=acq_settings)
-        self._view = AcquisitionView.from_stream(self._stream)
 
         self._write_error = None
 

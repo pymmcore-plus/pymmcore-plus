@@ -18,15 +18,6 @@ if TYPE_CHECKING:
 
 ome_writers = pytest.importorskip("ome_writers")
 
-try:
-    import zarr  # noqa: F401
-
-    HAS_ZARR = True
-except ImportError:
-    HAS_ZARR = False
-
-needs_zarr = pytest.mark.skipif(not HAS_ZARR, reason="zarr required for tiff backend")
-
 
 # ------------------- fixtures -------------------
 
@@ -117,7 +108,6 @@ def test_handler_requires_root_path() -> None:
 def test_handler_properties(zarr_settings: StreamSettings) -> None:
     handler = OMERunnerHandler(zarr_settings)
     assert handler.stream is None
-    assert handler.view is None
     assert handler.stream_settings is zarr_settings
     assert handler.queue is not None
     assert isinstance(handler.queue, queue.Queue)
@@ -302,8 +292,6 @@ def test_run_with_handler(
 def test_run_via_path(
     tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence, ext: str
 ) -> None:
-    if not HAS_ZARR and ext == ".ome.tiff":
-        pytest.skip("zarr required for tiff backend")
     path = str(tmp_path / f"via_path{ext}")
     core.mda.run(mda, output=path)
 
@@ -321,7 +309,6 @@ def test_run_via_path_list(tmp_path: Path, core: CMMCorePlus) -> None:
     core.mda.run(SIMPLE_MDA, output=[path1, path2])
 
 
-@needs_zarr
 def test_run_with_handler_from_settings(tmp_path: Path, core: CMMCorePlus) -> None:
     """StreamSettings -> OMERunnerHandler -> mmc.mda.run(sequence, output=handler)"""
     stream_settings = StreamSettings(
@@ -337,7 +324,6 @@ def test_run_invalid_path(core: CMMCorePlus) -> None:
         core.mda.run(SIMPLE_MDA, output="/some/path.xyz")
 
 
-@needs_zarr
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
 def test_run_multiple_handlers(
     tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence
@@ -369,7 +355,6 @@ def test_get_output_handlers_empty(core: CMMCorePlus) -> None:
     assert len(core.mda.get_output_handlers()) == 0
 
 
-@needs_zarr
 def test_group_delegates_to_both_handlers(
     zarr_settings: StreamSettings,
     tiff_settings: StreamSettings,

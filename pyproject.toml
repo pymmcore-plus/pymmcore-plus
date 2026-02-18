@@ -53,6 +53,7 @@ dependencies = [
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
 cli = ["typer >=0.13.0", "rich >=10.2.0"]
+io = ["zarr >=2.15,<3"]
 simulate = ["pillow >=11.0"]
 PySide2 = ["PySide2 >=5.15.2.1"]
 PySide6 = ["PySide6 ==6.7.3"]
@@ -103,7 +104,6 @@ pymmcore-plus = { workspace = true }
 [tool.uv]
 override-dependencies = [
     "griffe @ git+https://github.com/tlambert03/griffe@recursion#egg=griffe",
-    "ome-writers[tifffile,tensorstore] @ git+https://github.com/pymmcore-plus/ome-writers"  # TEMPORARY
 ]
 
 [project.urls]
