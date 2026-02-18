@@ -71,7 +71,7 @@ docs = [
     "mkdocs-typer ==0.0.3",
 ]
 test = [
-    "pymmcore-plus[simulate]",
+    "pymmcore-plus[io,simulate]",
     "msgspec >= 0.19",
     "msgpack >=1",
     "pytest-cov >=7",
