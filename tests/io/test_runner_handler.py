@@ -1,15 +1,11 @@
 from __future__ import annotations
 
-import queue
 from typing import TYPE_CHECKING
-from unittest.mock import patch
 
-import numpy as np
 import pytest
 import useq
 
 from pymmcore_plus.mda.handlers import OMERunnerHandler, StreamSettings
-from pymmcore_plus.mda.handlers._runner_handler import OMERunnerHandlerGroup
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -27,7 +23,6 @@ def zarr_settings(tmp_path: Path) -> StreamSettings:
     return StreamSettings(
         root_path=str(tmp_path / "test.ome.zarr"),
         overwrite=True,
-        asynchronous=False,
     )
 
 
@@ -36,17 +31,6 @@ def tiff_settings(tmp_path: Path) -> StreamSettings:
     return StreamSettings(
         root_path=str(tmp_path / "test.ome.tiff"),
         overwrite=True,
-        asynchronous=False,
-    )
-
-
-@pytest.fixture
-def async_zarr_settings(tmp_path: Path) -> StreamSettings:
-    return StreamSettings(
-        root_path=str(tmp_path / "test_async.ome.zarr"),
-        overwrite=True,
-        asynchronous=True,
-        queue_maxsize=50,
     )
 
 
@@ -91,8 +75,22 @@ def test_stream_settings_defaults(tmp_path: Path) -> None:
     assert s.dimensions is None
     assert s.dtype is None
     assert s.plate is None
-    assert s.asynchronous is True
-    assert s.queue_maxsize == 100
+
+
+def test_stream_settings_deprecated_asynchronous(tmp_path: Path) -> None:
+    with pytest.warns(DeprecationWarning, match="asynchronous is deprecated"):
+        StreamSettings(
+            root_path=str(tmp_path / "out.ome.zarr"),
+            asynchronous=False,
+        )
+
+
+def test_stream_settings_deprecated_queue_maxsize(tmp_path: Path) -> None:
+    with pytest.warns(DeprecationWarning, match="queue_maxsize is deprecated"):
+        StreamSettings(
+            root_path=str(tmp_path / "out.ome.zarr"),
+            queue_maxsize=50,
+        )
 
 
 # ------------------- OMERunnerHandler -------------------
@@ -109,8 +107,6 @@ def test_handler_properties(zarr_settings: StreamSettings) -> None:
     handler = OMERunnerHandler(zarr_settings)
     assert handler.stream is None
     assert handler.stream_settings is zarr_settings
-    assert handler.queue is not None
-    assert isinstance(handler.queue, queue.Queue)
 
 
 def test_handler_in_tempdir() -> None:
@@ -152,117 +148,6 @@ def test_handler_prepare_validation(
         handler.prepare(SIMPLE_MDA, meta)  # type: ignore[arg-type]
 
 
-def test_handler_write_error_propagates(
-    async_zarr_settings: StreamSettings,
-) -> None:
-    handler = OMERunnerHandler(async_zarr_settings)
-    handler._write_error = RuntimeError("test error")
-    frame = np.zeros((512, 512), dtype=np.uint16)
-    event = useq.MDAEvent()
-    meta: dict = {"format": "frame-dict", "version": "1.0"}
-    with pytest.raises(RuntimeError, match="Background writer failed"):
-        handler.writeframe(frame, event, meta)  # type: ignore[arg-type]
-
-
-def test_handler_drain_queue_returns_when_no_stream(
-    async_zarr_settings: StreamSettings,
-) -> None:
-    handler = OMERunnerHandler(async_zarr_settings)
-    assert handler._stream is None
-    # _drain_queue should return immediately when stream is None
-    handler._drain_queue()
-
-
-def test_handler_enqueue_frame_full_queue_warning(
-    tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    import logging
-
-    from pymmcore_plus._logger import logger as plog
-
-    settings = StreamSettings(
-        root_path=str(tmp_path / "full_q.ome.zarr"),
-        overwrite=True,
-        asynchronous=True,
-        queue_maxsize=1,
-    )
-    handler = OMERunnerHandler(settings)
-    frame = np.zeros((4, 4), dtype=np.uint16)
-    event = useq.MDAEvent()
-    meta: dict = {"format": "frame-dict", "version": "1.0"}
-
-    # Fill the queue
-    handler._queue.put(("dummy",))
-
-    # Patch put to simulate Full on first timeout call, then succeed
-    original_put = handler._queue.put
-    call_count = 0
-
-    def mock_put(item: object, timeout: float | None = None) -> None:
-        nonlocal call_count
-        call_count += 1
-        if call_count == 1 and timeout is not None:
-            raise queue.Full
-        # drain the queue first so the blocking put can succeed
-        while not handler._queue.empty():
-            try:
-                handler._queue.get_nowait()
-            except queue.Empty:
-                break
-        original_put(item)
-
-    prev_level = plog.level
-    plog.setLevel(logging.WARNING)
-    try:
-        with patch.object(handler._queue, "put", side_effect=mock_put):
-            handler._enqueue_frame(frame, event, meta)  # type: ignore[arg-type]
-    finally:
-        plog.setLevel(prev_level)
-
-    assert "Write queue full" in caplog.text
-
-
-# ------------------- OMERunnerHandlerGroup -------------------
-
-
-def test_group_empty() -> None:
-    group = OMERunnerHandlerGroup()
-    assert len(group) == 0
-    assert not group
-    assert list(group) == []
-
-
-def test_group_with_handler(zarr_settings: StreamSettings) -> None:
-    h = OMERunnerHandler(zarr_settings)
-    group = OMERunnerHandlerGroup([h])
-    assert len(group) == 1
-    assert bool(group)
-    assert list(group) == [h]
-
-
-def test_group_update_and_clear(
-    zarr_settings: StreamSettings, tiff_settings: StreamSettings
-) -> None:
-    group = OMERunnerHandlerGroup()
-    h1 = OMERunnerHandler(zarr_settings)
-    h2 = OMERunnerHandler(tiff_settings)
-
-    group.update([h1, h2])
-    assert len(group) == 2
-    assert list(group) == [h1, h2]
-
-    group.clear()
-    assert len(group) == 0
-    assert not group
-
-
-def test_group_cleanup_clears(zarr_settings: StreamSettings) -> None:
-    h = OMERunnerHandler(zarr_settings)
-    group = OMERunnerHandlerGroup([h])
-    group.cleanup()
-    assert len(group) == 0
-
-
 # ------------------- integration with core.mda.run -------------------
 
 MDA_SEQUENCES = [
@@ -273,14 +158,12 @@ MDA_SEQUENCES = [
 
 
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
-@pytest.mark.parametrize("asynchronous", [False, True], ids=["sync", "async"])
 def test_run_with_handler(
-    tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence, asynchronous: bool
+    tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence
 ) -> None:
     settings = StreamSettings(
         root_path=str(tmp_path / "run.ome.zarr"),
         overwrite=True,
-        asynchronous=asynchronous,
     )
     handler = OMERunnerHandler(settings)
     core.mda.run(mda, output=handler)
@@ -332,14 +215,12 @@ def test_run_multiple_handlers(
         StreamSettings(
             root_path=str(tmp_path / "multi.ome.zarr"),
             overwrite=True,
-            asynchronous=False,
         )
     )
     h_tiff = OMERunnerHandler(
         StreamSettings(
             root_path=str(tmp_path / "multi.ome.tiff"),
             overwrite=True,
-            asynchronous=False,
         )
     )
     core.mda.run(mda, output=[h_zarr, h_tiff])
@@ -355,7 +236,7 @@ def test_get_output_handlers_empty(core: CMMCorePlus) -> None:
     assert len(core.mda.get_output_handlers()) == 0
 
 
-def test_group_delegates_to_both_handlers(
+def test_delegates_to_both_handlers(
     zarr_settings: StreamSettings,
     tiff_settings: StreamSettings,
     core: CMMCorePlus,

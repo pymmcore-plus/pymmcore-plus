@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import warnings
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Protocol, runtime_checkable
 
@@ -12,8 +13,6 @@ if TYPE_CHECKING:
     from ome_writers._schema import DimensionList, DTypeStr
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
-
-_STOP = object()
 
 
 @runtime_checkable
@@ -56,11 +55,11 @@ class StreamSettings:
     plate : omew.Plate or None
         Optional plate layout for OME metadata.
     asynchronous : bool
-        If True, frames are enqueued and written in a background thread,
-        decoupling I/O from the MDA loop. Default is True.
+        Deprecated. Threading is now managed by the MDA runner. This field
+        will be removed in a future release.
     queue_maxsize : int
-        Maximum number of frames to hold in the write queue when
-        *asynchronous* is True. Default is 100.
+        Deprecated. Threading is now managed by the MDA runner. This field
+        will be removed in a future release.
     """
 
     root_path: str = ""
@@ -71,3 +70,21 @@ class StreamSettings:
     plate: omew.Plate | None = None
     asynchronous: bool = True
     queue_maxsize: int = 100
+
+    def __post_init__(self) -> None:
+        if not self.asynchronous:
+            warnings.warn(
+                "StreamSettings.asynchronous is deprecated and has no effect. "
+                "Threading is now managed by the MDA runner. "
+                "This field will be removed in a future release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
+        if self.queue_maxsize != 100:
+            warnings.warn(
+                "StreamSettings.queue_maxsize is deprecated and has no effect. "
+                "Threading is now managed by the MDA runner. "
+                "This field will be removed in a future release.",
+                DeprecationWarning,
+                stacklevel=2,
+            )
