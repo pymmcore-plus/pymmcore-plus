@@ -47,7 +47,6 @@ dependencies = [
     "rich >=10.2.0",
     "ome-types >=0.6.0",
     "ome-writers[tifffile,tensorstore] >=0.1.0",
-    "zarr >=3.1.5; python_version >= '3.11'",  # for ome-writers with tifffile
 ]
 
 # extras
