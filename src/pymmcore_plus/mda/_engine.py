@@ -107,9 +107,6 @@ class MDAEngine(PMDAEngine):
         # omitted by default when performing triggered acquisition because it's slow.
         self._include_frame_position_metadata: IncludePositionArg = "unsequenced-only"
 
-        # whether to restore the initial hardware state after sequence completion
-        self.restore_initial_state: bool | None = restore_initial_state
-
         # stored initial state for restoration (if restore_initial_state is True)
         self._initial_state: StateDict = {}
 
