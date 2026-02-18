@@ -5,30 +5,27 @@ import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
 from useq import MDASequence
 
 from pymmcore_plus._logger import exceptions_logged, logger
-from pymmcore_plus.mda.handlers._runner_handler import (
-    OMERunnerHandler,
-    OMERunnerHandlerGroup,
-)
+from pymmcore_plus.mda.handlers._runner_handler import OMERunnerHandlerGroup
 
 from ._protocol import PMDAEngine
 from ._thread_relay import mda_listeners_connected
 from .events import PMDASignaler, _get_auto_MDA_callback_class
-from .handlers import StreamSettings
+from .handlers._base_runner_handler import BaseRunnerHandler
 
 if TYPE_CHECKING:
     from typing import Protocol, TypeAlias
 
     import numpy as np
-    from ome_writers._schema import Format
     from useq import MDAEvent
 
+    from pymmcore_plus.mda.handlers._img_sequence_writer import ImageSequenceWriter
     from pymmcore_plus.metadata.schema import FrameMetaV1
 
     from ._engine import MDAEngine
@@ -57,8 +54,7 @@ if TYPE_CHECKING:
 
 
 SupportsFrameReady: TypeAlias = "FrameReady0 | FrameReady1 | FrameReady2 | FrameReady3"
-SingleOutput: TypeAlias = "Path | str | SupportsFrameReady"
-WriterOutput: TypeAlias = "str | Path | StreamSettings | OMERunnerHandler"
+SingleOutput: TypeAlias = "Path | str | SupportsFrameReady | BaseRunnerHandler"
 
 MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
@@ -103,15 +99,13 @@ class MDARunner:
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
+        self._runner_handler_group = OMERunnerHandlerGroup()
         self._canceled = False
         self._sequence: MDASequence | None = None
         # timer for the full sequence, reset only once at the beginning of the sequence
         self._sequence_t0: float = 0.0
         # event clock, reset whenever `event.reset_event_timer` is True
         self._t0: float = 0.0
-
-        # Internal handlers for runner-managed writers (OMERunnerHandler instances).
-        self._runner_handlers = OMERunnerHandlerGroup()
 
     def set_engine(self, engine: PMDAEngine) -> PMDAEngine | None:
         """Set the [`PMDAEngine`][pymmcore_plus.mda.PMDAEngine] to use for the MDA run."""  # noqa: E501
@@ -202,7 +196,6 @@ class MDARunner:
         events: Iterable[MDAEvent],
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
-        writer: WriterOutput | Sequence[WriterOutput] | None = None,
     ) -> None:
         """Run the multi-dimensional acquisition defined by `sequence`.
 
@@ -220,28 +213,22 @@ class MDARunner:
             The value may be either a single output or a sequence of outputs,
             where a "single output" can be any of the following:
 
-            - A string or Path to a directory to save images to. A handler will be
-                created automatically based on the extension of the path.
-                - `.zarr` files will be handled by `OMEZarrWriter`
-                - `.ome.tiff` files will be handled by `OMETiffWriter`
-                - A directory with no extension will be handled by `ImageSequenceWriter`
-            - A handler object that implements the `DataHandler` protocol, currently
-                meaning it has a `frameReady` method.  See `mda_listeners_connected`
-                for more details.
+            - A string or Path to a file path. A handler will be created
+                automatically based on the extension of the path.
+                - `.zarr` or `.ome.zarr` paths will use `OMERunnerHandler`
+                - `.ome.tiff` or `.tif` paths will use `OMERunnerHandler`
+                - A directory with no extension will use `ImageSequenceWriter`
+            - A `BaseRunnerHandler` instance (e.g. `OMERunnerHandler`) for
+                runner-managed writing via `prepare`/`writeframe`/`cleanup`.
+            - A handler object with a `frameReady` method for signal-based
+                writing.  See `mda_listeners_connected` for more details.
 
             During the course of the sequence, the `get_output_handlers` method can be
             used to get the currently connected output handlers (including those that
             were created automatically based on file paths).
-        writer : WriterOutput | Sequence[WriterOutput] | None, optional
-            Runner-managed writer(s) for streaming output. Can be a
-            `StreamSettings` (an `OMERunnerHandler` will be created internally)
-            or a pre-created `OMERunnerHandler` instance.
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-
-        # set up runner handlers
-        self._runner_handlers = self._collect_runner_handlers(writer)
 
         with self._outputs_connected(output):
             # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
@@ -257,7 +244,7 @@ class MDARunner:
         if error is not None:
             raise error
 
-    def get_output_handlers(self) -> tuple[SupportsFrameReady, ...]:
+    def get_output_handlers(self) -> tuple[SupportsFrameReady | BaseRunnerHandler, ...]:
         """Return the data handlers that are currently connected.
 
         Output handlers are connected by passing them to the `output` parameter of the
@@ -265,41 +252,19 @@ class MDARunner:
         strings representing paths.  If a string is passed, a handler will be created
         internally.
 
-        This method returns a tuple of currently connected handlers, including those
-        that were explicitly passed to `run()`, as well as those that were created based
-        on file paths.  Internally, handlers are held by weak references, so if you want
-        the handler to persist, you must keep a reference to it.  The only guaranteed
-        API that the handler will have is the `frameReady` method, but it could be any
-        user-defined object that implements that method.
+        This method returns a tuple of all currently connected handlers, including both
+        signal-based handlers (with a `frameReady` method) and runner handlers (with
+        `prepare`/`writeframe`/`cleanup` methods).
 
         Handlers are cleared each time `run()` is called, (but not at the end
         of the sequence).
 
         Returns
         -------
-        tuple[SupportsFrameReady, ...]
-            Tuple of objects that (minimally) support the `frameReady` method.
+        tuple[SupportsFrameReady | BaseRunnerHandler, ...]
+            Tuple of all connected output handlers.
         """
-        return tuple(self._handlers)
-
-    def get_writer_handlers(self) -> tuple[OMERunnerHandler, ...]:
-        """Return the OMERunnerHandlers that are currently set as writers.
-
-        These handlers are managed internally by the runner and are not connected to
-        the `frameReady` signal.  They are used for streaming output during the MDA run
-        and have their own internal logic for when to write frames, independent of the
-        signals emitted by the runner.
-
-        This method returns a tuple of the currently set writer handlers, which are
-        created based on the `writer` argument passed to `run()`.  If no writers were
-        set, this will return an empty tuple.
-
-        Returns
-        -------
-        tuple[OMERunnerHandler, ...]
-            Tuple of OMERunnerHandler objects that are currently set as writers.
-        """
-        return tuple(self._runner_handlers)
+        return (*self._handlers, *self._runner_handler_group)
 
     def seconds_elapsed(self) -> float:
         """Return the number of seconds since the start of the acquisition."""
@@ -313,43 +278,6 @@ class MDARunner:
         """
         return time.perf_counter() - self._t0
 
-    def _collect_runner_handlers(
-        self, writer: WriterOutput | Sequence[WriterOutput] | None
-    ) -> OMERunnerHandlerGroup:
-        """Convert writer arg to OMERunnerHandlerGroup."""
-        if writer is None:
-            return OMERunnerHandlerGroup()
-        handlers: list[OMERunnerHandler] = []
-        items: Sequence[WriterOutput] = (
-            writer
-            if isinstance(writer, Sequence) and not isinstance(writer, (str, Path))
-            else [writer]
-        )
-        for item in items:
-            if isinstance(item, OMERunnerHandler):
-                handlers.append(item)
-            elif isinstance(item, StreamSettings):
-                handlers.append(OMERunnerHandler(item))
-            elif isinstance(item, (str, Path)):
-                handlers.append(OMERunnerHandler(self._writer_settings_from_path(item)))
-        return OMERunnerHandlerGroup(handlers)
-
-    @staticmethod
-    def _writer_settings_from_path(path: str | Path) -> StreamSettings:
-        """Create StreamSettings from a file path, inferring format from extension."""
-        suffixes = Path(path).suffixes
-        suffix_str = "".join(suffixes).lower()
-        if ".zarr" in suffix_str:
-            fmt = "tensorstore"
-        elif ".tif" in suffix_str:
-            fmt = "tifffile"
-        else:
-            raise ValueError(
-                f"Cannot infer writer format from path {path!r}. "
-                "Use '.ome.zarr' or '.ome.tiff', or pass a StreamSettings directly."
-            )
-        return StreamSettings(root_path=path, format=cast("Format", fmt))
-
     def _outputs_connected(
         self, output: SingleOutput | Sequence[SingleOutput] | None
     ) -> AbstractContextManager:
@@ -360,31 +288,41 @@ class MDARunner:
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
-        # convert all items to handler objects, preserving order
-        _handlers: list[SupportsFrameReady] = []
+        # separate runner handlers from signal-based handlers
+        _signal_handlers: list[SupportsFrameReady] = []
+        _runner_handlers: list[BaseRunnerHandler] = []
         for item in output:
             if isinstance(item, (str, Path)):
-                _handlers.append(self._handler_for_path(item))
+                item = self._handler_for_path(item)
+            if isinstance(item, BaseRunnerHandler):
+                _runner_handlers.append(item)
             else:
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
                         "Output handlers must have a callable frameReady method. "
                         f"Got {item} with type {type(item)}."
                     )
-                _handlers.append(item)
+                _signal_handlers.append(item)
 
         self._handlers.clear()
-        self._handlers.update(_handlers)
-        return mda_listeners_connected(*_handlers, mda_events=self._signals)
+        self._handlers.update(_signal_handlers)
 
-    def _handler_for_path(self, path: str | Path) -> SupportsFrameReady:
+        self._runner_handler_group.clear()
+        self._runner_handler_group.update(_runner_handlers)
+
+        return mda_listeners_connected(*_signal_handlers, mda_events=self._signals)
+
+    @staticmethod
+    def _handler_for_path(
+        path: str | Path,
+    ) -> BaseRunnerHandler | ImageSequenceWriter:
         """Convert a string or Path into a handler object.
 
         This method picks from the built-in handlers based on the extension of the path.
         """
         from pymmcore_plus.mda.handlers import handler_for_path
 
-        return cast("SupportsFrameReady", handler_for_path(path))
+        return handler_for_path(path)
 
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
@@ -427,7 +365,7 @@ class MDARunner:
                         meta["runner_time_ms"] = runner_time_ms
 
                     # write frame to runner handlers.
-                    self._runner_handlers.writeframe(img, event, meta)
+                    self._runner_handler_group.writeframe(img, event, meta)
 
                     with exceptions_logged():
                         self._signals.frameReady.emit(img, event, meta)
@@ -453,7 +391,7 @@ class MDARunner:
         meta = self._engine.setup_sequence(sequence)
 
         # prepare runner handlers
-        self._runner_handlers.prepare(sequence, meta)
+        self._runner_handler_group.prepare(sequence, meta)
 
         self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
@@ -546,6 +484,6 @@ class MDARunner:
         logger.info("MDA Finished: %s", sequence)
 
         # cleanup runner handlers
-        self._runner_handlers.cleanup()
+        self._runner_handler_group.cleanup()
 
         self._signals.sequenceFinished.emit(sequence)

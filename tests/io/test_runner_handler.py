@@ -86,27 +86,13 @@ SUBSEQUENCE_GRID_MDA = useq.MDASequence(
 
 def test_stream_settings_defaults(tmp_path: Path) -> None:
     s = StreamSettings(root_path=str(tmp_path / "out.ome.zarr"))
+    assert s.format == "auto"
+    assert s.overwrite is False
     assert s.dimensions is None
     assert s.dtype is None
     assert s.plate is None
     assert s.asynchronous is True
     assert s.queue_maxsize == 100
-
-
-@pytest.mark.parametrize(
-    "method",
-    [
-        "_validate_storage_order",
-        "_validate_plate_positions",
-        "_warn_chunk_buffer_memory",
-    ],
-)
-def test_stream_settings_validators_skip_when_no_dims(
-    tmp_path: Path, method: str
-) -> None:
-    s = StreamSettings(root_path=str(tmp_path / "out.ome.zarr"))
-    result = getattr(s, method)()
-    assert result is s
 
 
 # ------------------- OMERunnerHandler -------------------
@@ -122,16 +108,25 @@ def test_handler_requires_root_path() -> None:
 def test_handler_properties(zarr_settings: StreamSettings) -> None:
     handler = OMERunnerHandler(zarr_settings)
     assert handler.stream is None
+    assert handler.view is None
     assert handler.stream_settings is zarr_settings
     assert handler.queue is not None
     assert isinstance(handler.queue, queue.Queue)
 
 
 def test_handler_in_tempdir() -> None:
-    settings = StreamSettings(root_path="test.ome.zarr", overwrite=True)
+    handler = OMERunnerHandler.in_tempdir()
+    assert handler.stream_settings.root_path
+    assert "pymmcp_runner_" in str(handler.stream_settings.root_path)
+    assert handler.stream_settings.format == "tensorstore"
+
+
+def test_handler_in_tempdir_with_settings() -> None:
+    settings = StreamSettings(root_path="sub.ome.zarr", overwrite=True)
     handler = OMERunnerHandler.in_tempdir(stream_settings=settings)
     assert handler.stream_settings.root_path
-    assert "pymmcp_ome_runner_" in str(handler.stream_settings.root_path)
+    assert handler.stream_settings.root_path.endswith("sub.ome.zarr")
+    assert handler.stream_settings.overwrite is True
 
 
 def test_handler_cleanup_without_prepare(zarr_settings: StreamSettings) -> None:
@@ -167,7 +162,7 @@ def test_handler_write_error_propagates(
     event = useq.MDAEvent()
     meta: dict = {"format": "frame-dict", "version": "1.0"}
     with pytest.raises(RuntimeError, match="Background writer failed"):
-        handler._writeframe(frame, event, meta)  # type: ignore[arg-type]
+        handler.writeframe(frame, event, meta)  # type: ignore[arg-type]
 
 
 def test_handler_drain_queue_returns_when_no_stream(
@@ -236,7 +231,6 @@ def test_group_empty() -> None:
     assert len(group) == 0
     assert not group
     assert list(group) == []
-    assert group.get_handlers() == []
 
 
 def test_group_with_handler(zarr_settings: StreamSettings) -> None:
@@ -245,7 +239,22 @@ def test_group_with_handler(zarr_settings: StreamSettings) -> None:
     assert len(group) == 1
     assert bool(group)
     assert list(group) == [h]
-    assert group.get_handlers() == [h]
+
+
+def test_group_update_and_clear(
+    zarr_settings: StreamSettings, tiff_settings: StreamSettings
+) -> None:
+    group = OMERunnerHandlerGroup()
+    h1 = OMERunnerHandler(zarr_settings)
+    h2 = OMERunnerHandler(tiff_settings)
+
+    group.update([h1, h2])
+    assert len(group) == 2
+    assert list(group) == [h1, h2]
+
+    group.clear()
+    assert len(group) == 0
+    assert not group
 
 
 def test_group_cleanup_clears(zarr_settings: StreamSettings) -> None:
@@ -275,59 +284,76 @@ def test_run_with_handler(
         asynchronous=asynchronous,
     )
     handler = OMERunnerHandler(settings)
-    core.mda.run(mda, writer=handler)
+    core.mda.run(mda, output=handler)
     assert handler.stream is None
 
 
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
 @pytest.mark.parametrize("ext", [".ome.zarr", ".ome.tiff"], ids=["zarr", "tiff"])
-def test_run_writer_via_path(
+def test_run_via_path(
     tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence, ext: str
 ) -> None:
     path = str(tmp_path / f"via_path{ext}")
-    core.mda.run(mda, writer=path)
+    core.mda.run(mda, output=path)
+
+
+def test_run_via_path_zarr(tmp_path: Path, core: CMMCorePlus) -> None:
+    """mmc.mda.run(sequence, output="example.ome.zarr")"""
+    path = str(tmp_path / "example.ome.zarr")
+    core.mda.run(SIMPLE_MDA, output=path)
+
+
+def test_run_via_path_list(tmp_path: Path, core: CMMCorePlus) -> None:
+    """mmc.mda.run(sequence, output=["example.ome.zarr", "example1.ome.zarr"])"""
+    path1 = str(tmp_path / "example.ome.zarr")
+    path2 = str(tmp_path / "example1.ome.zarr")
+    core.mda.run(SIMPLE_MDA, output=[path1, path2])
+
+
+def test_run_with_handler_from_settings(tmp_path: Path, core: CMMCorePlus) -> None:
+    """StreamSettings -> OMERunnerHandler -> mmc.mda.run(sequence, output=handler)"""
+    stream_settings = StreamSettings(
+        root_path=str(tmp_path / "example.ome.tiff"), overwrite=True
+    )
+    handler = OMERunnerHandler(stream_settings)
+    core.mda.run(SIMPLE_MDA, output=handler)
+    assert handler.stream is None
+
+
+def test_run_invalid_path(core: CMMCorePlus) -> None:
+    with pytest.raises(ValueError, match="Could not infer"):
+        core.mda.run(SIMPLE_MDA, output="/some/path.xyz")
 
 
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_run_writer_via_stream_settings(
+def test_run_multiple_handlers(
     tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence
 ) -> None:
-    settings = StreamSettings(
-        root_path=str(tmp_path / "via_settings.ome.zarr"),
-        overwrite=True,
-        asynchronous=False,
+    h_zarr = OMERunnerHandler(
+        StreamSettings(
+            root_path=str(tmp_path / "multi.ome.zarr"),
+            overwrite=True,
+            asynchronous=False,
+        )
     )
-    core.mda.run(mda, writer=settings)
-
-
-def test_run_writer_invalid_path(core: CMMCorePlus) -> None:
-    with pytest.raises(ValueError, match="Cannot infer writer format"):
-        core.mda.run(SIMPLE_MDA, writer="/some/path.xyz")
-
-
-@pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_run_multiple_writers(
-    tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence
-) -> None:
-    settings_zarr = StreamSettings(
-        root_path=str(tmp_path / "multi.ome.zarr"),
-        overwrite=True,
-        asynchronous=False,
+    h_tiff = OMERunnerHandler(
+        StreamSettings(
+            root_path=str(tmp_path / "multi.ome.tiff"),
+            overwrite=True,
+            asynchronous=False,
+        )
     )
-    settings_tiff = StreamSettings(
-        root_path=str(tmp_path / "multi.ome.tiff"),
-        overwrite=True,
-        asynchronous=False,
-    )
-    core.mda.run(mda, writer=[settings_zarr, settings_tiff])
+    core.mda.run(mda, output=[h_zarr, h_tiff])
+    assert h_zarr.stream is None
+    assert h_tiff.stream is None
 
 
-def test_run_no_writer(core: CMMCorePlus) -> None:
-    core.mda.run(SIMPLE_MDA, writer=None)
+def test_run_no_output(core: CMMCorePlus) -> None:
+    core.mda.run(SIMPLE_MDA, output=None)
 
 
-def test_get_writer_handlers_empty(core: CMMCorePlus) -> None:
-    assert len(core.mda.get_writer_handlers()) == 0
+def test_get_output_handlers_empty(core: CMMCorePlus) -> None:
+    assert len(core.mda.get_output_handlers()) == 0
 
 
 def test_group_delegates_to_both_handlers(
@@ -337,6 +363,6 @@ def test_group_delegates_to_both_handlers(
 ) -> None:
     h_zarr = OMERunnerHandler(zarr_settings)
     h_tiff = OMERunnerHandler(tiff_settings)
-    core.mda.run(SIMPLE_MDA, writer=[h_zarr, h_tiff])
+    core.mda.run(SIMPLE_MDA, output=[h_zarr, h_tiff])
     assert h_zarr.stream is None
     assert h_tiff.stream is None
