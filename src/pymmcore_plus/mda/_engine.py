@@ -78,6 +78,10 @@ class MDAEngine(PMDAEngine):
         reports that the events can be sequenced. This can be set after instantiation.
         By default, this is `True`, however in various testing and demo scenarios, you
         may wish to set it to `False` in order to avoid unexpected behavior.
+    force_set_xy_position : bool
+        Whether to always set the XY position, even if the target position is the same
+        as the last commanded position (this does *not* query the stage for the
+        current position). By default, this is `True`.
     restore_initial_state : bool | None
         Whether to restore the initial hardware state after the MDA sequence completes.
         If `True`, the engine will capture the initial state (positions,
@@ -91,14 +95,13 @@ class MDAEngine(PMDAEngine):
         mmc: CMMCorePlus,
         *,
         use_hardware_sequencing: bool = True,
+        force_set_xy_position: bool = True,
         restore_initial_state: bool | None = None,
     ) -> None:
         self._mmcore_ref = weakref.ref(mmc)
         self.use_hardware_sequencing: bool = use_hardware_sequencing
-        # if True, always set XY position, even if the commanded position is the same
-        # as the last commanded position (this does *not* query the stage for the
-        # current position).
-        self.force_set_xy_position: bool = True
+        self.force_set_xy_position: bool = force_set_xy_position
+        self.restore_initial_state: bool | None = restore_initial_state
 
         # whether to include position metadata when fetching on-frame metadata
         # omitted by default when performing triggered acquisition because it's slow.
