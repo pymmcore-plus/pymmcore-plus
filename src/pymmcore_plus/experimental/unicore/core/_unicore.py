@@ -1124,6 +1124,7 @@ class UniMMCore(CMMCorePlus):
     ) -> None:
         """Initialise _seq state and call cam.start_sequence."""
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        x, y, *_ = cam.get_roi()
         camera_label = cam.get_label()
 
         n_components = shape[2] if len(shape) > 2 else 1
@@ -1132,8 +1133,8 @@ class UniMMCore(CMMCorePlus):
             KW.Metadata_CameraLabel: camera_label,
             KW.Metadata_Height: str(shape[0]),
             KW.Metadata_Width: str(shape[1]),
-            KW.Metadata_ROI_X: "0",
-            KW.Metadata_ROI_Y: "0",
+            KW.Metadata_ROI_X: str(x),
+            KW.Metadata_ROI_Y: str(y),
             KW.PixelType: PixelType.for_bytes(dtype.itemsize, n_components),
         }
 

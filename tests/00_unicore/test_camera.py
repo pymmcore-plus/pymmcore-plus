@@ -363,6 +363,10 @@ def test_simple_camera_roi() -> None:
     while core.isSequenceRunning():
         time.sleep(0.001)
     frame, _meta = core.popNextImageAndMD()
+    assert _meta[Keyword.Metadata_Width] == "100"
+    assert _meta[Keyword.Metadata_Height] == "200"
+    assert _meta[Keyword.Metadata_ROI_X] == "10"
+    assert _meta[Keyword.Metadata_ROI_Y] == "20"
     assert frame.shape == (200, 100)
     np.testing.assert_array_equal(frame, FRAME[20:220, 10:110])
 
@@ -375,11 +379,15 @@ def test_simple_camera_roi() -> None:
 def test_base_camera_set_roi_raises() -> None:
     """CameraDevice.set_roi() raises NotImplementedError by default."""
     cam = MyCamera()
+    core = UniMMCore()
+    core.loadPyDevice(DEV, cam)
+    core.initializeDevice(DEV)
+    core.setCameraDevice(DEV)
     # get_roi works (returns full frame)
     assert cam.get_roi() == (0, 0, 512, 512)
     # set_roi raises
     with pytest.raises(NotImplementedError, match="does not support setting ROI"):
-        cam.set_roi(10, 20, 100, 200)
+        core.setROI(10, 20, 100, 200)
     # clear_roi is a no-op
     cam.clear_roi()
 
