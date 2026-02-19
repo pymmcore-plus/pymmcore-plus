@@ -1442,10 +1442,11 @@ class UniMMCore(CMMCorePlus):
     def getROI(self, label: DeviceLabel | str) -> list[int]: ...
     def getROI(self, label: DeviceLabel | str = "") -> list[int]:
         """Get the current region of interest (ROI) for the camera."""
-        if self._py_camera(label) is None:  # pragma: no cover
+        if self._py_camera(label) is not None:  # pragma: no cover
             raise NotImplementedError(
                 "getROI is not yet implemented for Python cameras."
             )
+        label = label or self.getCameraDevice()
         return super().getROI(label)
 
     def clearROI(self) -> None:
