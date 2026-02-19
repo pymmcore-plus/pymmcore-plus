@@ -1,11 +1,16 @@
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import pytest
 import useq
 
-from pymmcore_plus.mda.handlers import OMERunnerHandler, StreamSettings
+from pymmcore_plus.mda.handlers import (
+    ImageSequenceWriter,
+    OMERunnerHandler,
+    OMEZarrWriter,
+    StreamSettings,
+)
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -157,17 +162,22 @@ MDA_SEQUENCES = [
 ]
 
 
+# --- runner handler (BaseRunnerHandler) output ---
+
+
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
-def test_run_with_handler(
-    tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence
+@pytest.mark.parametrize("ext", [".ome.zarr", ".ome.tiff"], ids=["zarr", "tiff"])
+def test_run_with_ome_runner_handler(
+    tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence, ext: str
 ) -> None:
-    settings = StreamSettings(
-        root_path=str(tmp_path / "run.ome.zarr"),
-        overwrite=True,
-    )
+    """output=OMERunnerHandler(StreamSettings(root_path=...))"""
+    settings = StreamSettings(root_path=str(tmp_path / f"out{ext}"), overwrite=True)
     handler = OMERunnerHandler(settings)
     core.mda.run(mda, output=handler)
     assert handler.stream is None
+
+
+# --- string path output (resolved via handler_for_path) ---
 
 
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
@@ -175,36 +185,67 @@ def test_run_with_handler(
 def test_run_via_path(
     tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence, ext: str
 ) -> None:
-    path = str(tmp_path / f"via_path{ext}")
-    core.mda.run(mda, output=path)
+    """output="example.ome.zarr" / output="example.ome.tiff" """
+    core.mda.run(mda, output=str(tmp_path / f"via_path{ext}"))
 
 
-def test_run_via_path_zarr(tmp_path: Path, core: CMMCorePlus) -> None:
-    """mmc.mda.run(sequence, output="example.ome.zarr")"""
-    path = str(tmp_path / "example.ome.zarr")
-    core.mda.run(SIMPLE_MDA, output=path)
+def test_run_via_directory_path(tmp_path: Path, core: CMMCorePlus) -> None:
+    """output="example_tiff_sequence" (directory → ImageSequenceWriter)"""
+    core.mda.run(SIMPLE_MDA, output=str(tmp_path / "tiff_seq"))
+    assert (tmp_path / "tiff_seq").is_dir()
+
+
+# --- signal-based handler output (SupportsFrameReady) ---
+
+
+def test_run_with_ome_zarr_writer(tmp_path: Path, core: CMMCorePlus) -> None:
+    """output=OMEZarrWriter("example.ome.zarr")"""
+    writer = OMEZarrWriter(tmp_path / "out.ome.zarr")
+    core.mda.run(SIMPLE_MDA, output=writer)
+
+
+def _make_ome_tiff_writer(tmp_path: Path) -> Any:
+    """Import OMETiffWriter only if tifffile is available."""
+    from pymmcore_plus.mda.handlers import OMETiffWriter
+
+    return OMETiffWriter(tmp_path / "out.ome.tiff")
+
+
+def test_run_with_ome_tiff_writer(tmp_path: Path, core: CMMCorePlus) -> None:
+    """output=OMETiffWriter("example.ome.tiff")"""
+    pytest.importorskip("tifffile")
+    writer = _make_ome_tiff_writer(tmp_path)
+    core.mda.run(SIMPLE_MDA, output=writer)
+
+
+def test_run_with_tensorstore_handler(tmp_path: Path, core: CMMCorePlus) -> None:
+    """output=TensorStoreHandler(path="example.ome.zarr")"""
+    ts = pytest.importorskip("tensorstore")  # noqa: F841
+    from pymmcore_plus.mda.handlers import TensorStoreHandler
+
+    writer = TensorStoreHandler(path=tmp_path / "out.ome.zarr")
+    core.mda.run(SIMPLE_MDA, output=writer)
+
+
+def test_run_with_image_sequence_writer(tmp_path: Path, core: CMMCorePlus) -> None:
+    """output=ImageSequenceWriter("example_sequence", extension=".tiff")"""
+    writer = ImageSequenceWriter(tmp_path / "seq_out", extension=".tiff")
+    core.mda.run(SIMPLE_MDA, output=writer)
+    assert (tmp_path / "seq_out").is_dir()
+
+
+# --- multiple outputs / list ---
 
 
 def test_run_via_path_list(tmp_path: Path, core: CMMCorePlus) -> None:
-    """mmc.mda.run(sequence, output=["example.ome.zarr", "example1.ome.zarr"])"""
-    path1 = str(tmp_path / "example.ome.zarr")
-    path2 = str(tmp_path / "example1.ome.zarr")
-    core.mda.run(SIMPLE_MDA, output=[path1, path2])
-
-
-def test_run_with_handler_from_settings(tmp_path: Path, core: CMMCorePlus) -> None:
-    """StreamSettings -> OMERunnerHandler -> mmc.mda.run(sequence, output=handler)"""
-    stream_settings = StreamSettings(
-        root_path=str(tmp_path / "example.ome.tiff"), overwrite=True
+    """output=["example.ome.zarr", "example.ome.tiff"]"""
+    core.mda.run(
+        SIMPLE_MDA,
+        output=[
+            str(tmp_path / "example.ome.zarr"),
+            str(tmp_path / "example.ome.tiff"),
+        ],
     )
-    handler = OMERunnerHandler(stream_settings)
-    core.mda.run(SIMPLE_MDA, output=handler)
-    assert handler.stream is None
-
-
-def test_run_invalid_path(core: CMMCorePlus) -> None:
-    with pytest.raises(ValueError, match="Could not infer"):
-        core.mda.run(SIMPLE_MDA, output="/some/path.xyz")
 
 
 @pytest.mark.parametrize("mda", MDA_SEQUENCES)
@@ -212,37 +253,32 @@ def test_run_multiple_handlers(
     tmp_path: Path, core: CMMCorePlus, mda: useq.MDASequence
 ) -> None:
     h_zarr = OMERunnerHandler(
-        StreamSettings(
-            root_path=str(tmp_path / "multi.ome.zarr"),
-            overwrite=True,
-        )
+        StreamSettings(root_path=str(tmp_path / "multi.ome.zarr"), overwrite=True)
     )
     h_tiff = OMERunnerHandler(
-        StreamSettings(
-            root_path=str(tmp_path / "multi.ome.tiff"),
-            overwrite=True,
-        )
+        StreamSettings(root_path=str(tmp_path / "multi.ome.tiff"), overwrite=True)
     )
     core.mda.run(mda, output=[h_zarr, h_tiff])
     assert h_zarr.stream is None
     assert h_tiff.stream is None
 
 
+# --- edge cases ---
+
+
 def test_run_no_output(core: CMMCorePlus) -> None:
     core.mda.run(SIMPLE_MDA, output=None)
 
 
+def test_run_invalid_path(core: CMMCorePlus) -> None:
+    with pytest.raises(ValueError, match="Could not infer"):
+        core.mda.run(SIMPLE_MDA, output="/some/path.xyz")
+
+
+def test_run_invalid_handler(core: CMMCorePlus) -> None:
+    with pytest.raises(TypeError, match="callable frameReady"):
+        core.mda.run(SIMPLE_MDA, output=object())  # type: ignore[arg-type]
+
+
 def test_get_output_handlers_empty(core: CMMCorePlus) -> None:
-    assert len(core.mda.get_output_handlers()) == 0
-
-
-def test_delegates_to_both_handlers(
-    zarr_settings: StreamSettings,
-    tiff_settings: StreamSettings,
-    core: CMMCorePlus,
-) -> None:
-    h_zarr = OMERunnerHandler(zarr_settings)
-    h_tiff = OMERunnerHandler(tiff_settings)
-    core.mda.run(SIMPLE_MDA, output=[h_zarr, h_tiff])
-    assert h_zarr.stream is None
-    assert h_tiff.stream is None
+    assert not core.mda.get_output_handlers()

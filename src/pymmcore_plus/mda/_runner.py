@@ -8,7 +8,7 @@ import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, NamedTuple
 from unittest.mock import MagicMock
 
 from useq import MDASequence
@@ -64,6 +64,24 @@ MSG = (
 _STOP = object()
 
 
+class _PrepareMsg(NamedTuple):
+    sequence: MDASequence
+    meta: SummaryMetaV1 | None
+
+
+class _WriteFrameMsg(NamedTuple):
+    img: np.ndarray
+    event: MDAEvent
+    meta: FrameMetaV1
+
+
+class _CleanupMsg(NamedTuple):
+    sequence: MDASequence
+
+
+_HandlerMsg = _PrepareMsg | _WriteFrameMsg | _CleanupMsg
+
+
 def _frameReady_nparams(handler: Any) -> int:
     """Return the number of positional parameters for handler.frameReady."""
     sig = inspect.signature(handler.frameReady)
@@ -75,11 +93,11 @@ def _frameReady_nparams(handler: Any) -> int:
     )
 
 
-class _HandlerDispatchThread:
+class _HandlersThread:
     """Background thread that dispatches handler calls from a queue.
 
-    Handles both ``BaseRunnerHandler`` (prepare/writeframe/cleanup) and
-    ``SupportsFrameReady`` (sequenceStarted/frameReady/sequenceFinished) handlers
+    Handles both `BaseRunnerHandler` (prepare/writeframe/cleanup) and
+    `SupportsFrameReady` (sequenceStarted/frameReady/sequenceFinished) handlers
     in a single unified queue.
     """
 
@@ -87,7 +105,7 @@ class _HandlerDispatchThread:
         self._handlers: list[BaseRunnerHandler | SupportsFrameReady] = []
         self._runner_handlers: list[BaseRunnerHandler] = []
         self._signal_handlers: list[tuple[Any, int]] = []  # (handler, nparams)
-        self._queue: queue.Queue[tuple[Any, ...] | object] = queue.Queue()
+        self._queue: queue.Queue[_HandlerMsg | object] = queue.Queue()
         self._thread: threading.Thread | None = None
         self._error: BaseException | None = None
 
@@ -99,9 +117,10 @@ class _HandlerDispatchThread:
         handlers: list[BaseRunnerHandler | SupportsFrameReady],
     ) -> None:
         """Set the handler list, caching frameReady parameter counts."""
+        self.clear()
+
         self._handlers = list(handlers)
-        self._runner_handlers = []
-        self._signal_handlers = []
+
         for h in self._handlers:
             if isinstance(h, BaseRunnerHandler):
                 self._runner_handlers.append(h)
@@ -121,28 +140,24 @@ class _HandlerDispatchThread:
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
-    def _check_error(self) -> None:
-        if self._error is not None:
-            raise RuntimeError("Handler dispatch thread failed") from self._error
-
     def enqueue_prepare(
         self, sequence: MDASequence, meta: SummaryMetaV1 | None
     ) -> None:
         """Enqueue a prepare message for all handlers."""
         self._check_error()
-        self._queue.put(("prepare", sequence, meta))
+        self._queue.put(_PrepareMsg(sequence, meta))
 
     def enqueue_frame(
         self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1
     ) -> None:
         """Enqueue a frame message for all handlers."""
         self._check_error()
-        self._queue.put(("frame", img, event, meta))
+        self._queue.put(_WriteFrameMsg(img, event, meta))
 
     def enqueue_cleanup(self, sequence: MDASequence) -> None:
         """Enqueue a cleanup message for all handlers."""
         self._check_error()
-        self._queue.put(("cleanup", sequence))
+        self._queue.put(_CleanupMsg(sequence))
 
     def stop_and_join(self) -> None:
         """Send stop sentinel and wait for the thread to finish."""
@@ -159,16 +174,12 @@ class _HandlerDispatchThread:
             if item is _STOP:
                 break
             try:
-                msg_type = item[0]  # type: ignore[index]
-                if msg_type == "prepare":
-                    _, sequence, meta = item  # type: ignore[misc]
-                    self._dispatch_prepare(sequence, meta)
-                elif msg_type == "frame":
-                    _, img, event, meta = item  # type: ignore[misc]
-                    self._dispatch_frame(img, event, meta)
-                elif msg_type == "cleanup":
-                    _, sequence = item  # type: ignore[misc]
-                    self._dispatch_cleanup(sequence)
+                if isinstance(item, _PrepareMsg):
+                    self._dispatch_prepare(item.sequence, item.meta)
+                elif isinstance(item, _WriteFrameMsg):
+                    self._dispatch_frame(item.img, item.event, item.meta)
+                elif isinstance(item, _CleanupMsg):
+                    self._dispatch_cleanup(item.sequence)
             except Exception as e:
                 self._error = e
                 break
@@ -176,38 +187,41 @@ class _HandlerDispatchThread:
     def _dispatch_prepare(
         self, sequence: MDASequence, meta: SummaryMetaV1 | None
     ) -> None:
+        """Call prepare on runner handlers and sequenceStarted on signal handlers."""
         for h in self._runner_handlers:
             h.prepare(sequence, meta)
         for h, _ in self._signal_handlers:
             if hasattr(h, "sequenceStarted"):
-                h.sequenceStarted(sequence)
+                try:
+                    h.sequenceStarted(sequence, meta)
+                except TypeError:
+                    h.sequenceStarted(sequence)
 
     def _dispatch_frame(
         self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1
     ) -> None:
+        """Call writeframe on runner handlers and frameReady on signal handlers."""
         for h in self._runner_handlers:
             h.writeframe(img, event, meta)
+        args = (img, event, meta)
         for h, nparams in self._signal_handlers:
-            if nparams == 0:
-                h.frameReady()
-            elif nparams == 1:
-                h.frameReady(img)
-            elif nparams == 2:
-                h.frameReady(img, event)
-            else:
-                h.frameReady(img, event, meta)
+            h.frameReady(*args[:nparams])
 
     def _dispatch_cleanup(self, sequence: MDASequence) -> None:
+        """Call cleanup on runner handlers and sequenceFinished on signal handlers."""
         for h in self._runner_handlers:
             h.cleanup()
         for h, _ in self._signal_handlers:
             if hasattr(h, "sequenceFinished"):
                 h.sequenceFinished(sequence)
+
         # clear handler lists so get_output_handlers() returns empty
-        # before sequenceFinished is emitted
-        self._handlers.clear()
-        self._runner_handlers.clear()
-        self._signal_handlers.clear()
+        # before sequenceFinished is emitted on the main thread
+        self.clear()
+
+    def _check_error(self) -> None:
+        if self._error is not None:
+            raise RuntimeError("Handler dispatch thread failed") from self._error
 
 
 class GeneratorMDASequence(MDASequence):
@@ -246,7 +260,7 @@ class MDARunner:
         self._paused = False
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
-        self._dispatch = _HandlerDispatchThread()
+        self._handlers_thread = _HandlersThread()
         self._canceled = False
         self._sequence: MDASequence | None = None
         # timer for the full sequence, reset only once at the beginning of the sequence
@@ -377,7 +391,7 @@ class MDARunner:
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
 
-        with self._outputs_connected(output):
+        with self._set_handlers(output):
             try:
                 engine = self._prepare_to_run(sequence)
                 self._run(engine, events)
@@ -408,7 +422,7 @@ class MDARunner:
         tuple[SupportsFrameReady | BaseRunnerHandler, ...]
             Tuple of all connected output handlers.
         """
-        return tuple(self._dispatch)
+        return tuple(self._handlers_thread)
 
     def seconds_elapsed(self) -> float:
         """Return the number of seconds since the start of the acquisition."""
@@ -423,10 +437,10 @@ class MDARunner:
         return time.perf_counter() - self._t0
 
     @contextmanager
-    def _outputs_connected(
+    def _set_handlers(
         self, output: SingleOutput | Sequence[SingleOutput] | None
     ) -> Iterator[None]:
-        """Context in which output handlers are set on the dispatch thread."""
+        """Context in which output handlers are initialized in the background thread."""
         if output is None:
             yield
             return
@@ -446,11 +460,12 @@ class MDARunner:
                     )
             handlers.append(item)
 
-        self._dispatch.set_handlers(handlers)
+        # add the handlers to the thread
+        self._handlers_thread.set_handlers(handlers)
         try:
             yield
         finally:
-            self._dispatch.clear()
+            self._handlers_thread.clear()
 
     @staticmethod
     def _handler_for_path(
@@ -504,8 +519,8 @@ class MDARunner:
                     if "runner_time_ms" not in meta:
                         meta["runner_time_ms"] = runner_time_ms
 
-                    # enqueue frame for dispatch thread
-                    self._dispatch.enqueue_frame(img, event, meta)
+                    # enqueue frame in the handler thread
+                    self._handlers_thread.enqueue_frame(img, event, meta)
 
                     with exceptions_logged():
                         self._signals.frameReady.emit(img, event, meta)
@@ -530,9 +545,9 @@ class MDARunner:
 
         meta = self._engine.setup_sequence(sequence)
 
-        # start the dispatch thread and enqueue prepare
-        self._dispatch.start()
-        self._dispatch.enqueue_prepare(sequence, meta)
+        # start the handler thread and enqueue the prepare calls
+        self._handlers_thread.start()
+        self._handlers_thread.enqueue_prepare(sequence, meta)
 
         self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
@@ -624,8 +639,8 @@ class MDARunner:
 
         logger.info("MDA Finished: %s", sequence)
 
-        # enqueue cleanup and wait for dispatch thread to finish
-        self._dispatch.enqueue_cleanup(sequence)
-        self._dispatch.stop_and_join()
+        # enqueue cleanup and wait for the handler thread to finish
+        self._handlers_thread.enqueue_cleanup(sequence)
+        self._handlers_thread.stop_and_join()
 
         self._signals.sequenceFinished.emit(sequence)
