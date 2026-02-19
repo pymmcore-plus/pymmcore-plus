@@ -46,7 +46,10 @@ class MyCamera(CameraDevice):
         self._binning = value
 
     def shape(self) -> tuple[int, int]:
-        """Return the shape of the current camera state."""
+        """Return the shape of the current image (respects ROI)."""
+        if self._roi is not None:
+            _, _, w, h = self._roi
+            return (h, w)
         return FRAME_SHAPE
 
     def dtype(self) -> DTypeLike:
@@ -65,8 +68,24 @@ class MyCamera(CameraDevice):
         for i in range(n):
             buffer = get_buffer(shape, dtype)
             time.sleep(0.01)  # Simulate time taken to acquire an image
-            buffer[:] = FRAME
+            x, y, w, h = self.get_roi()
+            buffer[:] = FRAME[y : y + h, x : x + w]
             yield {"random_key": f"value_{i}"}  # Example metadata, can be anything.
+
+    # ROI support
+    _roi: tuple[int, int, int, int] | None = None
+
+    def get_roi(self) -> tuple[int, int, int, int]:
+        if self._roi is not None:
+            return self._roi
+        h, w = FRAME_SHAPE
+        return (0, 0, w, h)
+
+    def set_roi(self, x: int, y: int, width: int, height: int) -> None:
+        self._roi = (x, y, width, height)
+
+    def clear_roi(self) -> None:
+        self._roi = None
 
 
 class SequenceableCamera(MyCamera):
@@ -273,6 +292,37 @@ def test_buffer_methods(device: str) -> None:
         timeout -= 0.1
     assert core.isBufferOverflowed()
     core.clearCircularBuffer()
+
+
+@pytest.mark.parametrize("device", ["python", "c++"])
+def test_roi(device: str) -> None:
+    """getROI/setROI/clearROI round-trip, including snapped image size."""
+    core = UniMMCore()
+    _load_device(core, device)
+
+    # full frame by default
+    assert core.getROI() == [0, 0, *FRAME_SHAPE[::-1]]
+    assert core.getROI(DEV) == [0, 0, *FRAME_SHAPE[::-1]]
+
+    core.snapImage()
+    full = core.getImage()
+    assert full.shape == FRAME_SHAPE
+
+    # set a sub-ROI — image dimensions should change
+    core.setROI(10, 20, 100, 200)
+    assert core.getROI() == [10, 20, 100, 200]
+
+    core.snapImage()
+    cropped = core.getImage()
+    assert cropped.shape == (200, 100)
+
+    # clear resets to full frame
+    core.clearROI()
+    assert core.getROI() == [0, 0, *FRAME_SHAPE[::-1]]
+
+    core.snapImage()
+    restored = core.getImage()
+    assert restored.shape == FRAME_SHAPE
 
 
 def test_camera_channels_numbers() -> None:
