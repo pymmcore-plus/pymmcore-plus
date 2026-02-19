@@ -316,6 +316,12 @@ class UniMMCore(CMMCorePlus):
         self._pydevices.unload(label)
 
     def unloadAllDevices(self) -> None:
+        # Stop any in-flight sequence acquisition before clearing devices,
+        # otherwise the acquisition thread would keep running against unloaded objects.
+        if self._acquisition_thread is not None and self._acquisition_thread.is_alive():
+            self._stop_event.set()
+            self._acquisition_thread.join(timeout=2.0)
+            self._acquisition_thread = None
         self._pydevices.unload_all()
         super().unloadAllDevices()
 
