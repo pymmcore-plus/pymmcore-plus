@@ -145,7 +145,9 @@ def test_define_state_label(unicore: UniMMCore) -> None:
 
     if unicore._test_device_type == "python":  # type: ignore
         allowed_states = unicore.getAllowedPropertyValues(DEV, Keyword.State)
-        assert allowed_states == tuple(range(unicore.getNumberOfStates(DEV)))
+        assert allowed_states == tuple(
+            str(i) for i in range(unicore.getNumberOfStates(DEV))
+        )
 
         allowed_labels = unicore.getAllowedPropertyValues(DEV, Keyword.Label.value)
         assert allowed_labels == tuple(unicore.getStateLabels(DEV))
