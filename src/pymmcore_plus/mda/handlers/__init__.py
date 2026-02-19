@@ -4,12 +4,14 @@ from pathlib import Path
 
 from ._img_sequence_writer import ImageSequenceWriter
 from ._ome_tiff_writer import OMETiffWriter
+from ._ome_writer_handler import OMEWriterHandler
 from ._ome_zarr_writer import OMEZarrWriter
 from ._tensorstore_handler import TensorStoreHandler
 
 __all__ = [
     "ImageSequenceWriter",
     "OMETiffWriter",
+    "OMEWriterHandler",
     "OMEZarrWriter",
     "TensorStoreHandler",
     "handler_for_path",
