@@ -8,7 +8,7 @@ import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import contextmanager
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, NamedTuple
+from typing import TYPE_CHECKING, Any, NamedTuple, cast
 from unittest.mock import MagicMock
 
 from useq import MDASequence
@@ -64,22 +64,10 @@ MSG = (
 _STOP = object()
 
 
-class _PrepareMsg(NamedTuple):
-    sequence: MDASequence
-    meta: SummaryMetaV1 | None
-
-
 class _WriteFrameMsg(NamedTuple):
     img: np.ndarray
     event: MDAEvent
     meta: FrameMetaV1
-
-
-class _CleanupMsg(NamedTuple):
-    sequence: MDASequence
-
-
-_HandlerMsg = _PrepareMsg | _WriteFrameMsg | _CleanupMsg
 
 
 def _frameReady_nparams(handler: Any) -> int:
@@ -94,18 +82,19 @@ def _frameReady_nparams(handler: Any) -> int:
 
 
 class _HandlersThread:
-    """Background thread that dispatches handler calls from a queue.
+    """Background thread for frame dispatch, with synchronous prepare/cleanup.
 
-    Handles both `BaseRunnerHandler` (prepare/writeframe/cleanup) and
-    `SupportsFrameReady` (sequenceStarted/frameReady/sequenceFinished) handlers
-    in a single unified queue.
+    The thread only handles the hot-loop work: `writeframe` (for
+    `BaseRunnerHandler`) and `frameReady` (for `SupportsFrameReady`) calls.
+    `prepare` and `cleanup` run synchronously on the caller's thread so errors
+    propagate immediately.
     """
 
     def __init__(self) -> None:
         self._handlers: list[BaseRunnerHandler | SupportsFrameReady] = []
         self._runner_handlers: list[BaseRunnerHandler] = []
         self._signal_handlers: list[tuple[Any, int]] = []  # (handler, nparams)
-        self._queue: queue.Queue[_HandlerMsg | object] = queue.Queue()
+        self._queue: queue.Queue[_WriteFrameMsg | object] = queue.Queue()
         self._thread: threading.Thread | None = None
         self._error: BaseException | None = None
 
@@ -134,74 +123,10 @@ class _HandlersThread:
         self._runner_handlers.clear()
         self._signal_handlers.clear()
 
-    def start(self) -> None:
-        """Start the background dispatch thread (no-op if no handlers)."""
-        self._error = None
-        if not self._handlers:
-            return
-        # drain any stale messages from a previous (possibly failed) run
-        while not self._queue.empty():
-            self._queue.get_nowait()
-        self._thread = threading.Thread(target=self._run, daemon=True)
-        self._thread.start()
+    # ---- synchronous (called on runner thread) ----
 
-    def enqueue_prepare(
-        self, sequence: MDASequence, meta: SummaryMetaV1 | None
-    ) -> None:
-        """Enqueue a prepare message for all handlers."""
-        if self._thread is None:
-            return
-        self._check_error()
-        self._queue.put(_PrepareMsg(sequence, meta))
-
-    def enqueue_frame(
-        self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1
-    ) -> None:
-        """Enqueue a frame message for all handlers."""
-        if self._thread is None:
-            return
-        self._check_error()
-        self._queue.put(_WriteFrameMsg(img, event, meta))
-
-    def enqueue_cleanup(self, sequence: MDASequence) -> None:
-        """Enqueue a cleanup message for all handlers."""
-        if self._thread is None:
-            return
-        self._check_error()
-        self._queue.put(_CleanupMsg(sequence))
-
-    def stop_and_join(self) -> None:
-        """Send stop sentinel and wait for the thread to finish."""
-        if self._thread is not None:
-            self._queue.put(_STOP)
-            self._thread.join()
-            self._thread = None
-        # ensure handlers are cleared even if _dispatch_cleanup didn't run
-        # (e.g. thread died from a handler error before processing cleanup)
-        self.clear()
-        self._check_error()
-
-    def _run(self) -> None:
-        """Background thread: drain the queue and dispatch to handlers."""
-        while True:
-            item = self._queue.get()
-            if item is _STOP:
-                break
-            try:
-                if isinstance(item, _PrepareMsg):
-                    self._dispatch_prepare(item.sequence, item.meta)
-                elif isinstance(item, _WriteFrameMsg):
-                    self._dispatch_frame(item.img, item.event, item.meta)
-                elif isinstance(item, _CleanupMsg):
-                    self._dispatch_cleanup(item.sequence)
-            except Exception as e:
-                self._error = e
-                break
-
-    def _dispatch_prepare(
-        self, sequence: MDASequence, meta: SummaryMetaV1 | None
-    ) -> None:
-        """Call prepare on runner handlers and sequenceStarted on signal handlers."""
+    def prepare(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None:
+        """Call prepare/sequenceStarted on all handlers (synchronous)."""
         for h in self._runner_handlers:
             h.prepare(sequence, meta)
         for h, _ in self._signal_handlers:
@@ -211,27 +136,67 @@ class _HandlersThread:
                 except TypeError:
                     h.sequenceStarted(sequence)
 
-    def _dispatch_frame(
-        self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1
-    ) -> None:
-        """Call writeframe on runner handlers and frameReady on signal handlers."""
-        for h in self._runner_handlers:
-            h.writeframe(img, event, meta)
-        args = (img, event, meta)
-        for h, nparams in self._signal_handlers:
-            h.frameReady(*args[:nparams])
-
-    def _dispatch_cleanup(self, sequence: MDASequence) -> None:
-        """Call cleanup on runner handlers and sequenceFinished on signal handlers."""
+    def cleanup(self, sequence: MDASequence) -> None:
+        """Call cleanup/sequenceFinished on all handlers (synchronous)."""
         for h in self._runner_handlers:
             h.cleanup()
         for h, _ in self._signal_handlers:
             if hasattr(h, "sequenceFinished"):
                 h.sequenceFinished(sequence)
-
-        # clear handler lists so get_output_handlers() returns empty
-        # before sequenceFinished is emitted on the main thread
         self.clear()
+
+    # ---- threaded (frame dispatch) ----
+
+    def start(self) -> None:
+        """Start the background frame dispatch thread."""
+        self._error = None
+        if not self._handlers:
+            return
+        # drain any stale messages from a previous (possibly failed) run
+        while not self._queue.empty():
+            self._queue.get_nowait()
+        self._thread = threading.Thread(target=self._run, daemon=True)
+        self._thread.start()
+
+    def enqueue_frame(
+        self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1
+    ) -> None:
+        """Enqueue a frame for background dispatch."""
+        if self._thread is None:
+            return
+        self._check_error()
+        self._queue.put(_WriteFrameMsg(img, event, meta))
+
+    def stop_and_join(self) -> None:
+        """Send stop sentinel and wait for the thread to finish."""
+        if self._thread is not None:
+            self._queue.put(_STOP)
+            self._thread.join()
+            self._thread = None
+        self._check_error()
+
+    def _run(self) -> None:
+        """Background thread: drain the queue and dispatch frames."""
+        while True:
+            item = self._queue.get()
+            if item is _STOP:
+                break
+            try:
+                item = cast("_WriteFrameMsg", item)
+                self._dispatch_frame(item.img, item.event, item.meta)
+            except Exception as e:
+                self._error = e
+                break
+
+    def _dispatch_frame(
+        self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1
+    ) -> None:
+        """Call writeframe/frameReady on all handlers."""
+        for h in self._runner_handlers:
+            h.writeframe(img, event, meta)
+        args = (img, event, meta)
+        for h, nparams in self._signal_handlers:
+            h.frameReady(*args[:nparams])
 
     def _check_error(self) -> None:
         if self._error is not None:
@@ -530,9 +495,10 @@ class MDARunner:
                     if "runner_time_ms" not in meta:
                         meta["runner_time_ms"] = runner_time_ms
 
-                    # enqueue frame in the handler thread
+                    # enqueue frame for background handler dispatch
                     self._handlers_thread.enqueue_frame(img, event, meta)
 
+                    # emit signal on the runner thread for other consumers
                     with exceptions_logged():
                         self._signals.frameReady.emit(img, event, meta)
             finally:
@@ -556,9 +522,10 @@ class MDARunner:
 
         meta = self._engine.setup_sequence(sequence)
 
-        # start the handler thread and enqueue the prepare calls
+        # prepare handlers
+        self._handlers_thread.prepare(sequence, meta)
+        # start the background thread for frame dispatch
         self._handlers_thread.start()
-        self._handlers_thread.enqueue_prepare(sequence, meta)
 
         self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
@@ -650,8 +617,8 @@ class MDARunner:
 
         logger.info("MDA Finished: %s", sequence)
 
-        # enqueue cleanup and wait for the handler thread to finish
-        self._handlers_thread.enqueue_cleanup(sequence)
+        # drain all remaining frames, then clean up handlers
         self._handlers_thread.stop_and_join()
+        self._handlers_thread.cleanup(sequence)
 
         self._signals.sequenceFinished.emit(sequence)
