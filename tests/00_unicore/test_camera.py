@@ -301,8 +301,8 @@ def test_roi(device: str) -> None:
     _load_device(core, device)
 
     # full frame by default
-    assert core.getROI() == [0, 0, *FRAME_SHAPE[::-1]]
-    assert core.getROI(DEV) == [0, 0, *FRAME_SHAPE[::-1]]
+    assert list(core.getROI()) == [0, 0, *FRAME_SHAPE[::-1]]
+    assert list(core.getROI(DEV)) == [0, 0, *FRAME_SHAPE[::-1]]
 
     core.snapImage()
     full = core.getImage()
@@ -310,7 +310,7 @@ def test_roi(device: str) -> None:
 
     # set a sub-ROI — image dimensions should change
     core.setROI(10, 20, 100, 200)
-    assert core.getROI() == [10, 20, 100, 200]
+    assert list(core.getROI()) == [10, 20, 100, 200]
 
     core.snapImage()
     cropped = core.getImage()
@@ -318,7 +318,7 @@ def test_roi(device: str) -> None:
 
     # clear resets to full frame
     core.clearROI()
-    assert core.getROI() == [0, 0, *FRAME_SHAPE[::-1]]
+    assert list(core.getROI()) == [0, 0, *FRAME_SHAPE[::-1]]
 
     core.snapImage()
     restored = core.getImage()
