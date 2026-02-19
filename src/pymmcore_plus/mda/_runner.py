@@ -135,8 +135,13 @@ class _HandlersThread:
         self._signal_handlers.clear()
 
     def start(self) -> None:
-        """Start the background dispatch thread."""
+        """Start the background dispatch thread (no-op if no handlers)."""
         self._error = None
+        if not self._handlers:
+            return
+        # drain any stale messages from a previous (possibly failed) run
+        while not self._queue.empty():
+            self._queue.get_nowait()
         self._thread = threading.Thread(target=self._run, daemon=True)
         self._thread.start()
 
@@ -144,6 +149,8 @@ class _HandlersThread:
         self, sequence: MDASequence, meta: SummaryMetaV1 | None
     ) -> None:
         """Enqueue a prepare message for all handlers."""
+        if self._thread is None:
+            return
         self._check_error()
         self._queue.put(_PrepareMsg(sequence, meta))
 
@@ -151,11 +158,15 @@ class _HandlersThread:
         self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1
     ) -> None:
         """Enqueue a frame message for all handlers."""
+        if self._thread is None:
+            return
         self._check_error()
         self._queue.put(_WriteFrameMsg(img, event, meta))
 
     def enqueue_cleanup(self, sequence: MDASequence) -> None:
         """Enqueue a cleanup message for all handlers."""
+        if self._thread is None:
+            return
         self._check_error()
         self._queue.put(_CleanupMsg(sequence))
 
