@@ -192,6 +192,23 @@ class CameraDevice(Device):
                     sequence_stopper=seq_stopper,
                 )
 
+    # ROI support -----------------------------------------------------
+
+    def get_roi(self) -> tuple[int, int, int, int]:
+        """Return the current ROI as ``(x, y, width, height)``.
+
+        The default implementation returns the full sensor frame.
+        Override in subclasses to support hardware ROI.
+        """
+        h, w, *_ = self.shape()
+        return (0, 0, w, h)
+
+    def set_roi(self, x: int, y: int, width: int, height: int) -> None:
+        """Set the ROI.  Override in subclasses to support hardware ROI."""
+
+    def clear_roi(self) -> None:
+        """Reset the ROI to the full sensor frame.  Override if needed."""
+
     # Standard Properties, default implementations -------------------
 
     # We always implement a standard binning getter.  It does not

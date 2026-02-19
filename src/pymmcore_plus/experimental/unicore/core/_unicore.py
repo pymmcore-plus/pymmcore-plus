@@ -1503,10 +1503,10 @@ class UniMMCore(CMMCorePlus):
             cam.set_exposure(*args)
 
     def _do_set_roi(self, label: str, x: int, y: int, width: int, height: int) -> None:
-        if self._py_camera(label) is not None:
-            raise NotImplementedError(
-                "setROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera(label)) is not None:
+            with cam:
+                cam.set_roi(x, y, width, height)
+            return
         return pymmcore.CMMCore.setROI(self, label, x, y, width, height)
 
     @overload
@@ -1515,19 +1515,18 @@ class UniMMCore(CMMCorePlus):
     def getROI(self, label: DeviceLabel | str) -> list[int]: ...
     def getROI(self, label: DeviceLabel | str = "") -> list[int]:
         """Get the current region of interest (ROI) for the camera."""
-        if self._py_camera(label) is not None:  # pragma: no cover
-            raise NotImplementedError(
-                "getROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera(label)) is not None:
+            with cam:
+                return list(cam.get_roi())
         label = label or self.getCameraDevice()
         return super().getROI(label)
 
     def clearROI(self) -> None:
         """Clear the current region of interest (ROI) for the camera."""
-        if self._py_camera() is not None:  # pragma: no cover
-            raise NotImplementedError(
-                "clearROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera()) is not None:
+            with cam:
+                cam.clear_roi()
+            return
         return super().clearROI()
 
     def isExposureSequenceable(self, cameraLabel: DeviceLabel | str) -> bool:
