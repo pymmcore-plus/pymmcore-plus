@@ -1124,6 +1124,7 @@ class UniMMCore(CMMCorePlus):
     ) -> None:
         """Initialise _seq state and call cam.start_sequence."""
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        x, y, *_ = cam.get_roi()
         camera_label = cam.get_label()
 
         n_components = shape[2] if len(shape) > 2 else 1
@@ -1132,8 +1133,8 @@ class UniMMCore(CMMCorePlus):
             KW.Metadata_CameraLabel: camera_label,
             KW.Metadata_Height: str(shape[0]),
             KW.Metadata_Width: str(shape[1]),
-            KW.Metadata_ROI_X: "0",
-            KW.Metadata_ROI_Y: "0",
+            KW.Metadata_ROI_X: str(x),
+            KW.Metadata_ROI_Y: str(y),
             KW.PixelType: PixelType.for_bytes(dtype.itemsize, n_components),
         }
 
@@ -1503,10 +1504,10 @@ class UniMMCore(CMMCorePlus):
             cam.set_exposure(*args)
 
     def _do_set_roi(self, label: str, x: int, y: int, width: int, height: int) -> None:
-        if self._py_camera(label) is not None:
-            raise NotImplementedError(
-                "setROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera(label)) is not None:
+            with cam:
+                cam.set_roi(x, y, width, height)
+            return
         return pymmcore.CMMCore.setROI(self, label, x, y, width, height)
 
     @overload
@@ -1515,19 +1516,18 @@ class UniMMCore(CMMCorePlus):
     def getROI(self, label: DeviceLabel | str) -> list[int]: ...
     def getROI(self, label: DeviceLabel | str = "") -> list[int]:
         """Get the current region of interest (ROI) for the camera."""
-        if self._py_camera(label) is not None:  # pragma: no cover
-            raise NotImplementedError(
-                "getROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera(label)) is not None:
+            with cam:
+                return list(cam.get_roi())
         label = label or self.getCameraDevice()
         return super().getROI(label)
 
     def clearROI(self) -> None:
         """Clear the current region of interest (ROI) for the camera."""
-        if self._py_camera() is not None:  # pragma: no cover
-            raise NotImplementedError(
-                "clearROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera()) is not None:
+            with cam:
+                cam.clear_roi()
+            return
         return super().clearROI()
 
     def isExposureSequenceable(self, cameraLabel: DeviceLabel | str) -> bool:
