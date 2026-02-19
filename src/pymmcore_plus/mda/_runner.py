@@ -176,6 +176,9 @@ class _HandlersThread:
             self._queue.put(_STOP)
             self._thread.join()
             self._thread = None
+        # ensure handlers are cleared even if _dispatch_cleanup didn't run
+        # (e.g. thread died from a handler error before processing cleanup)
+        self.clear()
         self._check_error()
 
     def _run(self) -> None:
@@ -473,10 +476,7 @@ class MDARunner:
 
         # add the handlers to the thread
         self._handlers_thread.set_handlers(handlers)
-        try:
-            yield
-        finally:
-            self._handlers_thread.clear()
+        yield
 
     @staticmethod
     def _handler_for_path(
