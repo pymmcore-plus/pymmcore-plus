@@ -32,11 +32,13 @@ class CameraDevice(Device):
 
     @abstractmethod
     def shape(self) -> tuple[int, ...]:
-        """Return the shape of the image buffer.
+        """Return the shape of the current image buffer.
 
-        This is used when querying Width, Height, *and* number of components.
-        If the camera is grayscale, it should return (width, height).
-        If the camera is color, it should return (width, height, n_channels).
+        This is used when querying Height, Width *and* number of components.
+        If the camera is grayscale, it should return (height, width).
+        If the camera is color, it should return (height, width, n_channels).
+
+        If the camera supports ROI, this should return the ROI dimensions.
         """
 
     @abstractmethod
@@ -197,17 +199,27 @@ class CameraDevice(Device):
     def get_roi(self) -> tuple[int, int, int, int]:
         """Return the current ROI as ``(x, y, width, height)``.
 
-        The default implementation returns the full sensor frame.
-        Override in subclasses to support hardware ROI.
+        The default implementation returns the full frame from
+        ``shape()``. Override in subclasses to support hardware ROI.
         """
         h, w, *_ = self.shape()
         return (0, 0, w, h)
 
     def set_roi(self, x: int, y: int, width: int, height: int) -> None:
-        """Set the ROI.  Override in subclasses to support hardware ROI."""
+        """Set the ROI.
+
+        The default implementation raises ``NotImplementedError``.
+        Override in subclasses to support hardware ROI.
+        """
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support setting ROI."
+        )
 
     def clear_roi(self) -> None:
-        """Reset the ROI to the full sensor frame.  Override if needed."""
+        """Reset the ROI to the full sensor frame.
+
+        No-op by default (nothing was set, nothing to clear).
+        """
 
     # Standard Properties, default implementations -------------------
 
@@ -216,3 +228,115 @@ class CameraDevice(Device):
     def get_binning(self) -> int:
         """Get the binning factor for the camera."""
         return 1  # pragma: no cover
+
+
+class SimpleCameraDevice(CameraDevice):
+    """A convenience subclass of ``CameraDevice`` for simple/simulated cameras.
+
+    Instead of implementing ``start_sequence()`` and ``shape()``
+    directly, subclasses only need to implement:
+
+    - ``sensor_shape()``: the full (height, width) of the sensor
+    - ``snap(buffer)``: fill the provided **full-frame** buffer with image
+      data and return metadata.  The buffer is always sized to
+      ``sensor_shape()``.  If a ROI is active, cropping is handled
+      automatically by this base class.
+
+    Software ROI (``set_roi`` / ``clear_roi``) works out of the box.
+
+    .. warning::
+       This class is **not** recommended for real hardware cameras that need
+       efficient ring-buffer or hardware-triggered acquisition.  For those,
+       use subclass ``CameraDevice`` directly and implement ``start_sequence()``.
+    """
+
+    @abstractmethod
+    def sensor_shape(self) -> tuple[int, ...]:
+        """Return the full sensor shape ``(height, width[, n_channels])``."""
+
+    @abstractmethod
+    def snap(self, buffer: np.ndarray) -> Mapping:
+        """Snap a single image into the provided full-frame buffer.
+
+        Parameters
+        ----------
+        buffer : np.ndarray
+            Pre-allocated buffer shaped to ``sensor_shape()``.
+            **Must** be filled with full-frame image data every time.
+
+        Returns
+        -------
+        Mapping
+            Metadata for the acquired image.
+        """
+
+    # -- concrete overrides ------------------------------------------
+
+    _roi: tuple[int, int, int, int] | None = None
+
+    def shape(self) -> tuple[int, ...]:
+        """Return the current image shape, accounting for any active ROI."""
+        if self._roi is not None:
+            _, _, w, h = self._roi
+            return (h, w)
+        return self.sensor_shape()
+
+    def get_roi(self) -> tuple[int, int, int, int]:
+        """Return the current ROI as ``(x, y, width, height)``."""
+        if self._roi is not None:
+            return self._roi
+        h, w, *_ = self.sensor_shape()
+        return (0, 0, w, h)
+
+    def set_roi(self, x: int, y: int, width: int, height: int) -> None:
+        """Set the software ROI, validating bounds against the sensor shape."""
+        h, w, *_ = self.sensor_shape()
+        if x < 0 or y < 0 or width <= 0 or height <= 0:
+            raise ValueError(
+                f"Invalid ROI ({x}, {y}, {width}, {height}): "
+                "coordinates must be non-negative and dimensions positive."
+            )
+        if x + width > w or y + height > h:
+            raise ValueError(
+                f"ROI ({x}, {y}, {width}, {height}) exceeds sensor bounds ({w}x{h})."
+            )
+        self._roi = (x, y, width, height)
+
+    def clear_roi(self) -> None:
+        """Reset the ROI to the full sensor frame."""
+        self._roi = None
+
+    def start_sequence(
+        self,
+        n: int | None,
+        get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray],
+    ) -> Iterator[Mapping]:
+        """Loop over ``snap()``, cropping to the active ROI if set."""
+        import numpy as _np
+
+        sensor = self.sensor_shape()
+        roi = self._roi
+        dtype = self.dtype()
+
+        if roi is None:
+            # No ROI: snap directly into the output buffer (zero overhead)
+            count = 0
+            limit = n if n is not None else 2**63
+            while count < limit:
+                buf = get_buffer(sensor, dtype)
+                meta = self.snap(buf)
+                yield meta
+                count += 1
+        else:
+            # ROI active: snap into full-frame buffer, crop into output
+            x, y, w, h = roi
+            full_buf = _np.empty(sensor, dtype=dtype)
+            count = 0
+            limit = n if n is not None else 2**63
+            while count < limit:
+                roi_shape = self.shape()
+                out = get_buffer(roi_shape, dtype)
+                meta = self.snap(full_buf)
+                out[:] = full_buf[y : y + h, x : x + w]
+                yield meta
+                count += 1

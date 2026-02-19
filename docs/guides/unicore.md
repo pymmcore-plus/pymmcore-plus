@@ -122,22 +122,43 @@ class MyCamera(CameraDevice):
     def get_exposure(self) -> float:
         """Return current exposure time in milliseconds."""
         pass
-    
+
     def set_exposure(self, exposure: float) -> None:
         """Set exposure time in milliseconds."""
         pass
-    
+
     def shape(self) -> tuple[int, ...]:
-        """Return (height, width, [channels]) of current camera state."""
+        """Return (height, width, [channels]) of current image."""
         pass
-    
+
     def dtype(self) -> np.dtype:
         """Return NumPy dtype of camera images."""
         pass
-    
+
     def start_sequence(self, n: int | None, get_buffer: Callable) -> Iterator[dict]:
         """Start sequence acquisition yielding metadata dicts."""
         pass
+```
+
+For simple or simulated cameras, use `SimpleCameraDevice` instead — it only
+requires `sensor_shape()` and `snap()`, and provides automatic software ROI:
+
+```python
+from pymmcore_plus.experimental.unicore import SimpleCameraDevice
+
+class MySimpleCamera(SimpleCameraDevice):
+    def get_exposure(self) -> float: ...
+    def set_exposure(self, exposure: float) -> None: ...
+
+    def sensor_shape(self) -> tuple[int, ...]:
+        """Return (height, width) of the full sensor."""
+        ...
+
+    def dtype(self) -> np.dtype: ...
+
+    def snap(self, buffer: np.ndarray) -> dict:
+        """Fill the full-frame buffer with image data."""
+        ...
 ```
 
 ### XY Stage Devices (`XYStageDevice`)

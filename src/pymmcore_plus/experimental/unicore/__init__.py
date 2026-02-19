@@ -1,5 +1,5 @@
 from .core._unicore import UniMMCore
-from .devices._camera import CameraDevice
+from .devices._camera import CameraDevice, SimpleCameraDevice
 from .devices._device_base import Device
 from .devices._generic_device import GenericDevice
 from .devices._hub import HubDevice
@@ -17,6 +17,7 @@ __all__ = [
     "PropertyInfo",
     "SLMDevice",
     "ShutterDevice",
+    "SimpleCameraDevice",
     "StageDevice",
     "StateDevice",
     "UniMMCore",
