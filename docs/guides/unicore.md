@@ -140,6 +140,10 @@ class MyCamera(CameraDevice):
         pass
 ```
 
+!!! warning
+
+    `SimpleCameraDevice` is **not** recommended for real hardware cameras: a per-frame `snap()` prevents SDK-level optimizations like ring buffers and DMA transfers. Use `CameraDevice` with `start_sequence()` instead.
+
 For simple or simulated cameras, use `SimpleCameraDevice` instead — it only
 requires `sensor_shape()` and `snap()`, and provides automatic software ROI:
 
