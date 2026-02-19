@@ -509,7 +509,9 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getAllowedPropertyValues(label, propName)
         with self._pydevices[label] as dev:
-            return tuple(dev.get_property_info(propName).allowed_values or ())
+            return tuple(
+                str(v) for v in (dev.get_property_info(propName).allowed_values or ())
+            )
 
     def isPropertyPreInit(
         self, label: DeviceLabel | str, propName: PropertyName | str
