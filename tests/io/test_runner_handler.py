@@ -200,6 +200,7 @@ def test_run_via_directory_path(tmp_path: Path, core: CMMCorePlus) -> None:
 
 def test_run_with_ome_zarr_writer(tmp_path: Path, core: CMMCorePlus) -> None:
     """output=OMEZarrWriter("example.ome.zarr")"""
+    pytest.importorskip("zarr")
     writer = OMEZarrWriter(tmp_path / "out.ome.zarr")
     core.mda.run(SIMPLE_MDA, output=writer)
 
