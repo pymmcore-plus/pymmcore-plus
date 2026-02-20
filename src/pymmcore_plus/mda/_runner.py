@@ -372,6 +372,9 @@ class MDARunner:
             finally:
                 teardown_event(event)
 
+            if self._was_canceled:
+                break
+
     def _iter_with_signals(self, iterable: Iterable) -> Iterator:
         """Iterate over output, sending cancel/pause signals to generators.
 
