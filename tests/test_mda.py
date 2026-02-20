@@ -485,14 +485,15 @@ def test_get_handlers(core: CMMCorePlus) -> None:
     def _on_end() -> None:
         on_finish_names.extend([type(h).__name__ for h in runner.get_output_handlers()])
 
-    runner.run([MDAEvent()], output="memory://")
+    seq = MDASequence(time_plan={"interval": 0.1, "loops": 1})
+    runner.run(seq, output="memory://")
 
-    # weakref is used to store the handlers,
-    # handlers should be cleared after the sequence is finished
+    # runner handlers are cleared during cleanup (before sequenceFinished)
     assert not runner.get_output_handlers()
-    # but they should have been available during start and finish events
-    assert on_start_names == ["TensorStoreHandler"]
-    assert on_finish_names == ["TensorStoreHandler"]
+    # handler should have been available during sequenceStarted
+    assert on_start_names == ["OMERunnerHandler"]
+    # but cleaned up before sequenceFinished
+    assert on_finish_names == []
 
 
 def test_custom_action(core: CMMCorePlus) -> None:

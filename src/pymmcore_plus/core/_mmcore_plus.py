@@ -1665,12 +1665,16 @@ class CMMCorePlus(pymmcore.CMMCore):
             The output handler(s) to use.  If None, no output will be saved.
             "SingleOutput" can be any of the following:
 
-            - A string or Path to a directory to save images to. A handler will be
-                created automatically based on the extension of the path.
-            - A handler object that implements the `DataHandler` protocol, currently
-                meaning it has a `frameReady` method.  See `mda_listeners_connected`
-                for more details.
-            - A sequence of either of the above. (all will be connected)
+            - A string or Path to a file path. A handler will be created
+                automatically based on the extension of the path.
+                - `.zarr` or `.ome.zarr` paths will use `OMERunnerHandler`
+                - `.ome.tiff` or `.tif` paths will use `OMERunnerHandler`
+                - A directory with no extension will use `ImageSequenceWriter`
+            - A `BaseRunnerHandler` instance (e.g. `OMERunnerHandler`) for
+                runner-managed writing via `prepare`/`writeframe`/`cleanup`.
+            - A handler object with a `frameReady` method for signal-based
+                writing.
+            - A sequence of any of the above. (all will be connected)
         block : bool, optional
             If True, block until the sequence is complete, by default False.
 
@@ -1684,7 +1688,12 @@ class CMMCorePlus(pymmcore.CMMCore):
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self.mda.run, args=(events,), kwargs={"output": output})
+
+        th = Thread(
+            target=self.mda.run,
+            args=(events,),
+            kwargs={"output": output},
+        )
         th.start()
         if block:
             th.join()
