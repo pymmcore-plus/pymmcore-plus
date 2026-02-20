@@ -3,9 +3,9 @@ from __future__ import annotations
 import time
 import warnings
 import weakref
+from collections import UserDict, defaultdict
 from contextlib import suppress
 from functools import cache
-from itertools import product
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
 import numpy as np
@@ -27,13 +27,13 @@ from pymmcore_plus.metadata import (
 from ._protocol import PMDAEngine
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Sequence
+    from collections.abc import Callable, Iterable, Iterator, Sequence
     from typing import TypeAlias
 
     from numpy.typing import NDArray
     from typing_extensions import TypedDict
 
-    from pymmcore_plus.core import CMMCorePlus
+    from pymmcore_plus.core import CMMCorePlus, Metadata
 
     from ._protocol import PImagePayload
 
@@ -78,6 +78,10 @@ class MDAEngine(PMDAEngine):
         reports that the events can be sequenced. This can be set after instantiation.
         By default, this is `True`, however in various testing and demo scenarios, you
         may wish to set it to `False` in order to avoid unexpected behavior.
+    force_set_xy_position : bool
+        Whether to always set the XY position, even if the target position is the same
+        as the last commanded position (this does *not* query the stage for the
+        current position). By default, this is `True`.
     restore_initial_state : bool | None
         Whether to restore the initial hardware state after the MDA sequence completes.
         If `True`, the engine will capture the initial state (positions,
@@ -91,21 +95,17 @@ class MDAEngine(PMDAEngine):
         mmc: CMMCorePlus,
         *,
         use_hardware_sequencing: bool = True,
+        force_set_xy_position: bool = True,
         restore_initial_state: bool | None = None,
     ) -> None:
         self._mmcore_ref = weakref.ref(mmc)
         self.use_hardware_sequencing: bool = use_hardware_sequencing
-        # if True, always set XY position, even if the commanded position is the same
-        # as the last commanded position (this does *not* query the stage for the
-        # current position).
-        self.force_set_xy_position: bool = True
+        self.force_set_xy_position: bool = force_set_xy_position
+        self.restore_initial_state: bool | None = restore_initial_state
 
         # whether to include position metadata when fetching on-frame metadata
         # omitted by default when performing triggered acquisition because it's slow.
         self._include_frame_position_metadata: IncludePositionArg = "unsequenced-only"
-
-        # whether to restore the initial hardware state after sequence completion
-        self.restore_initial_state: bool | None = restore_initial_state
 
         # stored initial state for restoration (if restore_initial_state is True)
         self._initial_state: StateDict = {}
@@ -179,10 +179,12 @@ class MDAEngine(PMDAEngine):
 
         # capture initial state if restoration is enabled
         if self.restore_initial_state is None:
-            fd = core.getFocusDevice()
-            self.restore_initial_state = (
-                fd is not None and core.getFocusDirection(fd) != FocusDirection.Unknown
-            )
+            if fd := core.getFocusDevice():
+                self.restore_initial_state = (
+                    core.getFocusDirection(fd) != FocusDirection.Unknown
+                )
+            else:
+                self.restore_initial_state = False
 
         if self.restore_initial_state:
             self._initial_state = self._capture_state()
@@ -653,7 +655,6 @@ class MDAEngine(PMDAEngine):
         in case a user wants to subclass this engine and override this method.
         """
         n_events = len(event.events)
-
         t0 = event.metadata.get("runner_t0") or time.perf_counter()
         event_t0_ms = (time.perf_counter() - t0) * 1000
 
@@ -661,33 +662,84 @@ class MDAEngine(PMDAEngine):
             self._exec_event_slm_image(event.slm_image)
 
         core = self.mmcore
+        n_channels = core.getNumberOfCameraChannels()
+
         # Start sequence
         # Note that the overload of startSequenceAcquisition that takes a camera
         # label does NOT automatically initialize a circular buffer.  So if this call
         # is changed to accept the camera in the future, that should be kept in mind.
-        core.startSequenceAcquisition(
-            n_events,
-            0,  # intervalMS  # TODO: add support for this
-            True,  # stopOnOverflow
-        )
+        core.startSequenceAcquisition(n_events, 0, True)
         self.post_sequence_started(event)
 
-        n_channels = core.getNumberOfCameraChannels()
-        count = 0
-        iter_events = product(event.events, range(n_channels))
         pause_warned = False
 
-        # block until the sequence is done, popping images in the meantime
+        # Fast path for single camera (most common use case)
+        if n_channels == 1:
+            yield from self._exec_single_camera_sequence(event, event_t0_ms)
+            return
+
+        # Multi-camera path: coordinate async frame arrival
+        coordinator = _MultiCameraCoordinator(core, n_channels, n_events)
+
+        # Pop frames while sequence is running
         while core.isSequenceRunning():
+            if core.getRemainingImageCount():
+                for payload in coordinator.pop_and_process(
+                    event.events, event_t0_ms, self._create_seqimg_payload_from_popped
+                ):
+                    signal = yield payload
+                    if signal == "cancel":
+                        core.stopSequenceAcquisition()
+                        return
+                    if signal == "pause" and not pause_warned:
+                        pause_warned = True
+                        logger.warning(
+                            "MDA: Pause has been requested, but sequenced acquisition "
+                            "cannot be yet paused, only canceled."
+                        )
+            else:
+                time.sleep(0.001)
+
+        if core.isBufferOverflowed():  # pragma: no cover
+            raise MemoryError("Buffer overflowed")
+
+        # Pop any remaining frames from circular buffer
+        while core.getRemainingImageCount():
+            for payload in coordinator.pop_and_process(
+                event.events, event_t0_ms, self._create_seqimg_payload_from_popped
+            ):
+                signal = yield payload
+                if signal == "cancel":
+                    return
+
+        # Flush buffered frames and validate count
+        for payload in coordinator.flush_remaining():
+            signal = yield payload
+            if signal == "cancel":
+                return
+        coordinator.validate_count()
+
+    def _exec_single_camera_sequence(
+        self, event: SequencedEvent, event_t0_ms: float
+    ) -> Iterator[PImagePayload]:
+        """Execute single-camera sequenced event (fast path, no coordination needed)."""
+        core = self.mmcore
+        count = 0
+        pause_warned = False
+
+        # Pop frames while sequence is running, then drain remaining buffer
+        while True:
             if remaining := core.getRemainingImageCount():
-                payload = self._next_seqimg_payload(
-                    *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
+                img, mm_meta = core.popNextImageAndMD()
+                signal = yield self._create_seqimg_payload_from_popped(
+                    img,
+                    mm_meta,
+                    event=event.events[count],
+                    channel=0,
+                    event_t0=event_t0_ms,
+                    remaining=remaining - 1,
                 )
                 count += 1
-                # Yield payload and receive signal from runner via generator.send()
-                signal = yield payload
-
-                # Handle signals sent by runner (keeps engine decoupled from runner)
                 if signal == "cancel":
                     core.stopSequenceAcquisition()
                     return
@@ -697,43 +749,41 @@ class MDAEngine(PMDAEngine):
                         "MDA: Pause has been requested, but sequenced acquisition "
                         "cannot be yet paused, only canceled."
                     )
-            else:
+            elif core.isSequenceRunning():
+                # Still acquiring, buffer temporarily empty - wait
                 time.sleep(0.001)
+            else:
+                # Done acquiring and buffer empty - exit
+                break
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
 
-        while remaining := core.getRemainingImageCount():
-            payload = self._next_seqimg_payload(
-                *next(iter_events), remaining=remaining - 1, event_t0=event_t0_ms
-            )
-            count += 1
-            signal = yield payload
-            if signal == "cancel":
-                return
-
-        # necessary?
-        expected_images = n_events * n_channels
-        if count != expected_images:
+        # Validate count
+        if count != len(event.events):
             logger.warning(
                 "Unexpected number of images returned from sequence. "
                 "Expected %s, got %s",
-                expected_images,
+                len(event.events),
                 count,
             )
 
-    def _next_seqimg_payload(
+    def _create_seqimg_payload_from_popped(
         self,
+        img: NDArray,
+        mm_meta: Metadata,
         event: MDAEvent,
-        channel: int = 0,
+        channel: int,
         *,
         event_t0: float = 0.0,
         remaining: int = 0,
     ) -> PImagePayload:
-        """Grab next image from the circular buffer and return it as an ImagePayload."""
-        _slice = 0  # ?
+        """Create ImagePayload from already-popped image and metadata.
+
+        This is used by exec_sequenced_event to properly handle multi-camera
+        acquisitions where images arrive asynchronously.
+        """
         core = self.mmcore
-        img, mm_meta = core.popNextImageAndMD(channel, _slice)
         try:
             seq_time = float(mm_meta.get(Keyword.Elapsed_Time_ms))
         except Exception:
@@ -946,3 +996,123 @@ def _warn_focus_dir(focus_device: str) -> None:
         stacklevel=3,
         category=RuntimeWarning,
     )
+
+
+class _TimepointBuffer:
+    """Buffers multi-camera frames and yields them in sequential timepoint order.
+
+    Ensures frames are emitted in predictable (t, c) order: (0,0), (0,1), (1,0), (1,1)
+    even when cameras produce frames asynchronously.
+    """
+
+    def __init__(self, n_channels: int) -> None:
+        self.n_channels = n_channels
+        self._buffer: dict[int, dict[int, PImagePayload]] = defaultdict(dict)
+        self._next_timepoint = 0
+
+    def add(
+        self, timepoint: int, channel: int, payload: PImagePayload
+    ) -> Iterator[PImagePayload]:
+        """Add a frame and yield any complete timepoints in sequential order."""
+        self._buffer[timepoint][channel] = payload
+        yield from self._emit_ready_timepoints()
+
+    def _emit_ready_timepoints(self) -> Iterator[PImagePayload]:
+        """Yield complete timepoints sequentially."""
+        # check if next timepoint is ready (has frames for all channels)
+        # and if so, yield all its frames in channel order
+        while (frames := self._buffer.get(self._next_timepoint)) and len(
+            frames
+        ) == self.n_channels:
+            for ch in range(self.n_channels):
+                payload = frames[ch]
+                UserDict.__setitem__(payload[1].index, "cam", ch)
+                yield payload
+            del self._buffer[self._next_timepoint]
+            self._next_timepoint += 1
+
+    def flush(self) -> Iterator[PImagePayload]:
+        """Yield any remaining buffered frames in timepoint/channel order."""
+        for t in sorted(self._buffer):
+            for ch in sorted(self._buffer[t]):
+                payload = self._buffer[t][ch]
+                UserDict.__setitem__(payload[1].index, "cam", ch)
+                yield payload
+
+
+class _MultiCameraCoordinator:
+    """Coordinates multi-camera frame acquisition and ordering.
+
+    Handles asynchronous frame arrival from multiple cameras, ensuring frames
+    are emitted in sequential (timepoint, channel) order.
+    """
+
+    def __init__(self, core: CMMCorePlus, n_channels: int, n_events: int) -> None:
+        self.core = core
+        self.n_channels = n_channels
+        self.n_events = n_events
+        self.channel_frame_counts = [0] * n_channels
+        self.buffer = _TimepointBuffer(n_channels)
+        self.total_count = 0
+
+    def pop_and_process(
+        self,
+        events: tuple[MDAEvent, ...],
+        event_t0_ms: float,
+        payload_factory: Callable,
+    ) -> Iterator[PImagePayload]:
+        """Pop next frame, validate, create payload, and yield ordered frames."""
+        if not (remaining := self.core.getRemainingImageCount()):
+            return
+
+        # Pop image and extract channel index
+        img, mm_meta = self.core.popNextImageAndMD()
+        # NB: This is a implementation detail of the MultiCamera device adapter
+        # it adds a `devName-CameraChannelIndex` tag to the metadata of each frame
+        ch_index = int(
+            next(
+                (v for k, v in mm_meta.items() if k.endswith("CameraChannelIndex")),
+                0,
+            )
+        )
+
+        # Get the correct event for this channel based on its frame count
+        frame_idx = self.channel_frame_counts[ch_index]
+        if frame_idx >= self.n_events:  # pragma: no cover
+            logger.warning(
+                "Received unexpected frame for channel %s (frame %s of %s)",
+                ch_index,
+                frame_idx,
+                self.n_events,
+            )
+            return
+
+        current_event = events[frame_idx]
+        self.channel_frame_counts[ch_index] += 1
+        self.total_count += 1
+
+        # Create payload and buffer for ordered emission
+        payload = payload_factory(
+            img,
+            mm_meta,
+            current_event,
+            ch_index,
+            event_t0=event_t0_ms,
+            remaining=remaining - 1,
+        )
+        yield from self.buffer.add(frame_idx, ch_index, payload)
+
+    def flush_remaining(self) -> Iterator[PImagePayload]:
+        """Flush any buffered frames in order."""
+        yield from self.buffer.flush()
+
+    def validate_count(self) -> None:
+        """Validate expected frame count and log warnings."""
+        expected = self.n_events * self.n_channels
+        if self.total_count != expected:
+            logger.warning(
+                "Unexpected number of images returned from sequence. "
+                "Expected %s, got %s",
+                expected,
+                self.total_count,
+            )

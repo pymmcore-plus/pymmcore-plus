@@ -5,11 +5,14 @@ from dataclasses import fields
 from typing import TYPE_CHECKING, Protocol
 
 if TYPE_CHECKING:
-    from collections.abc import Container, Iterable
+    from collections.abc import Callable, Container, Iterable
     from dataclasses import Field
-    from typing import Any, Callable, ClassVar, TypeVar
-
-    from typing_extensions import TypeAlias  # py310
+    from typing import (
+        Any,
+        ClassVar,
+        TypeAlias,  # py310
+        TypeVar,
+    )
 
     from pymmcore_plus import CMMCorePlus
 

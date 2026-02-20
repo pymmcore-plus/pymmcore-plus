@@ -5,13 +5,14 @@ from __future__ import annotations
 import weakref
 from functools import partial
 from types import MethodType
-from typing import TYPE_CHECKING, Any, Callable, Union
+from typing import TYPE_CHECKING, Any, TypeAlias
 
 if TYPE_CHECKING:
-    from typing_extensions import TypeGuard  # py310
+    from collections.abc import Callable
+    from typing import TypeGuard  # py310
 
     MethodRef = tuple[weakref.ReferenceType[object], str, Callable | None]
-    NormedCallback = Union[MethodRef, Callable]
+    NormedCallback: TypeAlias = MethodRef | Callable
     StoredSlot = tuple[NormedCallback, int | None]
     ReducerFunc = Callable[[tuple, tuple], tuple]
 

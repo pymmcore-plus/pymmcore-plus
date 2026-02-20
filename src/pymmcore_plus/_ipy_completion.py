@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING
 
 from IPython import get_ipython  # pyright: ignore
 from IPython.core.completer import SimpleCompletion, context_matcher
@@ -9,7 +9,7 @@ from IPython.core.completer import SimpleCompletion, context_matcher
 from pymmcore_plus import CMMCorePlus, DeviceType
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
 
     from IPython.core.completer import (
         CompletionContext,
@@ -81,6 +81,24 @@ def _config_preset_names(core: CMMCorePlus, group: str) -> Sequence[SimpleComple
     try:
         return [
             SimpleCompletion(f'"{name}"') for name in core.getAvailableConfigs(group)
+        ]
+    except Exception:  # pragma: no cover
+        return []
+
+
+def _adapter_names(core: CMMCorePlus) -> Sequence[SimpleCompletion]:
+    """Get the names of all device adapter libraries."""
+    try:
+        return [SimpleCompletion(f'"{name}"') for name in core.getDeviceAdapterNames()]
+    except Exception:  # pragma: no cover
+        return []
+
+
+def _available_devices(core: CMMCorePlus, adapter: str) -> Sequence[SimpleCompletion]:
+    """Get the available devices for a given adapter library."""
+    try:
+        return [
+            SimpleCompletion(f'"{name}"') for name in core.getAvailableDevices(adapter)
         ]
     except Exception:  # pragma: no cover
         return []
@@ -228,6 +246,8 @@ CORE_COMPLETERS: dict[tuple[str, int], CoreCompleter] = {
     ("readFromSerialPort", 0): lambda core: _dev_labels(core, DeviceType.Serial),
     ("setParentLabel", 1): lambda core: _dev_labels(core, DeviceType.Hub),
 
+    # ----------------- Load Device ----------------------
+    ("loadDevice", 1): _adapter_names,
     # ----------------- Config Groups --------------------
     ("deleteConfig", 0): _config_group_names,
     ("deleteConfigGroup", 0): _config_group_names,
@@ -280,6 +300,8 @@ LABEL_COMPLETERS: dict[tuple[str, int], tuple[int, CoreLabelCompleter]] = {
     ("setProperty", 1): (0, _get_prop_names),
     ("startPropertySequence", 1): (0, _get_prop_names),
     ("stopPropertySequence", 1): (0, _get_prop_names),
+    # ----------------- Load Device ----------------------
+    ("loadDevice", 2): (1, _available_devices),
     # ----------------- Config Presets --------------------
     ("deleteConfig", 1): (0, _config_preset_names),
     ("getConfigData", 1): (0, _config_preset_names),
@@ -291,7 +313,7 @@ LABEL_COMPLETERS: dict[tuple[str, int], tuple[int, CoreLabelCompleter]] = {
 # fmt: on
 
 
-@context_matcher()  # type: ignore[misc]
+@context_matcher()  # type: ignore[untyped-decorator]
 def cmmcoreplus_matcher(ctx: CompletionContext) -> SimpleMatcherResult:
     """
     Offer string completions for CMMCorePlus calls such as.
@@ -325,15 +347,23 @@ def cmmcoreplus_matcher(ctx: CompletionContext) -> SimpleMatcherResult:
 
     # 4. Check if we have a specific completion for this method name and arg_index.
     key = (method_name, arg_index)
+    fragment = _get_current_fragment(src_to_cursor)
     if (dev_getter := CORE_COMPLETERS.get(key)) and (completions := dev_getter(obj)):
-        # If we have a specific suggestion for this method and arg_index, use it.
-        return {"completions": completions, "suppress": True}
+        return {
+            "completions": _filter(completions, fragment),
+            "matched_fragment": fragment,
+            "suppress": True,
+        }
 
     if info := LABEL_COMPLETERS.get(key):
         dev_idx, getter = info
         if dev_label := _get_argument(src_to_cursor, dev_idx):
             if completions := getter(obj, dev_label):
-                return {"completions": completions, "suppress": True}
+                return {
+                    "completions": _filter(completions, fragment),
+                    "matched_fragment": fragment,
+                    "suppress": True,
+                }
 
     return _null()
 
@@ -352,6 +382,30 @@ def _get_argument(src: str, index: int) -> str:
         if index < len(args):
             return args[index].strip().strip("'\"")
     return ""  # pragma: no cover
+
+
+def _filter(
+    completions: Sequence[SimpleCompletion], fragment: str
+) -> list[SimpleCompletion]:
+    """Filter completions to those whose text starts with the typed fragment."""
+    if not fragment:
+        return list(completions)
+    return [c for c in completions if c.text.startswith(fragment)]
+
+
+def _get_current_fragment(src: str) -> str:
+    r"""Get the partial text being typed for the current argument.
+
+    For example:
+    >>> _get_current_fragment("core.loadDevice('MyLabel', \"De")
+    '"De'
+    """
+    p0 = src.rfind("(") + 1
+    inner = src[p0:]
+    # get text after the last comma, or after the opening paren
+    last_comma = inner.rfind(",")
+    fragment = inner[last_comma + 1 :] if last_comma >= 0 else inner
+    return fragment.strip()
 
 
 def install_pymmcore_ipy_completion(shell: InteractiveShell | None = None) -> None:

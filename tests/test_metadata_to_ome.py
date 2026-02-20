@@ -38,6 +38,21 @@ PLATE_SEQ = useq.MDASequence(
     ),
 )
 
+PLATE_SEQ_FOVS = useq.MDASequence(
+    axis_order="pcz",
+    stage_positions=useq.WellPlatePlan(
+        plate=useq.WellPlate.from_str("96-well"),
+        a1_center_xy=(0, 0),
+        selected_wells=((0, 0, 0), (0, 1, 2)),
+        well_points_plan=useq.GridRowsColumns(rows=1, columns=2),
+    ),
+    z_plan=useq.ZRangeAround(range=3.0, step=1.0),
+    channels=(
+        useq.Channel(config="DAPI", exposure=20),
+        useq.Channel(config="FITC", exposure=30),
+    ),
+)
+
 GRID_SEQ = useq.MDASequence(
     time_plan=useq.TIntervalLoops(interval=0.5, loops=2),
     stage_positions=(
@@ -138,7 +153,9 @@ def _verify_image_names(seq: useq.MDASequence, ome) -> None:
     )
 
 
-@pytest.mark.parametrize("seq", [BASIC_SEQ, PLATE_SEQ, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID])
+@pytest.mark.parametrize(
+    "seq", [BASIC_SEQ, PLATE_SEQ, PLATE_SEQ_FOVS, GRID_SEQ, SEQ_WITH_SUBSEQ_GRID]
+)
 def test_ome_generation(seq: useq.MDASequence) -> None:
     mmc = CMMCorePlus()
     mmc.loadSystemConfiguration("tests/local_config.cfg")
@@ -168,7 +185,7 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
     assert pixels.tiff_data_blocks is not None
     assert len(pixels.tiff_data_blocks) == len(pixels.planes)
 
-    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes):
+    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes, strict=False):
         assert tiff_data.first_z == plane.the_z
         assert tiff_data.first_c == plane.the_c
         assert tiff_data.first_t == plane.the_t
@@ -179,7 +196,17 @@ def test_ome_generation(seq: useq.MDASequence) -> None:
         plate = ome.plates[0]
         assert plate.rows == plan.plate.rows
         assert plate.columns == plan.plate.columns
-        assert len(plate.wells) == len(plan)
+
+        # Count total WellSamples across all wells
+        total_well_samples = sum(
+            len(well.well_samples) if well.well_samples else 0 for well in plate.wells
+        )
+        # Total WellSamples should equal total image positions (including FOVs)
+        assert total_well_samples == len(plan)
+
+        # assert the well ids are correct
+        for idx, well in enumerate(plate.wells):
+            assert well.id == f"Well:{idx}"
 
 
 def test_ome_generation_from_events() -> None:
@@ -236,7 +263,7 @@ def test_ome_generation_from_events() -> None:
     assert pixels.tiff_data_blocks is not None
     assert len(pixels.tiff_data_blocks) == len(pixels.planes)
 
-    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes):
+    for tiff_data, plane in zip(pixels.tiff_data_blocks, pixels.planes, strict=False):
         assert tiff_data.first_z == plane.the_z
         assert tiff_data.first_c == plane.the_c
         assert tiff_data.first_t == plane.the_t

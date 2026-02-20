@@ -16,7 +16,6 @@ from threading import Thread
 from typing import (
     TYPE_CHECKING,
     Any,
-    Callable,
     NamedTuple,
     TypeVar,
     cast,
@@ -51,8 +50,8 @@ from ._property import DeviceProperty
 from .events import CMMCoreSignaler, PCoreSignaler, _get_auto_core_callback_class
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Iterator, Sequence
-    from typing import Literal, Never, TypeAlias, TypedDict, Union, Unpack
+    from collections.abc import Callable, Iterable, Iterator, Sequence
+    from typing import Literal, Never, TypeAlias, TypedDict, Unpack
 
     import numpy as np
     from pymmcore import DeviceLabel
@@ -64,7 +63,7 @@ if TYPE_CHECKING:
     _T = TypeVar("_T")
     _DT = TypeVar("_DT", bound=_device.Device)
     ListOrTuple = list[_T] | tuple[_T, ...]
-    DeviceTypesWithCurrent: TypeAlias = Union[
+    DeviceTypesWithCurrent: TypeAlias = (
         Literal[DeviceType.CameraDevice]
         | Literal[DeviceType.ShutterDevice]
         | Literal[DeviceType.StageDevice]
@@ -73,7 +72,7 @@ if TYPE_CHECKING:
         | Literal[DeviceType.SLMDevice]
         | Literal[DeviceType.GalvoDevice]
         | Literal[DeviceType.ImageProcessorDevice]
-    ]
+    )
 
     class PropertySchema(TypedDict, total=False):
         """JSON schema `dict` describing a device property."""
@@ -307,12 +306,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         [`CMMCorePlus.events`][pymmcore_plus.CMMCorePlus.events] property instead.
         """  # noqa
         raise RuntimeError(
-            dedent("""
+            dedent(
+                """
             This method is disallowed in pymmcore-plus.
 
             If you want to connect callbacks to events, use the
             `CMMCorePlus.events` property instead.
-            """)
+            """
+            )
         )
 
     @property
@@ -1268,18 +1269,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             }
         }
         """
-        dev = _device.Device.create(device_label, mmcore=self)
-        if (isinstance(device_type, type) and not isinstance(dev, device_type)) or (
-            isinstance(device_type, DeviceType)
-            and device_type not in {DeviceType.Any, DeviceType.Unknown}
-            and dev.type() != device_type
-        ):
-            raise TypeError(
-                f"{device_type!r} requested but device with label "
-                f"{device_label!r} is a {dev.type()}."
-            )
-
-        return dev
+        return _device.Device.create(device_label, mmcore=self, device_type=device_type)
 
     def getConfigGroupObject(
         self, group_name: str, allow_missing: bool = False
@@ -2091,13 +2081,13 @@ class CMMCorePlus(pymmcore.CMMCore):
         super().deleteConfig(*args)
         self.events.configDeleted.emit(groupName, configName)
 
-    def deleteConfigGroup(self, group: str) -> None:
+    def deleteConfigGroup(self, groupName: str) -> None:
         """Deletes an entire configuration `group`.
 
         **Why Override?** To emit a `configGroupDeleted` event.
         """
-        super().deleteConfigGroup(group)
-        self.events.configGroupDeleted.emit(group)
+        super().deleteConfigGroup(groupName)
+        self.events.configGroupDeleted.emit(groupName)
 
     @overload
     def defineConfig(self, groupName: str, configName: str) -> None: ...
@@ -2347,7 +2337,9 @@ class CMMCorePlus(pymmcore.CMMCore):
                     devices = self.getAvailableDevices(adapt)
                     descriptions = self.getAvailableDeviceDescriptions(adapt)
                     types = self.getAvailableDeviceTypes(adapt)
-                    for dev, desc, type_ in zip(devices, descriptions, types):
+                    for dev, desc, type_ in zip(
+                        devices, descriptions, types, strict=False
+                    ):
                         avail_data["Library, DeviceName"].append(f"{adapt!r}, {dev!r}")
                         avail_data["Type"].append(str(DeviceType(type_)))
                         avail_data["Description"].append(desc)

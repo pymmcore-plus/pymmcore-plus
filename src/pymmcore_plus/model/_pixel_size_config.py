@@ -7,11 +7,10 @@ from ._config_group import ConfigGroup, ConfigPreset, Setting
 
 if TYPE_CHECKING:
     from collections.abc import Container, Iterable, MutableMapping
-    from typing import Any, Final
+    from typing import Any, Final, TypeAlias
 
     from typing_extensions import (
-        Self,  # py311
-        TypeAlias,  # py310
+        Self,  # py310
     )
 
     from pymmcore_plus import CMMCorePlus

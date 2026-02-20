@@ -72,7 +72,7 @@ class StateDevice(Device):
 
     def register_standard_properties(self) -> None:
         """Inspect the class for standard properties and register them."""
-        states, labels = zip(*self._state_to_label.items())
+        states, labels = zip(*self._state_to_label.items(), strict=False)
         cls = type(self)
         self.register_property(
             name=Keyword.State,
@@ -135,8 +135,14 @@ class StateDevice(Device):
         # internal method to set the state, called by the property setter
         # to keep the label and state property in sync
         self.set_state(state)  # call the device-specific method
+        self.core.events.propertyChanged.emit(
+            self.get_label(), Keyword.State.value, state
+        )
         label = self._state_to_label.get(state, "")
         self.set_property_value(Keyword.Label, label)
+        self.core.events.propertyChanged.emit(
+            self.get_label(), Keyword.Label.value, label
+        )
 
     def _get_current_label(self) -> str:
         # internal method to get the current label, called by the property getter

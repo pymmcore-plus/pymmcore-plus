@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 from typing import (
+    TYPE_CHECKING,
     Any,
-    Callable,
     ClassVar,
     Protocol,
     overload,
@@ -10,6 +10,9 @@ from typing import (
 )
 
 from typing_extensions import Self
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 
 @runtime_checkable

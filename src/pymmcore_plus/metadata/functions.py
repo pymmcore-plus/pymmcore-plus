@@ -165,7 +165,10 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
     else:
         plane_shape = (h, w, n_comp)
     bpp = core.getBytesPerPixel()
-    dtype = f"uint{(bpp // n_comp) * 8}"
+    try:
+        dtype = f"uint{(bpp // n_comp) * 8}"
+    except ZeroDivisionError:
+        dtype = "unknown"
 
     info: ImageInfo = {
         "camera_label": core.getCameraDevice(),
@@ -209,7 +212,8 @@ def image_infos(core: CMMCorePlus) -> tuple[ImageInfo, ...]:
                     infos.append(image_info(core))
     finally:
         # set the camera back to the originally selected device
-        core.setCameraDevice(selected)
+        with suppress(RuntimeError):
+            core.setCameraDevice(selected)
     return tuple(infos)
 
 

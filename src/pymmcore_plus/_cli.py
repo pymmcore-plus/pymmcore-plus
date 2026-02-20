@@ -8,7 +8,7 @@ import time
 from contextlib import suppress
 from pathlib import Path
 from platform import system
-from typing import Optional, Union, cast
+from typing import cast
 
 from pymmcore_plus.core._device import Device
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
@@ -60,7 +60,7 @@ CONFIG_PARAM = typer.Option(
 
 @app.callback()
 def _main(
-    version: Optional[bool] = typer.Option(
+    version: bool | None = typer.Option(
         None,
         "--version",
         callback=_show_version_and_exit,
@@ -208,45 +208,43 @@ def install(
 
 @app.command()
 def run(
-    useq: Optional[Path] = typer.Argument(
+    useq: Path | None = typer.Argument(
         None,
         dir_okay=False,
         exists=True,
         resolve_path=True,
         help="Path to useq-schema file.",
     ),
-    config: Optional[Path] = CONFIG_PARAM,
-    z_go_up: Optional[bool] = typer.Option(None, help="Acquire from bottom to top."),
-    z_top: Optional[float] = typer.Option(None, help="Top of z-stack."),
-    z_bottom: Optional[float] = typer.Option(None, help="Bottom of z-stack."),
-    z_range: Optional[float] = typer.Option(
+    config: Path | None = CONFIG_PARAM,
+    z_go_up: bool | None = typer.Option(None, help="Acquire from bottom to top."),
+    z_top: float | None = typer.Option(None, help="Top of z-stack."),
+    z_bottom: float | None = typer.Option(None, help="Bottom of z-stack."),
+    z_range: float | None = typer.Option(
         None, help="Symmetric range of z-stack around position."
     ),
-    z_above: Optional[float] = typer.Option(
+    z_above: float | None = typer.Option(
         None, help="Asymmetric range of z-stack above position."
     ),
-    z_below: Optional[float] = typer.Option(
+    z_below: float | None = typer.Option(
         None, help="Asymmetric range of z-stack below position."
     ),
-    z_step: Optional[float] = typer.Option(None, help="Step size of z-stack."),
-    z_relative: Optional[list[float]] = typer.Option(
+    z_step: float | None = typer.Option(None, help="Step size of z-stack."),
+    z_relative: list[float] | None = typer.Option(
         None, "-zr", help="Relative z-positions to acquire (may use multiple times)."
     ),
-    z_absolute: Optional[list[float]] = typer.Option(
+    z_absolute: list[float] | None = typer.Option(
         None, "-za", help="Absolute z-positions to acquire (may use multiple times)."
     ),
-    t_interval: Optional[float] = typer.Option(
-        None, help="Interval between timepoints."
-    ),
-    t_duration: Optional[float] = typer.Option(None, help="Duration of time lapse."),
-    t_loops: Optional[float] = typer.Option(
+    t_interval: float | None = typer.Option(None, help="Interval between timepoints."),
+    t_duration: float | None = typer.Option(None, help="Duration of time lapse."),
+    t_loops: float | None = typer.Option(
         None, help="Number of time points to acquire."
     ),
     dry_run: bool = typer.Option(False, help="Do not run the acquisition."),
-    axis_order: Optional[str] = typer.Option(
+    axis_order: str | None = typer.Option(
         None, help="Order of axes to acquire (e.g. 'TPCZ')."
     ),
-    channel: Optional[list[str]] = typer.Option(
+    channel: list[str] | None = typer.Option(
         None,
         help="\bChannel to acquire. Argument is a string of the following form:\n"
         '\b - name: "DAPI"\n'
@@ -333,7 +331,7 @@ def run(
 
 @app.command()
 def build_dev(
-    devices: Optional[list[str]] = typer.Argument(
+    devices: list[str] | None = typer.Argument(
         None, help=f"Device adapters to build. Defaults to {DEFAULT_PACKAGES}"
     ),
     dest: Path = typer.Option(
@@ -346,7 +344,7 @@ def build_dev(
         resolve_path=True,
         help="Installation directory.",
     ),
-    overwrite: Optional[bool] = typer.Option(
+    overwrite: bool | None = typer.Option(
         None,
         "-y",
         help="Overwrite existing if git sha is already built. "
@@ -367,7 +365,7 @@ def build_dev(
 
 @app.command()
 def logs(
-    num: Optional[int] = typer.Option(
+    num: int | None = typer.Option(
         None, "-n", "--num", help="Number of lines to display."
     ),
     tail: bool = typer.Option(False, "-t", "--tail", help="Continually stream logs."),
@@ -448,7 +446,7 @@ def use(
     typer.secho(f"using {result}", fg=typer.colors.BRIGHT_GREEN)
 
 
-def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
+def _tail_file(file_path: str | Path, interval: float = 0.1) -> None:
     with open(file_path) as file:
         # Move the file pointer to the end
         while True:
@@ -464,7 +462,7 @@ def _tail_file(file_path: Union[str, Path], interval: float = 0.1) -> None:
 
 @app.command()
 def bench(
-    config: Optional[Path] = CONFIG_PARAM,
+    config: Path | None = CONFIG_PARAM,
     number: int = typer.Option(
         10, "-n", "--number", help="Number of iterations for each test."
     ),

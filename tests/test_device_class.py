@@ -63,7 +63,7 @@ def test_device_load_errors(core: CMMCorePlus) -> None:
 
 
 def test_device_object_wrong_type(core: CMMCorePlus) -> None:
-    with pytest.raises(TypeError, match="requested but device"):
+    with pytest.raises(TypeError, match="Cannot create loaded device"):
         core.getDeviceObject("Camera", DeviceType.XYStage)
 
 
@@ -226,9 +226,105 @@ def test_device_errors(core: CMMCorePlus) -> None:
     with pytest.raises(TypeError, match="Cannot cast"):
         _core.StageDevice.create("Camera", core)
 
-    with pytest.raises(RuntimeError, match="No device with label"):
+    with pytest.raises(RuntimeError, match="Could not determine device type"):
         _core.StageDevice.create("NotExist", core)
 
     # wrong type
     with pytest.raises(TypeError, match="Cannot create loaded device with label "):
         _core.StageDevice("Camera", core)
+
+
+def test_device_create_unloaded_without_type() -> None:
+    """Test that Device.create on unloaded device without device_type raises error."""
+    core = CMMCorePlus()
+    assert "Camera" not in core.getLoadedDevices()
+
+    # Calling Device.create without device_type should raise RuntimeError
+    with pytest.raises(
+        RuntimeError,
+        match=r"Could not determine device type.*please specify `device_type` as",
+    ):
+        core.getDeviceObject("Camera")
+
+    # But specifying device_type should work
+    cam = core.getDeviceObject("Camera", DeviceType.Camera)
+    assert isinstance(cam, _core.CameraDevice)
+    assert not cam.isLoaded()
+
+
+def test_device_create_loaded_with_wrong_type(core: CMMCorePlus) -> None:
+    """Test that Device.create on loaded device with wrong device_type raises error."""
+    # Camera is loaded in the core fixture
+    assert "Camera" in core.getLoadedDevices()
+    assert core.getDeviceType("Camera") == DeviceType.Camera
+
+    # Calling Device.create with wrong device_type should raise TypeError
+    # The error is raised from Device.__init__ when it detects the mismatch
+    with pytest.raises(TypeError, match="Cannot create loaded device with label"):
+        core.getDeviceObject("Camera", DeviceType.Stage)
+
+    # Calling with correct type should work
+    cam = core.getDeviceObject("Camera", DeviceType.Camera)
+    assert isinstance(cam, _core.CameraDevice)
+    assert cam.exposure
+
+
+def test_device_preload_wrong_type_then_load() -> None:
+    """Test pre-loading a device object with wrong type, then loading actual device.
+
+    This tests the tricky case: if someone pre-creates a device object with a
+    device_type that doesn't match what gets loaded later, what happens?
+    """
+    core = CMMCorePlus()
+
+    # Pre-create a Camera device object for a label that will be loaded as Stage
+    # (This is a hypothetical bad scenario - in practice you'd want the types to match)
+    future_stage = Device.create("FutureStage", core, DeviceType.Camera)
+    assert isinstance(future_stage, _core.CameraDevice)
+    assert not future_stage.isLoaded()
+    assert future_stage.type() == DeviceType.Camera  # Returns Camera due to subclass
+
+    # Now load it as a Stage
+    core.loadDevice("FutureStage", "DemoCamera", "DStage")
+    core.initializeDevice("FutureStage")
+
+    # there's very little we can do to resolve this mismatch at this point...
+    with pytest.raises(
+        RuntimeError,
+        match='Device "FutureStage" is of the wrong type for the requested operation',
+    ):
+        future_stage.exposure = 20
+
+
+def test_device_preload_correct_type_then_load() -> None:
+    """Test pre-loading a device object with correct type, then loading it.
+
+    This is the happy path for pre-loading devices.
+    """
+    core = CMMCorePlus()
+
+    # Pre-create a Camera device object
+    preloaded_cam = Device.create("Camera", core, DeviceType.Camera)
+    assert isinstance(preloaded_cam, _core.CameraDevice)
+    assert not preloaded_cam.isLoaded()
+
+    # Now load and initialize it as a Camera
+    core.loadDevice("Camera", "DemoCamera", "DCam")
+    core.initializeDevice("Camera")
+
+    # The pre-loaded object should now work correctly
+    assert preloaded_cam.isLoaded()
+    assert preloaded_cam.type() == DeviceType.Camera
+    # Verify we can use camera-specific methods
+    preloaded_cam.setExposure(50)
+    assert preloaded_cam.getExposure() == 50
+
+
+def test_docstring_device_example():
+    core = CMMCorePlus()
+    cam = core.getDeviceObject("DemoCamera", device_type=DeviceType.Camera)
+    assert not cam.isLoaded()
+    cam.load("DemoCamera", "DCam")
+    assert cam.isLoaded()
+    cam.initialize()
+    assert cam.exposure == 10.0  # default exposure

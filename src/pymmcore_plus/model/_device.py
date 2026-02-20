@@ -13,12 +13,11 @@ from ._core_link import CoreObject
 from ._property import Property
 
 if TYPE_CHECKING:
-    from collections.abc import Container, Iterable
-    from typing import Any, Callable
+    from collections.abc import Callable, Container, Iterable
+    from typing import Any, TypeAlias
 
     from typing_extensions import (
-        Self,  # py311
-        TypeAlias,  # py310
+        Self,  # py310
     )
 
     from pymmcore_plus.metadata.schema import DeviceInfo
@@ -433,7 +432,7 @@ def iter_available_library_devices(
         devs = core.getAvailableDevices(library_name)  # this could raise
     types = core.getAvailableDeviceTypes(library_name)
     descriptions = core.getAvailableDeviceDescriptions(library_name)
-    for dev_name, dev_type, desc in zip(devs, types, descriptions):
+    for dev_name, dev_type, desc in zip(devs, types, descriptions, strict=False):
         yield AvailableDevice(
             library=library_name,
             adapter_name=dev_name,

@@ -20,12 +20,14 @@ from platformdirs import user_data_dir
 from . import _discovery
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
-    from typing import Any, Callable, Literal, TypeVar
+    from collections.abc import Callable, Iterator
+    from typing import Any, Literal, TypeVar
 
     QtConnectionType = Literal["AutoConnection", "DirectConnection", "QueuedConnection"]
 
-    from typing_extensions import ParamSpec, TypeGuard  # py310
+    from typing import TypeGuard  # py310
+
+    from typing_extensions import ParamSpec
 
     from .core.events._protocol import PSignalInstance
 
@@ -248,7 +250,7 @@ def _rich_print_table(data: dict[str, list[str]], sort: str | None = None) -> No
 
 def _sorted_rows(data: dict, sort: str | None) -> list[tuple]:
     """Return a list of rows, sorted by the given column name."""
-    rows = list(zip(*data.values()))
+    rows = list(zip(*data.values(), strict=False))
     if sort is not None:
         with suppress(ValueError):
             # silently ignore if the sort column is not found
