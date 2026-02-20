@@ -44,8 +44,8 @@ def test_core(core: CMMCorePlus) -> None:
     assert isinstance(
         core.mda.events.frameReady, (psygnal.SignalInstance, QSignalInstance)
     )
-    assert not core.mda._canceled
-    assert not core.mda._paused
+    assert not core.mda.is_canceled()
+    assert not core.mda.is_paused()
 
     # because the fixture loadsSystemConfig 'demo'
     assert len(core.getLoadedDevices()) == 14

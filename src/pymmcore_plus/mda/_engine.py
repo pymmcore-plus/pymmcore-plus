@@ -671,6 +671,8 @@ class MDAEngine(PMDAEngine):
         core.startSequenceAcquisition(n_events, 0, True)
         self.post_sequence_started(event)
 
+        pause_warned = False
+
         # Fast path for single camera (most common use case)
         if n_channels == 1:
             yield from self._exec_single_camera_sequence(event, event_t0_ms)
@@ -681,21 +683,40 @@ class MDAEngine(PMDAEngine):
 
         # Pop frames while sequence is running
         while core.isSequenceRunning():
-            yield from coordinator.pop_and_process(
-                event.events, event_t0_ms, self._create_seqimg_payload_from_popped
-            )
+            if core.getRemainingImageCount():
+                for payload in coordinator.pop_and_process(
+                    event.events, event_t0_ms, self._create_seqimg_payload_from_popped
+                ):
+                    signal = yield payload
+                    if signal == "cancel":
+                        core.stopSequenceAcquisition()
+                        return
+                    if signal == "pause" and not pause_warned:
+                        pause_warned = True
+                        logger.warning(
+                            "MDA: Pause has been requested, but sequenced acquisition "
+                            "cannot be yet paused, only canceled."
+                        )
+            else:
+                time.sleep(0.001)
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
 
         # Pop any remaining frames from circular buffer
         while core.getRemainingImageCount():
-            yield from coordinator.pop_and_process(
+            for payload in coordinator.pop_and_process(
                 event.events, event_t0_ms, self._create_seqimg_payload_from_popped
-            )
+            ):
+                signal = yield payload
+                if signal == "cancel":
+                    return
 
         # Flush buffered frames and validate count
-        yield from coordinator.flush_remaining()
+        for payload in coordinator.flush_remaining():
+            signal = yield payload
+            if signal == "cancel":
+                return
         coordinator.validate_count()
 
     def _exec_single_camera_sequence(
@@ -704,12 +725,13 @@ class MDAEngine(PMDAEngine):
         """Execute single-camera sequenced event (fast path, no coordination needed)."""
         core = self.mmcore
         count = 0
+        pause_warned = False
 
         # Pop frames while sequence is running, then drain remaining buffer
         while True:
             if remaining := core.getRemainingImageCount():
                 img, mm_meta = core.popNextImageAndMD()
-                yield self._create_seqimg_payload_from_popped(
+                signal = yield self._create_seqimg_payload_from_popped(
                     img,
                     mm_meta,
                     event=event.events[count],
@@ -718,6 +740,15 @@ class MDAEngine(PMDAEngine):
                     remaining=remaining - 1,
                 )
                 count += 1
+                if signal == "cancel":
+                    core.stopSequenceAcquisition()
+                    return
+                if signal == "pause" and not pause_warned:
+                    pause_warned = True
+                    logger.warning(
+                        "MDA: Pause has been requested, but sequenced acquisition "
+                        "cannot be yet paused, only canceled."
+                    )
             elif core.isSequenceRunning():
                 # Still acquiring, buffer temporarily empty - wait
                 time.sleep(0.001)
