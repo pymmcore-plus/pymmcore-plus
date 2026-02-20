@@ -143,6 +143,7 @@ pulls from the queue and calls `self.callback(msg.img, msg.event, msg.meta)`.
 Error handling follows `critical_error` or `noncritical_error` policy.
 
 The key error paths:
+
 - **Non-critical + LOG**: `logger.exception(...)`, continue
 - **Non-critical + DISCONNECT**: set `_disconnected`, return (thread exits)
 - **Critical + CONTINUE**: append to `report.errors`, continue
@@ -271,12 +272,14 @@ tlambert03's feedback that the hot loop should only do `queue.put()`.
 ### Changes to `MDARunner`
 
 **Remove:**
+
 - `_handlers: WeakSet` instance variable
 - `_outputs_connected()` method
 - `_handler_for_path()` method (move to `_dispatch.py` or keep in handlers)
 - All imports of `mda_listeners_connected`, `_thread_relay`
 
 **Add:**
+
 - `_iter_with_signals()` method (from PR #517, for cancel/pause into generators)
 
 **Modify `run()`:**
@@ -478,6 +481,7 @@ def _finish_run(self, sequence: MDASequence) -> None:
 
 The current `get_output_handlers()` returns the WeakSet contents. With the
 dispatcher model, this doesn't map cleanly. Options:
+
 - Remove it (breaking change)
 - Deprecate with a warning
 - Expose `dispatcher.queue_status()` as the replacement
@@ -546,6 +550,7 @@ from ._dispatch import (
 | `get_output_handlers()` | Deprecate with warning. |
 
 **New capabilities:**
+
 - `run(..., consumers=[...])` — explicit consumer registration
 - `run(..., policy=RunPolicy(...))` — configure error/backpressure behavior
 - `run()` returns `RunReport` — diagnostics (previously returned `None`)
@@ -610,3 +615,54 @@ Add `generator.send()` support to `exec_sequenced_event`. Tests:
   #545). With per-consumer worker threads in the dispatcher, handlers don't need
   their own internal threads — the dispatcher already decouples acquisition from
   consumption. Handlers can be synchronous.
+
+-----------------------------
+
+Summary
+
+Here's what was implemented following the plan in docs/dev/runner-implementation-plan.md:
+
+Phase 1: New module src/pymmcore_plus/mda/_dispatch.py
+
+- RunStatus enum (COMPLETED, CANCELED, FAILED)
+- FrameConsumer protocol with setup(), frame(), finish() methods
+- ConsumerSpec dataclass for registering consumers with name, criticality
+- Policy enums: CriticalErrorPolicy, NonCriticalErrorPolicy, BackpressurePolicy
+- RunPolicy dataclass configuring error handling and queue sizes
+- ConsumerReport / RunReport diagnostics dataclasses
+- _ConsumerWorker — per-consumer worker thread with bounded queue, backpressure, and error handling
+- FrameDispatcher — fan-out dispatcher with add_consumer(), start(), submit(), should_cancel(), queue_status(), close()
+- _LegacyAdapter — wraps old frameReady()/sequenceStarted()/sequenceFinished() handlers
+- _SignalRelay — available for advanced use (emits frameReady on worker thread)
+
+Phase 2: Modified src/pymmcore_plus/mda/_runner.py
+
+- run() now accepts consumers: Sequence[ConsumerSpec] and policy: RunPolicy parameters
+- run() returns a RunReport instead of None
+- Internally creates a FrameDispatcher and routes all output handlers through it via _coerce_outputs()
+- frameReady signal still emits directly on the runner thread for backward compatibility
+- _iter_with_signals() wraps engine output to propagate cancel/pause signals via generator.send()
+- _prepare_to_run() now returns (engine, meta) tuple
+- get_output_handlers() still works (not yet deprecated, for backward compatibility)
+
+Phase 3: Modified src/pymmcore_plus/mda/_engine.py
+
+- _exec_single_camera_sequence() now uses signal = yield payload to receive cancel/pause signals
+- When "cancel" is received, calls core.stopSequenceAcquisition() and returns
+- Multi-camera path unchanged (cancel handled at outer level)
+
+Phase 4: Updated exports and tests
+
+- mda/**init**.py exports all new public types
+- 20 new tests in tests/test_dispatch.py covering:
+- Basic dispatch, multiple consumers, concurrent processing
+- All three critical error policies (RAISE, CANCEL, CONTINUE)
+- Both non-critical error policies (LOG, DISCONNECT)
+- Backpressure policies (DROP_NEWEST, DROP_OLDEST, FAIL)
+- Queue status monitoring, run reports
+- Legacy adapter with various argument counts
+- Signal relay
+- Setup error handling
+
+All 595 existing tests pass (+ 20 new). The one pre-existing hanging test (test_sequenced_multicam_events) was already broken
+before these changes.

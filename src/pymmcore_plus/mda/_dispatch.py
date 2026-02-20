@@ -365,8 +365,8 @@ class FrameDispatcher:
             )
             return True
         else:
-            policy = self.policy.noncritical_error
-            if policy == NonCriticalErrorPolicy.DISCONNECT:
+            nc_policy = self.policy.noncritical_error
+            if nc_policy == NonCriticalErrorPolicy.DISCONNECT:
                 logger.warning(
                     "Non-critical consumer %r disconnected on %s: %s",
                     spec.name,

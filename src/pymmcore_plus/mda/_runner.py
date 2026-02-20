@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import types
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from pathlib import Path
@@ -399,17 +400,21 @@ class MDARunner:
     def _iter_with_signals(self, iterable: Iterable[Any]) -> Iterator[Any]:
         """Wrap engine output, sending cancel/pause signals via generator.send()."""
         gen = iter(iterable)
-        is_generator = hasattr(gen, "send")
+        is_generator = isinstance(gen, types.GeneratorType)
         try:
             item = next(gen)
             while True:
                 yield item
-                signal = None
-                if self._canceled:
-                    signal = "cancel"
-                elif self._paused:
-                    signal = "pause"
-                item = gen.send(signal) if is_generator else next(gen)
+                if is_generator:
+                    if self._canceled:
+                        signal = "cancel"
+                    elif self._paused:
+                        signal = "pause"
+                    else:
+                        signal = None
+                    item = gen.send(signal)  # type: ignore[attr-defined]
+                else:
+                    item = next(gen)
         except StopIteration:
             pass
 
@@ -426,9 +431,9 @@ class MDARunner:
         self._canceled = False
         self._sequence = sequence
 
-        meta = self._engine.setup_sequence(sequence)
+        meta: dict[str, Any] = self._engine.setup_sequence(sequence) or {}  # type: ignore[assignment]
         logger.info("MDA Started: %s", sequence)
-        return self._engine, meta or {}
+        return self._engine, meta
 
     def _reset_event_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
