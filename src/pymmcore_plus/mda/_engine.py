@@ -673,7 +673,15 @@ class MDAEngine(PMDAEngine):
 
         # Fast path for single camera (most common use case)
         if n_channels == 1:
-            yield from self._exec_single_camera_sequence(event, event_t0_ms)
+            # Use manual iteration to propagate send() signals
+            gen = self._exec_single_camera_sequence(event, event_t0_ms)
+            try:
+                value = next(gen)
+                while True:
+                    signal = yield value
+                    value = gen.send(signal)
+            except StopIteration:
+                pass
             return
 
         # Multi-camera path: coordinate async frame arrival
@@ -709,7 +717,7 @@ class MDAEngine(PMDAEngine):
         while True:
             if remaining := core.getRemainingImageCount():
                 img, mm_meta = core.popNextImageAndMD()
-                yield self._create_seqimg_payload_from_popped(
+                signal = yield self._create_seqimg_payload_from_popped(
                     img,
                     mm_meta,
                     event=event.events[count],
@@ -718,6 +726,13 @@ class MDAEngine(PMDAEngine):
                     remaining=remaining - 1,
                 )
                 count += 1
+                if signal == "cancel":
+                    core.stopSequenceAcquisition()
+                    return
+                if signal == "pause":
+                    logger.warning(
+                        "Cannot pause hardware sequence; only cancel is supported."
+                    )
             elif core.isSequenceRunning():
                 # Still acquiring, buffer temporarily empty - wait
                 time.sleep(0.001)
