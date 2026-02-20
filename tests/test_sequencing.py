@@ -4,7 +4,7 @@ from collections.abc import Iterator
 from contextlib import suppress
 from math import prod
 from typing import cast
-from unittest.mock import MagicMock, call
+from unittest.mock import MagicMock, call, patch
 
 import numpy as np
 import pytest
@@ -112,6 +112,25 @@ def test_fully_sequenceable_core(core: CMMCorePlus) -> None:
     n_img = prod(mda.shape)
     core_mock.startSequenceAcquisition.assert_called_once_with(n_img, 0, True)
     core_mock.loadExposureSequence.assert_called()
+
+
+def test_sequenced_event_teardown(core: CMMCorePlus) -> None:
+    """Assert teardown_event receives the SequencedEvent, not inner events."""
+    mda = useq.MDASequence(
+        z_plan=useq.ZRangeAround(range=2, step=1),
+        time_plan=useq.TIntervalLoops(interval=0, loops=3),
+    )
+
+    core_mock = MockSequenceableCore(wraps=core)
+    engine = MDAEngine(mmc=core_mock, use_hardware_sequencing=True)
+    runner = MDARunner()
+    runner.set_engine(engine)
+    with patch.object(engine, "teardown_event") as mock_teardown:
+        runner.run(mda)
+
+    teardown_calls = [call.args[0] for call in mock_teardown.call_args_list]
+    assert len(teardown_calls) == 1
+    assert isinstance(teardown_calls[0], SequencedEvent)
 
 
 def test_sequenced_circular_buffer(core: CMMCorePlus) -> None:

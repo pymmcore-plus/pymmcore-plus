@@ -344,14 +344,16 @@ class MDARunner:
                 # we pop it off after the event is executed.
                 event.metadata["runner_t0"] = self._sequence_t0
                 output = engine.exec_event(event) or ()  # in case output is None
+                # when `event` is a SequencedEvent, `exec_event` return a sequence
+                # of individual `_events`s
                 for payload in output:
-                    img, event, meta = payload
-                    event.metadata.pop("runner_t0", None)
+                    img, _event, meta = payload
+                    _event.metadata.pop("runner_t0", None)
                     # if the engine calculated its own time, don't overwrite it
                     if "runner_time_ms" not in meta:
                         meta["runner_time_ms"] = runner_time_ms
                     with exceptions_logged():
-                        self._signals.frameReady.emit(img, event, meta)
+                        self._signals.frameReady.emit(img, _event, meta)
             finally:
                 teardown_event(event)
 
