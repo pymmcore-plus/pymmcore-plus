@@ -255,6 +255,33 @@ def test_continuous_sequence_acquisition(device: str) -> None:
     assert isinstance(core.popNextImage(), np.ndarray)
 
 
+def test_unload_all_stops_sequence_and_clears_unicore_state() -> None:
+    core = UniMMCore()
+    _load_device(core, "python")
+
+    core.setProperty(DEV, Keyword.Binning, 2)
+    core.defineConfig("grp", "preset", DEV, Keyword.Binning, "2")
+
+    core.startContinuousSequenceAcquisition()
+    assert core._acquisition_thread is not None
+    timeout = 2.0
+    while not core.isSequenceRunning():
+        if timeout <= 0:
+            raise RuntimeError("Sequence acquisition did not start in time.")
+        time.sleep(0.01)
+        timeout -= 0.01
+
+    core.unloadAllDevices()
+
+    assert DEV not in core.getLoadedDevices()
+    assert core._acquisition_thread is None
+    assert not core._stop_event.is_set()
+    assert not core._py_config_groups
+    assert not core._state_cache
+    assert core._current_image_buffer is None
+    assert core.getCameraDevice() == ""
+
+
 def test_sequenceable_exposures() -> None:
     """Test camera mixin methods for exposure control and sequencing."""
     core = UniMMCore()
