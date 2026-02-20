@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 import weakref
 from contextlib import nullcontext
@@ -12,6 +13,7 @@ import useq
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus, FocusDirection
+from pymmcore_plus.mda._dispatch import RunStatus
 from pymmcore_plus.mda._engine import _warn_focus_dir
 from pymmcore_plus.mda.events import MDASignaler
 
@@ -435,6 +437,23 @@ def test_runner_pause(qtbot: QtBot) -> None:
         thread.join()
     assert engine.setup_event.call_count == 2
     engine.teardown_sequence.assert_called_once()
+
+
+def test_runner_cancel_report_status(core: CMMCorePlus) -> None:
+    """Canceled runs return RunStatus.CANCELED in the RunReport."""
+    core.mda.engine.use_hardware_sequencing = False
+    report: dict[str, Any] = {}
+
+    def _run() -> None:
+        report["value"] = core.mda.run([MDAEvent(), MDAEvent(min_start_time=2)])
+
+    thread = threading.Thread(target=_run)
+    thread.start()
+    time.sleep(0.2)
+    core.mda.cancel()
+    thread.join()
+
+    assert report["value"].status is RunStatus.CANCELED
 
 
 def test_reset_event_timer(core: CMMCorePlus) -> None:

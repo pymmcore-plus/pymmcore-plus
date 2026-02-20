@@ -441,6 +441,35 @@ def test_setup_error_noncritical_disconnect() -> None:
     dispatcher.close(MDASequence(), RunStatus.COMPLETED)
 
 
+def test_setup_error_critical_cancel_requests_cancel() -> None:
+    """Critical setup error with CANCEL policy requests cancellation."""
+
+    class BadSetupConsumer(SimpleConsumer):
+        def setup(self, seq: Any, meta: Any) -> None:
+            raise RuntimeError("setup failed")
+
+    policy = RunPolicy(critical_error=CriticalErrorPolicy.CANCEL)
+    dispatcher = FrameDispatcher(policy)
+    dispatcher.add_consumer(ConsumerSpec("bad", BadSetupConsumer(), critical=True))
+
+    dispatcher.start(MDASequence(), {})
+    assert dispatcher.should_cancel()
+    dispatcher.close(MDASequence(), RunStatus.CANCELED)
+
+
+def test_legacy_adapter_does_not_mask_typeerror() -> None:
+    """_LegacyAdapter does not hide callback-internal TypeError exceptions."""
+
+    class BuggyHandler:
+        def frameReady(self, img: np.ndarray, event: MDAEvent, meta: dict) -> None:
+            raise TypeError("internal error")
+
+    adapter = _LegacyAdapter(BuggyHandler())
+
+    with pytest.raises(TypeError, match="internal error"):
+        adapter.frame(np.array([1]), MDAEvent(), {})
+
+
 def test_concurrent_consumers() -> None:
     """Multiple consumers process frames concurrently on separate threads."""
     thread_names: list[str] = []

@@ -104,6 +104,7 @@ class MDARunner:
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._canceled = False
+        self._cancel_seen = False
         self._sequence: MDASequence | None = None
         self._output_handlers: list[Any] = []
         # timer for the full sequence, reset only once at the beginning of the sequence
@@ -253,9 +254,16 @@ class MDARunner:
         try:
             engine, meta = self._prepare_to_run(sequence)
             dispatcher.start(sequence, meta)
+
+            if dispatcher.should_cancel():
+                self._canceled = True
+                self._check_canceled()
+
             self._signals.sequenceStarted.emit(sequence, meta)
-            self._run(engine, events, dispatcher)
-            if self._canceled:
+            if not self._cancel_seen:
+                self._run(engine, events, dispatcher)
+
+            if self._cancel_seen:
                 status = RunStatus.CANCELED
         except Exception as e:
             status = RunStatus.FAILED
@@ -429,6 +437,7 @@ class MDARunner:
         self._paused = False
         self._paused_time = 0.0
         self._canceled = False
+        self._cancel_seen = False
         self._sequence = sequence
 
         meta: dict[str, Any] = self._engine.setup_sequence(sequence) or {}  # type: ignore[assignment]
@@ -444,6 +453,7 @@ class MDARunner:
             logger.warning("MDA Canceled: %s", self._sequence)
             self._signals.sequenceCanceled.emit(self._sequence)
             self._canceled = False
+            self._cancel_seen = True
             return True
         return False
 

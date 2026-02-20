@@ -6,6 +6,7 @@ and critical/non-critical consumer semantics.
 
 from __future__ import annotations
 
+import inspect
 import logging
 import threading
 import time
@@ -272,6 +273,7 @@ class FrameDispatcher:
         self._specs: list[ConsumerSpec] = []
         self._workers: list[_ConsumerWorker] = []
         self.started_at: float = 0.0
+        self._cancel_requested = False
 
     def add_consumer(self, spec: ConsumerSpec) -> None:
         """Register a consumer. Must be called before start()."""
@@ -302,7 +304,9 @@ class FrameDispatcher:
 
     def should_cancel(self) -> bool:
         """Check if any critical worker requested cancellation."""
-        return any(w.stop_requested.is_set() for w in self._workers)
+        return self._cancel_requested or any(
+            w.stop_requested.is_set() for w in self._workers
+        )
 
     def queue_status(self) -> dict[str, tuple[int, int]]:
         """Return {name: (pending, capacity)} per worker."""
@@ -358,6 +362,7 @@ class FrameDispatcher:
                     phase,
                     exc,
                 )
+                self._cancel_requested = True
                 return False
             # CONTINUE
             logger.exception(
@@ -384,12 +389,19 @@ class FrameDispatcher:
 
 def _call_with_fallback(cb: Any, *args: Any) -> Any:
     """Call `cb` with progressively fewer positional args until it succeeds."""
+    try:
+        sig = inspect.signature(cb)
+    except (TypeError, ValueError):
+        return cb(*args)
+
     for n in range(len(args), -1, -1):
         try:
-            return cb(*args[:n])
+            sig.bind(*args[:n])
         except TypeError:
-            if n == 0:
-                raise
+            continue
+        return cb(*args[:n])
+
+    return cb()
 
 
 class _LegacyAdapter:
