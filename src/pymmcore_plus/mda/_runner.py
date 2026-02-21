@@ -20,6 +20,7 @@ from ._dispatch import (
     RunReport,
     RunStatus,
     _LegacyAdapter,
+    _SignalRelay,
 )
 from ._protocol import PMDAEngine
 from .events import _get_auto_MDA_callback_class
@@ -242,6 +243,11 @@ class MDARunner:
 
         dispatcher = FrameDispatcher(policy)
 
+        # Relay frameReady signal on a worker thread (non-critical)
+        dispatcher.add_consumer(
+            ConsumerSpec("_signal_relay", _SignalRelay(self._signals), critical=False)
+        )
+
         # Add explicit consumers
         for spec in consumers:
             dispatcher.add_consumer(spec)
@@ -416,11 +422,6 @@ class MDARunner:
                     if "runner_time_ms" not in meta:
                         meta["runner_time_ms"] = runner_time_ms
 
-                    # Emit signal on the runner thread (backward compat)
-                    with exceptions_logged():
-                        self._signals.frameReady.emit(img, ev, meta)
-
-                    # Dispatch to registered consumers on worker threads
                     dispatcher.submit(img, ev, meta)
 
                     if dispatcher.should_cancel():

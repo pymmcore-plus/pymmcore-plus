@@ -387,43 +387,59 @@ class FrameDispatcher:
 # ───────────────────────── Adapters ─────────────────────────
 
 
-def _call_with_fallback(cb: Any, *args: Any) -> Any:
+def _call_with_fallback(cb: Any, *args: Any) -> int | None:
     """Call `cb` with progressively fewer positional args until it succeeds."""
     try:
         sig = inspect.signature(cb)
     except (TypeError, ValueError):
-        return cb(*args)
+        cb(*args)
+        return None
 
     for n in range(len(args), -1, -1):
         try:
             sig.bind(*args[:n])
         except TypeError:
             continue
-        return cb(*args[:n])
+        cb(*args[:n])
+        return n
+    return None
 
-    return cb()
+
+NULL = object()  # sentinel for "no args fit"
 
 
 class _LegacyAdapter:
     """Wrap a legacy handler (with frameReady/sequenceStarted/sequenceFinished)."""
 
     def __init__(self, handler: Any) -> None:
-        self._handler = handler
+        ss = getattr(handler, "sequenceStarted", None)
+        self._seq_started = ss if callable(ss) else None
+
+        fr = getattr(handler, "frameReady", None)
+        self._frame_ready = fr if callable(fr) else None
+        self._n_frame_args: int | None | object = NULL
+
+        sf = getattr(handler, "sequenceFinished", None)
+        self._seq_finished = sf if callable(sf) else None
 
     def setup(self, sequence: MDASequence, meta: dict[str, Any]) -> None:
-        cb = getattr(self._handler, "sequenceStarted", None)
-        if callable(cb):
-            _call_with_fallback(cb, sequence, meta)
+        if self._seq_started:
+            _call_with_fallback(self._seq_started, sequence, meta)
 
     def frame(self, img: np.ndarray, event: MDAEvent, meta: dict[str, Any]) -> None:
-        cb = getattr(self._handler, "frameReady", None)
-        if callable(cb):
-            _call_with_fallback(cb, img, event, meta)
+        if not self._frame_ready:
+            return
+        if (nf := self._n_frame_args) is not NULL:
+            args = (img, event, meta)
+            self._frame_ready(*args[:nf])  # type: ignore[misc]
+        else:
+            self._n_frame_args = _call_with_fallback(
+                self._frame_ready, img, event, meta
+            )
 
     def finish(self, sequence: MDASequence, status: RunStatus) -> None:
-        cb = getattr(self._handler, "sequenceFinished", None)
-        if callable(cb):
-            _call_with_fallback(cb, sequence)
+        if self._seq_finished:
+            _call_with_fallback(self._seq_finished, sequence)
 
 
 class _SignalRelay:
@@ -439,4 +455,22 @@ class _SignalRelay:
         self._signals.frameReady.emit(img, event, meta)
 
     def finish(self, sequence: MDASequence, status: RunStatus) -> None:
-        pass
+        if not type(self._signals).__name__ == "QMDASignaler":
+            return
+
+        # To preserve the pre-refactor guarantee that all frameReady slots have been
+        # called before sequenceFinished is emitted, we flush pending events here. This
+        # only applies when finish() runs on the main thread (i.e. when run() is called
+        # directly); when run_mda() is used, the runner is already on a background
+        # thread and Qt's ordering guarantees handle it.
+        # (background details:)
+        # frameReady is emitted from the _SignalRelay worker thread. With Qt,
+        # cross-thread signal emissions are delivered as queued connections — they are
+        # posted to the receiving thread's event queue and processed only on the next
+        # event loop iteration.
+
+        from qtpy.QtCore import QCoreApplication, QThread
+
+        if (qapp := QCoreApplication.instance()) is not None:
+            if QThread.currentThread() is qapp.thread():
+                qapp.processEvents()

@@ -20,7 +20,6 @@ from pymmcore_plus.mda import (
     ConsumerReport,
     ConsumerSpec,
     CriticalErrorPolicy,
-    FrameConsumer,
     NonCriticalErrorPolicy,
     RunPolicy,
     RunReport,
@@ -40,7 +39,7 @@ DIM = "\033[2m"
 RESET = "\033[0m"
 
 
-class TiffWriter(FrameConsumer):
+class TiffWriter:
     """Simulates a critical file-writer consumer."""
 
     def setup(self, sequence: MDASequence, meta: dict[str, Any]) -> None:
@@ -58,7 +57,7 @@ class TiffWriter(FrameConsumer):
         print(f"{CYAN}[TiffWriter]{RESET}  finish() — status={status.value}")
 
 
-class LiveDisplay(FrameConsumer):
+class LiveDisplay:
     """Simulates a non-critical display consumer (e.g. napari)."""
 
     def __init__(self) -> None:
@@ -83,7 +82,7 @@ class LiveDisplay(FrameConsumer):
         )
 
 
-class MetricsLogger(FrameConsumer):
+class MetricsLogger:
     """A non-critical consumer that logs frame timing."""
 
     def __init__(self) -> None:
@@ -105,7 +104,7 @@ class MetricsLogger(FrameConsumer):
         print(f"{YELLOW}[Metrics]   {RESET}  finish() — total {total:.0f}ms")
 
 
-class FlakyAnalyzer(FrameConsumer):
+class FlakyAnalyzer:
     """A non-critical consumer that errors on every 3rd frame."""
 
     def setup(self, sequence: MDASequence, meta: dict[str, Any]) -> None:
@@ -211,7 +210,7 @@ def example_backpressure() -> None:
     print(f"{'─' * 60}\n")
 
     # A very slow display that can't keep up at all
-    class VerySlowDisplay(FrameConsumer):
+    class VerySlowDisplay:
         def __init__(self) -> None:
             self._count = 0
 
@@ -258,7 +257,7 @@ def example_backpressure() -> None:
 # ─── Example 4: Critical error → CANCEL ───────────────────────────
 
 
-class FailingWriter(FrameConsumer):
+class FailingWriter:
     """A critical consumer that fails on the 2nd frame."""
 
     def setup(self, sequence: MDASequence, meta: dict[str, Any]) -> None:

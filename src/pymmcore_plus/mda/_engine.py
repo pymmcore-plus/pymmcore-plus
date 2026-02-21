@@ -3,7 +3,7 @@ from __future__ import annotations
 import time
 import warnings
 import weakref
-from collections import UserDict, defaultdict
+from collections import defaultdict
 from contextlib import suppress
 from functools import cache
 from typing import TYPE_CHECKING, Literal, NamedTuple, cast
@@ -1022,23 +1022,28 @@ class _TimepointBuffer:
         """Yield complete timepoints sequentially."""
         # check if next timepoint is ready (has frames for all channels)
         # and if so, yield all its frames in channel order
-        while (frames := self._buffer.get(self._next_timepoint)) and len(
-            frames
-        ) == self.n_channels:
-            for ch in range(self.n_channels):
-                payload = frames[ch]
-                UserDict.__setitem__(payload[1].index, "cam", ch)
-                yield payload
+        nc = self.n_channels
+        while (frames := self._buffer.get(self._next_timepoint)) and len(frames) == nc:
+            for ch in range(nc):
+                yield self._modified_payload(frames[ch], ch)
             del self._buffer[self._next_timepoint]
             self._next_timepoint += 1
 
     def flush(self) -> Iterator[PImagePayload]:
         """Yield any remaining buffered frames in timepoint/channel order."""
         for t in sorted(self._buffer):
-            for ch in sorted(self._buffer[t]):
-                payload = self._buffer[t][ch]
-                UserDict.__setitem__(payload[1].index, "cam", ch)
-                yield payload
+            buffer_t = self._buffer[t]
+            for ch in sorted(buffer_t):
+                yield self._modified_payload(buffer_t[ch], ch)
+
+    def _modified_payload(self, payload: PImagePayload, channel: int) -> PImagePayload:
+        img, event, meta = payload
+        # Copy the event so each camera frame has its own index snapshot.
+        # Multiple cameras for the same timepoint share the same MDAEvent
+        # object; without a copy, setting cam=1 would corrupt cam=0's
+        # already-queued message in the async dispatcher.
+        event = event.model_copy(update={"index": {**event.index, "cam": channel}})
+        return img, event, meta
 
 
 class _MultiCameraCoordinator:

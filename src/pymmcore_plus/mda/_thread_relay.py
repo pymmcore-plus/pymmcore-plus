@@ -77,7 +77,12 @@ def mda_listeners_connected(
 
     if not asynchronous:
         # Just collapse to a regular synchronous listeners_connected
-        with listeners_connected(mda_events, *listeners, name_map=name_map):
+        with listeners_connected(
+            mda_events,
+            *listeners,
+            name_map=name_map,
+            qt_connection_type="DirectConnection",
+        ):
             yield None
         return
 

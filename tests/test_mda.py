@@ -314,14 +314,21 @@ def test_keep_shutter_open(core: CMMCorePlus) -> None:
         keep_shutter_open_across="t",
     )
 
-    @core.mda.events.frameReady.connect
-    def _on_frame(img: Any, event: MDAEvent) -> None:
-        assert core.getShutterOpen() == event.keep_shutter_open
-        # autoshutter will always be on only at position 0 (no time plan)
-        assert core.getAutoShutter() == (event.index["p"] == 0)
+    # Check hardware state synchronously inside exec_event (runner thread, before
+    # teardown). frameReady is now async so it can't be used to check live state.
+    assert core.mda.engine
+    original_exec = core.mda.engine.exec_event
+
+    def _capturing_exec(event: MDAEvent):  # type: ignore[misc]
+        for payload in original_exec(event):
+            assert core.getShutterOpen() == event.keep_shutter_open
+            # autoshutter will always be on only at position 0 (no time plan)
+            assert core.getAutoShutter() == (event.index["p"] == 0)
+            yield payload
 
     core.setAutoShutter(True)
-    core.mda.run(mda)
+    with patch.object(core.mda.engine, "exec_event", _capturing_exec):
+        core.mda.run(mda)
 
     # It should look like this:
     # event,                                                   open, auto_shut
