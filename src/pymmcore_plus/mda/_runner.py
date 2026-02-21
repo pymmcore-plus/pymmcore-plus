@@ -295,6 +295,21 @@ class MDARunner:
     def get_output_handlers(self) -> tuple[SupportsFrameReady, ...]:
         """Return the data handlers that are currently connected.
 
+        Output handlers are connected by passing them to the `output` parameter of the
+        `run` method; the run method accepts objects with a `frameReady` method *or*
+        strings representing paths.  If a string is passed, a handler will be created
+        internally.
+
+        This method returns a tuple of currently connected handlers, including those
+        that were explicitly passed to `run()`, as well as those that were created based
+        on file paths.  The only guaranteed API that the handler will have is the
+        `frameReady` method, but it could be any user-defined object that implements
+        that method.
+
+        During the course of the sequence, the `get_output_handlers` method can be
+        used to get the currently connected output handlers (including those that
+        were created automatically based on file paths).
+
         Returns
         -------
         tuple[SupportsFrameReady, ...]
@@ -364,6 +379,10 @@ class MDARunner:
         """Main execution of events, inside the try/except block of `run`."""
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
         if isinstance(events, Iterator):
+            # if an iterator is passed directly, then we use that iterator
+            # instead of the engine's event_iterator.  Directly passing an iterator
+            # is an advanced use case, (for example, `iter(Queue(), None)` for event-
+            # driven acquisition) and we don't want the engine to interfere with it.
             event_iterator = iter
         else:
             event_iterator = getattr(engine, "event_iterator", iter)
@@ -374,6 +393,7 @@ class MDARunner:
         for event in _events:
             if event.reset_event_timer:
                 self._reset_event_timer()
+            # If cancelled break out of the loop
             if self._wait_until_event(event) or not self._running:
                 break
 
@@ -383,12 +403,16 @@ class MDARunner:
 
             try:
                 runner_time_ms = self.seconds_elapsed() * 1000
+                # this is a bit of a hack to pass the time into the engine
+                # it is used for intra-event time calculations inside the engine.
+                # we pop it off after the event is executed.
                 event.metadata["runner_t0"] = self._sequence_t0
-                output = engine.exec_event(event) or ()
+                output = engine.exec_event(event) or ()  # in case output is None
 
                 for payload in self._iter_with_signals(output):
                     img, ev, meta = payload
                     ev.metadata.pop("runner_t0", None)
+                    # if the engine calculated its own time, don't overwrite it
                     if "runner_time_ms" not in meta:
                         meta["runner_time_ms"] = runner_time_ms
 
@@ -448,7 +472,16 @@ class MDARunner:
         self._t0 = time.perf_counter()  # reference time, in seconds
 
     def _check_canceled(self) -> bool:
-        """Return True if cancelled, emitting sequenceCanceled if so."""
+        """Return True if cancelled, emitting sequenceCanceled if so.
+
+        If cancelled, this relies on the `self._sequence` being the current sequence
+        in order to emit a `sequenceCanceled` signal.
+
+        Returns
+        -------
+        bool
+            Whether the MDA has been canceled.
+        """
         if self._canceled:
             logger.warning("MDA Canceled: %s", self._sequence)
             self._signals.sequenceCanceled.emit(self._sequence)
@@ -458,7 +491,13 @@ class MDARunner:
         return False
 
     def _wait_until_event(self, event: MDAEvent) -> bool:
-        """Wait until the event's min start time, checking for pauses/cancellations."""
+        """Wait until the event's min start time, checking for pauses/cancellations.
+
+        Returns
+        -------
+        bool
+            Whether the MDA was cancelled while waiting.
+        """
         if not self.is_running():
             return False  # pragma: no cover
         if self._check_canceled():
@@ -470,8 +509,14 @@ class MDARunner:
             if self._check_canceled():
                 return True
 
+        # NOTE: this is actually the only place where the runner assumes our event is
+        # an MDAevent.  For everything else, the engine is technically the only thing
+        # that cares about the event time.
+        # So this whole method could potentially be moved to the engine.
         if event.min_start_time:
             go_at = event.min_start_time + self._paused_time
+            # We need to enter a loop here checking paused and canceled.
+            # otherwise you'll potentially wait a long time to cancel
             remaining_wait_time = go_at - self.event_seconds_elapsed()
             while remaining_wait_time > 0:
                 self._signals.awaitingEvent.emit(event, remaining_wait_time)
@@ -485,10 +530,18 @@ class MDARunner:
                 time.sleep(min(remaining_wait_time, 0.5))
                 remaining_wait_time = go_at - self.event_seconds_elapsed()
 
+        # check canceled again in case it was canceled
+        # during the waiting loop
         return self._check_canceled()
 
     def _finish_run(self, sequence: MDASequence) -> None:
-        """To be called at the end of an acquisition."""
+        """To be called at the end of an acquisition.
+
+        Parameters
+        ----------
+        sequence : MDASequence
+            The sequence that was finished.
+        """
         self._running = False
         self._canceled = False
 
