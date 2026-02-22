@@ -97,6 +97,7 @@ dev = [
     "pydantic >2.7.4; python_version >= '3.13'",
     "opencv-python>=4.11.0.86",
     "pytest-xdist>=3.8.0",
+    "prek>=0.3.3",
 ]
 
 [tool.uv.sources]

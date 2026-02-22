@@ -77,7 +77,12 @@ def mda_listeners_connected(
 
     if not asynchronous:
         # Just collapse to a regular synchronous listeners_connected
-        with listeners_connected(mda_events, *listeners, name_map=name_map):
+        with listeners_connected(
+            mda_events,
+            *listeners,
+            name_map=name_map,
+            qt_connection_type="DirectConnection",
+        ):
             yield None
         return
 
@@ -88,7 +93,9 @@ def mda_listeners_connected(
 
     try:
         # connect the actual core.mda.events to methods on the relay
-        with listeners_connected(mda_events, relay):
+        with listeners_connected(
+            mda_events, relay, qt_connection_type="DirectConnection"
+        ):
             # connect the signals on the relay to the listeners
             with listeners_connected(
                 relay.signals,

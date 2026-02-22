@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 import time
 import weakref
 from contextlib import nullcontext
@@ -12,6 +13,7 @@ import useq
 from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus, FocusDirection
+from pymmcore_plus.mda._dispatch import RunStatus
 from pymmcore_plus.mda._engine import _warn_focus_dir
 from pymmcore_plus.mda.events import MDASignaler
 
@@ -312,14 +314,21 @@ def test_keep_shutter_open(core: CMMCorePlus) -> None:
         keep_shutter_open_across="t",
     )
 
-    @core.mda.events.frameReady.connect
-    def _on_frame(img: Any, event: MDAEvent) -> None:
-        assert core.getShutterOpen() == event.keep_shutter_open
-        # autoshutter will always be on only at position 0 (no time plan)
-        assert core.getAutoShutter() == (event.index["p"] == 0)
+    # Check hardware state synchronously inside exec_event (runner thread, before
+    # teardown). frameReady is now async so it can't be used to check live state.
+    assert core.mda.engine
+    original_exec = core.mda.engine.exec_event
+
+    def _capturing_exec(event: MDAEvent):  # type: ignore[misc]
+        for payload in original_exec(event):
+            assert core.getShutterOpen() == event.keep_shutter_open
+            # autoshutter will always be on only at position 0 (no time plan)
+            assert core.getAutoShutter() == (event.index["p"] == 0)
+            yield payload
 
     core.setAutoShutter(True)
-    core.mda.run(mda)
+    with patch.object(core.mda.engine, "exec_event", _capturing_exec):
+        core.mda.run(mda)
 
     # It should look like this:
     # event,                                                   open, auto_shut
@@ -435,6 +444,23 @@ def test_runner_pause(qtbot: QtBot) -> None:
         thread.join()
     assert engine.setup_event.call_count == 2
     engine.teardown_sequence.assert_called_once()
+
+
+def test_runner_cancel_report_status(core: CMMCorePlus) -> None:
+    """Canceled runs return RunStatus.CANCELED in the RunReport."""
+    core.mda.engine.use_hardware_sequencing = False
+    report: dict[str, Any] = {}
+
+    def _run() -> None:
+        report["value"] = core.mda.run([MDAEvent(), MDAEvent(min_start_time=2)])
+
+    thread = threading.Thread(target=_run)
+    thread.start()
+    time.sleep(0.2)
+    core.mda.cancel()
+    thread.join()
+
+    assert report["value"].status is RunStatus.CANCELED
 
 
 def test_reset_event_timer(core: CMMCorePlus) -> None:
