@@ -207,10 +207,15 @@ class MDARunner:
     ) -> RunReport:
         """Run the multi-dimensional acquisition defined by `events`.
 
-        Most users should not use this directly as it will block further
-        execution. Instead, use the
+        This is the main method for running a multi-dimensional acquisition.  It takes
+        an iterable of events, executes them using the registered engine, and dispatches
+        the resulting frames to the specified output handlers and any additional
+        consumers.
+
+        Note that this method is blocking and will not return until the acquisition is
+        complete. For a non-blocking alternative, use the
         [`CMMCorePlus.run_mda`][pymmcore_plus.CMMCorePlus.run_mda] method which will
-        run on a thread.
+        run this method on a thread.
 
         Parameters
         ----------

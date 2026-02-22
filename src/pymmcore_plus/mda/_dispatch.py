@@ -102,6 +102,9 @@ class ConsumerReport:
     processed: int = 0
     dropped: int = 0
     errors: list[Exception] = field(default_factory=list)
+    # TODO: submitted/dropped are written from the caller thread while
+    # processed/errors are written from the worker thread.  This is safe under
+    # the GIL but needs synchronization for free-threaded Python (PEP 703).
 
 
 @dataclass(slots=True)
@@ -332,19 +335,34 @@ class FrameDispatcher:
         for w in self._workers:
             w.join(timeout=30)
 
-        # Call finish() only on consumers that survived start()
+        # Call finish() on all consumers that survived start().
+        # Collect errors instead of raising immediately so every consumer
+        # gets its finish() call even if an earlier one fails.
+        finish_error: ConsumerDispatchError | None = None
         for spec in self._surviving_specs:
             try:
                 spec.consumer.finish(sequence, status)
             except Exception as exc:
-                self._handle_lifecycle_error(spec, exc, "finish")
+                if finish_error is None:
+                    try:
+                        self._handle_lifecycle_error(spec, exc, "finish")
+                    except ConsumerDispatchError as cde:
+                        finish_error = cde
+                else:
+                    logger.error(
+                        "Consumer %r finish error (after prior failure): %s",
+                        spec.name,
+                        exc,
+                    )
 
         # Collect reports
         reports = tuple(w.report for w in self._workers)
         finished_at = time.perf_counter()
 
-        # Check for fatal errors
-        fatal = next((w.fatal for w in self._workers if w.fatal is not None), None)
+        # Check for fatal errors (from frame processing or finish)
+        fatal = finish_error or next(
+            (w.fatal for w in self._workers if w.fatal is not None), None
+        )
 
         report = RunReport(
             status=status,
@@ -353,8 +371,7 @@ class FrameDispatcher:
             consumer_reports=reports,
         )
 
-        should_raise = self.policy.critical_error == CriticalErrorPolicy.RAISE
-        if fatal is not None and should_raise:
+        if fatal is not None:
             raise fatal
 
         return report
@@ -455,7 +472,11 @@ class _LegacyAdapter:
 
 
 class _SignalRelay:
-    """Relay frames to the runner's PMDASignaler.frameReady signal."""
+    """Relay frames to the runner's PMDASignaler.frameReady signal.
+
+    NOTE: frame() is called from a worker thread, so all frameReady listeners
+    must be thread-safe.
+    """
 
     def __init__(self, signals: PMDASignaler) -> None:
         self._signals = signals

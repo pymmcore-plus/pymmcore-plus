@@ -57,6 +57,7 @@ if TYPE_CHECKING:
     from pymmcore import DeviceLabel
     from useq import MDAEvent
 
+    from pymmcore_plus.mda._dispatch import ConsumerSpec, RunPolicy
     from pymmcore_plus.mda._runner import SingleOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
@@ -1644,6 +1645,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         events: Iterable[MDAEvent],
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
+        consumers: Sequence[ConsumerSpec] = (),
+        policy: RunPolicy | None = None,
         block: bool = False,
     ) -> Thread:
         """Run a sequence of [useq.MDAEvent][] on a new thread.
@@ -1671,6 +1674,10 @@ class CMMCorePlus(pymmcore.CMMCore):
                 meaning it has a `frameReady` method.  See `mda_listeners_connected`
                 for more details.
             - A sequence of either of the above. (all will be connected)
+        consumers : Sequence[ConsumerSpec], optional
+            Explicit consumer registrations with per-consumer settings.
+        policy : RunPolicy | None, optional
+            Error handling and backpressure configuration.
         block : bool, optional
             If True, block until the sequence is complete, by default False.
 
@@ -1684,7 +1691,8 @@ class CMMCorePlus(pymmcore.CMMCore):
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self.mda.run, args=(events,), kwargs={"output": output})
+        kwargs: dict = {"output": output, "consumers": consumers, "policy": policy}
+        th = Thread(target=self.mda.run, args=(events,), kwargs=kwargs)
         th.start()
         if block:
             th.join()

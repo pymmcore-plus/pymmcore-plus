@@ -643,3 +643,156 @@ def test_report_counters_consistent_under_load() -> None:
     assert worker.report.submitted == n_frames
     assert worker.report.processed == n_frames
     assert worker.report.dropped == 0
+
+
+# ---------------------------------------------------------------------------
+# finish() bug tests (currently failing — demonstrate bugs to fix)
+# ---------------------------------------------------------------------------
+
+
+class FinishErrorConsumer(SimpleConsumer):
+    """Consumer that raises on finish()."""
+
+    def __init__(self, error: Exception | None = None) -> None:
+        super().__init__()
+        self.error = error or RuntimeError("finish failed")
+
+    def finish(self, sequence: MDASequence, status: RunStatus) -> None:
+        super().finish(sequence, status)
+        raise self.error
+
+
+def test_finish_error_raise_does_not_skip_other_consumers() -> None:
+    """finish() error with RAISE should not prevent other consumers' finish()."""
+    c1 = FinishErrorConsumer()
+    c2 = SimpleConsumer()
+    policy = RunPolicy(critical_error=CriticalErrorPolicy.RAISE)
+    seq = MDASequence()
+
+    dispatcher = FrameDispatcher(policy)
+    dispatcher.add_consumer(ConsumerSpec("bad", c1, critical=True))
+    dispatcher.add_consumer(ConsumerSpec("good", c2, critical=True))
+    dispatcher.start(seq, {})
+
+    # Both consumers should get finish() called, even if the first raises.
+    with pytest.raises(ConsumerDispatchError):
+        dispatcher.close(seq, RunStatus.COMPLETED)
+
+    assert len(c1.finish_calls) == 1
+    assert len(c2.finish_calls) == 1, (
+        "Second consumer's finish() was skipped because first consumer raised"
+    )
+
+
+def test_finish_error_cancel_requests_cancel() -> None:
+    """finish() error with CANCEL policy should set cancel flag."""
+    consumer = FinishErrorConsumer()
+    policy = RunPolicy(critical_error=CriticalErrorPolicy.CANCEL)
+    seq = MDASequence()
+
+    dispatcher = FrameDispatcher(policy)
+    dispatcher.add_consumer(ConsumerSpec("bad", consumer, critical=True))
+    dispatcher.start(seq, {})
+    dispatcher.close(seq, RunStatus.COMPLETED)
+
+    assert dispatcher.should_cancel()
+
+
+def test_finish_error_continue_logs() -> None:
+    """finish() error with CONTINUE policy should not raise."""
+    consumer = FinishErrorConsumer()
+    policy = RunPolicy(critical_error=CriticalErrorPolicy.CONTINUE)
+    seq = MDASequence()
+
+    dispatcher = FrameDispatcher(policy)
+    dispatcher.add_consumer(ConsumerSpec("bad", consumer, critical=True))
+    dispatcher.start(seq, {})
+
+    # Should not raise
+    report = dispatcher.close(seq, RunStatus.COMPLETED)
+    assert len(consumer.finish_calls) == 1
+    assert report.status == RunStatus.COMPLETED
+
+
+# ---------------------------------------------------------------------------
+# Gap-filling tests
+# ---------------------------------------------------------------------------
+
+
+def test_finish_error_noncritical_disconnect() -> None:
+    """Non-critical finish() error with DISCONNECT should not raise."""
+    consumer = FinishErrorConsumer()
+    policy = RunPolicy(noncritical_error=NonCriticalErrorPolicy.DISCONNECT)
+    seq = MDASequence()
+
+    dispatcher = FrameDispatcher(policy)
+    dispatcher.add_consumer(ConsumerSpec("obs", consumer, critical=False))
+    dispatcher.start(seq, {})
+
+    report = dispatcher.close(seq, RunStatus.COMPLETED)
+    assert len(consumer.finish_calls) == 1
+    assert report.status == RunStatus.COMPLETED
+
+
+def test_finish_error_noncritical_log() -> None:
+    """Non-critical finish() error with LOG should not raise."""
+    consumer = FinishErrorConsumer()
+    policy = RunPolicy(noncritical_error=NonCriticalErrorPolicy.LOG)
+    seq = MDASequence()
+
+    dispatcher = FrameDispatcher(policy)
+    dispatcher.add_consumer(ConsumerSpec("obs", consumer, critical=False))
+    dispatcher.start(seq, {})
+
+    report = dispatcher.close(seq, RunStatus.COMPLETED)
+    assert len(consumer.finish_calls) == 1
+    assert report.status == RunStatus.COMPLETED
+
+
+def test_multiple_critical_consumers_failing() -> None:
+    """Multiple critical consumers both failing — all errors collected."""
+    c1 = ErrorConsumer(ValueError("error1"))
+    c2 = ErrorConsumer(ValueError("error2"))
+    policy = RunPolicy(critical_error=CriticalErrorPolicy.CONTINUE)
+    seq = MDASequence()
+
+    dispatcher = FrameDispatcher(policy)
+    dispatcher.add_consumer(ConsumerSpec("c1", c1, critical=True))
+    dispatcher.add_consumer(ConsumerSpec("c2", c2, critical=True))
+    dispatcher.start(seq, {})
+    dispatcher.submit(*_make_frame())
+
+    report = dispatcher.close(seq, RunStatus.COMPLETED)
+    assert len(report.consumer_reports) == 2
+    assert len(report.consumer_reports[0].errors) == 1
+    assert len(report.consumer_reports[1].errors) == 1
+
+
+def test_legacy_adapter_setup_error_propagates() -> None:
+    """_LegacyAdapter propagates errors from sequenceStarted."""
+
+    class BadStartHandler:
+        def sequenceStarted(self, seq: Any, meta: Any) -> None:
+            raise RuntimeError("start failed")
+
+        def frameReady(self, img: Any) -> None:
+            pass
+
+    adapter = _LegacyAdapter(BadStartHandler())
+    with pytest.raises(RuntimeError, match="start failed"):
+        adapter.setup(MDASequence(), {})
+
+
+def test_legacy_adapter_finish_error_propagates() -> None:
+    """_LegacyAdapter propagates errors from sequenceFinished."""
+
+    class BadFinishHandler:
+        def sequenceFinished(self, seq: Any) -> None:
+            raise RuntimeError("finish failed")
+
+        def frameReady(self, img: Any) -> None:
+            pass
+
+    adapter = _LegacyAdapter(BadFinishHandler())
+    with pytest.raises(RuntimeError, match="finish failed"):
+        adapter.finish(MDASequence(), RunStatus.COMPLETED)
