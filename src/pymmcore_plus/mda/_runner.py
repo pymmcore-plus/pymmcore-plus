@@ -261,11 +261,12 @@ class MDARunner:
             engine, meta = self._prepare_to_run(sequence)
             dispatcher.start(sequence, meta)
 
+            self._signals.sequenceStarted.emit(sequence, meta)
+
             if dispatcher.should_cancel():
                 self._canceled = True
                 self._check_canceled()
 
-            self._signals.sequenceStarted.emit(sequence, meta)
             if not self._cancel_seen:
                 self._run(engine, events, dispatcher)
 

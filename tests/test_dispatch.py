@@ -22,6 +22,8 @@ from pymmcore_plus.mda._dispatch import (
     RunPolicy,
     RunReport,
     RunStatus,
+    _ConsumerWorker,
+    _FrameMessage,
     _LegacyAdapter,
     _SignalRelay,
 )
@@ -221,9 +223,21 @@ def test_noncritical_error_disconnect() -> None:
     assert len(cr.errors) == 1
 
 
+class BlockingConsumer(SimpleConsumer):
+    """Consumer that blocks until released. Guarantees queue stays full."""
+
+    def __init__(self) -> None:
+        super().__init__()
+        self.gate = threading.Event()
+
+    def frame(self, img: np.ndarray, event: MDAEvent, meta: dict[str, Any]) -> None:
+        self.gate.wait()
+        super().frame(img, event, meta)
+
+
 def test_backpressure_drop_newest() -> None:
     """DROP_NEWEST policy drops new frames when queue is full."""
-    slow = SlowConsumer(delay=0.5)
+    consumer = BlockingConsumer()
     policy = RunPolicy(
         backpressure=BackpressurePolicy.DROP_NEWEST,
         critical_queue=2,
@@ -231,13 +245,14 @@ def test_backpressure_drop_newest() -> None:
     seq = MDASequence()
 
     dispatcher = FrameDispatcher(policy)
-    dispatcher.add_consumer(ConsumerSpec("slow", slow, critical=True))
+    dispatcher.add_consumer(ConsumerSpec("blocked", consumer, critical=True))
     dispatcher.start(seq, {})
 
-    # Submit many frames quickly (queue capacity is 2)
+    # Submit many frames while consumer is blocked — queue stays full
     for i in range(10):
         dispatcher.submit(*_make_frame(i))
 
+    consumer.gate.set()
     report = dispatcher.close(seq, RunStatus.COMPLETED)
     cr = report.consumer_reports[0]
     assert cr.dropped > 0
@@ -246,7 +261,7 @@ def test_backpressure_drop_newest() -> None:
 
 def test_backpressure_drop_oldest() -> None:
     """DROP_OLDEST policy drops old frames when queue is full."""
-    slow = SlowConsumer(delay=0.5)
+    consumer = BlockingConsumer()
     policy = RunPolicy(
         backpressure=BackpressurePolicy.DROP_OLDEST,
         critical_queue=2,
@@ -254,12 +269,13 @@ def test_backpressure_drop_oldest() -> None:
     seq = MDASequence()
 
     dispatcher = FrameDispatcher(policy)
-    dispatcher.add_consumer(ConsumerSpec("slow", slow, critical=True))
+    dispatcher.add_consumer(ConsumerSpec("blocked", consumer, critical=True))
     dispatcher.start(seq, {})
 
     for i in range(10):
         dispatcher.submit(*_make_frame(i))
 
+    consumer.gate.set()
     report = dispatcher.close(seq, RunStatus.COMPLETED)
     cr = report.consumer_reports[0]
     assert cr.dropped > 0
@@ -267,7 +283,7 @@ def test_backpressure_drop_oldest() -> None:
 
 def test_backpressure_fail() -> None:
     """FAIL policy raises BufferError when queue is full."""
-    slow = SlowConsumer(delay=1.0)
+    consumer = BlockingConsumer()
     policy = RunPolicy(
         backpressure=BackpressurePolicy.FAIL,
         critical_queue=1,
@@ -275,38 +291,33 @@ def test_backpressure_fail() -> None:
     seq = MDASequence()
 
     dispatcher = FrameDispatcher(policy)
-    dispatcher.add_consumer(ConsumerSpec("slow", slow, critical=True))
+    dispatcher.add_consumer(ConsumerSpec("blocked", consumer, critical=True))
     dispatcher.start(seq, {})
 
-    # First frame goes in fine
     dispatcher.submit(*_make_frame(0))
 
-    # Subsequent frames should eventually overflow
     with pytest.raises(BufferError, match="queue full"):
         for i in range(1, 100):
             dispatcher.submit(*_make_frame(i))
 
+    consumer.gate.set()
     dispatcher.close(seq, RunStatus.FAILED)
 
 
 def test_queue_status() -> None:
     """queue_status() returns correct pending/capacity info."""
-    slow = SlowConsumer(delay=0.5)
+    consumer = SimpleConsumer()
     policy = RunPolicy(critical_queue=10)
     seq = MDASequence()
 
     dispatcher = FrameDispatcher(policy)
-    dispatcher.add_consumer(ConsumerSpec("slow", slow, critical=True))
+    dispatcher.add_consumer(ConsumerSpec("slow", consumer, critical=True))
     dispatcher.start(seq, {})
-
-    for i in range(5):
-        dispatcher.submit(*_make_frame(i))
 
     status = dispatcher.queue_status()
     assert "slow" in status
     pending, capacity = status["slow"]
     assert capacity == 10
-    # pending might be less than 5 if the worker already processed some
     assert pending >= 0
 
     dispatcher.close(seq, RunStatus.COMPLETED)
@@ -412,12 +423,12 @@ def test_setup_error_critical_raise() -> None:
     """Critical consumer setup error with RAISE re-raises."""
 
     class BadSetupConsumer(SimpleConsumer):
-        def setup(self, seq: Any, meta: Any) -> None:
+        def setup(self, seq: Any, meta: Any) -> None:  # type: ignore
             raise RuntimeError("setup failed")
 
     policy = RunPolicy(critical_error=CriticalErrorPolicy.RAISE)
     dispatcher = FrameDispatcher(policy)
-    dispatcher.add_consumer(ConsumerSpec("bad", BadSetupConsumer(), critical=True))
+    dispatcher.add_consumer(ConsumerSpec("bad", BadSetupConsumer(), critical=True))  # type: ignore
 
     with pytest.raises(ConsumerDispatchError, match="bad"):
         dispatcher.start(MDASequence(), {})
@@ -479,7 +490,6 @@ def test_concurrent_consumers() -> None:
         def frame(self, img: Any, event: Any, meta: Any) -> None:
             with lock:
                 thread_names.append(threading.current_thread().name)
-            time.sleep(0.01)
 
     seq = MDASequence()
     dispatcher = FrameDispatcher()
@@ -489,7 +499,6 @@ def test_concurrent_consumers() -> None:
 
     dispatcher.start(seq, {})
     dispatcher.submit(*_make_frame())
-    time.sleep(0.1)
     dispatcher.close(seq, RunStatus.COMPLETED)
 
     # Each consumer should have processed on its own thread
@@ -498,3 +507,139 @@ def test_concurrent_consumers() -> None:
     assert len(unique_threads) == 3
     for name in unique_threads:
         assert name.startswith("mda-t")
+
+
+def _msg(val: int = 0) -> _FrameMessage:
+    return _FrameMessage(np.array([val]), MDAEvent(), {"v": val})
+
+
+def test_stop_does_not_block_on_full_queue() -> None:
+    """worker.stop() returns in bounded time even when queue is full and idle."""
+    policy = RunPolicy(
+        critical_error=CriticalErrorPolicy.RAISE,
+        backpressure=BackpressurePolicy.BLOCK,
+        critical_queue=2,
+    )
+    spec = ConsumerSpec("test", SimpleConsumer(), critical=True)
+    worker = _ConsumerWorker(spec, policy)
+    # Don't start the worker thread — simulate it having already exited.
+
+    worker.queue.put(_msg(0))
+    worker.queue.put(_msg(1))
+    assert worker.queue.full()
+
+    done = threading.Event()
+
+    def _stop() -> None:
+        worker.stop()
+        done.set()
+
+    t = threading.Thread(target=_stop, daemon=True)
+    t.start()
+    assert done.wait(timeout=3), "worker.stop() blocked on full queue"
+
+
+def test_cancel_signal_comes_after_started() -> None:
+    """sequenceCanceled is always emitted after sequenceStarted."""
+    from pymmcore_plus.mda._runner import MDARunner
+
+    class FailSetup:
+        def setup(self, seq: Any, meta: Any) -> None:
+            raise RuntimeError("setup failed")
+
+        def frame(self, img: Any, event: Any, meta: Any) -> None:
+            pass
+
+        def finish(self, seq: Any, status: Any) -> None:
+            pass
+
+    class MinimalEngine:
+        def setup_sequence(self, sequence: MDASequence) -> dict:
+            return {}
+
+        def setup_event(self, event: MDAEvent) -> None:
+            pass
+
+        def exec_event(self, event: MDAEvent) -> Any:
+            return ()
+
+        def event_iterator(self, events: Any) -> Any:
+            return iter(events)
+
+        def teardown_event(self, event: MDAEvent) -> None:
+            pass
+
+        def teardown_sequence(self, sequence: MDASequence) -> None:
+            pass
+
+    runner = MDARunner()
+    runner.set_engine(MinimalEngine())
+
+    signal_log: list[str] = []
+    runner.events.sequenceStarted.connect(lambda *a: signal_log.append("started"))
+    runner.events.sequenceCanceled.connect(lambda *a: signal_log.append("canceled"))
+    runner.events.sequenceFinished.connect(lambda *a: signal_log.append("finished"))
+
+    policy = RunPolicy(critical_error=CriticalErrorPolicy.CANCEL)
+    runner.run(
+        [MDAEvent()],
+        consumers=[ConsumerSpec("bad", FailSetup(), critical=True)],
+        policy=policy,
+    )
+
+    assert "started" in signal_log
+    assert "canceled" in signal_log
+    assert signal_log.index("started") < signal_log.index("canceled")
+
+
+def test_finish_not_called_when_setup_failed() -> None:
+    """Consumers excluded by setup() failure don't receive finish()."""
+
+    class FailingConsumer:
+        def __init__(self) -> None:
+            self.finish_called = False
+
+        def setup(self, seq: Any, meta: Any) -> None:
+            raise RuntimeError("setup failed")
+
+        def frame(self, img: Any, event: Any, meta: Any) -> None:
+            pass
+
+        def finish(self, seq: Any, status: Any) -> None:
+            self.finish_called = True
+
+    consumer = FailingConsumer()
+    policy = RunPolicy(critical_error=CriticalErrorPolicy.CANCEL)
+
+    dispatcher = FrameDispatcher(policy)
+    dispatcher.add_consumer(ConsumerSpec("bad", consumer, critical=True))
+
+    seq = MDASequence()
+    dispatcher.start(seq, {})
+    assert len(dispatcher._workers) == 0
+
+    dispatcher.close(seq, RunStatus.CANCELED)
+    assert not consumer.finish_called
+
+
+def test_report_counters_consistent_under_load() -> None:
+    """Report counters are consistent after many concurrent submits."""
+    policy = RunPolicy(
+        backpressure=BackpressurePolicy.BLOCK,
+        critical_queue=256,
+    )
+    consumer = SlowConsumer(delay=0.001)
+    spec = ConsumerSpec("test", consumer, critical=True)
+    worker = _ConsumerWorker(spec, policy)
+    worker.start()
+
+    n_frames = 200
+    for i in range(n_frames):
+        worker.submit(_msg(i))
+
+    worker.stop()
+    worker.join(timeout=5)
+
+    assert worker.report.submitted == n_frames
+    assert worker.report.processed == n_frames
+    assert worker.report.dropped == 0

@@ -209,7 +209,17 @@ class _ConsumerWorker:
 
     def stop(self) -> None:
         """Signal the worker to stop after draining its queue."""
-        self.queue.put(_STOP)
+        # Use put_nowait to avoid blocking forever if the queue is full
+        # and the worker thread is already dead.
+        while True:
+            try:
+                self.queue.put_nowait(_STOP)
+                return
+            except Full:
+                try:
+                    self.queue.get_nowait()
+                except Exception:
+                    pass
 
     def join(self, timeout: float | None = None) -> None:
         self.thread.join(timeout=timeout)
@@ -271,6 +281,7 @@ class FrameDispatcher:
     def __init__(self, policy: RunPolicy | None = None) -> None:
         self.policy = policy or RunPolicy()
         self._specs: list[ConsumerSpec] = []
+        self._surviving_specs: list[ConsumerSpec] = []
         self._workers: list[_ConsumerWorker] = []
         self.started_at: float = 0.0
         self._cancel_requested = False
@@ -292,6 +303,7 @@ class FrameDispatcher:
                     continue
             surviving.append(spec)
 
+        self._surviving_specs = surviving
         self._workers = [_ConsumerWorker(s, self.policy) for s in surviving]
         for w in self._workers:
             w.start()
@@ -320,8 +332,8 @@ class FrameDispatcher:
         for w in self._workers:
             w.join(timeout=30)
 
-        # Call finish() on each consumer
-        for spec in self._specs:
+        # Call finish() only on consumers that survived start()
+        for spec in self._surviving_specs:
             try:
                 spec.consumer.finish(sequence, status)
             except Exception as exc:
