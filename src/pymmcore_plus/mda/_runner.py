@@ -345,7 +345,7 @@ class MDARunner:
                 # we pop it off after the event is executed.
                 event.metadata["runner_t0"] = self._sequence_t0
                 output = engine.exec_event(event) or ()  # in case output is None
-                for payload in self._iter_with_signals(output):
+                for payload in self._iter_exec_output(output):
                     img, _event, meta = payload
                     _event.metadata.pop("runner_t0", None)
                     # if the engine calculated its own time, don't overwrite it
@@ -360,8 +360,8 @@ class MDARunner:
                 self._check_canceled()
                 break
 
-    def _iter_with_signals(self, iterable: Iterable) -> Iterator:
-        """Iterate over output, sending cancel/pause signals to generators.
+    def _iter_exec_output(self, iterable: Iterable) -> Iterator:
+        """Iterate over exec_event output, sending cancel/pause signals to generators.
 
         This allows the runner to communicate with generator-based engines
         (like exec_sequenced_event) without the engine needing to know about
