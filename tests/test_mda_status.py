@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from typing import TYPE_CHECKING
 from unittest.mock import Mock, patch
 
@@ -184,3 +185,55 @@ def test_cancel_from_waiting(core: CMMCorePlus) -> None:
 
     cancel_mock.assert_called_once()
     assert runner.status.finish_reason == FinishReason.CANCELED
+
+
+def test_cancel_from_preparing(core: CMMCorePlus) -> None:
+    """Cancel while PREPARING should remain canceled after setup returns."""
+    runner = core.mda
+    cancel_mock = Mock()
+    frame_mock = Mock()
+    runner.events.sequenceCanceled.connect(cancel_mock)
+    runner.events.frameReady.connect(frame_mock)
+
+    original_setup_sequence = runner.engine.setup_sequence
+
+    def _slow_setup(sequence: useq.MDASequence) -> object:
+        time.sleep(0.2)
+        assert runner.status.phase == AcqState.PREPARING
+        runner.cancel()
+        return original_setup_sequence(sequence)
+
+    with patch.object(runner.engine, "setup_sequence", side_effect=_slow_setup):
+        seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=5))
+        runner.run(seq)
+
+    cancel_mock.assert_called_once()
+    frame_mock.assert_not_called()
+    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.finish_reason == FinishReason.CANCELED
+
+
+def test_pause_unpause_then_complete(core: CMMCorePlus) -> None:
+    """Pause then unpause mid-sequence completes normally."""
+    runner = core.mda
+    pause_mock = Mock()
+    runner.events.sequencePauseToggled.connect(pause_mock)
+
+    frame_count = 0
+
+    @runner.events.frameReady.connect
+    def _on_frame(*args: object) -> None:
+        nonlocal frame_count
+        frame_count += 1
+        if frame_count == 2:
+            runner.toggle_pause()
+            runner.toggle_pause()
+
+    seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=5))
+    runner.run(seq)
+
+    assert frame_count == 5
+    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.finish_reason == FinishReason.COMPLETED
+    # paused then unpaused
+    assert pause_mock.call_count == 2
