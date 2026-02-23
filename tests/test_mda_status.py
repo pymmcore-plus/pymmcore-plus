@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING
+from unittest.mock import Mock
 
 import pytest
 import useq
@@ -21,6 +22,9 @@ def test_pause_and_cancel_mid_sequence(
 
     frame_count = 0
 
+    cancel_mock = Mock()
+    core.mda.events.sequenceCanceled.connect(cancel_mock)
+
     @core.mda.events.frameReady.connect
     def _on_frame() -> None:
         nonlocal frame_count
@@ -35,9 +39,9 @@ def test_pause_and_cancel_mid_sequence(
     with caplog.at_level(logging.WARNING, logger="pymmcore-plus"):
         core.mda.run(sequence)
 
-    assert core.mda._was_canceled
     assert frame_count < 50
     assert any("MDA Canceled:" in r.message for r in caplog.records)
+    cancel_mock.assert_called_once()
     # hardware sequences can't truly pause, only warn
     if hardware_seq:
         assert any("cannot be yet paused" in r.message for r in caplog.records)
