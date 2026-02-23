@@ -169,18 +169,6 @@ class MDARunner:
         """
         return self._in_pause_loop
 
-    def is_pause_requested(self) -> bool:
-        """Return True if pause requested but not yet in the pause loop."""
-        return self._paused and not self._in_pause_loop
-
-    def is_cancel_requested(self) -> bool:
-        """Return True if cancel has been requested."""
-        return self._canceled
-
-    def is_canceled(self) -> bool:
-        """Return True if the acquisition was canceled."""
-        return self._was_canceled
-
     def cancel(self) -> None:
         """Cancel the currently running acquisition.
 

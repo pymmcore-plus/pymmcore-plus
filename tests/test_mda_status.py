@@ -56,7 +56,7 @@ def test_sequenced_event_paused_and_cancelled(
 
         def _on_finished(seq):
             t1 = time.perf_counter()
-            assert core.mda.is_canceled()
+            assert core.mda._was_canceled
             assert t1 - t0 < 4.5, "Acquisition not canceled!"
             # assert that both pause warning and cancel warning were logged
             if hardware_seq:
@@ -93,7 +93,7 @@ def test_sequenced_event_paused_and_cancelled(
                     paused = True
                     time.sleep(0.2)
                     core.mda.toggle_pause()
-                    assert core.mda.is_pause_requested()
+                    assert core.mda._paused and not core.mda._in_pause_loop
                     assert core.mda.is_running()
                     time.sleep(0.2)
                     if not hardware_seq:
@@ -101,9 +101,9 @@ def test_sequenced_event_paused_and_cancelled(
                     # to stop the sequence faster
                     core.mda.cancel()
                     assert not core.mda.is_running()
-                    assert not core.mda.is_pause_requested()
+                    assert not core.mda._paused
                     assert not core.mda.is_paused()
-                    assert core.mda.is_cancel_requested()
+                    assert core.mda._canceled
     finally:
         logger.removeHandler(handler)
         logger.setLevel(original_level)
