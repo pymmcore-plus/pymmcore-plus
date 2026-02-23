@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import types
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
@@ -386,25 +387,21 @@ class MDARunner:
         signals, they're simply ignored.
         """
         gen = iter(iterable)
-        is_generator = hasattr(gen, "send")
+        is_generator = isinstance(gen, types.GeneratorType)
 
         try:
             item = next(gen)
             while True:
                 yield item
-
-                # Determine signal based on current runner state
-                signal = None
-                if self._canceled:
-                    signal = "cancel"
-                elif self._paused:
-                    signal = "pause"
-
-                try:
-                    # Send signal if it's a generator, otherwise just get next
-                    item = gen.send(signal) if is_generator else next(gen)  # type: ignore
-                except StopIteration:
-                    break
+                if is_generator:
+                    signal = None
+                    if self._canceled:
+                        signal = "cancel"
+                    elif self._paused:
+                        signal = "pause"
+                    item = gen.send(signal)  # type: ignore[attr-defined]
+                else:
+                    item = next(gen)
         except StopIteration:
             pass
 
