@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import types
 import warnings
 from collections.abc import Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
@@ -344,9 +345,7 @@ class MDARunner:
                 # we pop it off after the event is executed.
                 event.metadata["runner_t0"] = self._sequence_t0
                 output = engine.exec_event(event) or ()  # in case output is None
-                # when `event` is a SequencedEvent, `exec_event` return a sequence
-                # of individual `_events`s
-                for payload in output:
+                for payload in self._iter_exec_output(output):
                     img, _event, meta = payload
                     _event.metadata.pop("runner_t0", None)
                     # if the engine calculated its own time, don't overwrite it
@@ -356,6 +355,39 @@ class MDARunner:
                         self._signals.frameReady.emit(img, _event, meta)
             finally:
                 teardown_event(event)
+
+            if self._canceled:
+                self._check_canceled()
+                break
+
+    def _iter_exec_output(self, iterable: Iterable) -> Iterator:
+        """Iterate over exec_event output, sending cancel/pause signals to generators.
+
+        This allows the runner to communicate with generator-based engines
+        (like exec_sequenced_event) without the engine needing to know about
+        runner internals. Signals are sent via generator.send().
+
+        Works with any iterable - if it's not a generator or doesn't handle
+        signals, they're simply ignored.
+        """
+        gen = iter(iterable)
+        is_generator = isinstance(gen, types.GeneratorType)
+
+        try:
+            item = next(gen)
+            while True:
+                yield item
+                if is_generator:
+                    signal = None
+                    if self._canceled:
+                        signal = "cancel"
+                    elif self._paused:
+                        signal = "pause"
+                    item = gen.send(signal)  # type: ignore[attr-defined]
+                else:
+                    item = next(gen)
+        except StopIteration:
+            pass
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
