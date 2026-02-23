@@ -63,7 +63,7 @@ MSG = (
 )
 
 
-class AcqState(str, Enum):
+class RunState(str, Enum):
     """State of the MDA acquisition runner."""
 
     IDLE = "idle"
@@ -92,7 +92,7 @@ class FinishReason(str, Enum):
 class RunnerStatus:
     """Snapshot of the MDA runner's current state."""
 
-    phase: AcqState = AcqState.IDLE
+    phase: RunState = RunState.IDLE
     finish_reason: FinishReason | None = field(default=None)
     cancel_requested: bool = False
     pause_requested: bool = False
@@ -156,7 +156,7 @@ class MDARunner:
         self._engine: PMDAEngine | None = None
         self._signals = _get_auto_MDA_callback_class()()
         self._lock = threading.Lock()
-        self._state: AcqState = AcqState.IDLE
+        self._state: RunState = RunState.IDLE
         self._finish_reason: FinishReason | None = None
         self._cancel_requested: bool = False
         self._pause_requested: bool = False
@@ -228,7 +228,7 @@ class MDARunner:
         bool
             Whether an acquisition is underway.
         """
-        return self._state not in (AcqState.IDLE, AcqState.FINISHING)
+        return self._state not in (RunState.IDLE, RunState.FINISHING)
 
     def is_paused(self) -> bool:
         """Return True if the acquisition is currently paused.
@@ -240,7 +240,7 @@ class MDARunner:
         bool
             Whether the current acquisition is paused.
         """
-        return self._state == AcqState.PAUSED
+        return self._state == RunState.PAUSED
 
     def cancel(self) -> None:
         """Cancel the currently running acquisition.
@@ -251,16 +251,16 @@ class MDARunner:
         be emitted.
         """
         with self._lock:
-            if self._state in (AcqState.IDLE, AcqState.FINISHING):
+            if self._state in (RunState.IDLE, RunState.FINISHING):
                 return
             self._paused_time = 0
-            if self._state == AcqState.ACQUIRING:
+            if self._state == RunState.ACQUIRING:
                 # defer to event boundary
                 self._cancel_requested = True
             else:
                 # WAITING, PREPARING, or PAUSED → immediate transition
                 self._finish_reason = FinishReason.CANCELED
-                self._state = AcqState.FINISHING
+                self._state = RunState.FINISHING
 
     def toggle_pause(self) -> None:
         """Toggle the paused state of the current acquisition.
@@ -270,13 +270,13 @@ class MDARunner:
         no-op if no acquisition is currently underway.
         """
         with self._lock:
-            if self._state == AcqState.WAITING:
-                self._state = AcqState.PAUSED
+            if self._state == RunState.WAITING:
+                self._state = RunState.PAUSED
                 paused = True
-            elif self._state == AcqState.PAUSED:
-                self._state = AcqState.WAITING
+            elif self._state == RunState.PAUSED:
+                self._state = RunState.WAITING
                 paused = False
-            elif self._state == AcqState.ACQUIRING:
+            elif self._state == RunState.ACQUIRING:
                 self._pause_requested = not self._pause_requested
                 paused = self._pause_requested
             else:
@@ -433,7 +433,7 @@ class MDARunner:
                 break
 
             with self._lock:
-                self._state = AcqState.ACQUIRING
+                self._state = RunState.ACQUIRING
             self._signals.eventStarted.emit(event)
             logger.info("%s", event)
             engine.setup_event(event)
@@ -461,16 +461,16 @@ class MDARunner:
                 if self._cancel_requested:
                     self._cancel_requested = False
                     self._finish_reason = FinishReason.CANCELED
-                    self._state = AcqState.FINISHING
+                    self._state = RunState.FINISHING
                     break
 
                 if self._pause_requested:
                     self._pause_requested = False
-                    self._state = AcqState.PAUSED
+                    self._state = RunState.PAUSED
                     # signal was already emitted in toggle_pause()
 
-                if self._state != AcqState.PAUSED:
-                    self._state = AcqState.WAITING
+                if self._state != RunState.PAUSED:
+                    self._state = RunState.WAITING
         else:
             with self._lock:
                 self._finish_reason = FinishReason.COMPLETED
@@ -494,7 +494,7 @@ class MDARunner:
                 yield item
                 if is_generator:
                     signal = None
-                    if self._cancel_requested or self._state == AcqState.FINISHING:
+                    if self._cancel_requested or self._state == RunState.FINISHING:
                         signal = "cancel"
                     elif self._pause_requested:
                         signal = "pause"
@@ -516,7 +516,7 @@ class MDARunner:
             raise RuntimeError("No MDAEngine set.")
 
         with self._lock:
-            self._state = AcqState.PREPARING
+            self._state = RunState.PREPARING
             self._finish_reason = None
             self._cancel_requested = False
             self._pause_requested = False
@@ -525,8 +525,8 @@ class MDARunner:
 
         meta = self._engine.setup_sequence(sequence)
         with self._lock:
-            if self._state != AcqState.FINISHING:
-                self._state = AcqState.WAITING
+            if self._state != RunState.FINISHING:
+                self._state = RunState.WAITING
         self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
         return self._engine
@@ -549,14 +549,14 @@ class MDARunner:
         """
         # NOTE: mypy narrows self._state after each check, but cancel() and
         # toggle_pause() mutate it from other threads, so all checks are reachable.
-        if self._state == AcqState.FINISHING:
+        if self._state == RunState.FINISHING:
             return True
 
         # pause loop (for deferred pause from ACQUIRING boundary)
-        while self._state == AcqState.PAUSED:
+        while self._state == RunState.PAUSED:
             self._paused_time += self._pause_interval
             time.sleep(self._pause_interval)
-        if self._state == AcqState.FINISHING:  # type: ignore[comparison-overlap]
+        if self._state == RunState.FINISHING:  # type: ignore[comparison-overlap]
             return True
 
         if event.min_start_time:
@@ -564,16 +564,16 @@ class MDARunner:
             remaining = go_at - self.event_seconds_elapsed()
             while remaining > 0:
                 self._signals.awaitingEvent.emit(event, remaining)
-                while self._state == AcqState.PAUSED:  # type: ignore[comparison-overlap]
+                while self._state == RunState.PAUSED:  # type: ignore[comparison-overlap]
                     self._paused_time += self._pause_interval
                     remaining += self._pause_interval
                     time.sleep(self._pause_interval)
-                if self._state == AcqState.FINISHING:  # type: ignore[comparison-overlap]
+                if self._state == RunState.FINISHING:  # type: ignore[comparison-overlap]
                     return True
                 time.sleep(min(remaining, 0.5))
                 remaining = go_at - self.event_seconds_elapsed()
 
-        return self._state == AcqState.FINISHING  # type: ignore[comparison-overlap]
+        return self._state == RunState.FINISHING  # type: ignore[comparison-overlap]
 
     def _finish_run(self, sequence: MDASequence) -> None:
         """To be called at the end of an acquisition.
@@ -584,7 +584,7 @@ class MDARunner:
             The sequence that was finished.
         """
         with self._lock:
-            self._state = AcqState.FINISHING
+            self._state = RunState.FINISHING
             if self._finish_reason is None:
                 self._finish_reason = FinishReason.COMPLETED
             finish_reason = self._finish_reason
@@ -599,4 +599,4 @@ class MDARunner:
         logger.info("MDA Finished: %s", sequence)
         self._signals.sequenceFinished.emit(sequence)
         with self._lock:
-            self._state = AcqState.IDLE
+            self._state = RunState.IDLE

@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 import useq
 
-from pymmcore_plus.mda._runner import AcqState, FinishReason
+from pymmcore_plus.mda._runner import FinishReason, RunState
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
@@ -55,9 +55,9 @@ def test_pause_and_cancel_mid_sequence(
 def test_state_transitions_through_normal_run(core: CMMCorePlus) -> None:
     """Track phase transitions through a complete run."""
     runner = core.mda
-    phases: list[AcqState] = []
+    phases: list[RunState] = []
 
-    def _record_phase(phase: AcqState) -> None:
+    def _record_phase(phase: RunState) -> None:
         if not phases or phases[-1] != phase:
             phases.append(phase)
 
@@ -81,11 +81,11 @@ def test_state_transitions_through_normal_run(core: CMMCorePlus) -> None:
     runner.run(seq)
 
     # WAITING (after sequenceStarted), ACQUIRING (eventStarted/frameReady), FINISHING
-    assert AcqState.WAITING in phases
-    assert AcqState.ACQUIRING in phases
-    assert AcqState.FINISHING in phases
+    assert RunState.WAITING in phases
+    assert RunState.ACQUIRING in phases
+    assert RunState.FINISHING in phases
     # should end at IDLE
-    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.phase == RunState.IDLE
     assert runner.status.finish_reason == FinishReason.COMPLETED
 
 
@@ -95,7 +95,7 @@ def test_finish_reason_completed(core: CMMCorePlus) -> None:
     seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=2))
     runner.run(seq)
 
-    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.phase == RunState.IDLE
     assert runner.status.finish_reason == FinishReason.COMPLETED
 
 
@@ -115,18 +115,18 @@ def test_finish_reason_errored(core: CMMCorePlus) -> None:
         with pytest.raises(ValueError, match="hardware fault"):
             runner.run(seq)
 
-    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.phase == RunState.IDLE
     assert runner.status.finish_reason == FinishReason.ERRORED
 
 
 def test_cancel_from_idle_is_noop(core: CMMCorePlus) -> None:
     """Calling cancel() when IDLE should not change state."""
     runner = core.mda
-    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.phase == RunState.IDLE
 
     runner.cancel()
 
-    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.phase == RunState.IDLE
     assert runner.status.finish_reason is None
     assert not runner.status.cancel_requested
 
@@ -139,7 +139,7 @@ def test_toggle_pause_from_idle_is_noop(core: CMMCorePlus) -> None:
 
     runner.toggle_pause()
 
-    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.phase == RunState.IDLE
     assert not runner.is_paused()
     pause_mock.assert_not_called()
 
@@ -179,11 +179,34 @@ def test_cancel_from_waiting(core: CMMCorePlus) -> None:
         runner.cancel()
 
     seq = useq.MDASequence(
-        time_plan=useq.TIntervalLoops(interval=10, loops=3),
+        time_plan=useq.TIntervalLoops(interval=0.2, loops=3),
     )
     runner.run(seq)
 
     cancel_mock.assert_called_once()
+    assert runner.status.finish_reason == FinishReason.CANCELED
+
+
+def test_threaded_run_mda_cancel(core: CMMCorePlus) -> None:
+    """Threaded run_mda path can be canceled and returns to IDLE."""
+    runner = core.mda
+    seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0.1, loops=5))
+
+    thread = core.run_mda(seq)
+
+    deadline = time.perf_counter() + 2.0
+    while (
+        runner._state not in (RunState.WAITING, RunState.ACQUIRING)
+        and time.perf_counter() < deadline
+    ):
+        time.sleep(0.005)
+
+    assert runner.is_running()
+    runner.cancel()
+    thread.join(timeout=2)
+
+    assert not thread.is_alive()
+    assert runner.status.phase == RunState.IDLE
     assert runner.status.finish_reason == FinishReason.CANCELED
 
 
@@ -199,7 +222,7 @@ def test_cancel_from_preparing(core: CMMCorePlus) -> None:
 
     def _slow_setup(sequence: useq.MDASequence) -> object:
         time.sleep(0.2)
-        assert runner.status.phase == AcqState.PREPARING
+        assert runner.status.phase == RunState.PREPARING
         runner.cancel()
         return original_setup_sequence(sequence)
 
@@ -209,7 +232,7 @@ def test_cancel_from_preparing(core: CMMCorePlus) -> None:
 
     cancel_mock.assert_called_once()
     frame_mock.assert_not_called()
-    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.phase == RunState.IDLE
     assert runner.status.finish_reason == FinishReason.CANCELED
 
 
@@ -233,7 +256,7 @@ def test_pause_unpause_then_complete(core: CMMCorePlus) -> None:
     runner.run(seq)
 
     assert frame_count == 5
-    assert runner.status.phase == AcqState.IDLE
+    assert runner.status.phase == RunState.IDLE
     assert runner.status.finish_reason == FinishReason.COMPLETED
     # paused then unpaused
     assert pause_mock.call_count == 2
