@@ -21,6 +21,7 @@ from pymmcore_plus import (
 )
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
+from pymmcore_plus.mda._runner import AcqState
 
 if TYPE_CHECKING:
     from pytestqt.qtbot import QtBot
@@ -44,7 +45,7 @@ def test_core(core: CMMCorePlus) -> None:
     assert isinstance(
         core.mda.events.frameReady, (psygnal.SignalInstance, QSignalInstance)
     )
-    assert not core.mda._canceled
+    assert core.mda.status.phase == AcqState.IDLE
     assert not core.mda.is_paused()
 
     # because the fixture loadsSystemConfig 'demo'
@@ -252,11 +253,11 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot") -> None:
     # with an actual mda the threading and timing is
     # such that this ends up being a flaky test if we
     # use `core.run_mda`
-    core.mda._running = True
+    core.mda._state = AcqState.ACQUIRING
     new_engine = MDAEngine(core)
     with pytest.raises(RuntimeError):
         core.register_mda_engine(new_engine)
-    core.mda._running = False
+    core.mda._state = AcqState.IDLE
 
     with qtbot.waitSignal(core.events.mdaEngineRegistered):
         core.register_mda_engine(new_engine)
@@ -279,12 +280,12 @@ def test_not_concurrent_mdas(core: CMMCorePlus, qtbot: "QtBot") -> None:
         z_plan={"range": 3, "step": 1},
         channels=[{"config": "DAPI", "exposure": 1}],
     )
-    core.mda._running = True
+    core.mda._state = AcqState.ACQUIRING
     assert core.mda.is_running()
     with pytest.raises(ValueError):
         thread = core.run_mda(mda)
         thread.join()
-    core.mda._running = False
+    core.mda._state = AcqState.IDLE
     thread = core.run_mda(mda)
     core.mda.cancel()
     thread.join()
