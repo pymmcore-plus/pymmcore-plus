@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
+from typing_extensions import deprecated
 from useq import MDASequence
 
 from pymmcore_plus._logger import exceptions_logged, logger
@@ -136,9 +137,9 @@ class MDARunner:
         state running {
             WAITING --> ACQUIRING : next event ready
             ACQUIRING --> WAITING : event done
-            WAITING --> PAUSED : <code>toggle_pause()</code>
-            PAUSED --> WAITING : <code>toggle_pause()</code>
-            ACQUIRING --> PAUSED : <code>toggle_pause()</code></br>(after event done)
+            WAITING --> PAUSED : <code>set_paused(True)</code>
+            PAUSED --> WAITING : <code>set_paused(False)</code>
+            ACQUIRING --> PAUSED : <code>set_paused(True)</code></br>(after event done)
         }
         running --> FINISHING : <code>cancel()</code>
         running --> FINISHING : all events exhausted
@@ -233,7 +234,7 @@ class MDARunner:
     def is_paused(self) -> bool:
         """Return True if the acquisition is currently paused.
 
-        Use `toggle_pause` to change the paused state.
+        Use `set_paused` to change the paused state.
 
         Returns
         -------
@@ -262,23 +263,39 @@ class MDARunner:
                 self._finish_reason = FinishReason.CANCELED
                 self._state = RunState.FINISHING
 
+    @deprecated("Use `set_paused(paused)` instead.", category=DeprecationWarning)
     def toggle_pause(self) -> None:
         """Toggle the paused state of the current acquisition.
 
-        To get whether the acquisition is currently paused use the
-        [`is_paused`][pymmcore_plus.mda.MDARunner.is_paused] method. This method is a
-        no-op if no acquisition is currently underway.
+        !!!warning "Deprecated"
+            Use [`set_paused`][pymmcore_plus.mda.MDARunner.set_paused] instead.
+        """
+        self.set_paused(not (self.is_paused() or self._pause_requested))
+
+    def set_paused(self, paused: bool) -> None:
+        """Set the paused state of the current acquisition.
+
+        This is a no-op if the acquisition is already in the requested state,
+        or if no acquisition is currently underway.
+
+        Parameters
+        ----------
+        paused : bool
+            Whether to pause (True) or unpause (False) the acquisition.
         """
         with self._lock:
             if self._state == RunState.WAITING:
+                if not paused:
+                    return
                 self._state = RunState.PAUSED
-                paused = True
             elif self._state == RunState.PAUSED:
+                if paused:
+                    return
                 self._state = RunState.WAITING
-                paused = False
             elif self._state == RunState.ACQUIRING:
-                self._pause_requested = not self._pause_requested
-                paused = self._pause_requested
+                if self._pause_requested == paused:
+                    return
+                self._pause_requested = paused
             else:
                 return
         self._signals.sequencePauseToggled.emit(paused)
@@ -467,7 +484,7 @@ class MDARunner:
                 if self._pause_requested:
                     self._pause_requested = False
                     self._state = RunState.PAUSED
-                    # signal was already emitted in toggle_pause()
+                    # signal was already emitted in set_paused()
 
                 if self._state != RunState.PAUSED:
                     self._state = RunState.WAITING
@@ -548,7 +565,7 @@ class MDARunner:
             Whether the MDA was cancelled while waiting.
         """
         # NOTE: mypy narrows self._state after each check, but cancel() and
-        # toggle_pause() mutate it from other threads, so all checks are reachable.
+        # set_paused() mutate it from other threads, so all checks are reachable.
         if self._state == RunState.FINISHING:
             return True
 

@@ -425,10 +425,10 @@ def test_runner_pause(qtbot: QtBot) -> None:
     engine.setup_event.assert_called_once()  # not twice
 
     with qtbot.waitSignal(core.mda.events.sequencePauseToggled):
-        core.mda.toggle_pause()
+        core.mda.set_paused(True)
     time.sleep(1)
     with qtbot.waitSignal(core.mda.events.sequencePauseToggled):
-        core.mda.toggle_pause()
+        core.mda.set_paused(False)
 
     assert core.mda._paused_time > 0
 

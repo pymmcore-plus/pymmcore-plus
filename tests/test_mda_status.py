@@ -34,7 +34,7 @@ def test_pause_and_cancel_mid_sequence(
         nonlocal frame_count
         frame_count += 1
         if frame_count == 1 and hardware_seq:
-            runner.toggle_pause()
+            runner.set_paused(True)
         elif frame_count == 3:
             runner.cancel()
 
@@ -131,13 +131,13 @@ def test_cancel_from_idle_is_noop(core: CMMCorePlus) -> None:
     assert not runner.status.cancel_requested
 
 
-def test_toggle_pause_from_idle_is_noop(core: CMMCorePlus) -> None:
-    """Calling toggle_pause() when IDLE should not change state."""
+def test_set_paused_from_idle_is_noop(core: CMMCorePlus) -> None:
+    """Calling set_paused() when IDLE should not change state."""
     runner = core.mda
     pause_mock = Mock()
     runner.events.sequencePauseToggled.connect(pause_mock)
 
-    runner.toggle_pause()
+    runner.set_paused(True)
 
     assert runner.status.phase == RunState.IDLE
     assert not runner.is_paused()
@@ -157,7 +157,7 @@ def test_cancel_from_paused(core: CMMCorePlus) -> None:
         nonlocal paused
         if not paused:
             paused = True
-            runner.toggle_pause()
+            runner.set_paused(True)
             # now in PAUSED → cancel immediately
             runner.cancel()
 
@@ -249,8 +249,8 @@ def test_pause_unpause_then_complete(core: CMMCorePlus) -> None:
         nonlocal frame_count
         frame_count += 1
         if frame_count == 2:
-            runner.toggle_pause()
-            runner.toggle_pause()
+            runner.set_paused(True)
+            runner.set_paused(False)
 
     seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=5))
     runner.run(seq)

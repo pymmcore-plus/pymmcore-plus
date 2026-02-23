@@ -224,9 +224,9 @@ def test_mda_pause_cancel(qtbot: "QtBot") -> None:
         nonlocal _fcount
         _fcount += 1
         if _fcount == 1:
-            core.mda.toggle_pause()
+            core.mda.set_paused(True)
             pause_mock.assert_called_with(True)
-            core.mda.toggle_pause()
+            core.mda.set_paused(False)
             pause_mock.assert_called_with(False)
         elif _fcount == 2:
             core.mda.cancel()
