@@ -16,20 +16,29 @@ __all__ = [
 ]
 
 
-def handler_for_path(path: str | Path) -> object:
-    """Convert a string or Path into a handler object.
+from ._base_runner_handler import BaseRunnerHandler, StreamSettings
+from ._runner_handler import OMERunnerHandler
+
+
+def handler_for_path(path: str | Path) -> BaseRunnerHandler | ImageSequenceWriter:
+    """Convert a path into a `OMERunnerHandler` or `ImageSequenceWriter` object.
 
     This method picks from the built-in handlers based on the extension of the path.
+
+    If the path ends with .ome.zarr, .ome.tiff, or .ome.tif, an
+    OMERunnerHandler is used to write the data with OME metadata in the specified
+    format.
+
+    If the path is pointing to a folder, the `ImageSequenceWriter` is used, which
+    simply writes each frame as a separate tiff file in the folder with a sequentially
+    numbered filename
     """
     if str(path).rstrip("/").rstrip(":").lower() == "memory":
-        return TensorStoreHandler(kvstore="memory://")
+        return OMERunnerHandler.in_tempdir()
 
     path = str(Path(path).expanduser().resolve())
-    if path.endswith(".zarr"):
-        return OMEZarrWriter(path)
-
-    if path.endswith((".tiff", ".tif")):
-        return OMETiffWriter(path)
+    if path.endswith(".zarr") or path.endswith((".tiff", ".tif")):
+        return OMERunnerHandler(stream_settings=StreamSettings(root_path=path))
 
     # FIXME: ugly hack for the moment to represent a non-existent directory
     # there are many features that ImageSequenceWriter supports, and it's unclear

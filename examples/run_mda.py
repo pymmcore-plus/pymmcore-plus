@@ -29,4 +29,4 @@ def on_start(sequence: MDASequence):
 mmc.mda.events.sequenceStarted.connect(on_start)
 
 # run the sequence in a separate thread (5)
-mmc.run_mda(sequence)
+mmc.mda.run(sequence)
