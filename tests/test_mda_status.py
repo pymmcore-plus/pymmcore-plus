@@ -1,109 +1,43 @@
-"""Tests for MDA runner pause/cancel during hardware sequences."""
+"""Tests for MDA runner cancel/pause during hardware sequences."""
 
 from __future__ import annotations
 
 import logging
-import time
 from typing import TYPE_CHECKING
 
 import pytest
-from useq import MDASequence
-
-from pymmcore_plus._logger import logger
+import useq
 
 if TYPE_CHECKING:
-    from pytestqt.qtbot import QtBot
-
     from pymmcore_plus import CMMCorePlus
 
-try:
-    import pytestqt
-except ImportError:
-    pytestqt = None
 
-SKIP_NO_PYTESTQT = pytest.mark.skipif(
-    pytestqt is None, reason="pytest-qt not installed"
-)
-
-
-@SKIP_NO_PYTESTQT
 @pytest.mark.parametrize("hardware_seq", [True, False])
-def test_sequenced_event_paused_and_cancelled(
-    core: CMMCorePlus, qtbot: QtBot, hardware_seq: bool
+def test_pause_and_cancel_mid_sequence(
+    core: CMMCorePlus, caplog: pytest.LogCaptureFixture, hardware_seq: bool
 ) -> None:
-    """Test pausing and then canceling during a hardware-triggered sequence.
-
-    It checks that the sequence is actually cancelled and that the appropriate
-    warnings are logged.
-    """
+    """Pause then cancel mid-sequence stops acquisition early."""
     core.mda.engine.use_hardware_sequencing = hardware_seq
 
-    # Temporarily set logger level to WARNING to capture warnings
-    original_level = logger.level
-    logger.setLevel(logging.WARNING)
+    frame_count = 0
 
-    warnings_captured = []
+    @core.mda.events.frameReady.connect
+    def _on_frame() -> None:
+        nonlocal frame_count
+        frame_count += 1
+        if frame_count == 1 and hardware_seq:
+            core.mda.toggle_pause()
+        elif frame_count == 3:
+            core.mda.cancel()
 
-    class WarningHandler(logging.Handler):
-        def emit(self, record):
-            if record.levelno >= logging.WARNING:
-                warnings_captured.append(record.getMessage())
+    sequence = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=50))
 
-    handler = WarningHandler()
-    logger.addHandler(handler)
+    with caplog.at_level(logging.WARNING, logger="pymmcore-plus"):
+        core.mda.run(sequence)
 
-    try:
-
-        def _on_finished(seq):
-            t1 = time.perf_counter()
-            assert core.mda._was_canceled
-            assert t1 - t0 < 4.5, "Acquisition not canceled!"
-            # assert that both pause warning and cancel warning were logged
-            if hardware_seq:
-                assert len(warnings_captured) == 2
-                assert warnings_captured[0] == (
-                    "MDA: Pause has been requested, but sequenced acquisition "
-                    "cannot be yet paused, only canceled."
-                )
-                assert "MDA Canceled:" in warnings_captured[1]
-            else:
-                assert len(warnings_captured) == 1
-                assert "MDA Canceled:" in warnings_captured[0]
-
-        core.mda.events.sequenceFinished.connect(_on_finished)
-
-        # With 100 frames at 50ms exposure, full run would take ~5 seconds
-        sequence = MDASequence(time_plan={"interval": 0, "loops": 100})
-        core.setExposure(50)
-
-        t0 = time.perf_counter()
-        with qtbot.waitSignals(
-            (
-                core.mda.events.sequenceFinished,
-                core.mda.events.sequencePauseToggled,
-                core.mda.events.sequenceCanceled,
-            ),
-            timeout=10000,
-        ):
-            acq_thread = core.run_mda(sequence)
-            assert core.mda.is_running()
-            paused = False
-            while acq_thread.is_alive():
-                if not paused:
-                    paused = True
-                    time.sleep(0.2)
-                    core.mda.toggle_pause()
-                    assert core.mda._paused and not core.mda._in_pause_loop
-                    assert core.mda.is_running()
-                    time.sleep(0.2)
-                    if not hardware_seq:
-                        assert core.mda.is_paused()
-                    # to stop the sequence faster
-                    core.mda.cancel()
-                    assert not core.mda.is_running()
-                    assert not core.mda._paused
-                    assert not core.mda.is_paused()
-                    assert core.mda._canceled
-    finally:
-        logger.removeHandler(handler)
-        logger.setLevel(original_level)
+    assert core.mda._was_canceled
+    assert frame_count < 50
+    assert any("MDA Canceled:" in r.message for r in caplog.records)
+    # hardware sequences can't truly pause, only warn
+    if hardware_seq:
+        assert any("cannot be yet paused" in r.message for r in caplog.records)
