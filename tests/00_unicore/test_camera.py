@@ -8,7 +8,7 @@ import pytest
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core._constants import Keyword
-from pymmcore_plus.experimental.unicore import CameraDevice
+from pymmcore_plus.experimental.unicore import CameraDevice, SimpleCameraDevice
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 if TYPE_CHECKING:
@@ -19,13 +19,13 @@ if TYPE_CHECKING:
 DEV = "Camera"
 
 np.random.seed(42)
-FRAME_SHAPE = (512, 512)
+SENSOR_SHAPE = (512, 512)
 DTYPE = np.uint16
-FRAME = np.random.randint(0, 65535, size=FRAME_SHAPE, dtype=DTYPE)
+FRAME = np.random.randint(0, 65535, size=SENSOR_SHAPE, dtype=DTYPE)
 
 
 class MyCamera(CameraDevice):
-    """Example Camera device."""
+    """Camera device using CameraDevice directly with start_sequence()."""
 
     _exposure: float = 100.0
 
@@ -46,8 +46,8 @@ class MyCamera(CameraDevice):
         self._binning = value
 
     def shape(self) -> tuple[int, int]:
-        """Return the shape of the current camera state."""
-        return FRAME_SHAPE
+        """Return the shape of the current image."""
+        return SENSOR_SHAPE
 
     def dtype(self) -> DTypeLike:
         """Return the data type of the current camera state."""
@@ -64,9 +64,41 @@ class MyCamera(CameraDevice):
             n = 2**63
         for i in range(n):
             buffer = get_buffer(shape, dtype)
-            time.sleep(0.01)  # Simulate time taken to acquire an image
+            time.sleep(0.01)
             buffer[:] = FRAME
-            yield {"random_key": f"value_{i}"}  # Example metadata, can be anything.
+            yield {"random_key": f"value_{i}"}
+
+
+class MySimpleCamera(SimpleCameraDevice):
+    """Camera device using SimpleCameraDevice with snap()."""
+
+    _exposure: float = 100.0
+
+    def get_exposure(self) -> float:
+        return self._exposure
+
+    def set_exposure(self, exposure: float) -> None:
+        self._exposure = exposure
+
+    _binning: int = 1
+
+    def get_binning(self) -> int:
+        return self._binning
+
+    def set_binning(self, value: int) -> None:
+        self._binning = value
+
+    def sensor_shape(self) -> tuple[int, int]:
+        return SENSOR_SHAPE
+
+    def dtype(self) -> DTypeLike:
+        return DTYPE
+
+    def snap(self, buffer: np.ndarray) -> Mapping:
+        """Snap a single full-frame image."""
+        time.sleep(0.01)
+        buffer[:] = FRAME
+        return {"random_key": "value"}
 
 
 class SequenceableCamera(MyCamera):
@@ -112,7 +144,7 @@ def test_basic_properties(device: str) -> None:
     core.loadSystemConfiguration()
     _load_device(core, device)
 
-    assert (core.getImageWidth(), core.getImageHeight()) == FRAME_SHAPE
+    assert (core.getImageWidth(), core.getImageHeight()) == SENSOR_SHAPE
     assert core.getImageBitDepth() == FRAME.dtype.itemsize * 8
     assert core.getImageBufferSize() == FRAME.nbytes
     assert core.getBytesPerPixel() == FRAME.dtype.itemsize
@@ -150,7 +182,7 @@ def test_basic_acquisition(device: str) -> None:
     # Snap a single image
     core.snapImage()
     frame = core.getImage()
-    assert frame.shape == FRAME_SHAPE
+    assert frame.shape == SENSOR_SHAPE
     assert frame.dtype == DTYPE
 
 
@@ -182,8 +214,8 @@ def test_sequence_acquisition(device: str) -> None:
 
         assert meta[Keyword.Binning] == "1"
         assert meta[Keyword.Metadata_CameraLabel] == "Camera"
-        assert meta[Keyword.Metadata_Height] == str(FRAME_SHAPE[0])
-        assert meta[Keyword.Metadata_Width] == str(FRAME_SHAPE[1])
+        assert meta[Keyword.Metadata_Height] == str(SENSOR_SHAPE[0])
+        assert meta[Keyword.Metadata_Width] == str(SENSOR_SHAPE[1])
         assert meta[Keyword.PixelType] == "GRAY16"
         assert meta[Keyword.Metadata_ImageNumber] == str(i)
         assert Keyword.Elapsed_Time_ms in meta
@@ -191,7 +223,7 @@ def test_sequence_acquisition(device: str) -> None:
         if device == "python":
             assert meta["random_key"] == f"value_{i}"
 
-        assert frame.shape == FRAME_SHAPE
+        assert frame.shape == SENSOR_SHAPE
         assert frame.dtype == DTYPE
         assert core.getRemainingImageCount() == n_frames - i - 1
 
@@ -221,6 +253,33 @@ def test_continuous_sequence_acquisition(device: str) -> None:
     assert not core.isSequenceRunning()
     assert isinstance(core.getLastImage(), np.ndarray)
     assert isinstance(core.popNextImage(), np.ndarray)
+
+
+def test_unload_all_stops_sequence_and_clears_unicore_state() -> None:
+    core = UniMMCore()
+    _load_device(core, "python")
+
+    core.setProperty(DEV, Keyword.Binning, 2)
+    core.defineConfig("grp", "preset", DEV, Keyword.Binning, "2")
+
+    core.startContinuousSequenceAcquisition()
+    assert core._acquisition_thread is not None
+    timeout = 2.0
+    while not core.isSequenceRunning():
+        if timeout <= 0:
+            raise RuntimeError("Sequence acquisition did not start in time.")
+        time.sleep(0.01)
+        timeout -= 0.01
+
+    core.unloadAllDevices()
+
+    assert DEV not in core.getLoadedDevices()
+    assert core._acquisition_thread is None
+    assert not core._stop_event.is_set()
+    assert not core._py_config_groups
+    assert not core._state_cache
+    assert core._current_image_buffer is None
+    assert core.getCameraDevice() == ""
 
 
 def test_sequenceable_exposures() -> None:
@@ -273,6 +332,91 @@ def test_buffer_methods(device: str) -> None:
         timeout -= 0.1
     assert core.isBufferOverflowed()
     core.clearCircularBuffer()
+
+
+@pytest.mark.parametrize("device", ["python", "c++"])
+def test_roi(device: str) -> None:
+    """getROI/setROI/clearROI round-trip, including snapped image size."""
+    core = UniMMCore()
+    # Use SimpleCameraDevice for python (supports software ROI)
+    cls = MySimpleCamera if device == "python" else MyCamera
+    _load_device(core, device, cls=cls)
+
+    # full frame by default
+    assert list(core.getROI()) == [0, 0, *SENSOR_SHAPE[::-1]]
+    assert list(core.getROI(DEV)) == [0, 0, *SENSOR_SHAPE[::-1]]
+
+    core.snapImage()
+    full = core.getImage()
+    assert full.shape == SENSOR_SHAPE
+
+    # set a sub-ROI — image dimensions should change
+    core.setROI(10, 20, 100, 200)
+    assert list(core.getROI()) == [10, 20, 100, 200]
+
+    core.snapImage()
+    cropped = core.getImage()
+    assert cropped.shape == (200, 100)
+
+    # clear resets to full frame
+    core.clearROI()
+    assert list(core.getROI()) == [0, 0, *SENSOR_SHAPE[::-1]]
+
+    core.snapImage()
+    restored = core.getImage()
+    assert restored.shape == SENSOR_SHAPE
+
+
+def test_simple_camera_roi() -> None:
+    """SimpleCameraDevice auto-crops via snap()."""
+    core = UniMMCore()
+    _load_device(core, "python", cls=MySimpleCamera)
+
+    # full frame by default
+    core.snapImage()
+    assert core.getImage().shape == SENSOR_SHAPE
+
+    # set ROI — snap should auto-crop
+    core.setROI(10, 20, 100, 200)
+    assert list(core.getROI()) == [10, 20, 100, 200]
+
+    core.snapImage()
+    cropped = core.getImage()
+    assert cropped.shape == (200, 100)
+    np.testing.assert_array_equal(cropped, FRAME[20:220, 10:110])
+
+    # sequence acquisition should also auto-crop
+    core.startSequenceAcquisition(2, 0, True)
+    while core.isSequenceRunning():
+        time.sleep(0.001)
+    frame, _meta = core.popNextImageAndMD()
+    assert _meta[Keyword.Metadata_Width] == "100"
+    assert _meta[Keyword.Metadata_Height] == "200"
+    assert _meta[Keyword.Metadata_ROI_X] == "10"
+    assert _meta[Keyword.Metadata_ROI_Y] == "20"
+    assert frame.shape == (200, 100)
+    np.testing.assert_array_equal(frame, FRAME[20:220, 10:110])
+
+    # clear resets
+    core.clearROI()
+    core.snapImage()
+    assert core.getImage().shape == SENSOR_SHAPE
+
+
+def test_base_camera_set_roi_raises() -> None:
+    """CameraDevice.set_roi() raises NotImplementedError by default."""
+    cam = MyCamera()
+    core = UniMMCore()
+    core.loadPyDevice(DEV, cam)
+    core.initializeDevice(DEV)
+    core.setCameraDevice(DEV)
+    # get_roi works (returns full frame)
+    assert cam.get_roi() == (0, 0, 512, 512)
+    # set_roi raises
+    with pytest.raises(NotImplementedError, match="does not support setting ROI"):
+        core.setROI(10, 20, 100, 200)
+    # clear_roi is a no-op
+    cam.clear_roi()
 
 
 def test_camera_channels_numbers() -> None:
