@@ -173,3 +173,6 @@ class MDARelayThread(threading.Thread):
 
     def sequenceFinished(self, *args: Any) -> None:
         self._deque.append(("sequenceFinished", args))
+
+    def eventFinished(self, *args: Any) -> None:
+        self._deque.append(("eventFinished", args))

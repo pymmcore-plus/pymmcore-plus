@@ -356,6 +356,8 @@ class MDARunner:
                         self._signals.frameReady.emit(img, _event, meta)
             finally:
                 teardown_event(event)
+                with exceptions_logged():
+                    self._signals.eventFinished.emit(event)
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
