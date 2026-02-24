@@ -334,13 +334,19 @@ class CMMCorePlus(pymmcore.CMMCore):
         return f"<{type(self).__name__} at {hex(id(self))} with {ndevices} devices>"
 
     def __del__(self) -> None:
-        if hasattr(self, "_weak_clean"):
-            atexit.unregister(self._weak_clean)
-        # NOTE: we intentionally do NOT call registerCallback/reset/setPrimaryLogFile
-        # here.  The C++ ~CMMCore() destructor already handles all of these, and
-        # calling into C++ from __del__ can cause access violations on Windows when
-        # the garbage collector triggers __del__ during unrelated C++/Qt teardown
-        # (e.g. vispy layer removal in napari).
+        try:
+            if hasattr(self, "_weak_clean"):
+                atexit.unregister(self._weak_clean)
+            # Null the C++ callback pointer while _callback_relay is still alive.
+            # Without this, the C++ destructor's reset() can fire callbacks through
+            # a dangling pointer after Python has already freed _callback_relay.
+            super().registerCallback(None)
+        except Exception:
+            pass
+        # Do NOT call reset()/setPrimaryLogFile() — the C++ destructor handles
+        # those, and calling them from __del__ can cause access violations on
+        # Windows when GC triggers during unrelated C++/Qt teardown (e.g. vispy
+        # layer removal in napari).
 
     # Re-implemented methods from the CMMCore API
 
