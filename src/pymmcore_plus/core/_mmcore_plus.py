@@ -336,15 +336,11 @@ class CMMCorePlus(pymmcore.CMMCore):
     def __del__(self) -> None:
         if hasattr(self, "_weak_clean"):
             atexit.unregister(self._weak_clean)
-
-        try:
-            super().registerCallback(None)
-
-            self.reset()
-            # clean up logging
-            self.setPrimaryLogFile("")
-        except Exception as e:
-            logger.exception("Error during CMMCorePlus.__del__(): %s", e)
+        # NOTE: we intentionally do NOT call registerCallback/reset/setPrimaryLogFile
+        # here.  The C++ ~CMMCore() destructor already handles all of these, and
+        # calling into C++ from __del__ can cause access violations on Windows when
+        # the garbage collector triggers __del__ during unrelated C++/Qt teardown
+        # (e.g. vispy layer removal in napari).
 
     # Re-implemented methods from the CMMCore API
 
