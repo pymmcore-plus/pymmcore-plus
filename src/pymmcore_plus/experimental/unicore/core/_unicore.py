@@ -103,12 +103,19 @@ class _CoreDevice:
         self.reset_current()
 
     def reset_current(self) -> None:
+        """Set all current device labels to None."""
         self._pycurrent.update(CURRENT)
 
     def current(self, keyword: Keyword) -> PyDeviceLabel | None:
+        """Return the current device label for the given keyword, or None if not set."""
         return self._pycurrent[keyword]
 
     def set_current(self, keyword: Keyword, label: str | None) -> None:
+        """Set the current device label for the given keyword.
+
+        If label is None, current is cleared (set to None).
+        If label is a string, it is set as the current device for the keyword.
+        """
         self._pycurrent[keyword] = cast("PyDeviceLabel", label)
         self._state_cache[(KW.CoreDevice, keyword)] = label
 
@@ -310,13 +317,55 @@ class UniMMCore(CMMCorePlus):
         """Returns True if the specified device label corresponds to a Python device."""
         return label in self._pydevices
 
+    def _cleanup_sequence_state(self, only_label: str | None = None) -> None:
+        """Stop and clean up python-side sequence acquisition threads and state.
+
+        if `only_label` is provided, only clean up state associated with that device
+        label, otherwise clean up any/all sequence state.
+        """
+        if (
+            only_label is not None
+            and self._acquisition_thread is not None
+            and self._acquisition_thread.label != only_label
+        ):
+            return
+
+        self._stop_acquisition_thread()
+        self._stop_event.clear()
+        self._seq_buffer.clear()
+        self._current_image_buffer = None
+
+    def _cleanup_pydevice_state(self, label: str) -> None:
+        """Clean UniCore-managed state associated with one unloaded py-device."""
+        for keyword in CURRENT:
+            if self._pycore.current(keyword) == label:
+                self._pycore.set_current(keyword, None)
+
+        self._state_cache.clear_device(label)
+
+        for group_name, group in list(self._py_config_groups.items()):
+            for preset_name, config in list(group.items()):
+                to_clear = [k for k in config if k[0] == label]
+                for key in to_clear:
+                    config.pop(key, None)
+                if not config:
+                    group.pop(preset_name, None)
+            if not group:
+                self._py_config_groups.pop(group_name, None)
+
     def unloadDevice(self, label: DeviceLabel | str) -> None:
         if label not in self._pydevices:  # pragma: no cover
             return super().unloadDevice(label)
+        self._cleanup_sequence_state(label)
         self._pydevices.unload(label)
+        self._cleanup_pydevice_state(label)
 
     def unloadAllDevices(self) -> None:
+        self._cleanup_sequence_state()
         self._pydevices.unload_all()
+        self._pycore.reset_current()
+        self._py_config_groups.clear()
+        self._state_cache.clear()
         super().unloadAllDevices()
 
     def initializeDevice(self, label: DeviceLabel | str) -> None:
@@ -509,7 +558,9 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:  # pragma: no cover
             return super().getAllowedPropertyValues(label, propName)
         with self._pydevices[label] as dev:
-            return tuple(dev.get_property_info(propName).allowed_values or ())
+            return tuple(
+                str(v) for v in (dev.get_property_info(propName).allowed_values or ())
+            )
 
     def isPropertyPreInit(
         self, label: DeviceLabel | str, propName: PropertyName | str
@@ -1124,6 +1175,7 @@ class UniMMCore(CMMCorePlus):
     ) -> None:
         """Initialise _seq state and call cam.start_sequence."""
         shape, dtype = cam.shape(), np.dtype(cam.dtype())
+        x, y, *_ = cam.get_roi()
         camera_label = cam.get_label()
 
         n_components = shape[2] if len(shape) > 2 else 1
@@ -1132,8 +1184,8 @@ class UniMMCore(CMMCorePlus):
             KW.Metadata_CameraLabel: camera_label,
             KW.Metadata_Height: str(shape[0]),
             KW.Metadata_Width: str(shape[1]),
-            KW.Metadata_ROI_X: "0",
-            KW.Metadata_ROI_Y: "0",
+            KW.Metadata_ROI_X: str(x),
+            KW.Metadata_ROI_Y: str(y),
             KW.PixelType: PixelType.for_bytes(dtype.itemsize, n_components),
         }
 
@@ -1191,6 +1243,14 @@ class UniMMCore(CMMCorePlus):
         start_time = perf_counter_ns()
         self._acquisition_thread.start()
 
+    def _stop_acquisition_thread(self, timeout: float | None = 2) -> None:
+        """Stop and join the python acquisition thread, if present."""
+        if self._acquisition_thread is None:
+            return
+        self._stop_event.set()
+        self._acquisition_thread.join(timeout=timeout)
+        self._acquisition_thread = None
+
     # ------------------------------------------------- startSequenceAcquisition
 
     # startSequenceAcquisition
@@ -1218,11 +1278,7 @@ class UniMMCore(CMMCorePlus):
     def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
         if self._py_camera(cameraLabel) is None:  # pragma: no cover
             pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
-
-        if self._acquisition_thread is not None:
-            self._stop_event.set()
-            self._acquisition_thread.join()
-            self._acquisition_thread = None
+        self._stop_acquisition_thread()
 
     # ------------------------------------------------------------------ queries
     @overload
@@ -1503,10 +1559,10 @@ class UniMMCore(CMMCorePlus):
             cam.set_exposure(*args)
 
     def _do_set_roi(self, label: str, x: int, y: int, width: int, height: int) -> None:
-        if self._py_camera(label) is not None:
-            raise NotImplementedError(
-                "setROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera(label)) is not None:
+            with cam:
+                cam.set_roi(x, y, width, height)
+            return
         return pymmcore.CMMCore.setROI(self, label, x, y, width, height)
 
     @overload
@@ -1515,19 +1571,18 @@ class UniMMCore(CMMCorePlus):
     def getROI(self, label: DeviceLabel | str) -> list[int]: ...
     def getROI(self, label: DeviceLabel | str = "") -> list[int]:
         """Get the current region of interest (ROI) for the camera."""
-        if self._py_camera(label) is not None:  # pragma: no cover
-            raise NotImplementedError(
-                "getROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera(label)) is not None:
+            with cam:
+                return list(cam.get_roi())
         label = label or self.getCameraDevice()
         return super().getROI(label)
 
     def clearROI(self) -> None:
         """Clear the current region of interest (ROI) for the camera."""
-        if self._py_camera() is not None:  # pragma: no cover
-            raise NotImplementedError(
-                "clearROI is not yet implemented for Python cameras."
-            )
+        if (cam := self._py_camera()) is not None:
+            with cam:
+                cam.clear_roi()
+            return
         return super().clearROI()
 
     def isExposureSequenceable(self, cameraLabel: DeviceLabel | str) -> bool:
@@ -2525,6 +2580,17 @@ class ThreadSafeConfig(MutableMapping["DevPropTuple", Any]):
     def __repr__(self) -> str:
         with self._lock:
             return f"{self.__class__.__name__}({self._store!r})"
+
+    def clear(self) -> None:
+        with self._lock:
+            self._store.clear()
+
+    def clear_device(self, label: str) -> None:
+        """Remove all entries for a given device label under a single lock."""
+        with self._lock:
+            keys = [k for k in self._store if k[0] == label]
+            for key in keys:
+                del self._store[key]
 
 
 # Threading ------------------------------------------------------
