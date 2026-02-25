@@ -423,27 +423,17 @@ class MDARunner:
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
-        sink_settings: AcquisitionSettings | None = None
         # convert all items to handler objects, preserving order
         _handlers: list[SupportsFrameReady] = []
         for item in output:
-            if isinstance(item, (str, Path)):
-                stripped = str(item).rstrip("/").rstrip(":").lower()
-                if stripped in ("memory", "scratch"):
-                    item = AcquisitionSettings(format="scratch")  # pyright: ignore
-                else:
-                    # TODO!!!!!
-                    # don't merge with overwrite=True
-                    item = AcquisitionSettings(root_path=str(item), overwrite=True)
-            if isinstance(item, AcquisitionSettings):
-                if sink_settings is not None:
+            if isinstance(item, (str, Path, AcquisitionSettings)):
+                if self._sink is not None:
                     raise NotImplementedError(
                         "Only one AcquisitionSettings object or path may be provided "
                         "as output.  Open a feature request if you would like to see "
                         "support for multiple data sinks."
                     )
-                sink_settings = item
-
+                self._sink = _OmeWritersSink.from_output(item)
             else:
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
@@ -451,9 +441,6 @@ class MDARunner:
                         f"Got {item} with type {type(item)}."
                     )
                 _handlers.append(item)
-
-        if sink_settings is not None:
-            self._sink = _OmeWritersSink(sink_settings)
 
         self._handlers.clear()
         self._handlers.update(_handlers)
@@ -691,6 +678,16 @@ class _OmeWritersSink(SinkProtocol):
     def __init__(self, settings: AcquisitionSettings) -> None:
         self._settings = settings
         self._stream: OMEStream | None = None
+
+    @classmethod
+    def from_output(cls, output: str | Path | AcquisitionSettings) -> _OmeWritersSink:
+        if isinstance(output, AcquisitionSettings):
+            return cls(output)
+        stripped = str(output).rstrip("/").rstrip(":").lower()
+        if stripped in ("memory", "scratch"):
+            return cls(AcquisitionSettings(format="scratch"))  # pyright: ignore
+        # TODO: don't merge with overwrite=True
+        return cls(AcquisitionSettings(root_path=str(output), overwrite=True))
 
     def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None:
         # FIXME?
