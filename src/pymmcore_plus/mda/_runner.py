@@ -575,7 +575,6 @@ class MDARunner:
             self._finish_reason = None
             self._cancel_requested = False
             self._pause_requested = False
-
         self._paused_time = 0.0
         self._sequence = sequence
 
