@@ -13,6 +13,12 @@ from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
+from ome_writers import (
+    AcquisitionSettings,
+    OMEStream,
+    create_stream,
+    useq_to_acquisition_settings,
+)
 from typing_extensions import deprecated
 from useq import MDASequence
 
@@ -54,9 +60,16 @@ if TYPE_CHECKING:
             self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1, /
         ) -> Any: ...
 
+    class SinkView(Protocol):
+        @property
+        def dtype(self) -> Any: ...
+        @property
+        def ndim(self) -> int: ...
+        def __getitem__(self, key: Any) -> np.ndarray: ...
+
 
 SupportsFrameReady: TypeAlias = "FrameReady0 | FrameReady1 | FrameReady2 | FrameReady3"
-SingleOutput: TypeAlias = "Path | str | SupportsFrameReady"
+SingleOutput: TypeAlias = "Path | str | SupportsFrameReady | AcquisitionSettings"
 
 MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
@@ -164,6 +177,8 @@ class MDARunner:
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
+        self._sink: OMEStream | None = None
+        self._sink_settings: AcquisitionSettings | None = None
         self._sequence: MDASequence | None = None
         # timer for the full sequence, reset only once at the beginning of the sequence
         self._sequence_t0: float = 0.0
@@ -354,6 +369,22 @@ class MDARunner:
         if error is not None:
             raise error
 
+    def get_sink(self) -> SinkView | None:
+        """Array-like view of the current data sink, if it exists."""
+        if self._sink is None:
+            return None
+        try:
+            from ome_writers._array_view import AcquisitionView
+        except ImportError:
+            raise ImportError(
+                "AcquisitionView is required to use get_sink(), but it could not be "
+                "imported. We were naughty and imported a private module. "
+                "Likely version mismatch."
+            ) from None
+
+        return AcquisitionView.from_stream(self._sink)
+
+    @deprecated("Use `get_sink()` instead.", category=DeprecationWarning)
     def get_output_handlers(self) -> tuple[SupportsFrameReady, ...]:
         """Return the data handlers that are currently connected.
 
@@ -401,11 +432,27 @@ class MDARunner:
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
+        self._sink_settings = None
         # convert all items to handler objects, preserving order
         _handlers: list[SupportsFrameReady] = []
         for item in output:
             if isinstance(item, (str, Path)):
-                _handlers.append(self._handler_for_path(item))
+                stripped = str(item).rstrip("/").rstrip(":").lower()
+                if stripped in ("memory", "scratch"):
+                    item = AcquisitionSettings(format="scratch")  # pyright: ignore
+                else:
+                    # TODO!!!!!
+                    # don't merge with overwrite=True
+                    item = AcquisitionSettings(root_path=str(item), overwrite=True)
+            if isinstance(item, AcquisitionSettings):
+                if self._sink_settings is not None:
+                    raise NotImplementedError(
+                        "Only one AcquisitionSettings object or path may be provided "
+                        "as output.  Open a feature request if you would like to see "
+                        "support for multiple data sinks."
+                    )
+                self._sink_settings = item
+
             else:
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
@@ -537,13 +584,47 @@ class MDARunner:
             self._finish_reason = None
             self._cancel_requested = False
             self._pause_requested = False
+
         self._paused_time = 0.0
         self._sequence = sequence
 
         meta = self._engine.setup_sequence(sequence)
+
+        if self._sink_settings is not None:
+            if not meta:
+                raise NotImplementedError(
+                    "Cannot use output sinks without summary metadaata "
+                    "from the engine's setup_sequence method."
+                )
+            # fixme... image infos might not be locked down enough (it's a list...)
+            info = meta["image_infos"][0]
+            img_height = info["height"]
+            img_width = info["width"]
+            dtype = info["dtype"]
+            pix_size = info["pixel_size_um"]
+
+            try:
+                useq_settings = useq_to_acquisition_settings(
+                    sequence,
+                    image_width=img_width,
+                    image_height=img_height,
+                    pixel_size_um=pix_size,
+                )
+            except Exception:
+                raise  # TODO ... fallback to generic 3d sequence
+
+            new_settings = {
+                **self._sink_settings.model_dump(exclude_unset=True),
+                **useq_settings,
+                "dtype": dtype,
+            }
+            self._sink_settings = AcquisitionSettings.model_validate(new_settings)
+            self._sink = create_stream(self._sink_settings)
+
         with self._lock:
             if self._state != RunState.FINISHING:
                 self._state = RunState.WAITING
+
         self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
         return self._engine
@@ -606,6 +687,12 @@ class MDARunner:
                 self._finish_reason = FinishReason.COMPLETED
             finish_reason = self._finish_reason
 
+        if self._sink is not None:
+            try:
+                self._sink.close()
+            except Exception as e:
+                logger.error("Error closing data sink: %s", e)
+
         if hasattr(self._engine, "teardown_sequence"):
             self._engine.teardown_sequence(sequence)  # type: ignore
 
@@ -617,3 +704,6 @@ class MDARunner:
         self._signals.sequenceFinished.emit(sequence)
         with self._lock:
             self._state = RunState.IDLE
+
+
+class _DataSink: ...

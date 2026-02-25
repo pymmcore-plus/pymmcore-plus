@@ -48,6 +48,7 @@ dependencies = [
     "typer >=0.13.0",
     "rich >=10.2.0",
     "ome-types >=0.6.0",
+    "ome-writers >=0.2.0",
 ]
 
 # extras
@@ -231,4 +232,10 @@ ignore = [
 ]
 
 [tool.typos.default]
-extend-ignore-identifiers-re = ["(?i)nd2?.*", "(?i)ome", "anager", "ba", "(?:FOVs?)"]
+extend-ignore-identifiers-re = [
+    "(?i)nd2?.*",
+    "(?i)ome",
+    "anager",
+    "ba",
+    "(?:FOVs?)",
+]

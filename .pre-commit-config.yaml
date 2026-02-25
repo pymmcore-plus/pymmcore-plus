@@ -29,6 +29,7 @@ repos:
         files: "^src/"
         additional_dependencies:
           - pymmcore >=11.6.0.73.0
+          - ome-writers >=0.2.0
           - useq-schema >= 0.6.2
           - psygnal
           - typer
