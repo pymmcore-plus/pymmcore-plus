@@ -4,12 +4,12 @@ import threading
 import time
 import types
 import warnings
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Protocol, cast
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
@@ -29,14 +29,15 @@ from ._thread_relay import mda_listeners_connected
 from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
-    from typing import Protocol, TypeAlias
+    from typing import TypeAlias
 
     import numpy as np
     from useq import MDAEvent
 
-    from pymmcore_plus.metadata.schema import FrameMetaV1
+    from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
 
     from ._engine import MDAEngine
+    from ._protocol import PImagePayload
 
     class FrameReady0(Protocol):
         """Data handler with a no-argument `frameReady` method."""
@@ -177,8 +178,7 @@ class MDARunner:
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
-        self._sink: OMEStream | None = None
-        self._sink_settings: AcquisitionSettings | None = None
+        self._sink: SinkProtocol | None = None
         self._sequence: MDASequence | None = None
         # timer for the full sequence, reset only once at the beginning of the sequence
         self._sequence_t0: float = 0.0
@@ -369,20 +369,11 @@ class MDARunner:
         if error is not None:
             raise error
 
-    def get_sink(self) -> SinkView | None:
+    def get_view(self) -> SinkView | None:
         """Array-like view of the current data sink, if it exists."""
         if self._sink is None:
             return None
-        try:
-            from ome_writers._array_view import AcquisitionView
-        except ImportError:
-            raise ImportError(
-                "AcquisitionView is required to use get_sink(), but it could not be "
-                "imported. We were naughty and imported a private module. "
-                "Likely version mismatch."
-            ) from None
-
-        return AcquisitionView.from_stream(self._sink)
+        return self._sink.get_view()
 
     @deprecated("Use `get_sink()` instead.", category=DeprecationWarning)
     def get_output_handlers(self) -> tuple[SupportsFrameReady, ...]:
@@ -432,7 +423,7 @@ class MDARunner:
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
-        self._sink_settings = None
+        sink_settings: AcquisitionSettings | None = None
         # convert all items to handler objects, preserving order
         _handlers: list[SupportsFrameReady] = []
         for item in output:
@@ -445,13 +436,13 @@ class MDARunner:
                     # don't merge with overwrite=True
                     item = AcquisitionSettings(root_path=str(item), overwrite=True)
             if isinstance(item, AcquisitionSettings):
-                if self._sink_settings is not None:
+                if sink_settings is not None:
                     raise NotImplementedError(
                         "Only one AcquisitionSettings object or path may be provided "
                         "as output.  Open a feature request if you would like to see "
                         "support for multiple data sinks."
                     )
-                self._sink_settings = item
+                sink_settings = item
 
             else:
                 if not callable(getattr(item, "frameReady", None)):
@@ -460,6 +451,9 @@ class MDARunner:
                         f"Got {item} with type {type(item)}."
                     )
                 _handlers.append(item)
+
+        if sink_settings is not None:
+            self._sink = _OmeWritersSink(sink_settings)
 
         self._handlers.clear()
         self._handlers.update(_handlers)
@@ -489,6 +483,9 @@ class MDARunner:
         self._reset_event_timer()
         self._sequence_t0 = self._t0
 
+        _append: Callable | None = self._sink.append if self._sink is not None else None
+        _emit_event_started = self._signals.eventStarted.emit
+        _emit_frame_ready = self._signals.frameReady.emit
         for event in _events:
             if event.reset_event_timer:
                 self._reset_event_timer()
@@ -498,7 +495,8 @@ class MDARunner:
 
             with self._lock:
                 self._state = RunState.ACQUIRING
-            self._signals.eventStarted.emit(event)
+
+            _emit_event_started(event)
             logger.info("%s", event)
             engine.setup_event(event)
 
@@ -510,13 +508,15 @@ class MDARunner:
                 event.metadata["runner_t0"] = self._sequence_t0
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in self._iter_exec_output(output):
-                    img, _event, meta = payload
-                    _event.metadata.pop("runner_t0", None)
+                    img, sub_event, meta = payload
+                    sub_event.metadata.pop("runner_t0", None)
                     # if the engine calculated its own time, don't overwrite it
                     if "runner_time_ms" not in meta:
                         meta["runner_time_ms"] = runner_time_ms
+                    if _append is not None:
+                        _append(img, sub_event, meta)
                     with exceptions_logged():
-                        self._signals.frameReady.emit(img, _event, meta)
+                        _emit_frame_ready(img, sub_event, meta)
             finally:
                 teardown_event(event)
 
@@ -539,7 +539,7 @@ class MDARunner:
             with self._lock:
                 self._finish_reason = FinishReason.COMPLETED
 
-    def _iter_exec_output(self, iterable: Iterable) -> Iterator:
+    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload]:
         """Iterate over exec_event output, sending cancel/pause signals to generators.
 
         This allows the runner to communicate with generator-based engines
@@ -590,36 +590,8 @@ class MDARunner:
 
         meta = self._engine.setup_sequence(sequence)
 
-        if self._sink_settings is not None:
-            if not meta:
-                raise NotImplementedError(
-                    "Cannot use output sinks without summary metadaata "
-                    "from the engine's setup_sequence method."
-                )
-            # fixme... image infos might not be locked down enough (it's a list...)
-            info = meta["image_infos"][0]
-            img_height = info["height"]
-            img_width = info["width"]
-            dtype = info["dtype"]
-            pix_size = info["pixel_size_um"]
-
-            try:
-                useq_settings = useq_to_acquisition_settings(
-                    sequence,
-                    image_width=img_width,
-                    image_height=img_height,
-                    pixel_size_um=pix_size,
-                )
-            except Exception:
-                raise  # TODO ... fallback to generic 3d sequence
-
-            new_settings = {
-                **self._sink_settings.model_dump(exclude_unset=True),
-                **useq_settings,
-                "dtype": dtype,
-            }
-            self._sink_settings = AcquisitionSettings.model_validate(new_settings)
-            self._sink = create_stream(self._sink_settings)
+        if self._sink is not None:
+            self._sink.setup(sequence, meta)
 
         with self._lock:
             if self._state != RunState.FINISHING:
@@ -706,4 +678,76 @@ class MDARunner:
             self._state = RunState.IDLE
 
 
-class _DataSink: ...
+# future addition, no breakage
+class SinkProtocol(Protocol):
+    def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None: ...
+    def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None: ...
+    def skip(self, *, frames: int = 1) -> None: ...
+    def close(self) -> None: ...
+    def get_view(self) -> SinkView | None: ...
+
+
+class _OmeWritersSink(SinkProtocol):
+    def __init__(self, settings: AcquisitionSettings) -> None:
+        self._settings = settings
+        self._stream: OMEStream | None = None
+
+    def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None:
+        # FIXME?
+        # I'm not sure it's possible to abstract this enough to work with
+        # arbitrary engines... this is a tight coupling that will probably just
+        # exist for a long time
+        if not meta:  # pragma: no cover
+            raise NotImplementedError(
+                "Cannot use output sinks without summary metadaata "
+                "from the engine's setup_sequence method."
+            )
+
+        # fixme... image infos might not be locked down enough (it's a list...)
+        info = meta["image_infos"][0]
+        try:
+            useq_settings = useq_to_acquisition_settings(
+                sequence,
+                image_width=info["width"],
+                image_height=info["height"],
+                pixel_size_um=info["pixel_size_um"],
+            )
+        except Exception as e:
+            # TODO ... fallback to generic 3d sequence
+            raise NotImplementedError(
+                "This sequence is not currently supported by the built-in data sink:\n"
+                f"{e}\n\n"
+                "We will support all sequences soon."
+            ) from e
+
+        new_settings = {
+            **self._settings.model_dump(exclude_unset=True),
+            **useq_settings,
+            "dtype": info["dtype"],
+        }
+        self._settings = AcquisitionSettings.model_validate(new_settings)
+        self._stream = create_stream(self._settings)
+
+    def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None:
+        self._stream.append(img)  # type: ignore[union-attr]
+
+    def skip(self, *, frames: int = 1) -> None:
+        self._stream.skip(frames=frames)  # type: ignore[union-attr]
+
+    def close(self) -> None:
+        if self._stream is not None:
+            self._stream.close()
+
+    def get_view(self) -> SinkView | None:
+        if self._stream is None:
+            return None
+        try:
+            from ome_writers._array_view import AcquisitionView
+        except ImportError:
+            raise ImportError(
+                "AcquisitionView is required to use get_sink(), but it could not be "
+                "imported. We were naughty and imported a private module. "
+                "Likely version mismatch."
+            ) from None
+
+        return AcquisitionView.from_stream(self._stream)
