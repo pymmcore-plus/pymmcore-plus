@@ -62,8 +62,12 @@ if TYPE_CHECKING:
         ) -> Any: ...
 
     class SinkView(Protocol):
+        """Minimal array-like view that a data sink can provide for viewing."""
+
         @property
         def dtype(self) -> Any: ...
+        @property
+        def shape(self) -> tuple[int, ...]: ...
         @property
         def ndim(self) -> int: ...
         def __getitem__(self, key: Any) -> np.ndarray: ...
@@ -583,7 +587,6 @@ class MDARunner:
         with self._lock:
             if self._state != RunState.FINISHING:
                 self._state = RunState.WAITING
-
         self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
         return self._engine
@@ -675,6 +678,11 @@ class SinkProtocol(Protocol):
 
 
 class _OmeWritersSink(SinkProtocol):
+    """Our default built-in data sink.
+
+    uses ome-writers to write to OME-Zarr or OME-TIFF, or scratch (tmp/memory).
+    """
+
     def __init__(self, settings: AcquisitionSettings) -> None:
         self._settings = settings
         self._stream: OMEStream | None = None
