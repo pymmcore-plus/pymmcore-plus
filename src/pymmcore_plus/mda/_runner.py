@@ -356,7 +356,8 @@ class MDARunner:
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-        with self._outputs_connected(output):
+        handlers = self._coerce_outputs(output)  # also creates self._sink if needed
+        with self._handlers_connected(handlers):
             # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
             # called inside the context manager, since the `mda_listeners_connected`
             # context manager expects to see both of those signals.
@@ -421,18 +422,20 @@ class MDARunner:
         """
         return time.perf_counter() - self._t0
 
-    def _outputs_connected(
+    def _coerce_outputs(
         self, output: SingleOutput | Sequence[SingleOutput] | None
-    ) -> AbstractContextManager:
-        """Context in which output handlers are connected to the frameReady signal."""
+    ) -> list[SupportsFrameReady]:
+        """Normalize and validate output into a list of frameReady handlers.
+
+        Also sets self._sink if a path or AcquisitionSettings is provided.
+        """
         if output is None:
-            return nullcontext()
+            return []
 
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
-        # convert all items to handler objects, preserving order
-        _handlers: list[SupportsFrameReady] = []
+        handlers: list[SupportsFrameReady] = []
         for item in output:
             if isinstance(item, (str, Path, AcquisitionSettings)):
                 if self._sink is not None:
@@ -448,11 +451,18 @@ class MDARunner:
                         "Output handlers must have a callable frameReady method. "
                         f"Got {item} with type {type(item)}."
                     )
-                _handlers.append(item)
+                handlers.append(item)
+        return handlers
 
+    def _handlers_connected(
+        self, handlers: Sequence[SupportsFrameReady]
+    ) -> AbstractContextManager:
+        """Context in which output handlers are connected to the frameReady signal."""
         self._handlers.clear()
-        self._handlers.update(_handlers)
-        return mda_listeners_connected(*_handlers, mda_events=self._signals)
+        self._handlers.update(handlers)
+        if not handlers:
+            return nullcontext()
+        return mda_listeners_connected(*handlers, mda_events=self._signals)
 
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
