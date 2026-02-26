@@ -9,7 +9,7 @@ from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
@@ -379,7 +379,11 @@ class MDARunner:
             return None
         return self._sink.get_view()
 
-    @deprecated("Use `get_sink()` instead.", category=DeprecationWarning)
+    @deprecated(
+        "`get_output_handlers` is deprecated, and no full replacement planned. "
+        "Use `get_sink()` instead, to monitor the data as it is being acquired.",
+        category=DeprecationWarning,
+    )
     def get_output_handlers(self) -> tuple[SupportsFrameReady, ...]:
         """Return the data handlers that are currently connected.
 
@@ -449,15 +453,6 @@ class MDARunner:
         self._handlers.clear()
         self._handlers.update(_handlers)
         return mda_listeners_connected(*_handlers, mda_events=self._signals)
-
-    def _handler_for_path(self, path: str | Path) -> SupportsFrameReady:
-        """Convert a string or Path into a handler object.
-
-        This method picks from the built-in handlers based on the extension of the path.
-        """
-        from pymmcore_plus.mda.handlers import handler_for_path
-
-        return cast("SupportsFrameReady", handler_for_path(path))
 
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
@@ -745,13 +740,4 @@ class _OmeWritersSink(SinkProtocol):
     def get_view(self) -> SinkView | None:
         if self._stream is None:
             return None
-        try:
-            from ome_writers._array_view import AcquisitionView
-        except ImportError:
-            raise ImportError(
-                "AcquisitionView is required to use get_sink(), but it could not be "
-                "imported. We were naughty and imported a private module. "
-                "Likely version mismatch."
-            ) from None
-
-        return AcquisitionView.from_stream(self._stream)
+        return self._stream.view(dynamic_shape=True, strict=False)
