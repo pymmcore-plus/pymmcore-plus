@@ -3,6 +3,8 @@ from __future__ import annotations
 import weakref
 from typing import TYPE_CHECKING, Any, Literal, overload
 
+from typing_extensions import deprecated
+
 from ._constants import DeviceType, FocusDirection, Keyword
 from ._property import DeviceProperty
 from .events._device_signal_view import _DevicePropValueSignal
@@ -386,6 +388,7 @@ class CameraDevice(Device):
             self.label, numImages, intervalMs, stopOnOverflow
         )
 
+    @deprecated("No-op in MMCore >= 11.13; camera-dependent behavior in older")
     def prepareSequenceAcquisition(self) -> None:
         """Prepare sequence acquisition."""
         self._mmc.prepareSequenceAcquisition(self.label)
