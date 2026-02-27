@@ -395,7 +395,7 @@ class MDARunner:
 
     def get_view(self) -> SinkView | None:
         """Array-like view of the current data sink, if it exists."""
-        if self._sink is None:
+        if self._sink is None:  # pragma: no cover
             return None
         return self._sink.get_view()
 
@@ -459,7 +459,7 @@ class MDARunner:
         handlers: list[SupportsFrameReady] = []
         for item in output:
             if isinstance(item, (str, Path, AcquisitionSettings)):
-                if self._sink is not None:
+                if self._sink is not None:  # pragma: no cover
                     raise NotImplementedError(
                         "Only one AcquisitionSettings object or path may be provided "
                         "as output.  Open a feature request if you would like to see "
@@ -677,7 +677,7 @@ class MDARunner:
         if self._sink is not None:
             try:
                 self._sink.close()
-            except Exception as e:
+            except Exception as e:  # pragma: no cover
                 logger.error("Error closing data sink: %s", e)
 
         if hasattr(self._engine, "teardown_sequence"):
@@ -745,7 +745,7 @@ class _OmeWritersSink(SinkProtocol):
             )
         except Exception as e:
             # TODO ... fallback to generic 3d sequence
-            raise NotImplementedError(
+            raise NotImplementedError(  # pragma: no cover
                 "This sequence is not currently supported by the built-in data sink:\n"
                 f"{e}\n\n"
                 "We will support all sequences soon."
