@@ -302,13 +302,15 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
 
-        # Release hardware at interpreter exit.  We use a weakref to avoid
-        # preventing garbage collection of this instance.  The wrapper lambda
-        # calls the WeakMethod and invokes the result (WeakMethod.__call__
-        # returns the bound method, it doesn't invoke it).
-        _wm = weakref.WeakMethod(self.unloadAllDevices)
-        self._weak_clean = lambda: (_m := _wm()) is not None and _m()
-        atexit.register(self._weak_clean)
+        weakref.finalize(self, _prevent_relay_gc.discard, self._callback_relay)
+        self._weak_clean = weakref.WeakMethod(self.unloadAllDevices)
+
+        def _atexit_unload(ref: weakref.WeakMethod = self._weak_clean) -> None:
+            if fn := ref():
+                fn()
+
+        self._atexit_unload = _atexit_unload
+        atexit.register(_atexit_unload)
 
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
@@ -346,28 +348,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Return a string representation of the core object."""
         ndevices = len(self.getLoadedDevices()) - 1
         return f"<{type(self).__name__} at {hex(id(self))} with {ndevices} devices>"
-
-    def __del__(self) -> None:
-        if hasattr(self, "_weak_clean"):
-            atexit.unregister(self._weak_clean)
-
-        try:
-            # Null the C++ callback pointer so the C++ destructor's reset()
-            # won't fire callbacks through the SWIG director.  This is cheap
-            # (just sets a pointer to null) and safe from any context.
-            super().registerCallback(None)
-        except Exception:
-            pass
-
-        # Release the prevent-GC reference for _callback_relay.
-        # The C++ pointer is already null, so even if the relay is freed
-        # immediately after this, no C++ code can reach it.  Any device
-        # thread that raced past the null-check in CoreCallback before we
-        # nulled the pointer will still hit valid memory because the relay
-        # is alive until we discard it here (after the pointer is null).
-        relay = getattr(self, "_callback_relay", None)
-        if relay is not None:
-            _prevent_relay_gc.discard(relay)
 
     # Re-implemented methods from the CMMCore API
 
