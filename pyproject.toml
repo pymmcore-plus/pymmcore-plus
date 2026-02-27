@@ -48,7 +48,7 @@ dependencies = [
     "typer >=0.13.0",
     "rich >=10.2.0",
     "ome-types >=0.6.0",
-    "ome-writers>=0.2.0",
+    "ome-writers>=0.3.0",
 ]
 
 # extras
@@ -102,7 +102,6 @@ dev = [
 
 [tool.uv.sources]
 pymmcore-plus = { workspace = true }
-ome-writers = { path = "../ome-writers", editable = true }
 
 [tool.uv]
 override-dependencies = [
