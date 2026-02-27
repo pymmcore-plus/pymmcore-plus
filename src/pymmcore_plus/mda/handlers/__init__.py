@@ -1,13 +1,21 @@
 from __future__ import annotations
 
+import warnings
 from pathlib import Path
-
-from typing_extensions import deprecated
 
 from ._img_sequence_writer import ImageSequenceWriter
 from ._ome_tiff_writer import OMETiffWriter
 from ._ome_zarr_writer import OMEZarrWriter
 from ._tensorstore_handler import TensorStoreHandler
+
+warnings.warn(
+    f"The {__name__!r} module is deprecated and will be removed in a "
+    "future version. We are moving to ome-writers as the internally supported "
+    "data-sink. If you would like to continue using these handlers, please vendor "
+    "them into your own codebase.",
+    FutureWarning,
+    stacklevel=2,
+)
 
 __all__ = [
     "ImageSequenceWriter",
@@ -18,11 +26,6 @@ __all__ = [
 ]
 
 
-@deprecated(
-    "`handler_for_path` is deprecated and will be removed in a future version. "
-    "We are moving to ome-writers as the internally supported data-sink.",
-    category=FutureWarning,
-)
 def handler_for_path(path: str | Path) -> object:
     """Convert a string or Path into a handler object.
 
