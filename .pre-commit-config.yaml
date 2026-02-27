@@ -32,3 +32,4 @@ repos:
           - useq-schema >= 0.6.2
           - psygnal
           - typer
+          - ome-writers >=0.0.1.b1
