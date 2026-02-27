@@ -213,12 +213,13 @@ def _available_test_adapter_releases() -> dict[str, str]:
     with urlopen(github_api_url) as resp:
         releases = json.loads(resp.read().decode("utf-8"))
 
-    release_map = {}
+    release_map: dict[str, str] = {}
     for release in releases:
         tag_name = release["tag_name"]  # e.g., "74.20250825"
         if "." in tag_name:
             _, date_part = tag_name.split(".", 1)  # Extract YYYYMMDD part
-            release_map[date_part] = tag_name
+            if date_part not in release_map or tag_name > release_map[date_part]:
+                release_map[date_part] = tag_name
 
     return release_map
 
