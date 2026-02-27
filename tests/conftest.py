@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import gc
 import os
 from unittest.mock import patch
 
@@ -46,7 +47,8 @@ def core(
         pytest.fail("To run tests, please install MM with `mmcore install`")
     core.loadSystemConfiguration()
     yield core
-    core.__del__()
+    del core
+    gc.collect()
 
 
 @pytest.fixture
