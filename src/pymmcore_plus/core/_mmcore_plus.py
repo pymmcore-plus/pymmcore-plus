@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import atexit
 import os
 import re
 import time
@@ -301,16 +300,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
-
         weakref.finalize(self, _prevent_relay_gc.discard, self._callback_relay)
-        self._weak_clean = weakref.WeakMethod(self.unloadAllDevices)
-
-        def _atexit_unload(ref: weakref.WeakMethod = self._weak_clean) -> None:
-            if fn := ref():
-                fn()
-
-        self._atexit_unload = _atexit_unload
-        atexit.register(_atexit_unload)
 
     def __del__(self) -> None:
         # we've done a bad thing in other libraries and explicitly called __del__
