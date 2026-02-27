@@ -5,7 +5,6 @@ import os
 import re
 import time
 import warnings
-import weakref
 from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
@@ -295,9 +294,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         # preventing garbage collection of this instance.  The wrapper lambda
         # calls the WeakMethod and invokes the result (WeakMethod.__call__
         # returns the bound method, it doesn't invoke it).
-        _wm = weakref.WeakMethod(self.unloadAllDevices)
-        self._weak_clean = lambda: (_m := _wm()) is not None and _m()
-        atexit.register(self._weak_clean)
+        # _wm = weakref.WeakMethod(self.unloadAllDevices)
+        # self._weak_clean = lambda: (_m := _wm()) is not None and _m()
+        # atexit.register(self._weak_clean)
 
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
