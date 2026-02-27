@@ -693,7 +693,6 @@ class MDARunner:
             self._state = RunState.IDLE
 
 
-# future addition, no breakage
 class SinkProtocol(Protocol):
     def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None: ...
     def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None: ...
@@ -747,8 +746,7 @@ class _OmeWritersSink(SinkProtocol):
             # TODO ... fallback to generic 3d sequence
             raise NotImplementedError(  # pragma: no cover
                 "This sequence is not currently supported by the built-in data sink:\n"
-                f"{e}\n\n"
-                "We will support all sequences soon."
+                f"{e}\n\nWe will support all sequences soon."
             ) from e
 
         new_settings = {
