@@ -52,6 +52,14 @@ jobs:
             resolution: "lowest-direct"
             add-group: "PyQt6"
 
+          # test optional zarr backends
+          - os: macos-latest
+            python-version: "3.13"
+            add-group: "test-extra-io"
+          - os: windows-latest
+            python-version: "3.13"
+            add-group: "test-extra-io"
+
     env:
       UV_NO_SYNC: "1"
     steps:
