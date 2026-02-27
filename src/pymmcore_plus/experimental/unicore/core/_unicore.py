@@ -18,6 +18,7 @@ from typing import (
 )
 
 import numpy as np
+from typing_extensions import deprecated
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType, FocusDirection, Keyword
@@ -1622,11 +1623,11 @@ class UniMMCore(CMMCorePlus):
         with cam:
             cam.stop_property_sequence(KW.Exposure)
 
+    @deprecated("No-op in MMCore >= 11.13; camera-dependent behavior in older")
     def prepareSequenceAcquisition(self, cameraLabel: DeviceLabel | str) -> None:
         """Prepare the camera for sequence acquisition."""
         if self._py_camera(cameraLabel) is None:  # pragma: no cover
             return super().prepareSequenceAcquisition(cameraLabel)
-        # TODO: Implement prepareSequenceAcquisition for Python cameras?
 
     @overload
     def getPixelSizeAffine(self) -> AffineTuple: ...
