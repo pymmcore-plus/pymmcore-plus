@@ -291,9 +291,12 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
 
-        # use weakref to avoid atexit keeping us from being
-        # garbage collected
-        self._weak_clean = weakref.WeakMethod(self.unloadAllDevices)
+        # Release hardware at interpreter exit.  We use a weakref to avoid
+        # preventing garbage collection of this instance.  The wrapper lambda
+        # calls the WeakMethod and invokes the result (WeakMethod.__call__
+        # returns the bound method, it doesn't invoke it).
+        _wm = weakref.WeakMethod(self.unloadAllDevices)
+        self._weak_clean = lambda: (_m := _wm()) is not None and _m()
         atexit.register(self._weak_clean)
 
     @deprecated(
