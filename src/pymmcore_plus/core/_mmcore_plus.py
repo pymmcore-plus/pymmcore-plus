@@ -184,6 +184,10 @@ def _blockSignal(obj: Any, signal: Any) -> Iterator[None]:
 
 _instance = None
 
+# prevent GC of callback relay objects independent of instance __dict__.
+# See __del__ for full explanation.
+_prevent_relay_gc: set = set()
+
 
 class CMMCorePlus(pymmcore.CMMCore):
     """Wrapper for CMMCore with extended functionality.
@@ -283,6 +287,13 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
+
+        # prevent GC of _callback_relay independent of self lifetime.
+        # CMMCore stores a raw (non-preventing) pointer to this object;
+        # if Python GC clears our __dict__ before the C++ destructor runs, that pointer
+        # dangles.  Prevent that by holding a ref in a class-level set that we
+        # explicitly remove in __del__ / the C++ destructor path.
+        _prevent_relay_gc.add(self._callback_relay)
         super().registerCallback(self._callback_relay)
 
         self._mda_runner = MDARunner()
@@ -341,13 +352,22 @@ class CMMCorePlus(pymmcore.CMMCore):
             atexit.unregister(self._weak_clean)
 
         try:
+            # Null the C++ callback pointer so the C++ destructor's reset()
+            # won't fire callbacks through the SWIG director.  This is cheap
+            # (just sets a pointer to null) and safe from any context.
             super().registerCallback(None)
+        except Exception:
+            pass
 
-            self.reset()
-            # clean up logging
-            self.setPrimaryLogFile("")
-        except Exception as e:
-            logger.exception("Error during CMMCorePlus.__del__(): %s", e)
+        # Release the prevent-GC reference for _callback_relay.
+        # The C++ pointer is already null, so even if the relay is freed
+        # immediately after this, no C++ code can reach it.  Any device
+        # thread that raced past the null-check in CoreCallback before we
+        # nulled the pointer will still hit valid memory because the relay
+        # is alive until we discard it here (after the pointer is null).
+        relay = getattr(self, "_callback_relay", None)
+        if relay is not None:
+            _prevent_relay_gc.discard(relay)
 
     # Re-implemented methods from the CMMCore API
 
