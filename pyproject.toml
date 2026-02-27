@@ -46,17 +46,14 @@ dependencies = [
     "typer >=0.13.0",
     "rich >=10.2.0",
     "ome-types >=0.6.0",
-    "ome-writers[tifffile,tensorstore]>=0.3.0",
+    "ome-writers[tensorstore]>=0.3.0",
 ]
 
 # extras
 # https://peps.python.org/pep-0621/#dependencies-optional-dependencies
 [project.optional-dependencies]
 cli = ["typer >=0.13.0", "rich >=10.2.0"]
-io = [
-    "tifffile >=2024.8.30", # also comes with ome-writers[tifffile]
-    "zarr >=2.15,<3",       # drop?
-]
+io = ["ome-writers[tifffile,tensorstore]>=0.3.0"]
 simulate = ["pillow >=11.0"]
 PySide2 = ["PySide2 >=5.15.2.1"]
 PySide6 = ["PySide6 ==6.7.3"]
