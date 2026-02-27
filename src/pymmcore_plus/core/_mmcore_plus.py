@@ -312,6 +312,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._atexit_unload = _atexit_unload
         atexit.register(_atexit_unload)
 
+    def __del__(self) -> None:
+        # we've done a bad thing in other libraries and explicitly called __del__
+        # keep this here until we fix those downstream tests
+        pass
+
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
     )
