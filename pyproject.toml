@@ -47,8 +47,6 @@ dependencies = [
     "rich >=10.2.0",
     "ome-types >=0.6.0",
     "ome-writers[tifffile,tensorstore]>=0.3.0",
-    "tensorstore >=0.1.71,!=0.1.72; python_version >= '3.13'", # also comes with ome-writers[tensorstore]
-    "tensorstore >=0.1.67,!=0.1.72",                           # also comes with ome-writers[tensorstore]
 ]
 
 # extras
@@ -57,7 +55,7 @@ dependencies = [
 cli = ["typer >=0.13.0", "rich >=10.2.0"]
 io = [
     "tifffile >=2024.8.30", # also comes with ome-writers[tifffile]
-    "zarr >=2.15,<3",  # drop?
+    "zarr >=2.15,<3",       # drop?
 ]
 simulate = ["pillow >=11.0"]
 PySide2 = ["PySide2 >=5.15.2.1"]
