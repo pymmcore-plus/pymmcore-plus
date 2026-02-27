@@ -191,7 +191,7 @@ jobs:
         with:
           version: ${{ env.PYMM_VERSION }}
 
-      - run: uv run pytest -v --color=yes -W ignore
+      - run: uv run pytest -v --color=yes -W ignore -p no:faulthandler
 
   benchmarks:
     runs-on: ubuntu-latest

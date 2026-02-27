@@ -115,6 +115,7 @@ plugins:
             - https://docs.python.org/3/objects.inv
             - https://numpy.org/doc/stable/objects.inv
             - https://pymmcore-plus.github.io/useq-schema/objects.inv
+            - https://pymmcore-plus.github.io/ome-writers/objects.inv
           options:
             ## Headings options:
             # heading_level: 2 # default is 2

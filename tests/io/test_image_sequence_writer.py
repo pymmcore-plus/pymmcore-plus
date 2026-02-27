@@ -27,7 +27,8 @@ def test_tiff_sequence_writer(tmp_path: Path, core: CMMCorePlus) -> None:
     )
 
     dest = tmp_path / "out"
-    core.mda.run(mda, output=dest)
+    handler = ImageSequenceWriter(dest)
+    core.mda.run(mda, output=handler)
 
     files_written = list(dest.glob("*.tif"))
     assert len(files_written) == prod(mda.shape)
