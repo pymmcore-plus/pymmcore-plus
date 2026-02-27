@@ -602,10 +602,8 @@ class MDAEngine(PMDAEngine):
         if event.slm_image:
             self._set_event_slm_image(event)
 
-        # preparing a Sequence while another is running is dangerous.
         if core.isSequenceRunning():
             self._await_sequence_acquisition()
-        core.prepareSequenceAcquisition(core.getCameraDevice())
 
         # start sequences or set non-sequenced values
         if event.x_sequence:

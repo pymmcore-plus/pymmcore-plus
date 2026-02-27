@@ -219,7 +219,7 @@ CORE_COMPLETERS: dict[tuple[str, int], CoreCompleter] = {
     ("isExposureSequenceable", 0): lambda core: _dev_labels(core, DeviceType.Camera),
     ("isSequenceRunning", 0): lambda core: _dev_labels(core, DeviceType.Camera),
     ("loadExposureSequence", 0): lambda core: _dev_labels(core, DeviceType.Camera),
-    ("prepareSequenceAcquisition", 0): lambda core: _dev_labels(core, DeviceType.Camera),  # noqa
+
     ("setExposure", 0): lambda core: _dev_labels(core, DeviceType.Camera),
     ("setROI", 0): lambda core: _dev_labels(core, DeviceType.Camera),
     ("startExposureSequence", 0): lambda core: _dev_labels(core, DeviceType.Camera),
