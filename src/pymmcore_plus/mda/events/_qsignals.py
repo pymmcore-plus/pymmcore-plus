@@ -9,3 +9,4 @@ class QMDASignaler(QObject):
     frameReady = Signal(object, object, dict)  # img, MDAEvent, metadata
     awaitingEvent = Signal(object, float)  # MDAEvent, remaining_sec
     eventStarted = Signal(object)  # MDAEvent
+    eventFinished = Signal(object)  # MDAEvent

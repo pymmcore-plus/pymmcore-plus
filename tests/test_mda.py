@@ -254,6 +254,84 @@ def test_mda_iterable_of_events(
     assert frame_mock.call_count == 2
 
 
+@SKIP_NO_PYTESTQT
+def test_event_finished_signal(core: CMMCorePlus, qtbot: QtBot) -> None:
+    """Test that eventFinished is emitted once per event, after teardown."""
+    seq = MDASequence(
+        channels=["DAPI"],
+        time_plan={"interval": 0, "loops": 3},
+    )
+
+    event_started_mock = Mock()
+    event_finished_mock = Mock()
+    frame_mock = Mock()
+    core.mda.events.eventStarted.connect(event_started_mock)
+    core.mda.events.eventFinished.connect(event_finished_mock)
+    core.mda.events.frameReady.connect(frame_mock)
+
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        core.mda.run(seq)
+
+    # 3 timepoints × 1 channel = 3 events
+    assert event_started_mock.call_count == 3
+    assert event_finished_mock.call_count == 3
+    assert frame_mock.call_count == 3
+
+    # eventFinished should receive the same event as eventStarted
+    for started_call, finished_call in zip(
+        event_started_mock.call_args_list,
+        event_finished_mock.call_args_list,
+        strict=True,
+    ):
+        assert started_call.args[0] == finished_call.args[0]
+
+
+@SKIP_NO_PYTESTQT
+def test_event_finished_with_sequenced_events(core: CMMCorePlus, qtbot: QtBot) -> None:
+    """Test that eventFinished emits for SequencedEvents (hardware sequencing)."""
+    core.setProperty("Z", "UseSequences", "Yes")
+    core.mda.engine.use_hardware_sequencing = True
+    seq = MDASequence(
+        stage_positions=[(0, 0), (100, 0)],
+        z_plan={"top": 5, "bottom": -5, "step": 5},  # 3 z-slices
+    )
+
+    event_finished_mock = Mock()
+    frame_mock = Mock()
+    core.mda.events.eventFinished.connect(event_finished_mock)
+    core.mda.events.frameReady.connect(frame_mock)
+
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        core.mda.run(seq)
+
+    # With hardware sequencing: 2 positions × 1 SequencedEvent each = 2 events
+    # but 2 × 3 z-slices = 6 frames
+    assert event_finished_mock.call_count == 2
+    assert frame_mock.call_count == 6
+
+
+@SKIP_NO_PYTESTQT
+def test_event_finished_on_queue_based_acquisition(
+    core: CMMCorePlus, qtbot: QtBot
+) -> None:
+    """Test that eventFinished emits for queue-based (reactive) acquisitions."""
+    STOP = object()
+    q: Queue = Queue()
+
+    event_finished_mock = Mock()
+    core.mda.events.eventFinished.connect(event_finished_mock)
+
+    # Pre-fill queue with events and sentinel
+    q.put(MDAEvent(exposure=10))
+    q.put(MDAEvent(exposure=20))
+    q.put(STOP)
+
+    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        core.mda.run(iter(q.get, STOP))
+
+    assert event_finished_mock.call_count == 2
+
+
 DEVICE_ERRORS: dict[str, list[str]] = {
     "XY": ["No XY stage device found. Cannot set XY position"],
     "Z": ["No Z stage device found. Cannot set Z position"],

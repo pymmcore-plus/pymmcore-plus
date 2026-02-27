@@ -11,3 +11,4 @@ class MDASignaler(SignalGroup):
     frameReady = Signal(np.ndarray, MDAEvent, dict)  # img, MDAEvent, metadata
     awaitingEvent = Signal(MDAEvent, float)  # MDAEvent, remaining_sec
     eventStarted = Signal(MDAEvent)  # MDAEvent
+    eventFinished = Signal(MDAEvent)  # MDAEvent

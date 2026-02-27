@@ -33,3 +33,5 @@ class PMDASignaler(Protocol):
     """  # noqa: E501
     eventStarted: ClassVar[PSignal]
     """Emits `(event: MDAEvent)` immediately before event setup and execution."""
+    eventFinished: ClassVar[PSignal]
+    """Emits `(event: MDAEvent)` immediately after event execution and teardown."""
