@@ -324,6 +324,7 @@ class MDARunner:
         events: Iterable[MDAEvent],
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
+        overwrite: bool = False,
     ) -> None:
         """Run the multi-dimensional acquisition defined by `sequence`.
 
@@ -332,31 +333,49 @@ class MDARunner:
         [`CMMCorePlus.run_mda`][pymmcore_plus.CMMCorePlus.run_mda] method which will
         run on a thread.
 
+        !!!important
+
+            If `output` is a sequence, it may contain nor more than one
+            `str | Path | AcquisitionSettings`.
+
         Parameters
         ----------
         events : Iterable[MDAEvent]
             An iterable of `useq.MDAEvents` objects to execute.
         output : SingleOutput | Sequence[SingleOutput] | None, optional
             The output handler(s) to use.  If None, no output will be saved.
+
             The value may be either a single output or a sequence of outputs,
             where a "single output" can be any of the following:
 
-            - A string or Path to a directory to save images to. A handler will be
-                created automatically based on the extension of the path.
-                - `.zarr` files will be handled by `OMEZarrWriter`
-                - `.ome.tiff` files will be handled by `OMETiffWriter`
-                - A directory with no extension will be handled by `ImageSequenceWriter`
-            - A handler object that implements the `DataHandler` protocol, currently
-                meaning it has a `frameReady` method.  See `mda_listeners_connected`
-                for more details.
+            1. A string or `Path`. This value is passed directly to
+                [`ome_writers.AcquisitionSettings`][], and the extension can be used
+                to determine the file format to create:
+                - `[.ome].zarr` will result in an OME-Zarr at the specified path
+                - `[.ome].tiff` will result in an OME-TIFF at the specified, or, if
+                  multiple positions are acquired, the output path will be treated as a
+                  directory with individual OME-TIFF files for each position.
 
-            During the course of the sequence, the `get_output_handlers` method can be
-            used to get the currently connected output handlers (including those that
-            were created automatically based on file paths).
+            1. An [`ome_writers.AcquisitionSettings`][], object which allows full
+              control over many parameters.  See [ome_writers
+              documentation](https://pymmcore-plus.github.io/ome-writers/usage/) for
+              details.
+
+            1. A handler object that implements the `DataHandler` protocol, currently
+              meaning it has a `frameReady` method.  See `mda_listeners_connected`
+              for more details.
+
+            During the course of the sequence, the `get_view` method can be used to get
+            an array-like view of the current data sink, if the sink supports it.
+
+        overwrite : bool, optional
+            Whether to overwrite existing files *when output is a `str` or `Path`*.
+            Ignored in all other cases.  Default is False.
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-        handlers = self._coerce_outputs(output)  # also creates self._sink if needed
+        # also creates self._sink if output is a str|Path|AcquisitionSettings
+        handlers = self._coerce_outputs(output, overwrite=overwrite)
         with self._handlers_connected(handlers):
             # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
             # called inside the context manager, since the `mda_listeners_connected`
@@ -423,7 +442,9 @@ class MDARunner:
         return time.perf_counter() - self._t0
 
     def _coerce_outputs(
-        self, output: SingleOutput | Sequence[SingleOutput] | None
+        self,
+        output: SingleOutput | Sequence[SingleOutput] | None,
+        overwrite: bool = False,
     ) -> list[SupportsFrameReady]:
         """Normalize and validate output into a list of frameReady handlers.
 
@@ -444,7 +465,7 @@ class MDARunner:
                         "as output.  Open a feature request if you would like to see "
                         "support for multiple data sinks."
                     )
-                self._sink = _OmeWritersSink.from_output(item)
+                self._sink = _OmeWritersSink.from_output(item, overwrite=overwrite)
             else:
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
@@ -692,14 +713,15 @@ class _OmeWritersSink(SinkProtocol):
         self._stream: OMEStream | None = None
 
     @classmethod
-    def from_output(cls, output: str | Path | AcquisitionSettings) -> _OmeWritersSink:
+    def from_output(
+        cls, output: str | Path | AcquisitionSettings, overwrite: bool = False
+    ) -> _OmeWritersSink:
         if isinstance(output, AcquisitionSettings):
             return cls(output)
         stripped = str(output).rstrip("/").rstrip(":").lower()
         if stripped in ("memory", "scratch"):
-            return cls(AcquisitionSettings(format="scratch"))  # pyright: ignore
-        # TODO: don't merge with overwrite=True
-        return cls(AcquisitionSettings(root_path=str(output), overwrite=True))
+            return cls(AcquisitionSettings(format="scratch", overwrite=overwrite))  # pyright: ignore
+        return cls(AcquisitionSettings(root_path=str(output), overwrite=overwrite))
 
     def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None:
         # FIXME?
