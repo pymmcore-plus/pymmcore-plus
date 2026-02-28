@@ -124,12 +124,12 @@ class _CoreDevice:
 
 
 _DEFAULT_BUFFER_SIZE_MB: int = 1024
-if buf := os.getenv("UNICORE_BUFFER_SIZE_MB"):  # pragma: no cover
+if buf := os.getenv("UNICORE_SEQUENCE_BUFFER_MB"):  # pragma: no cover
     try:
         _DEFAULT_BUFFER_SIZE_MB = int(buf)
     except ValueError:
         warnings.warn(
-            f"Invalid value for UNICORE_BUFFER_SIZE_MB: {buf!r}. "
+            f"Invalid value for UNICORE_SEQUENCE_BUFFER_MB: {buf!r}. "
             f"Using default buffer size. {_DEFAULT_BUFFER_SIZE_MB} MB",
             stacklevel=2,
         )
