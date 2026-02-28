@@ -124,7 +124,7 @@ class _CoreDevice:
 
 
 _DEFAULT_BUFFER_SIZE_MB: int = 1024
-if buf := os.getenv("UNICORE_BUFFER_SIZE_MB"):
+if buf := os.getenv("UNICORE_BUFFER_SIZE_MB"):  # pragma: no cover
     try:
         _DEFAULT_BUFFER_SIZE_MB = int(buf)
     except ValueError:
