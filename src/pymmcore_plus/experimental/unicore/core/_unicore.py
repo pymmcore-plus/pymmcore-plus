@@ -205,22 +205,6 @@ class UniMMCore(CMMCorePlus):
     # ------------------------ General Core methods  ------------------------
     # -----------------------------------------------------------------------
 
-    def reset(self) -> None:
-        with suppress(TimeoutError):
-            self._pydevices.wait_for_device_type(
-                DeviceType.AnyType, self.getTimeoutMs(), parallel=False
-            )
-        super().waitForDeviceType(DeviceType.AnyType)
-        self._cleanup_python_state(
-            self._stop_event,
-            self._seq_buffer,
-            self._pydevices,
-            self._pycore,
-            self._py_config_groups,
-            self._state_cache,
-        )
-        super().reset()  # Clears C++ config groups, channel group, and devices
-
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
     ) -> None:
@@ -412,16 +396,20 @@ class UniMMCore(CMMCorePlus):
         self._pydevices.unload(label)
         self._cleanup_pydevice_state(label)
 
+    def _reset_python(self) -> None:
+        self._cleanup_sequence_state()
+        self._pydevices.unload_all()
+        self._pycore.reset_current()
+        self._py_config_groups.clear()
+        self._state_cache.clear()
+
     def unloadAllDevices(self) -> None:
-        self._cleanup_python_state(
-            self._stop_event,
-            self._seq_buffer,
-            self._pydevices,
-            self._pycore,
-            self._py_config_groups,
-            self._state_cache,
-        )
+        self._reset_python()
         super().unloadAllDevices()
+
+    def reset(self) -> None:
+        self._reset_python()
+        super().reset()
 
     def initializeDevice(self, label: DeviceLabel | str) -> None:
         if label not in self._pydevices:  # pragma: no cover
