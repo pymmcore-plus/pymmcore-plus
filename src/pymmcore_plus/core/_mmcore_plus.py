@@ -4,7 +4,6 @@ import os
 import re
 import time
 import warnings
-import weakref
 from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
@@ -183,11 +182,6 @@ def _blockSignal(obj: Any, signal: Any) -> Iterator[None]:
 
 _instance = None
 
-# prevent GC of callback relay objects independent of instance __dict__.
-# CMMCore stores a raw (non-preventing) pointer to the callback relay;
-# preventing GC here ensures the pointer doesn't dangle during C++ destruction.
-_prevent_relay_gc: set = set()
-
 
 class CMMCorePlus(pymmcore.CMMCore):
     """Wrapper for CMMCore with extended functionality.
@@ -288,12 +282,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
 
-        # prevent GC of _callback_relay independent of self lifetime.
-        # CMMCore stores a raw (non-preventing) pointer to this object;
-        # if Python GC clears our __dict__ before the C++ destructor runs, that pointer
-        # dangles.  Prevent that by holding a ref in a class-level set that we
-        # explicitly clean up via weakref.finalize before C++ destruction.
-        _prevent_relay_gc.add(self._callback_relay)
         super().registerCallback(self._callback_relay)
 
         self._mda_runner = MDARunner()
@@ -301,7 +289,6 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
-        weakref.finalize(self, _prevent_relay_gc.discard, self._callback_relay)
 
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
