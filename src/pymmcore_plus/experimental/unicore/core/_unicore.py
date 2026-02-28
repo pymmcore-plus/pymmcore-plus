@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import threading
 import warnings
+import weakref
 from collections.abc import Callable, Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from datetime import datetime
@@ -153,6 +154,39 @@ class UniMMCore(CMMCorePlus):
 
         super().__init__(*args, **kwargs)
 
+        # Ensure Python-side state is cleaned up before ~CMMCore() runs,
+        # since the C++ destructor calls CMMCore::reset() (not the Python
+        # override), bypassing all Python cleanup.
+        # NOTE: we pass individual objects (not self.__dict__) to avoid
+        # preventing GC — __dict__ contains objects that reference self.
+        weakref.finalize(
+            self,
+            UniMMCore._cleanup_python_state,
+            self._stop_event,
+            self._seq_buffer,
+            self._pydevices,
+            self._pycore,
+            self._py_config_groups,
+            self._state_cache,
+        )
+
+    @staticmethod
+    def _cleanup_python_state(
+        stop_event: threading.Event,
+        seq_buffer: SequenceBuffer,
+        pydevices: PyDeviceManager,
+        pycore: _CoreDevice,
+        py_config_groups: ConfigGroups,
+        state_cache: ThreadSafeConfig,
+    ) -> None:
+        """Clean up all Python-side state (threads, buffers, devices)."""
+        stop_event.set()
+        seq_buffer.clear()
+        pydevices.unload_all()
+        pycore.reset_current()
+        py_config_groups.clear()
+        state_cache.clear()
+
     def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
         """Helper function to set the current core device if it is a python device.
 
@@ -177,10 +211,15 @@ class UniMMCore(CMMCorePlus):
                 DeviceType.AnyType, self.getTimeoutMs(), parallel=False
             )
         super().waitForDeviceType(DeviceType.AnyType)
-        self.unloadAllDevices()
-        self._pycore.reset_current()
-        self._py_config_groups.clear()  # Clear Python device config settings
-        super().reset()  # Clears C++ config groups and channel group
+        self._cleanup_python_state(
+            self._stop_event,
+            self._seq_buffer,
+            self._pydevices,
+            self._pycore,
+            self._py_config_groups,
+            self._state_cache,
+        )
+        super().reset()  # Clears C++ config groups, channel group, and devices
 
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
@@ -374,11 +413,14 @@ class UniMMCore(CMMCorePlus):
         self._cleanup_pydevice_state(label)
 
     def unloadAllDevices(self) -> None:
-        self._cleanup_sequence_state()
-        self._pydevices.unload_all()
-        self._pycore.reset_current()
-        self._py_config_groups.clear()
-        self._state_cache.clear()
+        self._cleanup_python_state(
+            self._stop_event,
+            self._seq_buffer,
+            self._pydevices,
+            self._pycore,
+            self._py_config_groups,
+            self._state_cache,
+        )
         super().unloadAllDevices()
 
     def initializeDevice(self, label: DeviceLabel | str) -> None:
