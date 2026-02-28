@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import threading
 import warnings
 from collections.abc import Callable, Iterator, MutableMapping, Sequence
@@ -121,7 +122,18 @@ class _CoreDevice:
         self._state_cache[(KW.CoreDevice, keyword)] = label
 
 
-_DEFAULT_BUFFER_SIZE_MB: int = 1000
+_DEFAULT_BUFFER_SIZE_MB: int = 1024
+if buf := os.getenv("UNICORE_BUFFER_SIZE_MB"):
+    try:
+        _DEFAULT_BUFFER_SIZE_MB = int(buf)
+    except ValueError:
+        warnings.warn(
+            f"Invalid value for UNICORE_BUFFER_SIZE_MB: {buf!r}. "
+            f"Using default buffer size. {_DEFAULT_BUFFER_SIZE_MB} MB",
+            stacklevel=2,
+        )
+elif os.getenv("CI") or os.getenv("PYTEST_VERSION"):
+    _DEFAULT_BUFFER_SIZE_MB = 250
 
 
 class UniMMCore(CMMCorePlus):
