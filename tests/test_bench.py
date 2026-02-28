@@ -176,18 +176,21 @@ class MyCamera(CameraDevice):
 @pytest.mark.parametrize("device", ["python", "c++"])
 def test_bench_unicore_camera(device: str, benchmark: Callable) -> None:
     core = UniMMCore()
-    if device == "python":
-        core.loadPyDevice(DEV, MyCamera())
-    else:
-        core.loadDevice(DEV, "DemoCamera", "DCam")
-    core.initializeAllDevices()
-    core.setCameraDevice(DEV)
-    core.setExposure(1)
+    try:
+        if device == "python":
+            core.loadPyDevice(DEV, MyCamera())
+        else:
+            core.loadDevice(DEV, "DemoCamera", "DCam")
+        core.initializeAllDevices()
+        core.setCameraDevice(DEV)
+        core.setExposure(1)
 
-    def _burst() -> None:
-        core.startSequenceAcquisition(20, 0, True)
-        while core.getRemainingImageCount():
-            core.popNextImage()
-        core.stopSequenceAcquisition()
+        def _burst() -> None:
+            core.startSequenceAcquisition(20, 0, True)
+            while core.getRemainingImageCount():
+                core.popNextImage()
+            core.stopSequenceAcquisition()
 
-    benchmark(_burst)
+        benchmark(_burst)
+    finally:
+        core.unloadAllDevices()

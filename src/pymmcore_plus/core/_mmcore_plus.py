@@ -184,8 +184,18 @@ def _blockSignal(obj: Any, signal: Any) -> Iterator[None]:
 _instance = None
 
 # prevent GC of callback relay objects independent of instance __dict__.
-# See __del__ for full explanation.
+# CMMCore stores a raw (non-preventing) pointer to the callback relay;
+# preventing GC here ensures the pointer doesn't dangle during C++ destruction.
 _prevent_relay_gc: set = set()
+
+
+def _finalize_core(relay: Any, register_cb: Callable[[Any], None]) -> None:
+    """Prevent dangling C++ callback pointer during CMMCorePlus destruction."""
+    try:
+        register_cb(None)
+    except Exception:
+        pass
+    _prevent_relay_gc.discard(relay)
 
 
 class CMMCorePlus(pymmcore.CMMCore):
@@ -291,16 +301,17 @@ class CMMCorePlus(pymmcore.CMMCore):
         # CMMCore stores a raw (non-preventing) pointer to this object;
         # if Python GC clears our __dict__ before the C++ destructor runs, that pointer
         # dangles.  Prevent that by holding a ref in a class-level set that we
-        # explicitly remove in __del__ / the C++ destructor path.
+        # explicitly clean up via weakref.finalize before C++ destruction.
         _prevent_relay_gc.add(self._callback_relay)
-        super().registerCallback(self._callback_relay)
+        _register_callback = super().registerCallback
+        _register_callback(self._callback_relay)
 
         self._mda_runner = MDARunner()
         self._mda_runner.set_engine(MDAEngine(self))
 
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
-        weakref.finalize(self, _prevent_relay_gc.discard, self._callback_relay)
+        weakref.finalize(self, _finalize_core, self._callback_relay, _register_callback)
 
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
