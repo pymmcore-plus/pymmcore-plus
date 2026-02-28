@@ -155,37 +155,28 @@ class UniMMCore(CMMCorePlus):
         super().__init__(*args, **kwargs)
 
         # Ensure Python-side state is cleaned up before ~CMMCore() runs,
-        # since the C++ destructor calls CMMCore::reset() (not the Python
-        # override), bypassing all Python cleanup.
+        # since the C++ destructor calls CMMCore::reset(), (non polymorphic, so not
+        # the Python override. bypassing all Python cleanup).
         # NOTE: we pass individual objects (not self.__dict__) to avoid
         # preventing GC — __dict__ contains objects that reference self.
         weakref.finalize(
             self,
             UniMMCore._cleanup_python_state,
             self._stop_event,
-            self._seq_buffer,
             self._pydevices,
             self._pycore,
-            self._py_config_groups,
-            self._state_cache,
         )
 
     @staticmethod
     def _cleanup_python_state(
         stop_event: threading.Event,
-        seq_buffer: SequenceBuffer,
         pydevices: PyDeviceManager,
         pycore: _CoreDevice,
-        py_config_groups: ConfigGroups,
-        state_cache: ThreadSafeConfig,
     ) -> None:
         """Clean up all Python-side state (threads, buffers, devices)."""
         stop_event.set()
-        seq_buffer.clear()
         pydevices.unload_all()
         pycore.reset_current()
-        py_config_groups.clear()
-        state_cache.clear()
 
     def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
         """Helper function to set the current core device if it is a python device.
