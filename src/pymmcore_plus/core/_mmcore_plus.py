@@ -302,11 +302,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
         weakref.finalize(self, _prevent_relay_gc.discard, self._callback_relay)
 
-    def __del__(self) -> None:
-        # we've done a bad thing in other libraries and explicitly called __del__
-        # keep this here until we fix those downstream tests
-        pass
-
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
     )
