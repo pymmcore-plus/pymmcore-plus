@@ -41,7 +41,8 @@ dependencies = [
     "psygnal >=0.10",
     "pymmcore >=11.10.0.74.0",
     "typing-extensions >=4",                                   # not actually required at runtime
-    "useq-schema >=0.7.2",
+    # TODO: revert to "useq-schema >=0.X.X" before merging (after useq-schema#261 is merged and released)
+    "useq-schema @ git+https://github.com/pymmcore-plus/useq-schema.git@refs/pull/261/head",
     "tensorstore >=0.1.71,!=0.1.72; python_version >= '3.13'",
     "tensorstore >=0.1.67,!=0.1.72",
     # cli requirements included by default for now
