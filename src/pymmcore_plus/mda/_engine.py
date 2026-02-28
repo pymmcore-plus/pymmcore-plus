@@ -548,9 +548,7 @@ class MDAEngine(PMDAEngine):
 
         # restore ROI
         if "roi" in self._initial_state:
-            self._set_event_roi(
-                MDAEvent(roi=self._initial_state["roi"])
-            )
+            self._set_event_roi(MDAEvent(roi=self._initial_state["roi"]))
 
         core.waitForSystem()
         # clear the state after restoration
