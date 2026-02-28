@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         exposure: float
         autoshutter: bool
         config_groups: dict[str, str]
+        roi: tuple[int, int, int, int]
 
 
 # these are SLM devices that have a known pixel_on_value.
@@ -318,6 +319,8 @@ class MDAEngine(PMDAEngine):
                     mmcore.setProperty(dev, prop, value)
             except Exception as e:
                 logger.warning("Failed to set properties. %s", e)
+        if event.roi is not None:
+            self._set_event_roi(event)
         if (
             # (if autoshutter wasn't set at the beginning of the sequence
             # then it never matters...)
@@ -457,6 +460,12 @@ class MDAEngine(PMDAEngine):
         except Exception as e:
             logger.warning("Failed to capture autoshutter state: %s", e)
 
+        # capture ROI
+        try:
+            state["roi"] = tuple(core.getROI())  # type: ignore[assignment]
+        except Exception as e:
+            logger.warning("Failed to capture ROI: %s", e)
+
         return state
 
     def _restore_initial_state(self) -> None:
@@ -536,6 +545,10 @@ class MDAEngine(PMDAEngine):
                 core.setAutoShutter(self._initial_state["autoshutter"])
             except Exception as e:
                 logger.warning("Failed to restore autoshutter state: %s", e)
+
+        # restore ROI
+        if "roi" in self._initial_state:
+            self._set_event_roi(MDAEvent(roi=self._initial_state["roi"]))
 
         core.waitForSystem()
         # clear the state after restoration
@@ -902,6 +915,19 @@ class MDAEngine(PMDAEngine):
         p_idx = event.index.get("p", None)
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self.mmcore.setZPosition(cast("float", event.z_pos) + correction)
+
+    def _set_event_roi(self, event: MDAEvent) -> None:
+        """Set the camera ROI for this event.
+
+        This method is not part of the PMDAEngine protocol (it is called by
+        `setup_single_event`), but it is made public in case a user wants to
+        subclass this engine and override ROI behavior.
+        """
+        try:
+            self.mmcore.clearROI()
+            self.mmcore.setROI(*event.roi)
+        except Exception as e:
+            logger.warning("Failed to set ROI. %s", e)
 
     def _set_event_slm_image(self, event: MDAEvent) -> None:
         if not event.slm_image:
