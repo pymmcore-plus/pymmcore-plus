@@ -215,35 +215,63 @@ jobs:
           ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
           echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
 
-      - name: Setup MM test adapters
-        uses: pymmcore-plus/setup-mm-test-adapters@main
+      - uses: pymmcore-plus/setup-mm-test-adapters@main
         with:
           version: ${{ env.PYMM_VERSION }}
 
-      # Run the bench tests under valgrind memcheck to catch the exact
-      # invalid read/write/free that causes the intermittent segfault
-      # under codspeed's callgrind.
-      - name: "valgrind memcheck: bench tests"
-        run: |
-          uv run valgrind \
-            --tool=memcheck \
-            --leak-check=no \
-            --track-origins=yes \
-            --error-exitcode=1 \
-            --errors-for-leak-kinds=none \
-            --num-callers=30 \
-            python -m pytest tests/test_bench.py --codspeed -W ignore -v --color=yes --no-header \
-            2>&1 | tee /tmp/memcheck.log | tail -500
-        continue-on-error: true
+      - name: Download CPython valgrind suppression file
+        run: curl -fsSL -o valgrind-python.supp https://raw.githubusercontent.com/python/cpython/main/Misc/valgrind-python.supp
 
-      - name: Show memcheck errors
+      # Step 1: Does PYTHONMALLOC=malloc alone trigger the crash?
+      - name: "Test: PYTHONMALLOC=malloc (no valgrind)"
+        id: malloc-test
+        continue-on-error: true
+        run: |
+          PYTHONMALLOC=malloc uv run pytest tests/test_bench.py \
+            --codspeed -W ignore -v --color=yes
+
+      # Step 2: glibc malloc debug (prints diagnostics on heap corruption)
+      - name: "Test: PYTHONMALLOC=malloc + MALLOC_CHECK_=3"
+        id: malloc-check
+        continue-on-error: true
+        run: |
+          PYTHONMALLOC=malloc MALLOC_CHECK_=3 uv run pytest tests/test_bench.py \
+            --codspeed -W ignore -v --color=yes
+
+      # Step 3: valgrind memcheck with CodSpeed's env vars
+      - name: "valgrind memcheck (PYTHONMALLOC=malloc)"
+        id: memcheck
+        continue-on-error: true
+        run: |
+          PYTHONMALLOC=malloc setarch x86_64 -R \
+            uv run valgrind \
+              --tool=memcheck \
+              --trace-children=yes \
+              --track-origins=yes \
+              --leak-check=no \
+              --errors-for-leak-kinds=none \
+              --error-exitcode=42 \
+              --num-callers=30 \
+              --suppressions=valgrind-python.supp \
+              --log-file=/tmp/memcheck.log \
+              python -m pytest tests/test_bench.py \
+                --codspeed -W ignore -v --color=yes \
+          || true
+          echo "=== Valgrind memcheck errors ==="
+          grep -E "Invalid |Mismatched |Conditional jump|Use of uninitialised|ERROR SUMMARY" \
+            /tmp/memcheck.log || echo "No memcheck errors found"
+
+      - name: Summary
         if: always()
         run: |
-          echo "=== Valgrind errors ==="
-          grep -A5 "Invalid \|Mismatched \|Conditional jump\|Use of uninitialised" /tmp/memcheck.log || echo "No memcheck errors found"
-          echo ""
-          echo "=== Error summary ==="
-          grep -E "ERROR SUMMARY|definitely lost|indirectly lost" /tmp/memcheck.log || true
+          echo "=== PYTHONMALLOC=malloc only: ${{ steps.malloc-test.outcome }} ==="
+          echo "=== MALLOC_CHECK_=3:          ${{ steps.malloc-check.outcome }} ==="
+          echo "=== valgrind memcheck:        ${{ steps.memcheck.outcome }} ==="
+          if [ -f /tmp/memcheck.log ]; then
+            echo ""
+            echo "=== Full memcheck log (last 200 lines) ==="
+            tail -200 /tmp/memcheck.log
+          fi
 
   benchmarks:
     runs-on: ubuntu-latest
