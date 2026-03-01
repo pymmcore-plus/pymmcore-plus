@@ -243,6 +243,10 @@ jobs:
       - name: "valgrind callgrind (CodSpeed flags)"
         id: callgrind
         continue-on-error: true
+        env:
+          CODSPEED_ENV: runner
+          CODSPEED_RUNNER_MODE: instrumentation
+          PYTHONHASHSEED: "0"
         run: |
           PYTHONMALLOC=malloc setarch x86_64 -R \
             uv run valgrind \
