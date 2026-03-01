@@ -281,7 +281,6 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
-
         super().registerCallback(self._callback_relay)
 
         self._mda_runner = MDARunner()
@@ -289,6 +288,15 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
+
+    def __del__(self) -> None:
+        # Null the C++ callback pointer before Python relay is freed.
+        # Without this, CMMCore's destructor may invoke the SWIG director
+        # callback into an already-freed Python object (use-after-free).
+        try:
+            super().registerCallback(None)
+        except Exception:
+            pass
 
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
