@@ -4,6 +4,7 @@ import os
 import re
 import time
 import warnings
+import weakref
 from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
@@ -180,7 +181,7 @@ def _blockSignal(obj: Any, signal: Any) -> Iterator[None]:
         obj.blockSignals(False)
 
 
-_instance = None
+_instance: weakref.ref[CMMCorePlus] | None = None
 
 
 class CMMCorePlus(pymmcore.CMMCore):
@@ -221,9 +222,10 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         """
         global _instance
-        if _instance is None:
-            _instance = cls()
-        return _instance
+        inst = _instance and _instance()
+        if inst is None:
+            inst = cls()
+        return inst  # type: ignore[return-value]
 
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__()
@@ -241,8 +243,8 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         # Set the first instance of this class as the global singleton
         global _instance
-        if _instance is None:
-            _instance = self
+        if _instance is None or _instance() is None:
+            _instance = weakref.ref(self)
 
         if hasattr(self, "enableFeature"):
             strict = True
