@@ -232,7 +232,7 @@ jobs:
             --error-exitcode=1 \
             --errors-for-leak-kinds=none \
             --num-callers=30 \
-            python -m pytest tests/test_bench.py -W ignore -v --color=yes --no-header -p no:codspeed \
+            python -m pytest tests/test_bench.py --codspeed -W ignore -v --color=yes --no-header \
             2>&1 | tee /tmp/memcheck.log | tail -500
         continue-on-error: true
 
