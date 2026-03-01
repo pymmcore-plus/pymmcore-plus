@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import atexit
 import os
 import re
 import time
 import warnings
+import weakref
 from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
@@ -289,10 +291,30 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
 
+        # Safety net: null the C++ callback pointer at interpreter shutdown.
+        # __del__ is not guaranteed to fire for objects held by globals (like
+        # _instance), so we register an atexit handler via weakref to ensure
+        # the callback is nulled before Python tears down.
+        _ref = weakref.ref(self)
+        _base_reg = pymmcore.CMMCore.registerCallback
+
+        def _atexit_null_callback() -> None:
+            obj = _ref()
+            if obj is not None:
+                try:
+                    _base_reg(obj, None)
+                except Exception:
+                    pass
+
+        self._atexit_null_callback = _atexit_null_callback
+        atexit.register(_atexit_null_callback)
+
     def __del__(self) -> None:
         # Null the C++ callback pointer before Python relay is freed.
         # Without this, CMMCore's destructor may invoke the SWIG director
         # callback into an already-freed Python object (use-after-free).
+        if hasattr(self, "_atexit_null_callback"):
+            atexit.unregister(self._atexit_null_callback)
         try:
             super().registerCallback(None)
         except Exception:
