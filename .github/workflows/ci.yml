@@ -238,39 +238,43 @@ jobs:
           PYTHONMALLOC=malloc MALLOC_CHECK_=3 uv run pytest tests/test_bench.py \
             --codspeed -W ignore -v --color=yes
 
-      # Step 3: valgrind memcheck with CodSpeed's env vars
-      - name: "valgrind memcheck (PYTHONMALLOC=malloc)"
-        id: memcheck
+      # Step 3: valgrind callgrind with exact CodSpeed flags
+      # (from CodSpeedHQ/runner src/executor/valgrind/measure.rs)
+      - name: "valgrind callgrind (CodSpeed flags)"
+        id: callgrind
         continue-on-error: true
         run: |
           PYTHONMALLOC=malloc setarch x86_64 -R \
             uv run valgrind \
-              --tool=memcheck \
+              -q \
+              --tool=callgrind \
               --trace-children=yes \
-              --track-origins=yes \
-              --leak-check=no \
-              --errors-for-leak-kinds=none \
-              --error-exitcode=42 \
-              --num-callers=30 \
-              --suppressions=valgrind-python.supp \
-              --log-file=/tmp/memcheck.log \
+              --cache-sim=yes \
+              --I1=32768,8,64 \
+              --D1=32768,8,64 \
+              --LL=8388608,16,64 \
+              --instr-atstart=no \
+              --collect-systime=nsec \
+              --read-inline-info=yes \
+              --compress-strings=no \
+              --combine-dumps=yes \
+              --dump-line=no \
+              --callgrind-out-file=/tmp/callgrind.%p.out \
+              --log-file=/tmp/callgrind.log \
               python -m pytest tests/test_bench.py \
-                --codspeed -W ignore -v --color=yes \
-          || true
-          echo "=== Valgrind memcheck errors ==="
-          grep -E "Invalid |Mismatched |Conditional jump|Use of uninitialised|ERROR SUMMARY" \
-            /tmp/memcheck.log || echo "No memcheck errors found"
+                --codspeed -W ignore -v --color=yes
+          echo "exit code: $?"
 
       - name: Summary
         if: always()
         run: |
           echo "=== PYTHONMALLOC=malloc only: ${{ steps.malloc-test.outcome }} ==="
           echo "=== MALLOC_CHECK_=3:          ${{ steps.malloc-check.outcome }} ==="
-          echo "=== valgrind memcheck:        ${{ steps.memcheck.outcome }} ==="
-          if [ -f /tmp/memcheck.log ]; then
+          echo "=== valgrind callgrind:       ${{ steps.callgrind.outcome }} ==="
+          if [ -f /tmp/callgrind.log ]; then
             echo ""
-            echo "=== Full memcheck log (last 200 lines) ==="
-            tail -200 /tmp/memcheck.log
+            echo "=== callgrind log ==="
+            cat /tmp/callgrind.log
           fi
 
   benchmarks:
