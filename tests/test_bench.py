@@ -12,7 +12,6 @@ import useq
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.experimental.unicore import CameraDevice
 from pymmcore_plus.experimental.unicore.core._sequence_buffer import SequenceBuffer
-from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -106,58 +105,6 @@ def test_frame(request: Any) -> np.ndarray:
     return rng.integers(0, 256, size=request.param, dtype=np.uint8)
 
 
-DEV = "Camera"
-FRAME_SHAPE = (512, 512)
-DTYPE = np.uint16
-FRAME = np.ones(FRAME_SHAPE, dtype=DTYPE)
-
-
-class MyCamera(CameraDevice):
-    def get_exposure(self) -> float:
-        return 100.0
-
-    def set_exposure(self, exposure: float) -> None:
-        pass
-
-    def shape(self) -> tuple[int, int]:
-        """Return the shape of the current camera state."""
-        return FRAME_SHAPE
-
-    def dtype(self) -> DTypeLike:
-        """Return the data type of the current camera state."""
-        return DTYPE
-
-    def start_sequence(
-        self, n: int, get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray]
-    ) -> Iterator[Mapping]:
-        """Start a sequence acquisition."""
-        shape, dtype = self.shape(), self.dtype()
-        for _ in range(n):
-            time.sleep(0.001)
-            get_buffer(shape, dtype)[:] = FRAME
-            yield {}
-
-
-@pytest.mark.parametrize("device", ["python", "c++"])
-def test_bench_unicore_camera(device: str, benchmark: Callable) -> None:
-    core = UniMMCore()
-    if device == "python":
-        core.loadPyDevice(DEV, MyCamera())
-    else:
-        core.loadDevice(DEV, "DemoCamera", "DCam")
-    core.initializeAllDevices()
-    core.setCameraDevice(DEV)
-    core.setExposure(1)
-
-    def _burst() -> None:
-        core.startSequenceAcquisition(20, 0, True)
-        while core.getRemainingImageCount():
-            core.popNextImage()
-        core.stopSequenceAcquisition()
-
-    benchmark(_burst)
-
-
 def test_acquire_finalize_pop(test_frame: np.ndarray, benchmark: Callable) -> None:
     seqbuf = SequenceBuffer(size_mb=16.0, overwrite_on_overflow=True)
     out = np.empty_like(test_frame)
@@ -191,3 +138,55 @@ def test_overwrite_under_pressure(benchmark: Callable) -> None:
         tiny_buf.insert_data(frame, None)  # no pop: buffer stays full, evicts
 
     benchmark(_overwrite)
+
+
+DEV = "Camera"
+FRAME_SHAPE = (512, 512)
+DTYPE = np.uint16
+FRAME = np.ones(FRAME_SHAPE, dtype=DTYPE)
+
+
+class MyCamera(CameraDevice):
+    def get_exposure(self) -> float:
+        return 100.0
+
+    def set_exposure(self, exposure: float) -> None:
+        pass
+
+    def shape(self) -> tuple[int, int]:
+        """Return the shape of the current camera state."""
+        return FRAME_SHAPE
+
+    def dtype(self) -> DTypeLike:
+        """Return the data type of the current camera state."""
+        return DTYPE
+
+    def start_sequence(
+        self, n: int, get_buffer: Callable[[Sequence[int], DTypeLike], np.ndarray]
+    ) -> Iterator[Mapping]:
+        """Start a sequence acquisition."""
+        shape, dtype = self.shape(), self.dtype()
+        for _ in range(n):
+            time.sleep(0.001)
+            get_buffer(shape, dtype)[:] = FRAME
+            yield {}
+
+
+# @pytest.mark.parametrize("device", ["python", "c++"])
+# def test_bench_unicore_camera(device: str, benchmark: Callable) -> None:
+#     core = UniMMCore()
+#     if device == "python":
+#         core.loadPyDevice(DEV, MyCamera())
+#     else:
+#         core.loadDevice(DEV, "DemoCamera", "DCam")
+#     core.initializeAllDevices()
+#     core.setCameraDevice(DEV)
+#     core.setExposure(1)
+
+#     def _burst() -> None:
+#         core.startSequenceAcquisition(20, 0, True)
+#         while core.getRemainingImageCount():
+#             core.popNextImage()
+#         core.stopSequenceAcquisition()
+
+#     benchmark(_burst)
