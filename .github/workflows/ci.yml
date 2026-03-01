@@ -207,7 +207,7 @@ jobs:
       - name: install
         run: |
           uv sync --no-dev --group test-codspeed
-          sudo apt-get update && sudo apt-get install -y gdb
+          sudo apt-get update && sudo apt-get install -y valgrind
 
       - name: Get pymmcore version (env)
         shell: bash
@@ -220,68 +220,30 @@ jobs:
         with:
           version: ${{ env.PYMM_VERSION }}
 
-      - name: Enable core dumps
+      # Run the bench tests under valgrind memcheck to catch the exact
+      # invalid read/write/free that causes the intermittent segfault
+      # under codspeed's callgrind.
+      - name: "valgrind memcheck: bench tests"
         run: |
-          ulimit -c unlimited
-          echo '/tmp/core.%e.%p' | sudo tee /proc/sys/kernel/core_pattern
-          echo 0 | sudo tee /proc/sys/kernel/yama/ptrace_scope || true
-
-      # 1) Reproduce crash with the real CodSpeed action (simulation = valgrind callgrind)
-      - name: "Reproduce: codspeed simulation mode (expect crash)"
-        id: codspeed-sim
-        uses: CodSpeedHQ/action@v4
+          uv run valgrind \
+            --tool=memcheck \
+            --leak-check=no \
+            --track-origins=yes \
+            --error-exitcode=1 \
+            --errors-for-leak-kinds=none \
+            --num-callers=30 \
+            python -m pytest tests/test_bench.py -W ignore -v --color=yes --no-header -p no:codspeed \
+            2>&1 | tee /tmp/memcheck.log | tail -500
         continue-on-error: true
-        with:
-          mode: simulation
-          run: uv run pytest -W ignore --codspeed -v --color=no tests/test_bench.py
 
-      # 2) Try walltime mode (no valgrind) — does it crash without valgrind?
-      - name: "Test: codspeed walltime mode (no valgrind)"
-        id: codspeed-wall
-        uses: CodSpeedHQ/action@v4
-        continue-on-error: true
-        with:
-          mode: walltime
-          run: uv run pytest -W ignore --codspeed -v --color=no tests/test_bench.py
-
-      # 3) Search for and analyze any core dumps
-      - name: Analyze core dumps
+      - name: Show memcheck errors
         if: always()
         run: |
-          echo "=== simulation result: ${{ steps.codspeed-sim.outcome }} ==="
-          echo "=== walltime result: ${{ steps.codspeed-wall.outcome }} ==="
+          echo "=== Valgrind errors ==="
+          grep -A5 "Invalid \|Mismatched \|Conditional jump\|Use of uninitialised" /tmp/memcheck.log || echo "No memcheck errors found"
           echo ""
-          echo "=== Looking for core dumps ==="
-          find /tmp -maxdepth 1 -name 'core.*' -ls 2>/dev/null || true
-          find . -maxdepth 1 -name 'core*' -ls 2>/dev/null || true
-          CORE=$(find /tmp . -maxdepth 1 -name 'core*' -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -1 | cut -d' ' -f2)
-          if [ -n "$CORE" ]; then
-            echo "=== Analyzing: $CORE ==="
-            gdb -batch \
-              -ex "bt full" \
-              -ex "thread apply all bt full" \
-              .venv/bin/python "$CORE" 2>&1 | tail -200
-          else
-            echo "No core dump captured"
-          fi
-
-      # 4) Fallback: run codspeed CLI manually under gdb to catch crash directly
-      - name: "Fallback: gdb wrapping codspeed run"
-        if: steps.codspeed-sim.outcome == 'failure'
-        run: |
-          # codspeed-runner was installed by the action above
-          which codspeed || true
-          gdb -batch \
-            -ex "set follow-fork-mode child" \
-            -ex "handle SIGSEGV stop print" \
-            -ex "handle SIGABRT stop print" \
-            -ex run \
-            -ex "thread apply all bt full" \
-            --args codspeed run \
-              --mode=simulation \
-              -- uv run pytest -W ignore --codspeed -v --color=no tests/test_bench.py \
-            2>&1 | tail -300
-        continue-on-error: true
+          echo "=== Error summary ==="
+          grep -E "ERROR SUMMARY|definitely lost|indirectly lost" /tmp/memcheck.log || true
 
   benchmarks:
     runs-on: ubuntu-latest
