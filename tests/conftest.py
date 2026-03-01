@@ -46,7 +46,6 @@ def core(
         pytest.fail("To run tests, please install MM with `mmcore install`")
     core.loadSystemConfiguration()
     yield core
-    core.__del__()
 
 
 @pytest.fixture

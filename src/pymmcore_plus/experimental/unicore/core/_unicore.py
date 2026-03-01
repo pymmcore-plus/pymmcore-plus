@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
 import threading
 import warnings
+import weakref
 from collections.abc import Callable, Iterator, MutableMapping, Sequence
 from contextlib import suppress
 from datetime import datetime
@@ -121,7 +123,18 @@ class _CoreDevice:
         self._state_cache[(KW.CoreDevice, keyword)] = label
 
 
-_DEFAULT_BUFFER_SIZE_MB: int = 1000
+_DEFAULT_BUFFER_SIZE_MB: int = 1024
+if buf := os.getenv("UNICORE_SEQUENCE_BUFFER_MB"):  # pragma: no cover
+    try:
+        _DEFAULT_BUFFER_SIZE_MB = int(buf)
+    except ValueError:
+        warnings.warn(
+            f"Invalid value for UNICORE_SEQUENCE_BUFFER_MB: {buf!r}. "
+            f"Using default buffer size. {_DEFAULT_BUFFER_SIZE_MB} MB",
+            stacklevel=2,
+        )
+elif os.getenv("CI") or os.getenv("PYTEST_VERSION"):
+    _DEFAULT_BUFFER_SIZE_MB = 250
 
 
 class UniMMCore(CMMCorePlus):
@@ -141,6 +154,30 @@ class UniMMCore(CMMCorePlus):
 
         super().__init__(*args, **kwargs)
 
+        # Ensure Python-side state is cleaned up before ~CMMCore() runs,
+        # since the C++ destructor calls CMMCore::reset(), (non polymorphic, so not
+        # the Python override. bypassing all Python cleanup).
+        # NOTE: we pass individual objects (not self.__dict__) to avoid
+        # preventing GC — __dict__ contains objects that reference self.
+        weakref.finalize(
+            self,
+            UniMMCore._cleanup_python_state,
+            self._stop_event,
+            self._pydevices,
+            self._pycore,
+        )
+
+    @staticmethod
+    def _cleanup_python_state(
+        stop_event: threading.Event,
+        pydevices: PyDeviceManager,
+        pycore: _CoreDevice,
+    ) -> None:
+        """Clean up all Python-side state (threads, buffers, devices)."""
+        stop_event.set()
+        pydevices.unload_all()
+        pycore.reset_current()
+
     def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
         """Helper function to set the current core device if it is a python device.
 
@@ -158,17 +195,6 @@ class UniMMCore(CMMCorePlus):
     # -----------------------------------------------------------------------
     # ------------------------ General Core methods  ------------------------
     # -----------------------------------------------------------------------
-
-    def reset(self) -> None:
-        with suppress(TimeoutError):
-            self._pydevices.wait_for_device_type(
-                DeviceType.AnyType, self.getTimeoutMs(), parallel=False
-            )
-        super().waitForDeviceType(DeviceType.AnyType)
-        self.unloadAllDevices()
-        self._pycore.reset_current()
-        self._py_config_groups.clear()  # Clear Python device config settings
-        super().reset()  # Clears C++ config groups and channel group
 
     def loadSystemConfiguration(
         self, fileName: str | Path = "MMConfig_demo.cfg"
@@ -361,13 +387,20 @@ class UniMMCore(CMMCorePlus):
         self._pydevices.unload(label)
         self._cleanup_pydevice_state(label)
 
-    def unloadAllDevices(self) -> None:
+    def _reset_python(self) -> None:
         self._cleanup_sequence_state()
         self._pydevices.unload_all()
         self._pycore.reset_current()
         self._py_config_groups.clear()
         self._state_cache.clear()
+
+    def unloadAllDevices(self) -> None:
+        self._reset_python()
         super().unloadAllDevices()
+
+    def reset(self) -> None:
+        self._reset_python()
+        super().reset()
 
     def initializeDevice(self, label: DeviceLabel | str) -> None:
         if label not in self._pydevices:  # pragma: no cover

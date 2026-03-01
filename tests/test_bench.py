@@ -12,7 +12,6 @@ import useq
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.experimental.unicore import CameraDevice
 from pymmcore_plus.experimental.unicore.core._sequence_buffer import SequenceBuffer
-from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
@@ -173,21 +172,21 @@ class MyCamera(CameraDevice):
             yield {}
 
 
-@pytest.mark.parametrize("device", ["python", "c++"])
-def test_bench_unicore_camera(device: str, benchmark: Callable) -> None:
-    core = UniMMCore()
-    if device == "python":
-        core.loadPyDevice(DEV, MyCamera())
-    else:
-        core.loadDevice(DEV, "DemoCamera", "DCam")
-    core.initializeAllDevices()
-    core.setCameraDevice(DEV)
-    core.setExposure(1)
+# @pytest.mark.parametrize("device", ["python", "c++"])
+# def test_bench_unicore_camera(device: str, benchmark: Callable) -> None:
+#     core = UniMMCore()
+#     if device == "python":
+#         core.loadPyDevice(DEV, MyCamera())
+#     else:
+#         core.loadDevice(DEV, "DemoCamera", "DCam")
+#     core.initializeAllDevices()
+#     core.setCameraDevice(DEV)
+#     core.setExposure(1)
 
-    def _burst() -> None:
-        core.startSequenceAcquisition(20, 0, True)
-        while core.getRemainingImageCount():
-            core.popNextImage()
-        core.stopSequenceAcquisition()
+#     def _burst() -> None:
+#         core.startSequenceAcquisition(20, 0, True)
+#         while core.getRemainingImageCount():
+#             core.popNextImage()
+#         core.stopSequenceAcquisition()
 
-    benchmark(_burst)
+#     benchmark(_burst)

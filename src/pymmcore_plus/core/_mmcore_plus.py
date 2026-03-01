@@ -1,11 +1,9 @@
 from __future__ import annotations
 
-import atexit
 import os
 import re
 import time
 import warnings
-import weakref
 from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
@@ -283,6 +281,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._events = _get_auto_core_callback_class()()
         self._callback_relay = MMCallbackRelay(self.events)
+
         super().registerCallback(self._callback_relay)
 
         self._mda_runner = MDARunner()
@@ -290,14 +289,6 @@ class CMMCorePlus(pymmcore.CMMCore):
 
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
-
-        # Release hardware at interpreter exit.  We use a weakref to avoid
-        # preventing garbage collection of this instance.  The wrapper lambda
-        # calls the WeakMethod and invokes the result (WeakMethod.__call__
-        # returns the bound method, it doesn't invoke it).
-        _wm = weakref.WeakMethod(self.unloadAllDevices)
-        self._weak_clean = lambda: (_m := _wm()) is not None and _m()
-        atexit.register(self._weak_clean)
 
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
@@ -335,19 +326,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Return a string representation of the core object."""
         ndevices = len(self.getLoadedDevices()) - 1
         return f"<{type(self).__name__} at {hex(id(self))} with {ndevices} devices>"
-
-    def __del__(self) -> None:
-        if hasattr(self, "_weak_clean"):
-            atexit.unregister(self._weak_clean)
-
-        try:
-            super().registerCallback(None)
-
-            self.reset()
-            # clean up logging
-            self.setPrimaryLogFile("")
-        except Exception as e:
-            logger.exception("Error during CMMCorePlus.__del__(): %s", e)
 
     # Re-implemented methods from the CMMCore API
 
