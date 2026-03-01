@@ -173,8 +173,8 @@ class MyCamera(CameraDevice):
             yield {}
 
 
-# @pytest.mark.parametrize("device", ["python", "c++"])
-@pytest.mark.parametrize("device", ["python"])
+@pytest.mark.parametrize("device", ["python", "c++"])
+# @pytest.mark.parametrize("device", ["python"])
 def test_bench_unicore_camera(device: str, benchmark: Callable) -> None:
     core = UniMMCore()
     if device == "python":
