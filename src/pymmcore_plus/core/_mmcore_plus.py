@@ -290,6 +290,11 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._objective_regex: Pattern = _OBJDEV_REGEX
         self._channel_group_regex: Pattern = _CHANNEL_REGEX
 
+    def __del__(self) -> None:
+        # try to clean up the callback to avoid issues during interpreter shutdown
+        with suppress(Exception):
+            super().registerCallback(None)
+
     @deprecated(
         "registerCallback is disallowed in pymmcore-plus.  Use .events instead."
     )
