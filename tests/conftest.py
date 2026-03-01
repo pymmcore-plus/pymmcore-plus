@@ -87,22 +87,3 @@ def pytest_collection_modifyitems(session, config, items):
         else:
             other_items.append(item)
     items[:] = first_items + other_items + last_items
-
-
-# requires psutil
-# @pytest.fixture(autouse=True)
-# def monitor_file_descriptors():
-#     import psutil
-
-#     process = psutil.Process(os.getpid())
-#     before_fds = process.num_fds()
-
-#     yield
-
-#     if _mmcore_plus._instance:
-#         _mmcore_plus._instance.__del__()
-#         _mmcore_plus._instance = None
-
-#     after_fds = process.num_fds()
-#     if after_fds > before_fds:
-#         print(f"File descriptors leaked: {after_fds} > {before_fds}")
