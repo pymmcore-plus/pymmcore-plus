@@ -83,10 +83,10 @@ MSG = (
 
 
 class SkipEvent(Exception):
-    """Raised by an engine's ``setup_event`` to skip the current event.
+    """Raised by an engine's `setup_event` to skip the current event.
 
-    The ``num_frames`` parameter tells the runner how many sink frames
-    to skip (e.g. ``len(sequenced_event.events)`` for a SequencedEvent).
+    The `num_frames` parameter tells the runner how many sink frames
+    to skip (e.g. `len(sequenced_event.events)` for a SequencedEvent).
     """
 
     def __init__(self, num_frames: int = 1, reason: str = "") -> None:
@@ -163,7 +163,7 @@ class MDARunner:
 
     The state machine modeled by this runner is as follows:
 
-    ```mermaid
+    ``mermaid
     stateDiagram-v2
         [*] --> IDLE
         IDLE --> PREPARING : run()
@@ -178,7 +178,7 @@ class MDARunner:
         running --> FINISHING : <code>cancel()</code>
         running --> FINISHING : all events exhausted
         FINISHING --> IDLE : cleanup done
-    ```
+    ``
 
     You can query the current state of the runner using the
     [`status`][pymmcore_plus.mda.MDARunner.status] property, which returns a snapshot
@@ -540,31 +540,29 @@ class MDARunner:
                 if _skip is not None and exc.num_frames > 0:
                     _skip(frames=exc.num_frames)
                 teardown_event(event)
-                continue
-
-            try:
-                runner_time_ms = self.seconds_elapsed() * 1000
-                # this is a bit of a hack to pass the time into the engine
-                # it is used for intra-event time calculations inside the engine.
-                # we pop it off after the event is executed.
-                event.metadata["runner_t0"] = self._sequence_t0
-                output = engine.exec_event(event) or ()  # in case output is None
-                for payload in self._iter_exec_output(output):
-                    if payload is None:
-                        if _skip is not None:
-                            _skip(frames=1)
-                        continue
-                    img, sub_event, meta = payload
-                    sub_event.metadata.pop("runner_t0", None)
-                    # if the engine calculated its own time, don't overwrite it
-                    if "runner_time_ms" not in meta:
-                        meta["runner_time_ms"] = runner_time_ms
-                    if _append is not None:
-                        _append(img, sub_event, meta)
-                    with exceptions_logged():
-                        _emit_frame_ready(img, sub_event, meta)
-            finally:
-                teardown_event(event)
+            else:
+                try:
+                    runner_time_ms = self.seconds_elapsed() * 1000
+                    # this is a bit of a hack to pass the time into the engine
+                    # it is used for intra-event time calculations inside the
+                    # engine. we pop it off after the event is executed.
+                    event.metadata["runner_t0"] = self._sequence_t0
+                    output = engine.exec_event(event) or ()
+                    for payload in self._iter_exec_output(output):
+                        if payload is None:
+                            if _skip is not None:
+                                _skip(frames=1)
+                            continue
+                        img, sub_event, meta = payload
+                        sub_event.metadata.pop("runner_t0", None)
+                        if "runner_time_ms" not in meta:
+                            meta["runner_time_ms"] = runner_time_ms
+                        if _append is not None:
+                            _append(img, sub_event, meta)
+                        with exceptions_logged():
+                            _emit_frame_ready(img, sub_event, meta)
+                finally:
+                    teardown_event(event)
 
             # event boundary: resolve deferred flags
             with self._lock:
