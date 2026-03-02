@@ -12,6 +12,7 @@ from ome_writers import AcquisitionSettings
 from pymmcore_plus.mda._runner import MDARunner, _OmeWritersSink
 
 if TYPE_CHECKING:
+    from collections.abc import Iterator
     from pathlib import Path
 
     from pymmcore_plus import CMMCorePlus
@@ -138,3 +139,18 @@ def test_run_with_ragged_sequence(core: CMMCorePlus, tmp_path: Path, fmt: str) -
     assert view is not None
     # unbounded 3D fallback: each event becomes one "time" frame
     assert view.shape[:-2] == (5,)  # (4 planes for one channel + 1 for the other)
+
+
+def test_run_with_event_iterator(core: CMMCorePlus) -> None:
+    """A plain iterator of MDAEvents (non-deterministic) saves data."""
+    from useq import MDAEvent
+
+    def event_generator() -> Iterator[MDAEvent]:
+        for i in range(3):
+            yield MDAEvent(metadata={"frame": i})
+
+    core.mda.run(event_generator(), output="scratch")
+
+    view = core.mda.get_view()
+    assert view is not None
+    assert view.shape[:-2] == (3,)

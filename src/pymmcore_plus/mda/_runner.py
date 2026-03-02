@@ -793,7 +793,12 @@ class _OmeWritersSink(SinkProtocol):
                     image_height=height,
                     pixel_size_um=pixel_size_um,
                 )
-            except NotImplementedError:
+            except NotImplementedError as e:
+                logger.warning(
+                    "Could not convert MDASequence to AcquisitionSettings: %s. "
+                    "Falling back to generic unbounded 3D settings.",
+                    e,
+                )
                 useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
 
         new_settings = {
