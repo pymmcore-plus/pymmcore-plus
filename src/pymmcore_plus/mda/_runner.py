@@ -82,6 +82,22 @@ MSG = (
 )
 
 
+class SkipEvent(Exception):
+    """Raised by an engine's ``setup_event`` to skip the current event.
+
+    The ``num_frames`` parameter tells the runner how many sink frames
+    to skip (e.g. ``len(sequenced_event.events)`` for a SequencedEvent).
+    """
+
+    def __init__(self, num_frames: int = 1, reason: str = "") -> None:
+        self.num_frames = num_frames
+        self.reason = reason
+        msg = f"Skipping {num_frames} frame(s)"
+        if reason:
+            msg += f": {reason}"
+        super().__init__(msg)
+
+
 class RunState(str, Enum):
     """State of the MDA acquisition runner."""
 
@@ -501,6 +517,7 @@ class MDARunner:
         self._sequence_t0 = self._t0
 
         _append: Callable | None = self._sink.append if self._sink is not None else None
+        _skip: Callable | None = self._sink.skip if self._sink is not None else None
         _emit_event_started = self._signals.eventStarted.emit
         _emit_frame_ready = self._signals.frameReady.emit
         for event in _events:
@@ -515,7 +532,15 @@ class MDARunner:
 
             _emit_event_started(event)
             logger.info("%s", event)
-            engine.setup_event(event)
+
+            try:
+                engine.setup_event(event)
+            except SkipEvent as exc:
+                logger.info("%s", exc)
+                if _skip is not None and exc.num_frames > 0:
+                    _skip(frames=exc.num_frames)
+                teardown_event(event)
+                continue
 
             try:
                 runner_time_ms = self.seconds_elapsed() * 1000
@@ -525,6 +550,10 @@ class MDARunner:
                 event.metadata["runner_t0"] = self._sequence_t0
                 output = engine.exec_event(event) or ()  # in case output is None
                 for payload in self._iter_exec_output(output):
+                    if payload is None:
+                        if _skip is not None:
+                            _skip(frames=1)
+                        continue
                     img, sub_event, meta = payload
                     sub_event.metadata.pop("runner_t0", None)
                     # if the engine calculated its own time, don't overwrite it
@@ -556,7 +585,7 @@ class MDARunner:
             with self._lock:
                 self._finish_reason = FinishReason.COMPLETED
 
-    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload]:
+    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload | None]:
         """Iterate over exec_event output, sending cancel/pause signals to generators.
 
         This allows the runner to communicate with generator-based engines
