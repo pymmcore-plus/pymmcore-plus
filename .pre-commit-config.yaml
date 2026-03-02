@@ -5,20 +5,20 @@ ci:
 
 repos:
   - repo: https://github.com/adhtruong/mirrors-typos
-    rev: v1.42.3
+    rev: v1.44.0
     hooks:
       - id: typos
         args: [--force-exclude]
 
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.14
+    rev: v0.15.4
     hooks:
       - id: ruff-check
         args: [--fix, --unsafe-fixes]
       - id: ruff-format
 
   - repo: https://github.com/abravalheri/validate-pyproject
-    rev: v0.24.1
+    rev: v0.25
     hooks:
       - id: validate-pyproject
 
@@ -29,6 +29,7 @@ repos:
         files: "^src/"
         additional_dependencies:
           - pymmcore >=11.6.0.73.0
+          - ome-writers >=0.3.0
           - useq-schema >= 0.6.2
           - psygnal
           - typer
