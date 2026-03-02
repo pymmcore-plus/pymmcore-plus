@@ -161,7 +161,6 @@ _OFFSET_DEVICES: dict[tuple[str, str], str] = {
 STATE = pymmcore.g_Keyword_State
 LABEL = pymmcore.g_Keyword_Label
 STATE_PROPS = (STATE, LABEL)
-UNNAMED_PRESET = "NewPreset"
 
 
 class TaggedImage(NamedTuple):
@@ -2103,10 +2102,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         **Why Override?** To emit a `configDefined` event.  Also, if `groupName` is
         not a defined group, then `defineConfigGroup(groupName)` is called.
         """
-        if not configName:
-            idx = sum(UNNAMED_PRESET in p for p in self.getAvailableConfigs(groupName))
-            configName = f"{UNNAMED_PRESET}_{idx}" if idx > 0 else UNNAMED_PRESET
-
         if not self.isGroupDefined(groupName):
             # needed to refresh pymmcore 'ChannelGroup' options
             super().defineConfigGroup(groupName)
