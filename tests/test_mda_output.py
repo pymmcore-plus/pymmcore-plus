@@ -117,3 +117,24 @@ def test_run_with_custom_handler_and_path(core: CMMCorePlus, tmp_path: Path) -> 
 
     assert handler.frameReady.call_count == 2
     assert out.exists()
+
+
+@pytest.mark.parametrize("fmt", ["scratch", "ome-zarr", "ome-tiff"])
+def test_run_with_ragged_sequence(core: CMMCorePlus, tmp_path: Path, fmt: str) -> None:
+    """Ragged sequences (unsupported by ome-writers) fall back to unbounded 3D."""
+    # do_stack=False on one channel with a z_plan creates a ragged dimension
+    seq = useq.MDASequence(
+        channels=[
+            {"config": "DAPI", "exposure": 1},
+            {"config": "FITC", "exposure": 1, "do_stack": False},
+        ],
+        z_plan={"range": 3, "step": 1},
+    )
+
+    out = AcquisitionSettings(root_path=str(tmp_path / "test"), format=fmt)
+
+    core.mda.run(seq, output=out)
+    view = core.mda.get_view()
+    assert view is not None
+    # unbounded 3D fallback: each event becomes one "time" frame
+    assert view.shape[:-2] == (5,)  # (4 planes for one channel + 1 for the other)
