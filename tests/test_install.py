@@ -103,15 +103,11 @@ def test_test_dev_install_latest_compatible(tmp_path: Path) -> None:
     """Test _test_dev_install with 'latest-compatible' release."""
     dest = tmp_path / "test_install_compatible"
 
-    # Mock pymmcore version info
-    mock_version_info = Mock()
-    mock_version_info.device_interface = 74
-
     with (
         patch("pymmcore_plus.install.urlopen", _mock_urlopen),
         patch("pymmcore_plus.install._download_url", _mock_download_url),
         patch("subprocess.run", _mock_subprocess_run),
-        patch("pymmcore_plus._pymmcore.version_info", mock_version_info),
+        patch("pymmcore_plus.install.PYMMCORE_DIV", 74),
     ):
         install(dest=dest, release="latest-compatible", test_adapters=True)
 
@@ -133,17 +129,13 @@ def test_test_dev_install_no_compatible_releases(tmp_path: Path) -> None:
     """Test error when no compatible releases are found."""
     dest = tmp_path / "test_install_no_compat"
 
-    # Mock a very old device interface version
-    mock_version_info = Mock()
-    mock_version_info.device_interface = 50  # Very old version
-
     def mock_empty_github_releases():
         """Mock GitHub API with no releases for old interface."""
         return {}
 
     with (
         patch("pymmcore_plus.install.urlopen", _mock_urlopen),
-        patch("pymmcore_plus._pymmcore.version_info", mock_version_info),
+        patch("pymmcore_plus.install.PYMMCORE_DIV", 50),
         patch(
             "pymmcore_plus.install._available_test_adapter_releases",
             mock_empty_github_releases,

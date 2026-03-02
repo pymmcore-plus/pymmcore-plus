@@ -3,6 +3,8 @@ from __future__ import annotations
 from enum import Enum, IntEnum, auto
 from typing import Any, Literal
 
+from typing_extensions import deprecated
+
 import pymmcore_plus._pymmcore as pymmcore
 
 # NOTE: by using pymmcore.attributes, we guarantee that the values are the same
@@ -254,6 +256,7 @@ class FocusDirection(IntEnum):
     FocusDirectionAwayFromSample = AwayFromSample
 
 
+@deprecated("This is a remnant of a never-implemented feature")
 class DeviceNotification(IntEnum):
     Attention = pymmcore.Attention
     Done = pymmcore.Done

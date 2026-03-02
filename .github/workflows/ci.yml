@@ -207,21 +207,21 @@ jobs:
       - name: install
         run: uv sync --no-dev --group test-codspeed
 
-      - name: Cache Linux Build
-        id: cache-mm-build
-        uses: actions/cache@v5
-        with:
-          path: ~/.local/share/pymmcore-plus/
-          key: ${{ runner.os }}-mmbuild-74-${{ hashFiles('src/pymmcore_plus/_build.py') }}
+      - name: Get pymmcore version (env)
+        shell: bash
+        run: |
+          ver=$(uv run python -c 'from pymmcore_plus import _pymmcore;print(_pymmcore.version_info.device_interface)')
+          echo "PYMM_VERSION=$ver" >> $GITHUB_ENV
 
-      - name: Build Micro-Manager
-        if: steps.cache-mm-build.outputs.cache-hit != 'true'
-        run: uv run mmcore build-dev
+      - name: Setup MM test adapters
+        uses: pymmcore-plus/setup-mm-test-adapters@main
+        with:
+          version: ${{ env.PYMM_VERSION }}
 
       - name: Run benchmarks
         uses: CodSpeedHQ/action@v4
         with:
-          mode: instrumentation
+          mode: simulation
           run: uv run pytest -W ignore --codspeed -v --color=yes
 
   deploy:

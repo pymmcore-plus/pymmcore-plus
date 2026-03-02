@@ -160,7 +160,8 @@ bumped the version.
 
 |Version|Release Date|Last Release|Commit|
 |-------|----|-----|------|
-|74|20250815|        |[7e9f2f214](https://github.com/micro-manager/mmCoreAndDevices/commit/7e9f2f214)|
+|75|20260226|        |[3c6312ac5](https://github.com/micro-manager/mmCoreAndDevices/commit/3c6312ac5)|
+|74|20250815|20260225|[7e9f2f214](https://github.com/micro-manager/mmCoreAndDevices/commit/7e9f2f214)|
 |73|20250318|20250814|[55863b2d8](https://github.com/micro-manager/mmCoreAndDevices/commit/55863b2d8)|
 |72|20250318|20250318|[b8de737b2](https://github.com/micro-manager/mmCoreAndDevices/commit/b8de737b2)|
 |71|20221031|20250310|[7ba63fb8f](https://github.com/micro-manager/mmCoreAndDevices/commit/7ba63fb8f)|

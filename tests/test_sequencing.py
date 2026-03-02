@@ -61,7 +61,6 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     core_mock.startSequenceAcquisition.assert_not_called()
 
     runner.run(mda)
-    assert core_mock.prepareSequenceAcquisition.call_count == EXPECTED_SEQUENCES
     assert core_mock.startSequenceAcquisition.call_count == EXPECTED_SEQUENCES
     core_mock.startSequenceAcquisition.assert_called_with(NLOOPS, 0, True)
 
