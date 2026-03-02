@@ -327,13 +327,13 @@ def test_metadata(core: CMMCorePlus) -> None:
     md["Camera"] = "new"
     assert md["Camera"] == "new" == md.get("Camera")
 
-    cpy = md.copy()
-    assert cpy == md
+    copy_ = md.copy()
+    assert copy_ == md
 
     del md["Camera"]
     assert "Camera" not in md
 
-    assert "Camera" in cpy
+    assert "Camera" in copy_
     assert md.get("", 1) == 1  # default
 
     md.clear()
