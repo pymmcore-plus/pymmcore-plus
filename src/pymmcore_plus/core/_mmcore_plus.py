@@ -4,6 +4,7 @@ import os
 import re
 import time
 import warnings
+import weakref
 from collections import defaultdict
 from contextlib import contextmanager, suppress
 from datetime import datetime
