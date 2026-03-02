@@ -54,10 +54,10 @@ class PMDAEngine(Protocol):
         executing the event.  The default assumption is to acquire an image,
         but more elaborate events will be possible.
 
-        Yields ``(image, event, metadata)`` tuples for each acquired frame.
-        May yield ``None`` for frames that could not be acquired (e.g. partial
+        Yields `(image, event, metadata)` tuples for each acquired frame.
+        May yield `None` for frames that could not be acquired (e.g. partial
         hardware failure during a triggered sequence); the runner will call
-        ``sink.skip(frames=1)`` for each ``None``.
+        `sink.skip(frames=1)` for each `None`.
         """
 
     def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:

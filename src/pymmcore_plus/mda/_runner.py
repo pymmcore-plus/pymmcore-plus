@@ -163,7 +163,7 @@ class MDARunner:
 
     The state machine modeled by this runner is as follows:
 
-    ``mermaid
+    ```mermaid
     stateDiagram-v2
         [*] --> IDLE
         IDLE --> PREPARING : run()
@@ -178,7 +178,7 @@ class MDARunner:
         running --> FINISHING : <code>cancel()</code>
         running --> FINISHING : all events exhausted
         FINISHING --> IDLE : cleanup done
-    ``
+    ```
 
     You can query the current state of the runner using the
     [`status`][pymmcore_plus.mda.MDARunner.status] property, which returns a snapshot
@@ -549,9 +549,9 @@ class MDARunner:
                     event.metadata["runner_t0"] = self._sequence_t0
                     output = engine.exec_event(event) or ()
                     for payload in self._iter_exec_output(output):
-                        if payload is None:
+                        if isinstance(payload, int):
                             if _skip is not None:
-                                _skip(frames=1)
+                                _skip(frames=payload)
                             continue
                         img, sub_event, meta = payload
                         sub_event.metadata.pop("runner_t0", None)
@@ -583,12 +583,15 @@ class MDARunner:
             with self._lock:
                 self._finish_reason = FinishReason.COMPLETED
 
-    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload | None]:
+    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload | int]:
         """Iterate over exec_event output, sending cancel/pause signals to generators.
 
         This allows the runner to communicate with generator-based engines
         (like exec_sequenced_event) without the engine needing to know about
         runner internals. Signals are sent via generator.send().
+
+        Consecutive None payloads (missing frames) are coalesced into a single
+        int representing the skip count.
 
         Works with any iterable - if it's not a generator or doesn't handle
         signals, they're simply ignored.
@@ -596,21 +599,28 @@ class MDARunner:
         gen = iter(iterable)
         is_generator = isinstance(gen, types.GeneratorType)
 
+        def _advance() -> PImagePayload | None:
+            if not is_generator:
+                return next(gen)  # type: ignore[no-any-return]
+            if self._cancel_requested or self._state == RunState.FINISHING:
+                return gen.send("cancel")  # type: ignore
+            return gen.send("pause" if self._pause_requested else None)  # type: ignore
+
+        skip_count = 0
         try:
             item = next(gen)
             while True:
-                yield item
-                if is_generator:
-                    signal = None
-                    if self._cancel_requested or self._state == RunState.FINISHING:
-                        signal = "cancel"
-                    elif self._pause_requested:
-                        signal = "pause"
-                    item = gen.send(signal)  # type: ignore[attr-defined]
+                if item is None:
+                    skip_count += 1
                 else:
-                    item = next(gen)
+                    if skip_count:
+                        yield skip_count
+                        skip_count = 0
+                    yield item
+                item = _advance()
         except StopIteration:
-            pass
+            if skip_count:
+                yield skip_count
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
