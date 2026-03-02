@@ -29,4 +29,4 @@ def on_start(sequence: MDASequence):
 mmc.mda.events.sequenceStarted.connect(on_start)
 
 # run the sequence (5)
-mmc.mda.run(sequence, output="example.ome.zarr")
+mmc.mda.run(sequence)
