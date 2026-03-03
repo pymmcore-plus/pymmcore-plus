@@ -2,7 +2,7 @@ import os
 import re
 from collections.abc import Callable, Mapping
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import Any
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -23,14 +23,13 @@ from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda import MDAEngine
 from pymmcore_plus.mda._runner import RunState
 
-if TYPE_CHECKING:
-    from pytestqt.qtbot import QtBot
+_sig_types: tuple[type, ...] = (psygnal.SignalInstance,)
 
 try:
-    from qtpy.QtCore import QObject
     from qtpy.QtCore import SignalInstance as QSignalInstance
+
+    _sig_types = (*_sig_types, QSignalInstance)
 except ImportError:
-    QObject = None
     QSignalInstance = None
 
 
@@ -39,12 +38,9 @@ def test_core(core: CMMCorePlus) -> None:
     assert isinstance(core, pymmcore.CMMCore)
     # because the fixture tries to find micromanager, this should be populated
     assert core.getDeviceAdapterSearchPaths()
-    assert isinstance(
-        core.events.propertyChanged, (psygnal.SignalInstance, QSignalInstance)
-    )
-    assert isinstance(
-        core.mda.events.frameReady, (psygnal.SignalInstance, QSignalInstance)
-    )
+
+    assert isinstance(core.events.propertyChanged, _sig_types)
+    assert isinstance(core.mda.events.frameReady, _sig_types)
     assert core.mda.status.phase == RunState.IDLE
     assert not core.mda.is_paused()
 
@@ -86,10 +82,7 @@ def test_load_system_config(core: CMMCorePlus) -> None:
     )
 
 
-@pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_cb_exceptions(core: CMMCorePlus, caplog: Any, qtbot: "QtBot") -> None:
-    if not isinstance(core.events, QObject):
-        pytest.skip(reason="Skip cb exceptions on psygnal.")
+def test_cb_exceptions(core: CMMCorePlus, caplog: Any, anybot: Any) -> None:
 
     @core.events.propertyChanged.connect
     def _raze():
@@ -98,14 +91,14 @@ def test_cb_exceptions(core: CMMCorePlus, caplog: Any, qtbot: "QtBot") -> None:
     # using this to avoid our setProperty override... which would immediately
     # raise the exception (we want it to be raised deeper)
     if isinstance(core.events, CMMCoreSignaler):
-        pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
-        msg = caplog.records[0].message
-        assert msg.startswith(
-            "Exception occurred in MMCorePlus callback 'propertyChanged'"
-        )
+        with caplog.at_level("ERROR", logger="pymmcore-plus"):
+            pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
+            anybot.waitUntil(lambda: caplog.records)
+        expected = "Exception occurred in MMCorePlus callback 'propertyChanged'"
+        assert expected in caplog.text
     else:
-        with qtbot.capture_exceptions() as exceptions:
-            with qtbot.waitSignal(core.events.propertyChanged):
+        with anybot.capture_exceptions() as exceptions:
+            with anybot.waitSignal(core.events.propertyChanged):
                 pymmcore.CMMCore.setProperty(core, "Camera", "Binning", 2)
         assert len(exceptions) == 1
         assert str(exceptions[0][1]) == "Boom"
@@ -125,8 +118,7 @@ def test_new_position_methods(core: CMMCorePlus) -> None:
     assert round(z2, 2) == z1 + 1
 
 
-@pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
+def test_mda(core: CMMCorePlus, anybot: Any) -> None:
     """Test signal emission during MDA"""
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
@@ -148,7 +140,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
     core.events.stagePositionChanged.connect(stage_mock)
     core.events.exposureChanged.connect(exp_mock)
 
-    with qtbot.waitSignal(core.mda._signals.sequenceFinished):
+    with anybot.waitSignal(core.mda._signals.sequenceFinished):
         core.mda.run(mda)
     assert fr_mock.call_count == len(list(mda))
     for event, _call in zip(mda, fr_mock.call_args_list, strict=False):
@@ -173,7 +165,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
     sf_mock.assert_called_once_with(mda)
     # device adapter will have slightly different position than requested
     # round Y,X to 1 decimal place for comparison
-    qtbot.waitUntil(lambda: xystage_mock.call_count >= 2)
+    anybot.waitUntil(lambda: xystage_mock.call_count >= 2)
     xy_moves = [
         (round(y, 1), round(x, 1))
         for ((dev, y, x), kwargs) in xystage_mock.call_args_list
@@ -195,12 +187,8 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
     )
 
 
-@pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_mda_pause_cancel(qtbot: "QtBot") -> None:
+def test_mda_pause_cancel(core: CMMCorePlus, anybot: Any) -> None:
     """Test signal emission during MDA with cancelation"""
-    core = CMMCorePlus()
-    core.loadSystemConfiguration()
-
     mda = MDASequence(
         time_plan={"interval": 0.25, "loops": 10},
         stage_positions=[(1, 1, 1)],
@@ -232,7 +220,7 @@ def test_mda_pause_cancel(qtbot: "QtBot") -> None:
         elif _fcount == 2:
             core.mda.cancel()
 
-    with qtbot.waitSignal(core.mda._signals.sequenceFinished):
+    with anybot.waitSignal(core.mda._signals.sequenceFinished):
         core.run_mda(mda)
 
     ss_mock.assert_called_once()
@@ -242,8 +230,7 @@ def test_mda_pause_cancel(qtbot: "QtBot") -> None:
     sf_mock.assert_called_once_with(mda)
 
 
-@pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot") -> None:
+def test_register_mda_engine(core: CMMCorePlus, anybot: Any) -> None:
     orig_engine = core.mda.engine
     assert orig_engine and orig_engine.mmcore is core
 
@@ -260,7 +247,7 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot") -> None:
         core.register_mda_engine(new_engine)
     core.mda._state = RunState.IDLE
 
-    with qtbot.waitSignal(core.events.mdaEngineRegistered):
+    with anybot.waitSignal(core.events.mdaEngineRegistered):
         core.register_mda_engine(new_engine)
     assert core.mda.engine is new_engine
 
@@ -273,8 +260,7 @@ def test_register_mda_engine(core: CMMCorePlus, qtbot: "QtBot") -> None:
     registered_mock.assert_called_once_with(new_engine, orig_engine)
 
 
-@pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_not_concurrent_mdas(core: CMMCorePlus, qtbot: "QtBot") -> None:
+def test_not_concurrent_mdas(core: CMMCorePlus) -> None:
     mda = MDASequence(
         time_plan={"interval": 0.1, "loops": 2},
         stage_positions=[(1, 1, 1)],
@@ -501,8 +487,7 @@ def test_setContext(core: CMMCorePlus) -> None:
     assert core.getAutoShutter()
 
 
-@pytest.mark.skipif(QObject is None, reason="Qt not available.")
-def test_snap_signals(core: CMMCorePlus, qtbot: "QtBot") -> None:
+def test_snap_signals(core: CMMCorePlus, anybot: Any) -> None:
     assert core.getAutoShutter()
 
     def shutter_is(state: bool) -> Callable:
@@ -511,7 +496,7 @@ def test_snap_signals(core: CMMCorePlus, qtbot: "QtBot") -> None:
 
         return _check
 
-    with qtbot.waitSignals(
+    with anybot.waitSignals(
         [core.events.propertyChanged, core.events.propertyChanged],
         check_params_cbs=[shutter_is(True), shutter_is(False)],
         order="strict",

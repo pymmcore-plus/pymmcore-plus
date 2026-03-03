@@ -21,18 +21,8 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
 
     from pytest import LogCaptureFixture
-    from pytestqt.qtbot import QtBot
 
     from pymmcore_plus.mda import MDAEngine
-
-try:
-    import pytestqt
-except ImportError:
-    pytestqt = None
-
-SKIP_NO_PYTESTQT = pytest.mark.skipif(
-    pytestqt is None, reason="pytest-qt not installed"
-)
 
 
 def test_mda_waiting(core: CMMCorePlus) -> None:
@@ -92,8 +82,7 @@ class BrokenEngine:
     def exec_event(self, event): ...
 
 
-@SKIP_NO_PYTESTQT
-def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
+def test_mda_failures(core: CMMCorePlus, anybot: Any) -> None:
     mda = MDASequence(
         channels=["Cy5"],
         time_plan={"interval": 1.5, "loops": 2},
@@ -108,7 +97,7 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
     core.mda.events.frameReady.connect(cb)
 
     if isinstance(core.mda.events, MDASignaler):
-        with qtbot.waitSignal(core.mda.events.sequenceFinished):
+        with anybot.waitSignal(core.mda.events.sequenceFinished):
             core.mda.run(mda)
 
     assert not core.mda.is_running()
@@ -121,11 +110,11 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
     # we should fail gracefully
     with patch.object(core.mda, "_engine", BrokenEngine()):
         if isinstance(core.mda.events, MDASignaler):
-            with qtbot.waitSignal(core.mda.events.sequenceFinished):
+            with anybot.waitSignal(core.mda.events.sequenceFinished):
                 with pytest.raises(ValueError):
                     core.mda.run(mda)
         else:
-            with qtbot.waitSignal(core.mda.events.sequenceFinished):
+            with anybot.waitSignal(core.mda.events.sequenceFinished):
                 with pytest.raises(ValueError):
                     core.mda.run(mda)
         assert not core.mda.is_running()
@@ -139,10 +128,9 @@ def test_mda_failures(core: CMMCorePlus, qtbot: QtBot) -> None:
 AFPlan = {"autofocus_device_name": "Z", "autofocus_motor_offset": 25, "axes": ("p",)}
 
 
-@SKIP_NO_PYTESTQT
-def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus) -> None:
+def test_autofocus(core: CMMCorePlus, anybot: Any, mock_fullfocus: Any) -> None:
     mda = MDASequence(stage_positions=[{"z": 0}], autofocus_plan=AFPlan)
-    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+    with anybot.waitSignal(core.mda.events.sequenceFinished):
         core.mda.run(mda)
 
     engine = cast("MDAEngine", core.mda._engine)
@@ -150,10 +138,7 @@ def test_autofocus(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus) -> None:
     assert engine._z_correction[0] == 50
 
 
-@SKIP_NO_PYTESTQT
-def test_autofocus_relative_z_plan(
-    core: CMMCorePlus, qtbot: QtBot, mock_fullfocus: Any
-) -> None:
+def test_autofocus_relative_z_plan(core: CMMCorePlus, mock_fullfocus: Any) -> None:
     # setting both z pos and autofocus offset to 25 because core does not have a
     # demo AF stage with both `State` and `Offset` properties.
     mda = MDASequence(
@@ -179,8 +164,7 @@ def test_autofocus_relative_z_plan(
     assert core.mda.engine._z_correction == {0: 50.0}  # saved the correction
 
 
-@SKIP_NO_PYTESTQT
-def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failure):
+def test_autofocus_retries(core: CMMCorePlus, mock_fullfocus_failure: Any) -> None:
     # mock_autofocus sets z=100
     # setting both z pos and autofocus offset to 25 because core does not have a
     # demo AF stage with both `State` and `Offset` properties.
@@ -199,8 +183,7 @@ def test_autofocus_retries(core: CMMCorePlus, qtbot: QtBot, mock_fullfocus_failu
     assert core.getZPosition() == 25
 
 
-@SKIP_NO_PYTESTQT
-def test_set_mda_fov(core: CMMCorePlus, qtbot: QtBot):
+def test_set_mda_fov(core: CMMCorePlus) -> None:
     """Test that the fov size is updated."""
     mda = MDASequence(
         channels=["FITC"],
@@ -236,10 +219,9 @@ SEQS = [
 ]
 
 
-@SKIP_NO_PYTESTQT
 @pytest.mark.parametrize("seq", SEQS)
 def test_mda_iterable_of_events(
-    core: CMMCorePlus, seq: Iterable[MDAEvent], qtbot: QtBot
+    core: CMMCorePlus, seq: Iterable[MDAEvent], anybot: Any
 ) -> None:
     if seq == "event_generator()":  # type: ignore
         seq = event_generator()
@@ -248,7 +230,7 @@ def test_mda_iterable_of_events(
     core.mda.events.sequenceStarted.connect(start_mock)
     core.mda.events.frameReady.connect(frame_mock)
 
-    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+    with anybot.waitSignal(core.mda.events.sequenceFinished):
         core.mda.run(seq)
 
     assert start_mock.call_count == 1
@@ -387,21 +369,12 @@ def test_engine_protocol(core: CMMCorePlus) -> None:
         core.mda.set_engine(object())  # type: ignore
 
 
-@SKIP_NO_PYTESTQT
-def test_runner_cancel(qtbot: QtBot) -> None:
-    # not using the parametrized fixture because we only want to test Qt here.
-    # see https://github.com/pymmcore-plus/pymmcore-plus/issues/95 and
-    # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
-    # for what we're trying to avoid
-    core = CMMCorePlus()
-    core.loadSystemConfiguration()
-    core.mda.engine.use_hardware_sequencing = False
-
+def test_runner_cancel(core: CMMCorePlus, anybot: Any) -> None:
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
     event1 = MDAEvent()
     core.run_mda([event1, MDAEvent(min_start_time=10)])
-    with qtbot.waitSignal(core.mda.events.sequenceCanceled):
+    with anybot.waitSignal(core.mda.events.sequenceCanceled):
         time.sleep(0.1)
         core.mda.cancel()
 
@@ -409,31 +382,22 @@ def test_runner_cancel(qtbot: QtBot) -> None:
     engine.setup_event.assert_called_once_with(event1)  # not twice
 
 
-@SKIP_NO_PYTESTQT
-def test_runner_pause(qtbot: QtBot) -> None:
-    # not using the parametrized fixture because we only want to test Qt here.
-    # see https://github.com/pymmcore-plus/pymmcore-plus/issues/95 and
-    # https://github.com/pymmcore-plus/pymmcore-plus/pull/98
-    # for what we're trying to avoid
-    core = CMMCorePlus()
-    core.loadSystemConfiguration()
-    core.mda.engine.use_hardware_sequencing = False
-
+def test_runner_pause(core: CMMCorePlus, anybot: Any) -> None:
     engine = MagicMock(wraps=core.mda.engine)
     core.mda.set_engine(engine)
-    with qtbot.waitSignal(core.mda.events.frameReady):
+    with anybot.waitSignal(core.mda.events.frameReady):
         thread = core.run_mda([MDAEvent(), MDAEvent(min_start_time=2)])
     engine.setup_event.assert_called_once()  # not twice
 
-    with qtbot.waitSignal(core.mda.events.sequencePauseToggled):
+    with anybot.waitSignal(core.mda.events.sequencePauseToggled):
         core.mda.set_paused(True)
     time.sleep(1)
-    with qtbot.waitSignal(core.mda.events.sequencePauseToggled):
+    with anybot.waitSignal(core.mda.events.sequencePauseToggled):
         core.mda.set_paused(False)
 
     assert core.mda._paused_time > 0
 
-    with qtbot.waitSignal(core.mda.events.sequenceFinished):
+    with anybot.waitSignal(core.mda.events.sequenceFinished):
         thread.join()
     assert engine.setup_event.call_count == 2
     engine.teardown_sequence.assert_called_once()
