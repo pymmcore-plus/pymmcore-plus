@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import math
+from math import prod
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
@@ -25,131 +25,68 @@ def multicam_core(core: CMMCorePlus) -> CMMCorePlus:
     return core
 
 
-def test_multicam_ome_sink_nonsequenced(multicam_core: CMMCorePlus) -> None:
-    """Non-sequenced multi-camera MDA should write all frames to ome sink."""
-    multicam_core.mda.engine.use_hardware_sequencing = False
+@pytest.mark.parametrize("sequenced", [True, False])
+def test_multicam_ome_sink(multicam_core: CMMCorePlus, sequenced: bool) -> None:
+    """Multi-camera MDA should write all N*M frames to the ome sink."""
+    multicam_core.mda.engine.use_hardware_sequencing = sequenced
 
     seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=3))
-    n_events = len(list(seq))  # 3
-    n_cameras = multicam_core.getNumberOfCameraChannels()  # 2
-    expected_frames = n_events * n_cameras  # 6
+    expected = len(list(seq)) * multicam_core.getNumberOfCameraChannels()
 
     multicam_core.mda.run(seq, output="scratch")
 
     view = multicam_core.mda.get_view()
     assert view is not None
-    # The view should contain all frames (including both cameras)
-
-    total_pixels = math.prod(view.shape)
-    frame_pixels = view.shape[-2] * view.shape[-1]
-    assert total_pixels // frame_pixels == expected_frames
+    assert prod(view.shape[:-2]) == expected
 
 
-def test_multicam_ome_sink_sequenced(multicam_core: CMMCorePlus) -> None:
-    """Sequenced multi-camera MDA should write all frames to ome sink."""
-    multicam_core.mda.engine.use_hardware_sequencing = True
-
+def test_multicam_event_indices(multicam_core: CMMCorePlus) -> None:
+    """Both paths should emit cam-indexed events with identical indices."""
     seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=3))
-    n_events = len(list(seq))  # 3
-    n_cameras = multicam_core.getNumberOfCameraChannels()  # 2
-    expected_frames = n_events * n_cameras  # 6
-
-    multicam_core.mda.run(seq, output="scratch")
-
-    view = multicam_core.mda.get_view()
-    assert view is not None
-
-    total_pixels = math.prod(view.shape)
-    frame_pixels = view.shape[-2] * view.shape[-1]
-    assert total_pixels // frame_pixels == expected_frames
-
-
-def test_multicam_nonsequenced_events_missing_cam_index(
-    multicam_core: CMMCorePlus,
-) -> None:
-    """Every frameReady event from a multi-camera MDA should have 'cam' index."""
-    multicam_core.mda.engine.use_hardware_sequencing = False
-
-    seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=3))
-
-    events: list = []
-    multicam_core.mda.events.frameReady.connect(lambda img, ev, meta: events.append(ev))
-    multicam_core.mda.run(seq)
-
-    n_cameras = multicam_core.getNumberOfCameraChannels()
-    assert len(events) == len(list(seq)) * n_cameras
-
-    # Every event should have a `cam` key in its index
-    for ev in events:
-        assert "cam" in ev.index, (
-            f"Event index {ev.index} is missing 'cam' key — "
-            f"non-sequenced path doesn't add camera index"
-        )
-
-
-def test_multicam_event_index_consistency(multicam_core: CMMCorePlus) -> None:
-    """Sequenced and non-sequenced runs should produce identical event indices."""
-    seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=3))
+    n_expected = len(list(seq)) * multicam_core.getNumberOfCameraChannels()
 
     def collect_indices(sequenced: bool) -> list[dict]:
         multicam_core.mda.engine.use_hardware_sequencing = sequenced
         indices: list[dict] = []
-        mock = Mock(side_effect=lambda img, ev, meta: indices.append(dict(ev.index)))
-        multicam_core.mda.events.frameReady.connect(mock)
+        cb = Mock(side_effect=lambda _i, ev, _m: indices.append(dict(ev.index)))
+        multicam_core.mda.events.frameReady.connect(cb)
         multicam_core.mda.run(seq)
-        multicam_core.mda.events.frameReady.disconnect(mock)
+        multicam_core.mda.events.frameReady.disconnect(cb)
         return indices
 
-    seq_indices = collect_indices(sequenced=True)
-    nonseq_indices = collect_indices(sequenced=False)
+    seq_idx = collect_indices(sequenced=True)
+    nonseq_idx = collect_indices(sequenced=False)
 
-    assert len(seq_indices) == len(nonseq_indices), (
-        f"Frame count mismatch: sequenced={len(seq_indices)}, "
-        f"non-sequenced={len(nonseq_indices)}"
-    )
+    # both should have the right count
+    assert len(seq_idx) == len(nonseq_idx) == n_expected
 
-    # Convert to comparable tuples and check they match
-    def _to_tuples(indices: list[dict]) -> list[tuple]:
-        return [tuple(sorted(d.items())) for d in indices]
+    # every event must have a cam key
+    for idx in seq_idx + nonseq_idx:
+        assert "cam" in idx
 
-    assert _to_tuples(seq_indices) == _to_tuples(nonseq_indices), (
-        "Event indices differ between sequenced and non-sequenced paths.\n"
-        f"  sequenced:     {seq_indices}\n"
-        f"  non-sequenced: {nonseq_indices}"
-    )
+    # indices must match across paths
+    to_tuples = [tuple(sorted(d.items())) for d in seq_idx]
+    assert to_tuples == [tuple(sorted(d.items())) for d in nonseq_idx]
 
 
-def test_multicam_ome_sink_with_channels_and_positions(
-    multicam_core: CMMCorePlus,
+@pytest.mark.parametrize("sequenced", [True, False])
+def test_multicam_ome_sink_with_channels(
+    multicam_core: CMMCorePlus, sequenced: bool
 ) -> None:
-    """Complex multi-camera MDA should write all frames to ome sink."""
+    """Multi-camera + optical channels should write all frames to ome sink."""
+    multicam_core.mda.engine.use_hardware_sequencing = sequenced
+
     seq = useq.MDASequence(
         channels=["DAPI", "FITC"],
         stage_positions=[(0, 0, 0), (100, 100, 0)],
         time_plan=useq.TIntervalLoops(interval=0, loops=3),
         axis_order="tpcz",
     )
+    expected = len(list(seq)) * multicam_core.getNumberOfCameraChannels()
 
-    n_events = len(list(seq))  # 2 * 2 * 3 = 12
-    n_cameras = multicam_core.getNumberOfCameraChannels()  # 2
-    expected_frames = n_events * n_cameras  # 24
+    with pytest.warns(UserWarning, match="Multi-camera.*channels"):
+        multicam_core.mda.run(seq, output="scratch")
 
-    # Test both sequenced and non-sequenced
-    for sequenced in (False, True):
-        multicam_core.mda.engine.use_hardware_sequencing = sequenced
-        label = "sequenced" if sequenced else "non-sequenced"
-
-        # multi-cam + channels triggers a metadata limitation warning
-        with pytest.warns(UserWarning, match="Multi-camera.*channels"):
-            multicam_core.mda.run(seq, output="scratch")
-
-        view = multicam_core.mda.get_view()
-        assert view is not None, f"No view returned ({label})"
-
-        total_pixels = math.prod(view.shape)
-        frame_pixels = view.shape[-2] * view.shape[-1]
-        actual_frames = total_pixels // frame_pixels
-        assert actual_frames == expected_frames, (
-            f"({label}) Expected {expected_frames} frames, got {actual_frames}. "
-            f"view.shape={view.shape}"
-        )
+    view = multicam_core.mda.get_view()
+    assert view is not None
+    assert prod(view.shape[:-2]) == expected
