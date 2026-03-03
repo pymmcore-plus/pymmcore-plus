@@ -130,6 +130,7 @@ class MDAEngine(PMDAEngine):
 
         self._last_config: tuple[str, str] = ("", "")
         self._last_xy_pos: tuple[float | None, float | None] = (None, None)
+        self._camera_device: str | None = None
 
         # -----
         # The following values are stored during setup_sequence simply to speed up
@@ -224,6 +225,8 @@ class MDAEngine(PMDAEngine):
         event : MDAEvent
             The event to use for the Hardware config
         """
+        if self._camera_device is None:
+            self._camera_device = self.mmcore.getCameraDevice()
         if isinstance(event, SequencedEvent):
             self.setup_sequenced_event(event)
         else:
@@ -935,8 +938,9 @@ class MDAEngine(PMDAEngine):
         subclass this engine and override ROI behavior.
         """
         try:
+            cam = self._camera_device or self.mmcore.getCameraDevice()
             self.mmcore.clearROI()
-            self.mmcore.setROI(*event.roi)
+            self.mmcore.setROI(cam, *event.roi)
         except Exception as e:
             logger.warning("Failed to set ROI. %s", e)
 
