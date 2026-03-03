@@ -2,10 +2,12 @@ from __future__ import annotations
 
 from math import prod
 from typing import TYPE_CHECKING
-from unittest.mock import Mock
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 import useq
+
+from pymmcore_plus.mda._runner import SkipEvent
 
 if TYPE_CHECKING:
     from pymmcore_plus import CMMCorePlus
@@ -90,3 +92,33 @@ def test_multicam_ome_sink_with_channels(
     view = multicam_core.mda.get_view()
     assert view is not None
     assert prod(view.shape[:-2]) == expected
+
+
+def test_multicam_skip_event_multiplier(multicam_core: CMMCorePlus) -> None:
+    """SkipEvent.num_frames should be multiplied by n_cameras for the sink."""
+    real_engine = multicam_core.mda.engine
+
+    class SkippingEngine:
+        """Delegates setup_sequence for real metadata, skips every event."""
+
+        def setup_sequence(self, sequence: useq.MDASequence) -> dict:
+            return real_engine.setup_sequence(sequence)
+
+        def setup_event(self, event: useq.MDAEvent) -> None:
+            raise SkipEvent(num_frames=3)
+
+        def exec_event(self, event: useq.MDAEvent) -> tuple:
+            return ()
+
+    sink = MagicMock()
+    sink.get_view.return_value = None
+
+    with patch.object(multicam_core.mda, "_engine", SkippingEngine()):
+        multicam_core.mda._sink = sink
+        try:
+            multicam_core.mda.run([useq.MDAEvent()])
+        finally:
+            multicam_core.mda._sink = None
+
+    n_cameras = multicam_core.getNumberOfCameraChannels()
+    sink.skip.assert_called_once_with(frames=3 * n_cameras)
