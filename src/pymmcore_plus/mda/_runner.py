@@ -150,6 +150,68 @@ class GeneratorMDASequence(MDASequence):
         return "GeneratorMDASequence()"
 
 
+class _CancellableIterator:
+    """Wraps a potentially-blocking iterator with a persistent daemon thread.
+
+    Reuses a single thread for all ``next()`` calls, communicating via a pair
+    of ``threading.Event`` objects, so that ``cancel_event`` can interrupt a
+    blocked ``next()`` without per-call thread creation overhead.
+    """
+
+    __slots__ = (
+        "_cancel_event",
+        "_error",
+        "_request",
+        "_response",
+        "_result",
+        "_shutdown",
+        "_source",
+        "_thread",
+    )
+
+    def __init__(
+        self, source: Iterator[MDAEvent], cancel_event: threading.Event
+    ) -> None:
+        self._source = source
+        self._cancel_event = cancel_event
+        self._request = threading.Event()
+        self._response = threading.Event()
+        self._result: MDAEvent | None = None
+        self._error: BaseException | None = None
+        self._shutdown = False
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def _loop(self) -> None:
+        while True:
+            self._request.wait()
+            self._request.clear()
+            if self._shutdown:
+                return
+            try:
+                self._result = next(self._source, None)
+                self._error = None
+            except BaseException as exc:
+                self._result = None
+                self._error = exc
+            self._response.set()
+
+    def get_next(self) -> MDAEvent | None:
+        """Get the next event, or None if exhausted / cancelled."""
+        self._response.clear()
+        self._request.set()
+        while not self._response.wait(timeout=0.1):
+            if self._cancel_event.is_set():
+                return None
+        if self._error is not None:
+            raise self._error
+        return self._result
+
+    def shutdown(self) -> None:
+        self._shutdown = True
+        self._request.set()
+
+
 class MDARunner:
     """Object that executes a multi-dimensional experiment using an MDAEngine.
 
@@ -192,6 +254,7 @@ class MDARunner:
         self._engine: PMDAEngine | None = None
         self._signals = _get_auto_MDA_callback_class()()
         self._lock = threading.Lock()
+        self._cancel_event = threading.Event()
         self._state: RunState = RunState.IDLE
         self._finish_reason: FinishReason | None = None
         self._cancel_requested: bool = False
@@ -298,6 +361,7 @@ class MDARunner:
                 # WAITING, PREPARING, or PAUSED → immediate transition
                 self._finish_reason = FinishReason.CANCELED
                 self._state = RunState.FINISHING
+            self._cancel_event.set()
 
     @deprecated("Use `set_paused(paused)` instead.", category=DeprecationWarning)
     def toggle_pause(self) -> None:
@@ -505,7 +569,8 @@ class MDARunner:
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
         teardown_event = getattr(engine, "teardown_event", lambda e: None)
-        if isinstance(events, Iterator):
+        is_raw_iterator = isinstance(events, Iterator)
+        if is_raw_iterator:
             # if an iterator is passed directly, then we use that iterator
             # instead of the engine's event_iterator.  Directly passing an iterator
             # is an advanced use case, (for example, `iter(Queue(), None)` for event-
@@ -521,68 +586,89 @@ class MDARunner:
         _skip: Callable | None = self._sink.skip if self._sink is not None else None
         _emit_event_started = self._signals.eventStarted.emit
         _emit_frame_ready = self._signals.frameReady.emit
-        for event in _events:
-            if event.reset_event_timer:
-                self._reset_event_timer()
-
-            if self._wait_until_event(event):
-                break
-
-            with self._lock:
-                self._state = RunState.ACQUIRING
-
-            _emit_event_started(event)
-            logger.info("%s", event)
-
-            try:
-                engine.setup_event(event)
-            except SkipEvent as exc:
-                logger.info("%s", exc)
-                if _skip is not None and exc.num_frames > 0:
-                    _skip(frames=exc.num_frames)
-                teardown_event(event)
-            else:
-                try:
-                    runner_time_ms = self.seconds_elapsed() * 1000
-                    # this is a bit of a hack to pass the time into the engine
-                    # it is used for intra-event time calculations inside the
-                    # engine. we pop it off after the event is executed.
-                    event.metadata["runner_t0"] = self._sequence_t0
-                    output = engine.exec_event(event) or ()
-                    for payload in self._iter_exec_output(output):
-                        if isinstance(payload, int):
-                            if _skip is not None:
-                                _skip(frames=payload)
-                            continue
-                        img, sub_event, meta = payload
-                        sub_event.metadata.pop("runner_t0", None)
-                        if "runner_time_ms" not in meta:
-                            meta["runner_time_ms"] = runner_time_ms
-                        if _append is not None:
-                            _append(img, sub_event, meta)
-                        with exceptions_logged():
-                            _emit_frame_ready(img, sub_event, meta)
-                finally:
-                    teardown_event(event)
-
-            # event boundary: resolve deferred flags
-            with self._lock:
-                if self._cancel_requested:
-                    self._cancel_requested = False
-                    self._finish_reason = FinishReason.CANCELED
-                    self._state = RunState.FINISHING
+        _worker: _CancellableIterator | None = None
+        _fast_next = next  # local for speed
+        if is_raw_iterator:
+            _worker = _CancellableIterator(_events, self._cancel_event)
+        exhausted = False
+        try:
+            while True:
+                event = (
+                    _worker.get_next()
+                    if _worker is not None
+                    else _fast_next(_events, None)
+                )
+                if event is None:
+                    if self._state != RunState.FINISHING:
+                        exhausted = True
                     break
 
-                if self._pause_requested:
-                    self._pause_requested = False
-                    self._state = RunState.PAUSED
-                    # signal was already emitted in set_paused()
+                if event.reset_event_timer:
+                    self._reset_event_timer()
 
-                if self._state != RunState.PAUSED:
-                    self._state = RunState.WAITING
-        else:
+                if self._wait_until_event(event):
+                    break
+
+                with self._lock:
+                    self._state = RunState.ACQUIRING
+
+                _emit_event_started(event)
+                logger.info("%s", event)
+
+                try:
+                    engine.setup_event(event)
+                except SkipEvent as exc:
+                    logger.info("%s", exc)
+                    if _skip is not None and exc.num_frames > 0:
+                        _skip(frames=exc.num_frames)
+                    teardown_event(event)
+                else:
+                    try:
+                        runner_time_ms = self.seconds_elapsed() * 1000
+                        # this is a bit of a hack to pass the time into the
+                        # engine. it is used for intra-event time calculations
+                        # inside the engine.  we pop it off after execution.
+                        event.metadata["runner_t0"] = self._sequence_t0
+                        output = engine.exec_event(event) or ()
+                        for payload in self._iter_exec_output(output):
+                            if isinstance(payload, int):
+                                if _skip is not None:
+                                    _skip(frames=payload)
+                                continue
+                            img, sub_event, meta = payload
+                            sub_event.metadata.pop("runner_t0", None)
+                            if "runner_time_ms" not in meta:
+                                meta["runner_time_ms"] = runner_time_ms
+                            if _append is not None:
+                                _append(img, sub_event, meta)
+                            with exceptions_logged():
+                                _emit_frame_ready(img, sub_event, meta)
+                    finally:
+                        teardown_event(event)
+
+                # event boundary: resolve deferred flags
+                with self._lock:
+                    if self._cancel_requested:
+                        self._cancel_requested = False
+                        self._finish_reason = FinishReason.CANCELED
+                        self._state = RunState.FINISHING
+                        break
+
+                    if self._pause_requested:
+                        self._pause_requested = False
+                        self._state = RunState.PAUSED
+                        # signal was already emitted in set_paused()
+
+                    if self._state != RunState.PAUSED:
+                        self._state = RunState.WAITING
+        finally:
+            if _worker is not None:
+                _worker.shutdown()
+
+        if exhausted:
             with self._lock:
-                self._finish_reason = FinishReason.COMPLETED
+                if self._finish_reason is None:
+                    self._finish_reason = FinishReason.COMPLETED
 
     def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload | int]:
         """Iterate over exec_event output, sending cancel/pause signals to generators.
@@ -639,6 +725,7 @@ class MDARunner:
             self._finish_reason = None
             self._cancel_requested = False
             self._pause_requested = False
+        self._cancel_event.clear()
         self._paused_time = 0.0
         self._sequence = sequence
 

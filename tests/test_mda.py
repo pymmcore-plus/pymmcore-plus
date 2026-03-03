@@ -4,6 +4,7 @@ import time
 import weakref
 from contextlib import nullcontext
 from queue import Queue
+from threading import Thread
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, Mock, patch
 
@@ -13,7 +14,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus, FocusDirection
 from pymmcore_plus.mda._engine import _warn_focus_dir
-from pymmcore_plus.mda._runner import RunState, SkipEvent
+from pymmcore_plus.mda._runner import FinishReason, RunState, SkipEvent
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
@@ -468,6 +469,29 @@ def test_queue_mda(core: CMMCorePlus) -> None:
     # make sure that the engine's iterator was NOT used when running an iter(Queue)
     mock_engine.event_iterator.assert_not_called()
     assert mock_engine.setup_event.call_count == 2
+
+
+def test_cancel_queue_mda_before_events(core: CMMCorePlus) -> None:
+    """Cancel should work even if no events have been consumed yet.
+
+    Regression test for https://github.com/pymmcore-plus/pymmcore-plus/issues/403
+    """
+
+    queue: Queue[MDAEvent | None] = Queue()
+    # Don't put any events — the runner will block on queue.get()
+
+    thread = Thread(target=core.mda.run, args=(iter(queue.get, None),))
+    thread.start()
+
+    # Give the runner time to start and block on queue.get()
+    time.sleep(0.3)
+    assert core.mda.is_running()
+
+    core.mda.cancel()
+    thread.join(timeout=2)
+    assert not thread.is_alive(), "Runner thread did not exit after cancel()"
+    assert not core.mda.is_running()
+    assert core.mda._finish_reason is FinishReason.CANCELED
 
 
 def test_custom_action(core: CMMCorePlus) -> None:
