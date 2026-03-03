@@ -638,6 +638,8 @@ def test_setup_event_roi_multi_timepoint(core: CMMCorePlus) -> None:
 
     # ROI should be restored after sequence
     assert tuple(core.getROI()) == initial_roi
+
+
 def _mock_sink() -> MagicMock:
     """Create a MagicMock that satisfies the SinkProtocol."""
     sink = MagicMock()
