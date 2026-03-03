@@ -83,6 +83,22 @@ MSG = (
 )
 
 
+class SkipEvent(Exception):
+    """Raised by an engine's `setup_event` to skip the current event.
+
+    The `num_frames` parameter tells the runner how many sink frames
+    to skip (e.g. `len(sequenced_event.events)` for a SequencedEvent).
+    """
+
+    def __init__(self, num_frames: int = 1, reason: str = "") -> None:
+        self.num_frames = num_frames
+        self.reason = reason
+        msg = f"Skipping {num_frames} frame(s)"
+        if reason:
+            msg += f": {reason}"
+        super().__init__(msg)
+
+
 class RunState(str, Enum):
     """State of the MDA acquisition runner."""
 
@@ -502,6 +518,7 @@ class MDARunner:
         self._sequence_t0 = self._t0
 
         _append: Callable | None = self._sink.append if self._sink is not None else None
+        _skip: Callable | None = self._sink.skip if self._sink is not None else None
         _emit_event_started = self._signals.eventStarted.emit
         _emit_frame_ready = self._signals.frameReady.emit
         for event in _events:
@@ -516,27 +533,37 @@ class MDARunner:
 
             _emit_event_started(event)
             logger.info("%s", event)
-            engine.setup_event(event)
 
             try:
-                runner_time_ms = self.seconds_elapsed() * 1000
-                # this is a bit of a hack to pass the time into the engine
-                # it is used for intra-event time calculations inside the engine.
-                # we pop it off after the event is executed.
-                event.metadata["runner_t0"] = self._sequence_t0
-                output = engine.exec_event(event) or ()  # in case output is None
-                for payload in self._iter_exec_output(output):
-                    img, sub_event, meta = payload
-                    sub_event.metadata.pop("runner_t0", None)
-                    # if the engine calculated its own time, don't overwrite it
-                    if "runner_time_ms" not in meta:
-                        meta["runner_time_ms"] = runner_time_ms
-                    if _append is not None:
-                        _append(img, sub_event, meta)
-                    with exceptions_logged():
-                        _emit_frame_ready(img, sub_event, meta)
-            finally:
+                engine.setup_event(event)
+            except SkipEvent as exc:
+                logger.info("%s", exc)
+                if _skip is not None and exc.num_frames > 0:
+                    _skip(frames=exc.num_frames)
                 teardown_event(event)
+            else:
+                try:
+                    runner_time_ms = self.seconds_elapsed() * 1000
+                    # this is a bit of a hack to pass the time into the engine
+                    # it is used for intra-event time calculations inside the
+                    # engine. we pop it off after the event is executed.
+                    event.metadata["runner_t0"] = self._sequence_t0
+                    output = engine.exec_event(event) or ()
+                    for payload in self._iter_exec_output(output):
+                        if isinstance(payload, int):
+                            if _skip is not None:
+                                _skip(frames=payload)
+                            continue
+                        img, sub_event, meta = payload
+                        sub_event.metadata.pop("runner_t0", None)
+                        if "runner_time_ms" not in meta:
+                            meta["runner_time_ms"] = runner_time_ms
+                        if _append is not None:
+                            _append(img, sub_event, meta)
+                        with exceptions_logged():
+                            _emit_frame_ready(img, sub_event, meta)
+                finally:
+                    teardown_event(event)
 
             # event boundary: resolve deferred flags
             with self._lock:
@@ -557,12 +584,15 @@ class MDARunner:
             with self._lock:
                 self._finish_reason = FinishReason.COMPLETED
 
-    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload]:
+    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload | int]:
         """Iterate over exec_event output, sending cancel/pause signals to generators.
 
         This allows the runner to communicate with generator-based engines
         (like exec_sequenced_event) without the engine needing to know about
         runner internals. Signals are sent via generator.send().
+
+        Consecutive None payloads (missing frames) are coalesced into a single
+        int representing the skip count.
 
         Works with any iterable - if it's not a generator or doesn't handle
         signals, they're simply ignored.
@@ -570,21 +600,28 @@ class MDARunner:
         gen = iter(iterable)
         is_generator = isinstance(gen, types.GeneratorType)
 
+        def _advance() -> PImagePayload | None:
+            if not is_generator:
+                return next(gen)  # type: ignore[no-any-return]
+            if self._cancel_requested or self._state == RunState.FINISHING:
+                return gen.send("cancel")  # type: ignore
+            return gen.send("pause" if self._pause_requested else None)  # type: ignore
+
+        skip_count = 0
         try:
             item = next(gen)
             while True:
-                yield item
-                if is_generator:
-                    signal = None
-                    if self._cancel_requested or self._state == RunState.FINISHING:
-                        signal = "cancel"
-                    elif self._pause_requested:
-                        signal = "pause"
-                    item = gen.send(signal)  # type: ignore[attr-defined]
+                if item is None:
+                    skip_count += 1
                 else:
-                    item = next(gen)
+                    if skip_count:
+                        yield skip_count
+                        skip_count = 0
+                    yield item
+                item = _advance()
         except StopIteration:
-            pass
+            if skip_count:
+                yield skip_count
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.

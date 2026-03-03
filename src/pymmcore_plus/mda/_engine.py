@@ -39,7 +39,7 @@ if TYPE_CHECKING:
 
     IncludePositionArg: TypeAlias = Literal[True, False, "unsequenced-only"]
     RunnerSignal: TypeAlias = Literal["cancel", "pause", None]
-    EventPayloadGenerator = Generator[PImagePayload, RunnerSignal, None]
+    EventPayloadGenerator = Generator[PImagePayload | None, RunnerSignal, None]
 
     class StateDict(TypedDict, total=False):
         xy_position: Sequence[float]
@@ -229,7 +229,7 @@ class MDAEngine(PMDAEngine):
             self.setup_single_event(event)
         self.mmcore.waitForSystem()
 
-    def exec_event(self, event: MDAEvent) -> Iterable[PImagePayload]:
+    def exec_event(self, event: MDAEvent) -> Iterable[PImagePayload | None]:
         """Execute an individual event and return the image data."""
         action = getattr(event, "action", None)
         core = self.mmcore
@@ -331,7 +331,7 @@ class MDAEngine(PMDAEngine):
             mmcore.setAutoShutter(False)
             mmcore.setShutterOpen(True)
 
-    def exec_single_event(self, event: MDAEvent) -> Iterator[PImagePayload]:
+    def exec_single_event(self, event: MDAEvent) -> Iterator[PImagePayload | None]:
         """Execute a single (non-triggered) event and return the image data.
 
         This method is not part of the PMDAEngine protocol (it is called by
@@ -718,14 +718,17 @@ class MDAEngine(PMDAEngine):
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
 
-        # Validate count
-        if count != len(event.events):
+        # Yield None for each missing frame so the runner can tell the sink
+        n_expected = len(event.events)
+        if count != n_expected:
             logger.warning(
                 "Unexpected number of images returned from sequence. "
                 "Expected %s, got %s",
-                len(event.events),
+                n_expected,
                 count,
             )
+            for _ in range(n_expected - count):
+                yield None
 
     def _exec_multi_camera_sequence(
         self,
@@ -770,7 +773,8 @@ class MDAEngine(PMDAEngine):
             signal = yield payload
             if signal == "cancel":
                 return
-        coordinator.validate_count()
+        for _missing in range(coordinator.validate_count()):
+            yield None
 
     def _create_seqimg_payload_from_popped(
         self,
@@ -1113,13 +1117,15 @@ class _MultiCameraCoordinator:
         """Flush any buffered frames in order."""
         yield from self.buffer.flush()
 
-    def validate_count(self) -> None:
-        """Validate expected frame count and log warnings."""
+    def validate_count(self) -> int:
+        """Validate expected frame count and return number of missing frames."""
         expected = self.n_events * self.n_channels
-        if self.total_count != expected:
+        missing = expected - self.total_count
+        if missing:
             logger.warning(
                 "Unexpected number of images returned from sequence. "
                 "Expected %s, got %s",
                 expected,
                 self.total_count,
             )
+        return max(missing, 0)

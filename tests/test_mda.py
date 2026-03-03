@@ -13,7 +13,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus, FocusDirection
 from pymmcore_plus.mda._engine import _warn_focus_dir
-from pymmcore_plus.mda._runner import RunState
+from pymmcore_plus.mda._runner import RunState, SkipEvent
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
@@ -588,3 +588,122 @@ def test_restore_initial_state_enabled_by_default(
         assert abs(final_x - changed_x) < 0.1
         assert abs(final_y - changed_y) < 0.1
         assert abs(final_z - changed_z) < 0.1
+
+
+def _mock_sink() -> MagicMock:
+    """Create a MagicMock that satisfies the SinkProtocol."""
+    sink = MagicMock()
+    sink.get_view.return_value = None
+    return sink
+
+
+def test_skip_event_from_setup(core: CMMCorePlus) -> None:
+    """SkipEvent raised in setup_event skips exec and notifies the sink."""
+    exec_mock = Mock()
+
+    class SkippingEngine:
+        def setup_sequence(self, sequence: MDASequence) -> None:
+            return None
+
+        def setup_event(self, event: MDAEvent) -> None:
+            if event.index.get("t") == 1:
+                raise SkipEvent(num_frames=1)
+
+        def exec_event(self, event: MDAEvent) -> Iterable:
+            exec_mock(event)
+            yield (MagicMock(), event, {"runner_time_ms": 0})
+
+    sink = _mock_sink()
+    events = [
+        MDAEvent(index={"t": 0}),
+        MDAEvent(index={"t": 1}),  # this one will be skipped
+        MDAEvent(index={"t": 2}),
+    ]
+
+    with patch.object(core.mda, "_engine", SkippingEngine()):
+        core.mda._sink = sink
+        try:
+            core.mda.run(events)
+        finally:
+            core.mda._sink = None
+
+    # exec_event should have been called for events 0 and 2, but not 1
+    assert exec_mock.call_count == 2
+    assert sink.append.call_count == 2
+    sink.skip.assert_called_once_with(frames=1)
+
+
+def test_skip_event_multi_frame(core: CMMCorePlus) -> None:
+    """SkipEvent with num_frames > 1 passes the count to sink.skip."""
+
+    class SkippingEngine:
+        def setup_sequence(self, sequence: MDASequence) -> None:
+            return None
+
+        def setup_event(self, event: MDAEvent) -> None:
+            raise SkipEvent(num_frames=5)
+
+        def exec_event(self, event: MDAEvent) -> Iterable:
+            return ()
+
+    sink = _mock_sink()
+    with patch.object(core.mda, "_engine", SkippingEngine()):
+        core.mda._sink = sink
+        try:
+            core.mda.run([MDAEvent()])
+        finally:
+            core.mda._sink = None
+
+    sink.skip.assert_called_once_with(frames=5)
+    sink.append.assert_not_called()
+
+
+def test_none_payload_calls_skip(core: CMMCorePlus) -> None:
+    """None yielded from exec_event causes sink.skip(frames=1)."""
+
+    class PartialEngine:
+        def setup_sequence(self, sequence: MDASequence) -> None:
+            return None
+
+        def setup_event(self, event: MDAEvent) -> None:
+            pass
+
+        def exec_event(self, event: MDAEvent) -> Iterable:
+            yield (MagicMock(), event, {"runner_time_ms": 0})
+            yield None  # one frame failed
+            yield (MagicMock(), event, {"runner_time_ms": 0})
+
+    sink = _mock_sink()
+    with patch.object(core.mda, "_engine", PartialEngine()):
+        core.mda._sink = sink
+        try:
+            core.mda.run([MDAEvent()])
+        finally:
+            core.mda._sink = None
+
+    assert sink.append.call_count == 2
+    sink.skip.assert_called_once_with(frames=1)
+
+
+def test_skip_event_teardown_still_called(core: CMMCorePlus) -> None:
+    """teardown_event is called even when setup_event raises SkipEvent."""
+    teardown_mock = Mock()
+
+    class SkippingEngine:
+        def setup_sequence(self, sequence: MDASequence) -> None:
+            return None
+
+        def setup_event(self, event: MDAEvent) -> None:
+            raise SkipEvent(num_frames=1)
+
+        def exec_event(self, event: MDAEvent) -> Iterable:
+            return ()
+
+        def teardown_event(self, event: MDAEvent) -> None:
+            teardown_mock(event)
+
+    event = MDAEvent()
+    with patch.object(core.mda, "_engine", SkippingEngine()):
+        core.mda.run([event])
+
+    teardown_mock.assert_called_once_with(event)
