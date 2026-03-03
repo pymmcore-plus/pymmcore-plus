@@ -173,6 +173,7 @@ def test_mda(core: CMMCorePlus, qtbot: "QtBot") -> None:
     sf_mock.assert_called_once_with(mda)
     # device adapter will have slightly different position than requested
     # round Y,X to 1 decimal place for comparison
+    qtbot.waitUntil(lambda: xystage_mock.call_count >= 2)
     xy_moves = [
         (round(y, 1), round(x, 1))
         for ((dev, y, x), kwargs) in xystage_mock.call_args_list
