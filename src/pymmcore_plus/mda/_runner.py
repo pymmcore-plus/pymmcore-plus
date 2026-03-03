@@ -648,7 +648,7 @@ class MDARunner:
 
         meta = self._engine.setup_sequence(sequence)
 
-        # extract camera multiplier for sink skip accounting (Bug 3)
+        # extract camera multiplier for sink skip accounting
         self._n_cameras = 1
         if meta and (infos := meta.get("image_infos")):
             self._n_cameras = infos[0].get("num_camera_adapter_channels", 1)
