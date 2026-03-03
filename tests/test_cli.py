@@ -10,7 +10,7 @@ from multiprocessing import Process, Queue
 from pathlib import Path
 from time import sleep
 from typing import TYPE_CHECKING, Any, cast
-from unittest.mock import Mock, patch
+from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 from useq import MDASequence
@@ -232,7 +232,8 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
     else:
         expected = MDASequence(**args)
 
-    with patch("pymmcore_plus.core._mmcore_plus._instance") as mock:
+    mock = MagicMock()
+    with patch("pymmcore_plus.core._mmcore_plus._instance", lambda: mock):
         result = runner.invoke(app, cmd)
 
     assert result.exit_code == 0
@@ -240,7 +241,8 @@ def test_run_mda(tmp_path: Path, with_file: bool, args: dict[str, dict | str]) -
 
 
 def test_run_mda_dry() -> None:
-    with patch("pymmcore_plus.core._mmcore_plus._instance") as mock:
+    mock = MagicMock()
+    with patch("pymmcore_plus.core._mmcore_plus._instance", lambda: mock):
         result = runner.invoke(app, ["run", "--dry-run"])
 
     assert result.exit_code == 0
@@ -260,7 +262,8 @@ def test_run_mda_channels() -> None:
         "--channel",
         "Other;70",
     ]
-    with patch("pymmcore_plus.core._mmcore_plus._instance") as mock:
+    mock = MagicMock()
+    with patch("pymmcore_plus.core._mmcore_plus._instance", lambda: mock):
         result = runner.invoke(app, cmd)
 
     expected = MDASequence(

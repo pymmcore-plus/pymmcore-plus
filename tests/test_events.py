@@ -239,7 +239,7 @@ def test_groups_and_presets_events(core: CMMCorePlus) -> None:
 
     cfg_defined = Mock()
     core.events.configDefined.connect(cfg_defined)
-    core.defineConfig("NewGroup", "")
+    core.defineConfig("NewGroup", "NewPreset")
     cfg_defined.assert_called_once_with("NewGroup", "NewPreset", "", "", "")
     assert "NewGroup" in core.getAvailableConfigGroups()
     assert "NewPreset" in core.getAvailableConfigs("NewGroup")

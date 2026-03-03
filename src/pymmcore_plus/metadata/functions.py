@@ -181,8 +181,8 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
         "pixel_size_config_name": core.getCurrentPixelSizeConfig(),
     }
 
-    # if (n_channels := core.getNumberOfCameraChannels()) > 1:
-    #     info["num_camera_adapter_channels"] = n_channels
+    if (n_channels := core.getNumberOfCameraChannels()) > 1:
+        info["num_camera_adapter_channels"] = n_channels
     if (mag_factor := core.getMagnificationFactor()) != 1.0:
         info["magnification_factor"] = mag_factor
     if (affine := core.getPixelSizeAffine(True)) != (1.0, 0.0, 0.0, 0.0, 1.0, 0.0):

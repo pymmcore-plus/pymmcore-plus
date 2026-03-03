@@ -4,15 +4,22 @@ import threading
 import time
 import types
 import warnings
-from collections.abc import Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any, Protocol
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
+from ome_writers import (
+    AcquisitionSettings,
+    Dimension,
+    OMEStream,
+    create_stream,
+    useq_to_acquisition_settings,
+)
 from typing_extensions import deprecated
 from useq import MDASequence
 
@@ -23,14 +30,16 @@ from ._thread_relay import mda_listeners_connected
 from .events import PMDASignaler, _get_auto_MDA_callback_class
 
 if TYPE_CHECKING:
-    from typing import Protocol, TypeAlias
+    from typing import TypeAlias
 
     import numpy as np
+    from ome_writers._useq import AcquisitionSettingsDict
     from useq import MDAEvent
 
-    from pymmcore_plus.metadata.schema import FrameMetaV1
+    from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
 
     from ._engine import MDAEngine
+    from ._protocol import PImagePayload
 
     class FrameReady0(Protocol):
         """Data handler with a no-argument `frameReady` method."""
@@ -54,14 +63,41 @@ if TYPE_CHECKING:
             self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1, /
         ) -> Any: ...
 
+    class SinkView(Protocol):
+        """Minimal array-like view that a data sink can provide for viewing."""
+
+        @property
+        def dtype(self) -> Any: ...
+        @property
+        def shape(self) -> tuple[int, ...]: ...
+        @property
+        def ndim(self) -> int: ...
+        def __getitem__(self, key: Any) -> np.ndarray: ...
+
 
 SupportsFrameReady: TypeAlias = "FrameReady0 | FrameReady1 | FrameReady2 | FrameReady3"
-SingleOutput: TypeAlias = "Path | str | SupportsFrameReady"
+SingleOutput: TypeAlias = "Path | str | SupportsFrameReady | AcquisitionSettings"
 
 MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
     "length & shape. Iterating over it has no effect."
 )
+
+
+class SkipEvent(Exception):
+    """Raised by an engine's `setup_event` to skip the current event.
+
+    The `num_frames` parameter tells the runner how many sink frames
+    to skip (e.g. `len(sequenced_event.events)` for a SequencedEvent).
+    """
+
+    def __init__(self, num_frames: int = 1, reason: str = "") -> None:
+        self.num_frames = num_frames
+        self.reason = reason
+        msg = f"Skipping {num_frames} frame(s)"
+        if reason:  # pragma: no cover
+            msg += f": {reason}"
+        super().__init__(msg)
 
 
 class RunState(str, Enum):
@@ -164,6 +200,7 @@ class MDARunner:
         self._paused_time: float = 0
         self._pause_interval: float = 0.1  # sec to wait between checking pause state
         self._handlers: WeakSet[SupportsFrameReady] = WeakSet()
+        self._sink: SinkProtocol | None = None
         self._sequence: MDASequence | None = None
         # timer for the full sequence, reset only once at the beginning of the sequence
         self._sequence_t0: float = 0.0
@@ -305,6 +342,7 @@ class MDARunner:
         events: Iterable[MDAEvent],
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
+        overwrite: bool = False,
     ) -> None:
         """Run the multi-dimensional acquisition defined by `sequence`.
 
@@ -313,31 +351,50 @@ class MDARunner:
         [`CMMCorePlus.run_mda`][pymmcore_plus.CMMCorePlus.run_mda] method which will
         run on a thread.
 
+        !!!important
+
+            If `output` is a sequence, it may contain nor more than one
+            `str | Path | AcquisitionSettings`.
+
         Parameters
         ----------
         events : Iterable[MDAEvent]
             An iterable of `useq.MDAEvents` objects to execute.
         output : SingleOutput | Sequence[SingleOutput] | None, optional
             The output handler(s) to use.  If None, no output will be saved.
+
             The value may be either a single output or a sequence of outputs,
             where a "single output" can be any of the following:
 
-            - A string or Path to a directory to save images to. A handler will be
-                created automatically based on the extension of the path.
-                - `.zarr` files will be handled by `OMEZarrWriter`
-                - `.ome.tiff` files will be handled by `OMETiffWriter`
-                - A directory with no extension will be handled by `ImageSequenceWriter`
-            - A handler object that implements the `DataHandler` protocol, currently
-                meaning it has a `frameReady` method.  See `mda_listeners_connected`
-                for more details.
+            1. A string or `Path`. This value is passed directly to
+                [`ome_writers.AcquisitionSettings`][], and the extension can be used
+                to determine the file format to create:
+                - `[.ome].zarr` will result in an OME-Zarr at the specified path
+                - `[.ome].tiff` will result in an OME-TIFF at the specified, or, if
+                  multiple positions are acquired, the output path will be treated as a
+                  directory with individual OME-TIFF files for each position.
 
-            During the course of the sequence, the `get_output_handlers` method can be
-            used to get the currently connected output handlers (including those that
-            were created automatically based on file paths).
+            1. An [`ome_writers.AcquisitionSettings`][], object which allows full
+              control over many parameters.  See [ome_writers
+              documentation](https://pymmcore-plus.github.io/ome-writers/usage/) for
+              details.
+
+            1. A handler object that implements the `DataHandler` protocol, currently
+              meaning it has a `frameReady` method.  See `mda_listeners_connected`
+              for more details.
+
+            During the course of the sequence, the `get_view` method can be used to get
+            an array-like view of the current data sink, if the sink supports it.
+
+        overwrite : bool, optional
+            Whether to overwrite existing files *when output is a `str` or `Path`*.
+            Ignored in all other cases.  Default is False.
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-        with self._outputs_connected(output):
+        # also creates self._sink if output is a str|Path|AcquisitionSettings
+        handlers = self._coerce_outputs(output, overwrite=overwrite)
+        with self._handlers_connected(handlers):
             # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
             # called inside the context manager, since the `mda_listeners_connected`
             # context manager expects to see both of those signals.
@@ -354,6 +411,17 @@ class MDARunner:
         if error is not None:
             raise error
 
+    def get_view(self) -> SinkView | None:
+        """Array-like view of the current data sink, if it exists."""
+        if self._sink is None:  # pragma: no cover
+            return None
+        return self._sink.get_view()
+
+    @deprecated(
+        "`get_output_handlers` is deprecated, and no full replacement planned. "
+        "Use `get_sink()` instead, to monitor the data as it is being acquired.",
+        category=DeprecationWarning,
+    )
     def get_output_handlers(self) -> tuple[SupportsFrameReady, ...]:
         """Return the data handlers that are currently connected.
 
@@ -391,41 +459,52 @@ class MDARunner:
         """
         return time.perf_counter() - self._t0
 
-    def _outputs_connected(
-        self, output: SingleOutput | Sequence[SingleOutput] | None
-    ) -> AbstractContextManager:
-        """Context in which output handlers are connected to the frameReady signal."""
+    def _coerce_outputs(
+        self,
+        output: SingleOutput | Sequence[SingleOutput] | None,
+        overwrite: bool = False,
+    ) -> list[SupportsFrameReady]:
+        """Normalize and validate output into a list of frameReady handlers.
+
+        Also sets self._sink if a path or AcquisitionSettings is provided.
+        """
         if output is None:
-            return nullcontext()
+            return []
+
+        # reset sink from any previous run so a new run can set a fresh one
+        self._sink = None
 
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
-        # convert all items to handler objects, preserving order
-        _handlers: list[SupportsFrameReady] = []
+        handlers: list[SupportsFrameReady] = []
         for item in output:
-            if isinstance(item, (str, Path)):
-                _handlers.append(self._handler_for_path(item))
+            if isinstance(item, (str, Path, AcquisitionSettings)):
+                if self._sink is not None:
+                    raise NotImplementedError(
+                        "Only one AcquisitionSettings object or path may be provided "
+                        "as output.  Open a feature request if you would like to see "
+                        "support for multiple data sinks."
+                    )
+                self._sink = _OmeWritersSink.from_output(item, overwrite=overwrite)
             else:
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
                         "Output handlers must have a callable frameReady method. "
                         f"Got {item} with type {type(item)}."
                     )
-                _handlers.append(item)
+                handlers.append(item)
+        return handlers
 
+    def _handlers_connected(
+        self, handlers: Sequence[SupportsFrameReady]
+    ) -> AbstractContextManager:
+        """Context in which output handlers are connected to the frameReady signal."""
         self._handlers.clear()
-        self._handlers.update(_handlers)
-        return mda_listeners_connected(*_handlers, mda_events=self._signals)
-
-    def _handler_for_path(self, path: str | Path) -> SupportsFrameReady:
-        """Convert a string or Path into a handler object.
-
-        This method picks from the built-in handlers based on the extension of the path.
-        """
-        from pymmcore_plus.mda.handlers import handler_for_path
-
-        return cast("SupportsFrameReady", handler_for_path(path))
+        self._handlers.update(handlers)
+        if not handlers:
+            return nullcontext()
+        return mda_listeners_connected(*handlers, mda_events=self._signals)
 
     def _run(self, engine: PMDAEngine, events: Iterable[MDAEvent]) -> None:
         """Main execution of events, inside the try/except block of `run`."""
@@ -442,6 +521,10 @@ class MDARunner:
         self._reset_event_timer()
         self._sequence_t0 = self._t0
 
+        _append: Callable | None = self._sink.append if self._sink is not None else None
+        _skip: Callable | None = self._sink.skip if self._sink is not None else None
+        _emit_event_started = self._signals.eventStarted.emit
+        _emit_frame_ready = self._signals.frameReady.emit
         for event in _events:
             if event.reset_event_timer:
                 self._reset_event_timer()
@@ -451,27 +534,40 @@ class MDARunner:
 
             with self._lock:
                 self._state = RunState.ACQUIRING
-            self._signals.eventStarted.emit(event)
+
+            _emit_event_started(event)
             logger.info("%s", event)
-            engine.setup_event(event)
 
             try:
-                runner_time_ms = self.seconds_elapsed() * 1000
-                # this is a bit of a hack to pass the time into the engine
-                # it is used for intra-event time calculations inside the engine.
-                # we pop it off after the event is executed.
-                event.metadata["runner_t0"] = self._sequence_t0
-                output = engine.exec_event(event) or ()  # in case output is None
-                for payload in self._iter_exec_output(output):
-                    img, _event, meta = payload
-                    _event.metadata.pop("runner_t0", None)
-                    # if the engine calculated its own time, don't overwrite it
-                    if "runner_time_ms" not in meta:
-                        meta["runner_time_ms"] = runner_time_ms
-                    with exceptions_logged():
-                        self._signals.frameReady.emit(img, _event, meta)
-            finally:
+                engine.setup_event(event)
+            except SkipEvent as exc:
+                logger.info("%s", exc)
+                if _skip is not None and exc.num_frames > 0:
+                    _skip(frames=exc.num_frames * self._n_cameras)
                 teardown_event(event)
+            else:
+                try:
+                    runner_time_ms = self.seconds_elapsed() * 1000
+                    # this is a bit of a hack to pass the time into the engine
+                    # it is used for intra-event time calculations inside the
+                    # engine. we pop it off after the event is executed.
+                    event.metadata["runner_t0"] = self._sequence_t0
+                    output = engine.exec_event(event) or ()
+                    for payload in self._iter_exec_output(output):
+                        if isinstance(payload, int):
+                            if _skip is not None:
+                                _skip(frames=payload)
+                            continue
+                        img, sub_event, meta = payload
+                        sub_event.metadata.pop("runner_t0", None)
+                        if "runner_time_ms" not in meta:
+                            meta["runner_time_ms"] = runner_time_ms
+                        if _append is not None:
+                            _append(img, sub_event, meta)
+                        with exceptions_logged():
+                            _emit_frame_ready(img, sub_event, meta)
+                finally:
+                    teardown_event(event)
 
             # event boundary: resolve deferred flags
             with self._lock:
@@ -492,12 +588,15 @@ class MDARunner:
             with self._lock:
                 self._finish_reason = FinishReason.COMPLETED
 
-    def _iter_exec_output(self, iterable: Iterable) -> Iterator:
+    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload | int]:
         """Iterate over exec_event output, sending cancel/pause signals to generators.
 
         This allows the runner to communicate with generator-based engines
         (like exec_sequenced_event) without the engine needing to know about
         runner internals. Signals are sent via generator.send().
+
+        Consecutive None payloads (missing frames) are coalesced into a single
+        int representing the skip count.
 
         Works with any iterable - if it's not a generator or doesn't handle
         signals, they're simply ignored.
@@ -505,21 +604,28 @@ class MDARunner:
         gen = iter(iterable)
         is_generator = isinstance(gen, types.GeneratorType)
 
+        def _advance() -> PImagePayload | None:
+            if not is_generator:  # pragma: no cover
+                return next(gen)  # type: ignore[no-any-return]
+            if self._cancel_requested or self._state == RunState.FINISHING:
+                return gen.send("cancel")  # type: ignore
+            return gen.send("pause" if self._pause_requested else None)  # type: ignore
+
+        skip_count = 0
         try:
             item = next(gen)
             while True:
-                yield item
-                if is_generator:
-                    signal = None
-                    if self._cancel_requested or self._state == RunState.FINISHING:
-                        signal = "cancel"
-                    elif self._pause_requested:
-                        signal = "pause"
-                    item = gen.send(signal)  # type: ignore[attr-defined]
+                if item is None:
+                    skip_count += 1
                 else:
-                    item = next(gen)
+                    if skip_count:
+                        yield skip_count
+                        skip_count = 0
+                    yield item
+                item = _advance()
         except StopIteration:
-            pass
+            if skip_count:
+                yield skip_count
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
@@ -541,6 +647,15 @@ class MDARunner:
         self._sequence = sequence
 
         meta = self._engine.setup_sequence(sequence)
+
+        # extract camera multiplier for sink skip accounting
+        self._n_cameras = 1
+        if meta and (infos := meta.get("image_infos")):
+            self._n_cameras = infos[0].get("num_camera_adapter_channels", 1)
+
+        if self._sink is not None:
+            self._sink.setup(sequence, meta)
+
         with self._lock:
             if self._state != RunState.FINISHING:
                 self._state = RunState.WAITING
@@ -606,6 +721,12 @@ class MDARunner:
                 self._finish_reason = FinishReason.COMPLETED
             finish_reason = self._finish_reason
 
+        if self._sink is not None:
+            try:
+                self._sink.close()
+            except Exception as e:  # pragma: no cover
+                logger.error("Error closing data sink: %s", e)
+
         if hasattr(self._engine, "teardown_sequence"):
             self._engine.teardown_sequence(sequence)  # type: ignore
 
@@ -617,3 +738,151 @@ class MDARunner:
         self._signals.sequenceFinished.emit(sequence)
         with self._lock:
             self._state = RunState.IDLE
+
+
+class SinkProtocol(Protocol):
+    def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None: ...
+    def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None: ...
+    def skip(self, *, frames: int = 1) -> None: ...
+    def close(self) -> None: ...
+    def get_view(self) -> SinkView | None: ...
+
+
+def _unbounded_3d_settings(
+    width: int, height: int, pixel_size_um: float | None = None
+) -> AcquisitionSettingsDict:
+    """Return generic unbounded 3D acquisition settings (t, y, x).
+
+    Used as a fallback when a sequence can't be converted to ome-writers dimensions.
+    """
+    return {
+        "dimensions": [
+            Dimension(name="t", count=None, chunk_size=1, type="time"),
+            Dimension(
+                name="y",
+                count=height,
+                chunk_size=height,
+                scale=pixel_size_um,
+                unit="micrometer",
+            ),
+            Dimension(
+                name="x",
+                count=width,
+                chunk_size=width,
+                scale=pixel_size_um,
+                unit="micrometer",
+            ),
+        ],
+        "plate": None,
+    }
+
+
+def _frame_meta_to_ome(meta: FrameMetaV1) -> dict:
+    """Convert FrameMetaV1 to ome-writers frame_metadata dict."""
+    # TODO:
+    # decide whether we should be passing *everything* else from FrameMetaV1
+    # after converting/popping a few special keys...
+    d: dict = {
+        "delta_t": meta["runner_time_ms"] / 1000,
+        "exposure_time": meta["exposure_ms"] / 1000,
+    }
+    if pos := meta.get("position"):
+        d.update({f"position_{k}": v for k, v in pos.items() if k in "xyz"})
+    return d
+
+
+class _OmeWritersSink(SinkProtocol):
+    """Our default built-in data sink.
+
+    uses ome-writers to write to OME-Zarr or OME-TIFF, or scratch (tmp/memory).
+    """
+
+    def __init__(self, settings: AcquisitionSettings) -> None:
+        self._settings = settings
+        self._stream: OMEStream | None = None
+
+    @classmethod
+    def from_output(
+        cls, output: str | Path | AcquisitionSettings, overwrite: bool = False
+    ) -> _OmeWritersSink:
+        if isinstance(output, AcquisitionSettings):
+            return cls(output)
+        stripped = str(output).rstrip("/").rstrip(":").lower()
+        if stripped in ("memory", "scratch"):
+            return cls(AcquisitionSettings(format="scratch", overwrite=overwrite))  # pyright: ignore
+        return cls(AcquisitionSettings(root_path=str(output), overwrite=overwrite))
+
+    def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None:
+        # FIXME?
+        # I'm not sure it's possible to abstract this enough to work with
+        # arbitrary engines... this is a tight coupling that will probably just
+        # exist for a long time
+        if not meta:  # pragma: no cover
+            raise NotImplementedError(
+                "Cannot use output sinks without summary metadaata "
+                "from the engine's setup_sequence method."
+            )
+
+        # fixme... image infos might not be locked down enough (it's a list...)
+        info = meta["image_infos"][0]
+        width, height = info["width"], info["height"]
+        pixel_size_um = info["pixel_size_um"]
+
+        useq_settings: Mapping
+        if isinstance(sequence, GeneratorMDASequence):
+            useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
+        else:
+            try:
+                useq_settings = useq_to_acquisition_settings(
+                    sequence,
+                    image_width=width,
+                    image_height=height,
+                    pixel_size_um=pixel_size_um,
+                )
+            except NotImplementedError as e:
+                logger.warning(
+                    "Could not convert MDASequence to AcquisitionSettings: %s. "
+                    "Falling back to generic unbounded 3D settings.",
+                    e,
+                )
+                useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
+
+        # multi-camera: add a camera dimension before Y/X so the sink
+        # expects N_events * N_cameras frames instead of just N_events
+        n_cameras = info.get("num_camera_adapter_channels", 1)
+        if n_cameras > 1:
+            if sequence.channels:
+                warnings.warn(
+                    "Multi-camera acquisition combined with MDASequence channels "
+                    "is not fully supported: OME metadata will only reflect the "
+                    "optical channel names, not the per-camera axis.",
+                    stacklevel=2,
+                )
+            dims = list(useq_settings["dimensions"])
+            cam_dim = Dimension(name="cam", count=n_cameras, type="other")
+            # insert before Y, X (the last two dimensions)
+            dims.insert(len(dims) - 2, cam_dim)
+            useq_settings = {**useq_settings, "dimensions": dims}
+
+        new_settings = {
+            **self._settings.model_dump(),
+            **useq_settings,
+            "dtype": info["dtype"],
+        }
+        self._settings = AcquisitionSettings.model_validate(new_settings)
+        self._stream = create_stream(self._settings)
+
+    def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None:
+        self._stream.append(img, frame_metadata=_frame_meta_to_ome(meta))  # type: ignore[union-attr]
+
+    def skip(self, *, frames: int = 1) -> None:
+        self._stream.skip(frames=frames)  # type: ignore[union-attr]
+
+    def close(self) -> None:
+        if self._stream is not None:
+            self._stream.close()
+
+    def get_view(self) -> SinkView | None:
+        if self._stream is None:
+            return None
+        return self._stream.view(dynamic_shape=True, strict=False)
