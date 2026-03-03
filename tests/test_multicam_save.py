@@ -1,14 +1,3 @@
-"""Tests demonstrating multi-camera MDA + ome-writers sink bugs.
-
-These tests assert *correct* behavior — what an end-user would expect.
-They will FAIL because of bugs in the current implementation:
-
-Bug 1: ome-writers sink is sized from MDASequence axes only (no `cam` axis),
-        so it expects N frames but receives N*M (M = number of cameras).
-Bug 2: Non-sequenced path doesn't add `cam` to event.index, unlike sequenced.
-Bug 3: SkipEvent.num_frames doesn't account for the camera multiplier.
-"""
-
 from __future__ import annotations
 
 import math
@@ -34,14 +23,6 @@ def multicam_core(core: CMMCorePlus) -> CMMCorePlus:
     core.setProperty("MultiCam", "Physical Camera 2", "Camera2")
     core.setCameraDevice("MultiCam")
     return core
-
-
-# --------------------------------------------------------------------------- #
-# Bug 1: ome-writers sink receives too many frames
-# The sink dimensions come from useq_to_acquisition_settings() which only knows
-# about MDASequence axes (t, c, z, p) — not the `cam` axis.  After N frames
-# the internal iterator is exhausted → IndexError.
-# --------------------------------------------------------------------------- #
 
 
 def test_multicam_ome_sink_nonsequenced(multicam_core: CMMCorePlus) -> None:
@@ -81,14 +62,6 @@ def test_multicam_ome_sink_sequenced(multicam_core: CMMCorePlus) -> None:
     total_pixels = math.prod(view.shape)
     frame_pixels = view.shape[-2] * view.shape[-1]
     assert total_pixels // frame_pixels == expected_frames
-
-
-# --------------------------------------------------------------------------- #
-# Bug 2: Non-sequenced path doesn't add `cam` to event.index
-# exec_single_event() yields the same event for all cameras — the event.index
-# dict is missing the `cam` key.  The sequenced path uses
-# _TimepointBuffer._with_camera_index() to add it.
-# --------------------------------------------------------------------------- #
 
 
 def test_multicam_nonsequenced_events_missing_cam_index(
@@ -144,14 +117,6 @@ def test_multicam_event_index_consistency(multicam_core: CMMCorePlus) -> None:
         f"  sequenced:     {seq_indices}\n"
         f"  non-sequenced: {nonseq_indices}"
     )
-
-
-# --------------------------------------------------------------------------- #
-# Bug 1 (complex case): more axes + cameras
-# With 2 channels, 2 positions, 3 timepoints, 2 cameras the MDASequence has
-# 2*2*3 = 12 events, but the engine yields 12*2 = 24 frames.  The sink is
-# sized for 12 and crashes after frame 12.
-# --------------------------------------------------------------------------- #
 
 
 def test_multicam_ome_sink_with_channels_and_positions(
