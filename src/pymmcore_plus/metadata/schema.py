@@ -241,9 +241,9 @@ class ImageInfo(TypedDict):
     roi: NotRequired[tuple[int, int, int, int]]
     multi_roi: NotRequired[tuple[list[int], list[int], list[int], list[int]]]
 
-    # # this will be != 1 for things like multi-camera device,
-    # # or any "single" device adapter that manages multiple detectors, like PMTs, etc..
-    # num_camera_adapter_channels: NotRequired[int]
+    # this will be != 1 for things like multi-camera device,
+    # or any "single" device adapter that manages multiple detectors, like PMTs, etc.
+    num_camera_adapter_channels: NotRequired[int]
 
 
 class StagePosition(TypedDict):
