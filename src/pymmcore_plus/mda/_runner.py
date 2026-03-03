@@ -33,6 +33,7 @@ if TYPE_CHECKING:
     from typing import TypeAlias
 
     import numpy as np
+    from ome_writers._useq import AcquisitionSettingsDict
     from useq import MDAEvent
 
     from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
@@ -94,7 +95,7 @@ class SkipEvent(Exception):
         self.num_frames = num_frames
         self.reason = reason
         msg = f"Skipping {num_frames} frame(s)"
-        if reason:
+        if reason:  # pragma: no cover
             msg += f": {reason}"
         super().__init__(msg)
 
@@ -470,13 +471,16 @@ class MDARunner:
         if output is None:
             return []
 
+        # reset sink from any previous run so a new run can set a fresh one
+        self._sink = None
+
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
         handlers: list[SupportsFrameReady] = []
         for item in output:
             if isinstance(item, (str, Path, AcquisitionSettings)):
-                if self._sink is not None:  # pragma: no cover
+                if self._sink is not None:
                     raise NotImplementedError(
                         "Only one AcquisitionSettings object or path may be provided "
                         "as output.  Open a feature request if you would like to see "
@@ -539,7 +543,7 @@ class MDARunner:
             except SkipEvent as exc:
                 logger.info("%s", exc)
                 if _skip is not None and exc.num_frames > 0:
-                    _skip(frames=exc.num_frames)
+                    _skip(frames=exc.num_frames * self._n_cameras)
                 teardown_event(event)
             else:
                 try:
@@ -601,7 +605,7 @@ class MDARunner:
         is_generator = isinstance(gen, types.GeneratorType)
 
         def _advance() -> PImagePayload | None:
-            if not is_generator:
+            if not is_generator:  # pragma: no cover
                 return next(gen)  # type: ignore[no-any-return]
             if self._cancel_requested or self._state == RunState.FINISHING:
                 return gen.send("cancel")  # type: ignore
@@ -643,6 +647,11 @@ class MDARunner:
         self._sequence = sequence
 
         meta = self._engine.setup_sequence(sequence)
+
+        # extract camera multiplier for sink skip accounting (Bug 3)
+        self._n_cameras = 1
+        if meta and (infos := meta.get("image_infos")):
+            self._n_cameras = infos[0].get("num_camera_adapter_channels", 1)
 
         if self._sink is not None:
             self._sink.setup(sequence, meta)
@@ -741,7 +750,7 @@ class SinkProtocol(Protocol):
 
 def _unbounded_3d_settings(
     width: int, height: int, pixel_size_um: float | None = None
-) -> dict:
+) -> AcquisitionSettingsDict:
     """Return generic unbounded 3D acquisition settings (t, y, x).
 
     Used as a fallback when a sequence can't be converted to ome-writers dimensions.
@@ -837,6 +846,23 @@ class _OmeWritersSink(SinkProtocol):
                     e,
                 )
                 useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
+
+        # multi-camera: add a camera dimension before Y/X so the sink
+        # expects N_events * N_cameras frames instead of just N_events
+        n_cameras = info.get("num_camera_adapter_channels", 1)
+        if n_cameras > 1:
+            if sequence.channels:
+                warnings.warn(
+                    "Multi-camera acquisition combined with MDASequence channels "
+                    "is not fully supported: OME metadata will only reflect the "
+                    "optical channel names, not the per-camera axis.",
+                    stacklevel=2,
+                )
+            dims = list(useq_settings["dimensions"])
+            cam_dim = Dimension(name="cam", count=n_cameras, type="other")
+            # insert before Y, X (the last two dimensions)
+            dims.insert(len(dims) - 2, cam_dim)
+            useq_settings = {**useq_settings, "dimensions": dims}
 
         new_settings = {
             **self._settings.model_dump(),

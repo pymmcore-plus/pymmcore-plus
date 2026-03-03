@@ -174,7 +174,9 @@ def test_multicam_ome_sink_with_channels_and_positions(
         multicam_core.mda.engine.use_hardware_sequencing = sequenced
         label = "sequenced" if sequenced else "non-sequenced"
 
-        multicam_core.mda.run(seq, output="scratch")
+        # multi-cam + channels triggers a metadata limitation warning
+        with pytest.warns(UserWarning, match="Multi-camera.*channels"):
+            multicam_core.mda.run(seq, output="scratch")
 
         view = multicam_core.mda.get_view()
         assert view is not None, f"No view returned ({label})"
