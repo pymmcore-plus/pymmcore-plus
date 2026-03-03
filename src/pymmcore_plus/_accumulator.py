@@ -22,7 +22,7 @@ DT = TypeVar("DT", bound=DeviceType)
 class AbstractChangeAccumulator(ABC, Generic[T]):
     """Abstract base class for accumulating a series of `setX` calls to a device.
 
-    A `ChangeAccumulator`` is a class that accumulates a series of `setX` calls to a
+    A `ChangeAccumulator` is a class that accumulates a series of `setX` calls to a
     device, retaining an internal target value, and emitting a signal when the device
     has reached its target and is idle. It can be shared by multiple players (e.g.
     widgets, or other classes) that want to control the same device, and allows them all

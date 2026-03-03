@@ -39,22 +39,26 @@ class PMDAEngine(Protocol):
         without any additional preparation.  (This means that the engine
         should perform any waits or blocks required for system state
         changes to complete.)
+
+        If the engine cannot set up the event (e.g. hardware failure), it may
+        raise `SkipEvent(num_frames)` to tell the runner to skip this event
+        and inform the data sink of the missing frames. If `SkipEvent` is raised,
+        `exec_event` will NOT be called for this event, but `teardown_event` will be.
         """
 
     @abstractmethod
-    def exec_event(self, event: MDAEvent) -> Iterable[PImagePayload]:
+    def exec_event(self, event: MDAEvent) -> Iterable[PImagePayload | None]:
         """Execute `event`.
 
         This method is called after `setup_event` and is responsible for
         executing the event.  The default assumption is to acquire an image,
         but more elaborate events will be possible.
 
-        The protocol for the returned object is still under development.  However, if
-        the returned object has an `image` attribute, then the
-        [`MDARunner`][pymmcore_plus.mda.MDARunner] will emit a
-        [`frameReady`][pymmcore_plus.mda.PMDASignaler.frameReady] signal
+        Yields `(image, event, metadata)` tuples for each acquired frame.
+        May yield `None` for frames that could not be acquired (e.g. partial
+        hardware failure during a triggered sequence); the runner will call
+        `sink.skip(frames=1)` for each `None`.
         """
-        # TODO: nail down a spec for the return object.
 
     def event_iterator(self, events: Iterable[MDAEvent]) -> Iterator[MDAEvent]:
         """Wrapper on the event iterator.

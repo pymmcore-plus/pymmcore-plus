@@ -4,7 +4,7 @@ import threading
 import time
 import types
 import warnings
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
@@ -15,6 +15,7 @@ from weakref import WeakSet
 
 from ome_writers import (
     AcquisitionSettings,
+    Dimension,
     OMEStream,
     create_stream,
     useq_to_acquisition_settings,
@@ -80,6 +81,22 @@ MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
     "length & shape. Iterating over it has no effect."
 )
+
+
+class SkipEvent(Exception):
+    """Raised by an engine's `setup_event` to skip the current event.
+
+    The `num_frames` parameter tells the runner how many sink frames
+    to skip (e.g. `len(sequenced_event.events)` for a SequencedEvent).
+    """
+
+    def __init__(self, num_frames: int = 1, reason: str = "") -> None:
+        self.num_frames = num_frames
+        self.reason = reason
+        msg = f"Skipping {num_frames} frame(s)"
+        if reason:
+            msg += f": {reason}"
+        super().__init__(msg)
 
 
 class RunState(str, Enum):
@@ -501,6 +518,7 @@ class MDARunner:
         self._sequence_t0 = self._t0
 
         _append: Callable | None = self._sink.append if self._sink is not None else None
+        _skip: Callable | None = self._sink.skip if self._sink is not None else None
         _emit_event_started = self._signals.eventStarted.emit
         _emit_frame_ready = self._signals.frameReady.emit
         for event in _events:
@@ -515,27 +533,37 @@ class MDARunner:
 
             _emit_event_started(event)
             logger.info("%s", event)
-            engine.setup_event(event)
 
             try:
-                runner_time_ms = self.seconds_elapsed() * 1000
-                # this is a bit of a hack to pass the time into the engine
-                # it is used for intra-event time calculations inside the engine.
-                # we pop it off after the event is executed.
-                event.metadata["runner_t0"] = self._sequence_t0
-                output = engine.exec_event(event) or ()  # in case output is None
-                for payload in self._iter_exec_output(output):
-                    img, sub_event, meta = payload
-                    sub_event.metadata.pop("runner_t0", None)
-                    # if the engine calculated its own time, don't overwrite it
-                    if "runner_time_ms" not in meta:
-                        meta["runner_time_ms"] = runner_time_ms
-                    if _append is not None:
-                        _append(img, sub_event, meta)
-                    with exceptions_logged():
-                        _emit_frame_ready(img, sub_event, meta)
-            finally:
+                engine.setup_event(event)
+            except SkipEvent as exc:
+                logger.info("%s", exc)
+                if _skip is not None and exc.num_frames > 0:
+                    _skip(frames=exc.num_frames)
                 teardown_event(event)
+            else:
+                try:
+                    runner_time_ms = self.seconds_elapsed() * 1000
+                    # this is a bit of a hack to pass the time into the engine
+                    # it is used for intra-event time calculations inside the
+                    # engine. we pop it off after the event is executed.
+                    event.metadata["runner_t0"] = self._sequence_t0
+                    output = engine.exec_event(event) or ()
+                    for payload in self._iter_exec_output(output):
+                        if isinstance(payload, int):
+                            if _skip is not None:
+                                _skip(frames=payload)
+                            continue
+                        img, sub_event, meta = payload
+                        sub_event.metadata.pop("runner_t0", None)
+                        if "runner_time_ms" not in meta:
+                            meta["runner_time_ms"] = runner_time_ms
+                        if _append is not None:
+                            _append(img, sub_event, meta)
+                        with exceptions_logged():
+                            _emit_frame_ready(img, sub_event, meta)
+                finally:
+                    teardown_event(event)
 
             # event boundary: resolve deferred flags
             with self._lock:
@@ -556,12 +584,15 @@ class MDARunner:
             with self._lock:
                 self._finish_reason = FinishReason.COMPLETED
 
-    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload]:
+    def _iter_exec_output(self, iterable: Iterable) -> Iterator[PImagePayload | int]:
         """Iterate over exec_event output, sending cancel/pause signals to generators.
 
         This allows the runner to communicate with generator-based engines
         (like exec_sequenced_event) without the engine needing to know about
         runner internals. Signals are sent via generator.send().
+
+        Consecutive None payloads (missing frames) are coalesced into a single
+        int representing the skip count.
 
         Works with any iterable - if it's not a generator or doesn't handle
         signals, they're simply ignored.
@@ -569,21 +600,28 @@ class MDARunner:
         gen = iter(iterable)
         is_generator = isinstance(gen, types.GeneratorType)
 
+        def _advance() -> PImagePayload | None:
+            if not is_generator:
+                return next(gen)  # type: ignore[no-any-return]
+            if self._cancel_requested or self._state == RunState.FINISHING:
+                return gen.send("cancel")  # type: ignore
+            return gen.send("pause" if self._pause_requested else None)  # type: ignore
+
+        skip_count = 0
         try:
             item = next(gen)
             while True:
-                yield item
-                if is_generator:
-                    signal = None
-                    if self._cancel_requested or self._state == RunState.FINISHING:
-                        signal = "cancel"
-                    elif self._pause_requested:
-                        signal = "pause"
-                    item = gen.send(signal)  # type: ignore[attr-defined]
+                if item is None:
+                    skip_count += 1
                 else:
-                    item = next(gen)
+                    if skip_count:
+                        yield skip_count
+                        skip_count = 0
+                    yield item
+                item = _advance()
         except StopIteration:
-            pass
+            if skip_count:
+                yield skip_count
 
     def _prepare_to_run(self, sequence: MDASequence) -> PMDAEngine:
         """Set up for the MDA run.
@@ -701,6 +739,49 @@ class SinkProtocol(Protocol):
     def get_view(self) -> SinkView | None: ...
 
 
+def _unbounded_3d_settings(
+    width: int, height: int, pixel_size_um: float | None = None
+) -> dict:
+    """Return generic unbounded 3D acquisition settings (t, y, x).
+
+    Used as a fallback when a sequence can't be converted to ome-writers dimensions.
+    """
+    return {
+        "dimensions": [
+            Dimension(name="t", count=None, chunk_size=1, type="time"),
+            Dimension(
+                name="y",
+                count=height,
+                chunk_size=height,
+                scale=pixel_size_um,
+                unit="micrometer",
+            ),
+            Dimension(
+                name="x",
+                count=width,
+                chunk_size=width,
+                scale=pixel_size_um,
+                unit="micrometer",
+            ),
+        ],
+        "plate": None,
+    }
+
+
+def _frame_meta_to_ome(meta: FrameMetaV1) -> dict:
+    """Convert FrameMetaV1 to ome-writers frame_metadata dict."""
+    # TODO:
+    # decide whether we should be passing *everything* else from FrameMetaV1
+    # after converting/popping a few special keys...
+    d: dict = {
+        "delta_t": meta["runner_time_ms"] / 1000,
+        "exposure_time": meta["exposure_ms"] / 1000,
+    }
+    if pos := meta.get("position"):
+        d.update({f"position_{k}": v for k, v in pos.items() if k in "xyz"})
+    return d
+
+
 class _OmeWritersSink(SinkProtocol):
     """Our default built-in data sink.
 
@@ -735,22 +816,30 @@ class _OmeWritersSink(SinkProtocol):
 
         # fixme... image infos might not be locked down enough (it's a list...)
         info = meta["image_infos"][0]
-        try:
-            useq_settings = useq_to_acquisition_settings(
-                sequence,
-                image_width=info["width"],
-                image_height=info["height"],
-                pixel_size_um=info["pixel_size_um"],
-            )
-        except Exception as e:
-            # TODO ... fallback to generic 3d sequence
-            raise NotImplementedError(  # pragma: no cover
-                "This sequence is not currently supported by the built-in data sink:\n"
-                f"{e}\n\nWe will support all sequences soon."
-            ) from e
+        width, height = info["width"], info["height"]
+        pixel_size_um = info["pixel_size_um"]
+
+        useq_settings: Mapping
+        if isinstance(sequence, GeneratorMDASequence):
+            useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
+        else:
+            try:
+                useq_settings = useq_to_acquisition_settings(
+                    sequence,
+                    image_width=width,
+                    image_height=height,
+                    pixel_size_um=pixel_size_um,
+                )
+            except NotImplementedError as e:
+                logger.warning(
+                    "Could not convert MDASequence to AcquisitionSettings: %s. "
+                    "Falling back to generic unbounded 3D settings.",
+                    e,
+                )
+                useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
 
         new_settings = {
-            **self._settings.model_dump(exclude_unset=True),
+            **self._settings.model_dump(),
             **useq_settings,
             "dtype": info["dtype"],
         }
@@ -758,7 +847,7 @@ class _OmeWritersSink(SinkProtocol):
         self._stream = create_stream(self._settings)
 
     def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None:
-        self._stream.append(img)  # type: ignore[union-attr]
+        self._stream.append(img, frame_metadata=_frame_meta_to_ome(meta))  # type: ignore[union-attr]
 
     def skip(self, *, frames: int = 1) -> None:
         self._stream.skip(frames=frames)  # type: ignore[union-attr]
