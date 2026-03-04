@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
 import numpy as np
 import useq
-from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
+from useq import AcquireImage, CameraROI, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
         exposure: float
         autoshutter: bool
         config_groups: dict[str, str]
-        roi: tuple[int, int, int, int]
+        roi: CameraROI
 
 
 # these are SLM devices that have a known pixel_on_value.
@@ -472,7 +472,10 @@ class MDAEngine(PMDAEngine):
 
         # capture ROI
         try:
-            state["roi"] = tuple(core.getROI())  # type: ignore[assignment]
+            x, y, w, h = core.getROI(self._camera_device)
+            state["roi"] = CameraROI(
+                x=x, y=y, width=w, height=h, camera=self._camera_device
+            )
         except Exception as e:
             logger.warning("Failed to capture ROI: %s", e)
 
@@ -938,9 +941,11 @@ class MDAEngine(PMDAEngine):
         subclass this engine and override ROI behavior.
         """
         try:
-            cam = self._camera_device or self.mmcore.getCameraDevice()
+            roi = event.roi
+            cam = roi.camera or self._camera_device
+            # TODO MMCore does not have a version of clearROI that takes a camera device
             self.mmcore.clearROI()
-            self.mmcore.setROI(cam, *event.roi)
+            self.mmcore.setROI(cam, roi.x, roi.y, roi.width, roi.height)
         except Exception as e:
             logger.warning("Failed to set ROI. %s", e)
 
