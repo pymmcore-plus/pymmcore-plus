@@ -129,6 +129,7 @@ class MDAEngine(PMDAEngine):
 
         self._last_config: tuple[str, str] = ("", "")
         self._last_xy_pos: tuple[float | None, float | None] = (None, None)
+        self._timeout = np.inf
 
         # -----
         # The following values are stored during setup_sequence simply to speed up
@@ -694,7 +695,8 @@ class MDAEngine(PMDAEngine):
         pause_warned = False
 
         # Pop frames while sequence is running, then drain remaining buffer
-        while True:
+        t_start = time.time()
+        while time.time() - t_start < self._timeout:
             if remaining := core.getRemainingImageCount():
                 img, mm_meta = core.popNextImageAndMD()
                 signal = yield self._create_seqimg_payload_from_popped(
