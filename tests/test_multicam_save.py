@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from math import prod
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, Mock, patch
 
 import pytest
@@ -94,21 +94,6 @@ def test_multicam_ome_sink_with_channels(
     assert prod(view.shape[:-2]) == expected
 
 
-def _sink_injected(runner: Any) -> MagicMock:
-    """Inject a mock sink into an MDARunner for the duration of a run."""
-    sink = MagicMock()
-    sink.get_view.return_value = None
-    real_coerce = runner._coerce_outputs
-
-    def _coerce_with_sink(output: object = None, overwrite: bool = False) -> list:
-        handlers = real_coerce(output, overwrite=overwrite)
-        runner._sink = sink
-        return handlers
-
-    runner._coerce_outputs = _coerce_with_sink
-    return sink
-
-
 def test_multicam_skip_event_multiplier(multicam_core: CMMCorePlus) -> None:
     """SkipEvent.num_frames should be multiplied by n_cameras for the sink."""
     real_engine = multicam_core.mda.engine
@@ -125,8 +110,11 @@ def test_multicam_skip_event_multiplier(multicam_core: CMMCorePlus) -> None:
         def exec_event(self, event: useq.MDAEvent) -> tuple:
             return ()
 
-    sink = _sink_injected(multicam_core.mda)
-    with patch.object(multicam_core.mda, "_engine", SkippingEngine()):
+    sink = MagicMock()
+    with (
+        patch.object(multicam_core.mda, "_engine", SkippingEngine()),
+        patch.object(multicam_core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
         multicam_core.mda.run([useq.MDAEvent()])
 
     n_cameras = multicam_core.getNumberOfCameraChannels()

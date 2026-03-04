@@ -392,8 +392,8 @@ class MDARunner:
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-        # also creates self._sink if output is a str|Path|AcquisitionSettings
-        handlers = self._coerce_outputs(output, overwrite=overwrite)
+        handlers, sink = self._coerce_outputs(output, overwrite=overwrite)
+        self._sink = sink
         with self._handlers_connected(handlers):
             # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
             # called inside the context manager, since the `mda_listeners_connected`
@@ -459,34 +459,36 @@ class MDARunner:
         """
         return time.perf_counter() - self._t0
 
+    @staticmethod
     def _coerce_outputs(
-        self,
         output: SingleOutput | Sequence[SingleOutput] | None,
         overwrite: bool = False,
-    ) -> list[SupportsFrameReady]:
-        """Normalize and validate output into a list of frameReady handlers.
+    ) -> tuple[list[SupportsFrameReady], SinkProtocol | None]:
+        """Normalize and validate output into a list of frameReady handlers, and a sink.
 
-        Also sets self._sink if a path or AcquisitionSettings is provided.
+        Returns
+        -------
+        tuple[list[SupportsFrameReady], SinkProtocol | None]
+            A tuple of (handlers, sink).
         """
-        # reset sink from any previous run so a new run can set a fresh one
-        self._sink = None
+        sink: SinkProtocol | None = None
+        handlers: list[SupportsFrameReady] = []
 
         if output is None:
-            return []
+            return handlers, sink
 
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
 
-        handlers: list[SupportsFrameReady] = []
         for item in output:
             if isinstance(item, (str, Path, AcquisitionSettings)):
-                if self._sink is not None:
+                if sink is not None:
                     raise NotImplementedError(
                         "Only one AcquisitionSettings object or path may be provided "
                         "as output.  Open a feature request if you would like to see "
                         "support for multiple data sinks."
                     )
-                self._sink = _OmeWritersSink.from_output(item, overwrite=overwrite)
+                sink = _OmeWritersSink.from_output(item, overwrite=overwrite)
             else:
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
@@ -494,7 +496,7 @@ class MDARunner:
                         f"Got {item} with type {type(item)}."
                     )
                 handlers.append(item)
-        return handlers
+        return handlers, sink
 
     def _handlers_connected(
         self, handlers: Sequence[SupportsFrameReady]

@@ -554,21 +554,6 @@ def test_restore_initial_state_enabled_by_default(
         assert abs(final_z - changed_z) < 0.1
 
 
-def _sink_injected(runner: Any) -> MagicMock:
-    """Inject a mock sink into an MDARunner for the duration of a run."""
-    sink = MagicMock()
-    sink.get_view.return_value = None
-    real_coerce = runner._coerce_outputs
-
-    def _coerce_with_sink(output: object = None, overwrite: bool = False) -> list:
-        handlers = real_coerce(output, overwrite=overwrite)
-        runner._sink = sink
-        return handlers
-
-    runner._coerce_outputs = _coerce_with_sink
-    return sink
-
-
 def test_skip_event_from_setup(core: CMMCorePlus) -> None:
     """SkipEvent raised in setup_event skips exec and notifies the sink."""
     exec_mock = Mock()
@@ -591,8 +576,11 @@ def test_skip_event_from_setup(core: CMMCorePlus) -> None:
         MDAEvent(index={"t": 2}),
     ]
 
-    sink = _sink_injected(core.mda)
-    with patch.object(core.mda, "_engine", SkippingEngine()):
+    sink = MagicMock()
+    with (
+        patch.object(core.mda, "_engine", SkippingEngine()),
+        patch.object(core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
         core.mda.run(events)
 
     # exec_event should have been called for events 0 and 2, but not 1
@@ -614,8 +602,11 @@ def test_skip_event_multi_frame(core: CMMCorePlus) -> None:
         def exec_event(self, event: MDAEvent) -> Iterable:
             return ()
 
-    sink = _sink_injected(core.mda)
-    with patch.object(core.mda, "_engine", SkippingEngine()):
+    sink = MagicMock()
+    with (
+        patch.object(core.mda, "_engine", SkippingEngine()),
+        patch.object(core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
         core.mda.run([MDAEvent()])
 
     sink.skip.assert_called_once_with(frames=5)
@@ -637,8 +628,11 @@ def test_none_payload_calls_skip(core: CMMCorePlus) -> None:
             yield None  # one frame failed
             yield (MagicMock(), event, {"runner_time_ms": 0})
 
-    sink = _sink_injected(core.mda)
-    with patch.object(core.mda, "_engine", PartialEngine()):
+    sink = MagicMock()
+    with (
+        patch.object(core.mda, "_engine", PartialEngine()),
+        patch.object(core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
         core.mda.run([MDAEvent()])
 
     assert sink.append.call_count == 2
