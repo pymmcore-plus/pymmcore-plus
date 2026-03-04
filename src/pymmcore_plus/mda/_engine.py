@@ -130,7 +130,15 @@ class MDAEngine(PMDAEngine):
 
         self._last_config: tuple[str, str] = ("", "")
         self._last_xy_pos: tuple[float | None, float | None] = (None, None)
+
+        # store device names, set to core.getCameraDevice(), core.getXYStageDevice(),
+        # and core.getFocusDevice() in setup_sequence() if not provided.
+        # Will be used in calls to core.setROI(self._camera_device, ...),
+        # core.setXYPosition(self._xy_stage_device, ...), and
+        # core.setZPosition(self._z_stage_device, ...) during MDA events
         self._camera_device: str | None = None
+        # self._xy_stage_device: str | None = None
+        # self._z_stage_device: str | None = None
 
         # -----
         # The following values are stored during setup_sequence simply to speed up
@@ -176,6 +184,13 @@ class MDAEngine(PMDAEngine):
         # https://github.com/pymmcore-plus/pymmcore-plus/issues/503
         core._last_config = ("", "")  # noqa: SLF001
         core._last_xy_position.clear()  # noqa: SLF001
+
+        if self._camera_device is None:
+            self._camera_device = self.mmcore.getCameraDevice()
+        # if self._xy_stage_device is None:
+        #     self._xy_stage_device = self.mmcore.getXYStageDevice()
+        # if self._z_stage_device is None:
+        #     self._z_stage_device = self.mmcore.getFocusDevice()
 
         self._update_config_device_props()
         # get if the autofocus is engaged at the start of the sequence
@@ -225,8 +240,6 @@ class MDAEngine(PMDAEngine):
         event : MDAEvent
             The event to use for the Hardware config
         """
-        if self._camera_device is None:
-            self._camera_device = self.mmcore.getCameraDevice()
         if isinstance(event, SequencedEvent):
             self.setup_sequenced_event(event)
         else:
