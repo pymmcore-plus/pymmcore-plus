@@ -485,10 +485,9 @@ class MDAEngine(PMDAEngine):
 
         # capture ROI
         try:
-            x, y, w, h = core.getROI(self._camera_device)
-            state["roi"] = CameraROI(
-                x=x, y=y, width=w, height=h, camera=self._camera_device
-            )
+            cam = self._camera_device or core.getCameraDevice()
+            x, y, w, h = core.getROI(cam)
+            state["roi"] = CameraROI(x=x, y=y, width=w, height=h, camera=cam)
         except Exception as e:
             logger.warning("Failed to capture ROI: %s", e)
 
@@ -953,9 +952,10 @@ class MDAEngine(PMDAEngine):
         `setup_single_event`), but it is made public in case a user wants to
         subclass this engine and override ROI behavior.
         """
+        if (roi := event.roi) is None:
+            return
         try:
-            roi = event.roi
-            cam = roi.camera or self._camera_device
+            cam = roi.camera or self._camera_device or self.mmcore.getCameraDevice()
             # TODO MMCore does not have a version of clearROI that takes a camera device
             self.mmcore.clearROI()
             self.mmcore.setROI(cam, roi.x, roi.y, roi.width, roi.height)
