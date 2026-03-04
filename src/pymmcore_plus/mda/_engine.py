@@ -131,15 +131,6 @@ class MDAEngine(PMDAEngine):
         self._last_config: tuple[str, str] = ("", "")
         self._last_xy_pos: tuple[float | None, float | None] = (None, None)
 
-        # store device names, set to core.getCameraDevice(), core.getXYStageDevice(),
-        # and core.getFocusDevice() in setup_sequence() if not provided.
-        # Will be used in calls to core.setROI(self._camera_device, ...),
-        # core.setXYPosition(self._xy_stage_device, ...), and
-        # core.setZPosition(self._z_stage_device, ...) during MDA events
-        self._camera_device: str | None = None
-        # self._xy_stage_device: str | None = None
-        # self._z_stage_device: str | None = None
-
         # -----
         # The following values are stored during setup_sequence simply to speed up
         # retrieval of metadata during each frame.
@@ -184,13 +175,6 @@ class MDAEngine(PMDAEngine):
         # https://github.com/pymmcore-plus/pymmcore-plus/issues/503
         core._last_config = ("", "")  # noqa: SLF001
         core._last_xy_position.clear()  # noqa: SLF001
-
-        if self._camera_device is None:
-            self._camera_device = self.mmcore.getCameraDevice()
-        # if self._xy_stage_device is None:
-        #     self._xy_stage_device = self.mmcore.getXYStageDevice()
-        # if self._z_stage_device is None:
-        #     self._z_stage_device = self.mmcore.getFocusDevice()
 
         self._update_config_device_props()
         # get if the autofocus is engaged at the start of the sequence
@@ -485,9 +469,8 @@ class MDAEngine(PMDAEngine):
 
         # capture ROI
         try:
-            cam = self._camera_device or core.getCameraDevice()
-            x, y, w, h = core.getROI(cam)
-            state["roi"] = CameraROI(x=x, y=y, width=w, height=h, camera=cam)
+            x, y, w, h = core.getROI()
+            state["roi"] = CameraROI(offset_x=x, offset_y=y, width=w, height=h)
         except Exception as e:
             logger.warning("Failed to capture ROI: %s", e)
 
@@ -955,10 +938,8 @@ class MDAEngine(PMDAEngine):
         if (roi := event.roi) is None:
             return
         try:
-            cam = roi.camera or self._camera_device or self.mmcore.getCameraDevice()
-            # TODO MMCore does not have a version of clearROI that takes a camera device
             self.mmcore.clearROI()
-            self.mmcore.setROI(cam, roi.x, roi.y, roi.width, roi.height)
+            self.mmcore.setROI(roi.offset_x, roi.offset_y, roi.width, roi.height)
         except Exception as e:
             logger.warning("Failed to set ROI. %s", e)
 
