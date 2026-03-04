@@ -154,3 +154,27 @@ def test_run_with_event_iterator(core: CMMCorePlus) -> None:
     view = core.mda.get_view()
     assert view is not None
     assert view.shape[:-2] == (3,)
+
+
+def test_sink_cleared_on_run_without_output(core: CMMCorePlus, tmp_path: Path) -> None:
+    """Test that the sink is always cleared at the start of a run.
+
+    The sink must be cleared even if the new run doesn't specify an output, otherwise
+    the sink from the previous run would still be set and the new run would try to
+    reuse it, which would fail if the previous sink had a file-based output because
+    the file already exists.
+    """
+    runner = core.mda
+    seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0.1, loops=2))
+    out = tmp_path / "first.ome.tiff"
+
+    # First run: write to a file - this sets runner._sink
+    runner.run(seq, output=out)
+    assert out.exists()
+    assert runner._sink is not None
+
+    # Second run: no output - sink must be cleared before the run starts,
+    # otherwise _prepare_to_run would call self._sink.setup() on the stale
+    # sink and raise FileExistsError because the file already exists.
+    runner.run(seq)  # must not raise
+    assert runner._sink is None

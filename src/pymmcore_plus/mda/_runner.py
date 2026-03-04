@@ -468,11 +468,11 @@ class MDARunner:
 
         Also sets self._sink if a path or AcquisitionSettings is provided.
         """
-        if output is None:
-            return []
-
         # reset sink from any previous run so a new run can set a fresh one
         self._sink = None
+
+        if output is None:
+            return []
 
         if isinstance(output, (str, Path)) or not isinstance(output, Sequence):
             output = [output]
