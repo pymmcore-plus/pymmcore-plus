@@ -358,17 +358,24 @@ class MDAEngine(PMDAEngine):
 
         # most cameras will only have a single channel
         # but Multi-camera may have multiple, and we need to retrieve a buffer for each
-        for cam in range(mmcore.getNumberOfCameraChannels()):
+        n_cam_channels = mmcore.getNumberOfCameraChannels()
+        for cam in range(n_cam_channels):
             meta = self.get_frame_metadata(
                 event,
                 runner_time_ms=event_time_ms,
                 camera_device=mmcore.getPhysicalCameraDevice(cam),
                 include_position=self._include_frame_position_metadata is not False,
             )
+            # add cam index when using multi-camera, matching sequenced path
+            sub_event = event
+            if n_cam_channels > 1:
+                sub_event = event.model_copy(
+                    update={"index": {**event.index, "cam": cam}}
+                )
             # Note, the third element is actually a MutableMapping, but mypy doesn't
             # see TypedDict as a subclass of MutableMapping yet.
             # https://github.com/python/mypy/issues/4976
-            yield ImagePayload(mmcore.getImage(cam), event, meta)  # type: ignore[misc]
+            yield ImagePayload(mmcore.getImage(cam), sub_event, meta)  # type: ignore[misc]
 
     def get_frame_metadata(
         self,
