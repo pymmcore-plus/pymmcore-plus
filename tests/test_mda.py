@@ -640,13 +640,6 @@ def test_setup_event_roi_multi_timepoint(core: CMMCorePlus) -> None:
     assert tuple(core.getROI()) == initial_roi
 
 
-def _mock_sink() -> MagicMock:
-    """Create a MagicMock that satisfies the SinkProtocol."""
-    sink = MagicMock()
-    sink.get_view.return_value = None
-    return sink
-
-
 def test_skip_event_from_setup(core: CMMCorePlus) -> None:
     """SkipEvent raised in setup_event skips exec and notifies the sink."""
     exec_mock = Mock()
