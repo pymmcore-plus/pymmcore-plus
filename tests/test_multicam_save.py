@@ -111,14 +111,11 @@ def test_multicam_skip_event_multiplier(multicam_core: CMMCorePlus) -> None:
             return ()
 
     sink = MagicMock()
-    sink.get_view.return_value = None
-
-    with patch.object(multicam_core.mda, "_engine", SkippingEngine()):
-        multicam_core.mda._sink = sink
-        try:
-            multicam_core.mda.run([useq.MDAEvent()])
-        finally:
-            multicam_core.mda._sink = None
+    with (
+        patch.object(multicam_core.mda, "_engine", SkippingEngine()),
+        patch.object(multicam_core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
+        multicam_core.mda.run([useq.MDAEvent()])
 
     n_cameras = multicam_core.getNumberOfCameraChannels()
     sink.skip.assert_called_once_with(frames=3 * n_cameras)
