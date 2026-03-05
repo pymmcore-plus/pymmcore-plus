@@ -733,7 +733,10 @@ class MDAEngine(PMDAEngine):
                 break
         else:
             # Deadline exceeded — stop sequenced acquisition
-            logger.warning("Sequenced acquisition timed out after %.1f s", self._sequenced_acq_timeout)
+            logger.warning(
+                "Sequenced acquisition timed out after %.1f s",
+                self._sequenced_acq_timeout,
+            )
             core.stopSequenceAcquisition()
 
         if core.isBufferOverflowed():  # pragma: no cover
@@ -788,7 +791,10 @@ class MDAEngine(PMDAEngine):
                 break
         else:
             # Deadline exceeded — stop sequenced acquisition
-            logger.warning("Sequenced acquisition timed out after %.1f s", self._sequenced_acq_timeout)
+            logger.warning(
+                "Sequenced acquisition timed out after %.1f s",
+                self._sequenced_acq_timeout,
+            )
             core.stopSequenceAcquisition()
 
         if core.isBufferOverflowed():  # pragma: no cover
