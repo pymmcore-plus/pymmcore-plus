@@ -556,62 +556,72 @@ def test_restore_initial_state_enabled_by_default(
 
 def test_setup_event_roi(core: CMMCorePlus) -> None:
     """Test that engine applies ROI from a setup event and restores it."""
-    assert core.mda.engine
+
     core.mda.engine.restore_initial_state = True
+    core.mda.engine.use_hardware_sequencing = False
 
     # capture initial ROI
     initial_roi = tuple(core.getROI())
 
-    setup = MDAEvent(
-        roi=(0, 0, 256, 256),
-        action=useq.CustomAction(name="setup"),
-    )
+    width, height = 128, 64
     seq = MDASequence(
-        setup=setup,
+        setup=MDAEvent(roi=(12, 32, width, height)),
         time_plan={"interval": 0, "loops": 1},
         channels=["DAPI"],
     )
 
+    images: list = []
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any) -> None:
+        images.append(img)
+
     core.mda.run(seq)
 
+    assert images[0].shape == (height, width)
     # ROI should be restored to initial
     assert tuple(core.getROI()) == initial_roi
 
 
 def test_setup_event_properties(core: CMMCorePlus) -> None:
     """Test that engine applies properties from a setup event."""
-    assert core.mda.engine
 
-    setup = MDAEvent(
-        properties=[("Camera", "Binning", "2")],
-        action=useq.CustomAction(name="setup"),
-    )
+    core.mda.engine.restore_initial_state = True
+
+    initial_binning = "1"
+    core.setProperty("Camera", "Binning", initial_binning)
+
+    target_binning = "2"
     seq = MDASequence(
-        setup=setup,
+        setup=MDAEvent(properties=[("Camera", "Binning", target_binning)]),
         time_plan={"interval": 0, "loops": 1},
         channels=["DAPI"],
     )
 
+    binning: list[str] = []
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any) -> None:
+        binning.append(core.getProperty("Camera", "Binning"))
+
     core.mda.run(seq)
+
+    assert binning[0] == target_binning
+    # Binning should be restored to initial state
+    assert core.getProperty("Camera", "Binning") == initial_binning
 
 
 def test_setup_event_roi_multi_timepoint(core: CMMCorePlus) -> None:
-    """Test that ROI from setup is applied before a multi-frame sequence."""
+    """Test that ROI from setup is applied before a sequenced multi-frame sequence."""
     from pymmcore_plus.core._sequencing import SequencedEvent
 
-    assert core.mda.engine
     core.mda.engine.restore_initial_state = True
     core.mda.engine.use_hardware_sequencing = True
 
     initial_roi = tuple(core.getROI())
-    target_roi = (0, 0, 256, 256)
+    width, height = 128, 256
+    target_roi = (12, 32, width, height)
 
-    setup = MDAEvent(
-        roi=target_roi,
-        action=useq.CustomAction(name="setup"),
-    )
     seq = MDASequence(
-        setup=setup,
+        setup=MDAEvent(roi=target_roi),
         time_plan={"interval": 0, "loops": 3},
         channels=["DAPI"],
     )
@@ -626,7 +636,7 @@ def test_setup_event_roi_multi_timepoint(core: CMMCorePlus) -> None:
     images: list = []
 
     @core.mda.events.frameReady.connect
-    def _on_frame(img, event, meta):
+    def _on_frame(img: Any) -> None:
         images.append(img)
 
     core.mda.run(seq)
@@ -634,7 +644,7 @@ def test_setup_event_roi_multi_timepoint(core: CMMCorePlus) -> None:
     # All acquired images should match the ROI dimensions
     assert len(images) == 3
     for img in images:
-        assert img.shape == (target_roi[3], target_roi[2])
+        assert img.shape == (height, width)
 
     # ROI should be restored after sequence
     assert tuple(core.getROI()) == initial_roi
