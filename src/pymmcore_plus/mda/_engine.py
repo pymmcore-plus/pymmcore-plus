@@ -128,7 +128,7 @@ class MDAEngine(PMDAEngine):
         self._autoshutter_was_set: bool = mmc.getAutoShutter()
 
         # used to set a timeout for sequence acquisitions, by default infinite.
-        # Useful when acquire an image sequence and the camera misses a trigger pulse
+        # Useful when acquiring an image sequence and the camera misses a trigger pulse
         # or drops a frame. In those cases, and in part depending on the dispatched
         # trigger pulse train and the camera device adapter, the acquisition may stall
         # indefinitely. As such, the timeout can be set to the expected acquisition
