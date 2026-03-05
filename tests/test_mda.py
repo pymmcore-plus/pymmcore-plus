@@ -554,13 +554,6 @@ def test_restore_initial_state_enabled_by_default(
         assert abs(final_z - changed_z) < 0.1
 
 
-def _mock_sink() -> MagicMock:
-    """Create a MagicMock that satisfies the SinkProtocol."""
-    sink = MagicMock()
-    sink.get_view.return_value = None
-    return sink
-
-
 def test_skip_event_from_setup(core: CMMCorePlus) -> None:
     """SkipEvent raised in setup_event skips exec and notifies the sink."""
     exec_mock = Mock()
@@ -577,19 +570,18 @@ def test_skip_event_from_setup(core: CMMCorePlus) -> None:
             exec_mock(event)
             yield (MagicMock(), event, {"runner_time_ms": 0})
 
-    sink = _mock_sink()
     events = [
         MDAEvent(index={"t": 0}),
         MDAEvent(index={"t": 1}),  # this one will be skipped
         MDAEvent(index={"t": 2}),
     ]
 
-    with patch.object(core.mda, "_engine", SkippingEngine()):
-        core.mda._sink = sink
-        try:
-            core.mda.run(events)
-        finally:
-            core.mda._sink = None
+    sink = MagicMock()
+    with (
+        patch.object(core.mda, "_engine", SkippingEngine()),
+        patch.object(core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
+        core.mda.run(events)
 
     # exec_event should have been called for events 0 and 2, but not 1
     assert exec_mock.call_count == 2
@@ -610,13 +602,12 @@ def test_skip_event_multi_frame(core: CMMCorePlus) -> None:
         def exec_event(self, event: MDAEvent) -> Iterable:
             return ()
 
-    sink = _mock_sink()
-    with patch.object(core.mda, "_engine", SkippingEngine()):
-        core.mda._sink = sink
-        try:
-            core.mda.run([MDAEvent()])
-        finally:
-            core.mda._sink = None
+    sink = MagicMock()
+    with (
+        patch.object(core.mda, "_engine", SkippingEngine()),
+        patch.object(core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
+        core.mda.run([MDAEvent()])
 
     sink.skip.assert_called_once_with(frames=5)
     sink.append.assert_not_called()
@@ -637,13 +628,12 @@ def test_none_payload_calls_skip(core: CMMCorePlus) -> None:
             yield None  # one frame failed
             yield (MagicMock(), event, {"runner_time_ms": 0})
 
-    sink = _mock_sink()
-    with patch.object(core.mda, "_engine", PartialEngine()):
-        core.mda._sink = sink
-        try:
-            core.mda.run([MDAEvent()])
-        finally:
-            core.mda._sink = None
+    sink = MagicMock()
+    with (
+        patch.object(core.mda, "_engine", PartialEngine()),
+        patch.object(core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
+        core.mda.run([MDAEvent()])
 
     assert sink.append.call_count == 2
     sink.skip.assert_called_once_with(frames=1)
