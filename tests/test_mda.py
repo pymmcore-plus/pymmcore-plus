@@ -571,6 +571,7 @@ def test_setup_event_roi(core: CMMCorePlus) -> None:
     )
 
     images: list = []
+
     @core.mda.events.frameReady.connect
     def _on_frame(img: Any) -> None:
         images.append(img)
@@ -598,6 +599,7 @@ def test_setup_event_properties(core: CMMCorePlus) -> None:
     )
 
     binning: list[str] = []
+
     @core.mda.events.frameReady.connect
     def _on_frame(img: Any) -> None:
         binning.append(core.getProperty("Camera", "Binning"))
