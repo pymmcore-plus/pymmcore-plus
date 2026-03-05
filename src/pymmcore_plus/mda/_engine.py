@@ -134,7 +134,7 @@ class MDAEngine(PMDAEngine):
         # indefinitely. As such, the timeout can be set to the expected acquisition
         # duration, e.g. framerate * num_frames + buffer. If the timeout is exceeded,
         # ``exec_event`` will return ``None`` for any missing frames.
-        self._sequenced_acq_timeout = np.inf
+        self._sequenced_acq_timeout: float = np.inf
 
         self._last_config: tuple[str, str] = ("", "")
         self._last_xy_pos: tuple[float | None, float | None] = (None, None)
