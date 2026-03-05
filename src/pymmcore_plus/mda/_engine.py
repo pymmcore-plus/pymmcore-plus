@@ -597,11 +597,6 @@ class MDAEngine(PMDAEngine):
                     core.stopPropertySequence(dev, prop)
                 core.loadPropertySequence(dev, prop, value_sequence)
 
-        # set all static properties, these won't change over the course of the sequence.
-        if event.properties:
-            for dev, prop, value in event.properties:
-                core.setProperty(dev, prop, value)
-
     def setup_sequenced_event(self, event: SequencedEvent) -> None:
         """Setup hardware for a sequenced (triggered) event.
 
@@ -620,8 +615,15 @@ class MDAEngine(PMDAEngine):
         # but this could be removed.
         self._set_event_channel(event)
 
+        if event.properties:
+            for dev, prop, value in event.properties:
+                core.setProperty(dev, prop, value)
+
         if event.slm_image:
             self._set_event_slm_image(event)
+
+        if event.roi:
+            self._set_event_roi(event)
 
         if core.isSequenceRunning():
             self._await_sequence_acquisition()
