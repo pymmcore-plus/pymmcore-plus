@@ -127,6 +127,15 @@ class MDAEngine(PMDAEngine):
         # Note: getAutoShutter() is True when no config is loaded at all
         self._autoshutter_was_set: bool = mmc.getAutoShutter()
 
+        # used to set a timeout for sequence acquisitions, by default infinite.
+        # Useful when acquiring an image sequence and the camera misses a trigger pulse
+        # or drops a frame. In those cases, and in part depending on the dispatched
+        # trigger pulse train and the camera device adapter, the acquisition may stall
+        # indefinitely. As such, the timeout can be set to the expected acquisition
+        # duration, e.g. framerate * num_frames + buffer. If the timeout is exceeded,
+        # ``exec_event`` will return ``None`` for any missing frames.
+        self._sequenced_acq_timeout: float = np.inf
+
         self._last_config: tuple[str, str] = ("", "")
         self._last_xy_pos: tuple[float | None, float | None] = (None, None)
 
@@ -692,9 +701,10 @@ class MDAEngine(PMDAEngine):
         core = self.mmcore
         count = 0
         pause_warned = False
+        deadline = time.monotonic() + self._sequenced_acq_timeout
 
         # Pop frames while sequence is running, then drain remaining buffer
-        while True:
+        while time.monotonic() < deadline:
             if remaining := core.getRemainingImageCount():
                 img, mm_meta = core.popNextImageAndMD()
                 signal = yield self._create_seqimg_payload_from_popped(
@@ -721,6 +731,13 @@ class MDAEngine(PMDAEngine):
             else:
                 # Done acquiring and buffer empty - exit
                 break
+        else:
+            # Deadline exceeded — stop sequenced acquisition
+            logger.warning(
+                "Sequenced acquisition timed out after %.1f s",
+                self._sequenced_acq_timeout,
+            )
+            core.stopSequenceAcquisition()
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
@@ -748,9 +765,10 @@ class MDAEngine(PMDAEngine):
         n_events = len(event.events)
         coordinator = _MultiCameraCoordinator(core, n_channels, n_events)
         pause_warned = False
+        deadline = time.monotonic() + self._sequenced_acq_timeout
 
         # Unified loop: pop while running, then drain remaining buffer
-        while True:
+        while time.monotonic() < deadline:
             if core.getRemainingImageCount():
                 for payload in coordinator.pop_and_process(
                     event.events,
@@ -771,6 +789,13 @@ class MDAEngine(PMDAEngine):
                 time.sleep(0.001)
             else:
                 break
+        else:
+            # Deadline exceeded — stop sequenced acquisition
+            logger.warning(
+                "Sequenced acquisition timed out after %.1f s",
+                self._sequenced_acq_timeout,
+            )
+            core.stopSequenceAcquisition()
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
