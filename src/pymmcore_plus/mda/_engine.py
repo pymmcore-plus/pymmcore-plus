@@ -192,6 +192,11 @@ class MDAEngine(PMDAEngine):
         if self.restore_initial_state:
             self._initial_state = self._capture_state()
 
+        # Apply the setup event (ROI, properties, etc.) before computing
+        # grid FOV sizes and summary metadata so they reflect the setup state.
+        if sequence.setup is not None:
+            self.setup_single_event(sequence.setup)
+
         if px_size := core.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
 

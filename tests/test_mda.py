@@ -571,14 +571,24 @@ def test_setup_event_roi(core: CMMCorePlus) -> None:
     )
 
     images: list = []
+    summary_meta: list = []
 
     @core.mda.events.frameReady.connect
     def _on_frame(img: Any) -> None:
         images.append(img)
 
+    @core.mda.events.sequenceStarted.connect
+    def _on_start(seq: Any, meta: Any) -> None:
+        summary_meta.append(meta)
+
     core.mda.run(seq)
 
     assert images[0].shape == (height, width)
+
+    # Summary metadata should include the ROI set by the setup event
+    assert len(summary_meta) == 1
+    assert summary_meta[0]["image_infos"][0]["roi"] == (12, 32, width, height)
+
     # ROI should be restored to initial
     assert tuple(core.getROI()) == initial_roi
 
@@ -628,12 +638,10 @@ def test_setup_event_roi_multi_timepoint(core: CMMCorePlus) -> None:
         channels=["DAPI"],
     )
 
-    # Verify event types: setup + one SequencedEvent for the 3 timepoints
+    # Setup event is not yielded during iteration; only acquisition events are
     events = list(core.mda.engine.event_iterator(seq))
-    assert len(events) == 2
-    assert isinstance(events[0].action, useq.CustomAction)
-    assert events[0].action.name == "setup"
-    assert isinstance(events[1], SequencedEvent)
+    assert len(events) == 1
+    assert isinstance(events[0], SequencedEvent)
 
     images: list = []
 
