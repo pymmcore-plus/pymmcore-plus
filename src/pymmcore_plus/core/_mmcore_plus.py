@@ -2206,7 +2206,8 @@ class CMMCorePlus(pymmcore.CMMCore):
         ...and send a channelGroupChanged signal.
         """
         if self.getChannelGroup() != channelGroup:
-            super().setChannelGroup(channelGroup)
+            with _blockSignal(self.events, self.events.channelGroupChanged):
+                super().setChannelGroup(channelGroup)
             self.events.channelGroupChanged.emit(channelGroup)
 
     def setFocusDevice(self, focusLabel: str) -> None:
