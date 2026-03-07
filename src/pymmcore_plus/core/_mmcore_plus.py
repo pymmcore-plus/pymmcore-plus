@@ -2371,7 +2371,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             yield
             return
 
-        # Suppress relay during the operation to handle v11 sync callbacks
+        # Suppress relay during the operation to handle MMCore v11 sync callbacks
         # (fired during yield). After yield, value-aware tokens handle v12
         # async callbacks that arrive later.
         with self._callback_relay.property_suppressed(device, properties):
@@ -2540,7 +2540,7 @@ _CUSTOM_RELAY = {
 _DEDUP_TTL = 2.0  # seconds
 _DEDUP_MAX_TOKENS = 64  # per (dev, prop)
 
-_PropKey = tuple[str, str]
+_PropKey: TypeAlias = tuple[str, str]
 
 
 class _MMCallbackRelay(pymmcore.MMEventCallback):
@@ -2548,7 +2548,10 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
 
     def __init__(self, emitter: CMMCoreSignaler):
         self._emitter = emitter
+        # mapping of (device, prop) to a deque of (value, expiration)
+        # representing recently emitted propertyChanged events to suppress duplicates
         self._prop_tokens: dict[_PropKey, deque[tuple[str, float]]] = {}
+        # Set of (device, prop) pairs for which relay emissions are currently suppressed
         self._prop_suppressed: set[_PropKey] = set()
         self._lock = threading.Lock()
         super().__init__()
@@ -2580,12 +2583,18 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
                 tokens.append((str(value), time.monotonic() + _DEDUP_TTL))
 
     def onPropertyChanged(self, name: str, propName: str, propValue: str) -> None:
+        """Special handling for propertyChanged signals.
+
+        To avoid emitting duplicate propertyChanged signals for the same property within
+        a short time window, we check if the incoming callback matches a recently
+        registered manual emission (via `register_property_emission`) and suppress it if
+        so.
+        """
         with self._lock:
-            key = (name, propName)
-            if key in self._prop_suppressed:
+            if (key := (name, propName)) in self._prop_suppressed:
                 return
-            tokens = self._prop_tokens.get(key)
-            if tokens:
+
+            if tokens := self._prop_tokens.get(key):
                 self._expire_tokens(tokens)
                 # Common case: FIFO consumption (first token matches)
                 if tokens and tokens[0][0] == propValue:
