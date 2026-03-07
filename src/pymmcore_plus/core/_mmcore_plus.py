@@ -2551,8 +2551,8 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         # mapping of (device, prop) to a deque of (value, expiration)
         # representing recently emitted propertyChanged events to suppress duplicates
         self._prop_tokens: dict[_PropKey, deque[tuple[str, float]]] = {}
-        # Set of (device, prop) pairs for which relay emissions are currently suppressed
-        self._prop_suppressed: set[_PropKey] = set()
+        # Refcount per (device, prop) for re-entrant suppression scopes.
+        self._prop_suppressed: dict[_PropKey, int] = {}
         self._lock = threading.Lock()
         super().__init__()
 
@@ -2563,12 +2563,20 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         """Suppress relay emissions for (device, prop) pairs during a block."""
         keys = [(device, p) for p in properties]
         with self._lock:
-            self._prop_suppressed.update(keys)
+            for key in keys:
+                self._prop_suppressed[key] = self._prop_suppressed.get(key, 0) + 1
         try:
             yield
         finally:
             with self._lock:
-                self._prop_suppressed.difference_update(keys)
+                for key in keys:
+                    if key not in self._prop_suppressed:
+                        continue
+                    count = self._prop_suppressed[key] - 1
+                    if count > 0:
+                        self._prop_suppressed[key] = count
+                    else:
+                        del self._prop_suppressed[key]
 
     def register_property_emission(self, device: str, prop: str, value: str) -> None:
         """Register a manual propertyChanged emission for dedup."""
@@ -2579,6 +2587,9 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
                 self._prop_tokens[key] = tokens = deque()
             else:
                 self._expire_tokens(tokens)
+                if not tokens:
+                    del self._prop_tokens[key]
+                    self._prop_tokens[key] = tokens = deque()
             if len(tokens) < _DEDUP_MAX_TOKENS:
                 tokens.append((str(value), time.monotonic() + _DEDUP_TTL))
 
@@ -2591,24 +2602,27 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
         so.
         """
         with self._lock:
-            if (key := (name, propName)) in self._prop_suppressed:
+            if self._prop_suppressed.get(key := (name, propName), 0) > 0:
                 return
 
             if tokens := self._prop_tokens.get(key):
                 self._expire_tokens(tokens)
-                # Common case: FIFO consumption (first token matches)
-                if tokens and tokens[0][0] == propValue:
-                    tokens.popleft()
-                    if not tokens:
-                        del self._prop_tokens[key]
-                    return
-                # Uncommon: out-of-order delivery, linear scan
-                for i, (val, _) in enumerate(tokens):
-                    if val == propValue:
-                        del tokens[i]
+                if not tokens:
+                    del self._prop_tokens[key]
+                else:
+                    # Common case: FIFO consumption (first token matches)
+                    if tokens[0][0] == propValue:
+                        tokens.popleft()
                         if not tokens:
                             del self._prop_tokens[key]
                         return
+                    # Uncommon: out-of-order delivery, linear scan
+                    for i, (val, _) in enumerate(tokens):
+                        if val == propValue:
+                            del tokens[i]
+                            if not tokens:
+                                del self._prop_tokens[key]
+                            return
         try:
             self._emitter.propertyChanged.emit(name, propName, propValue)
         except Exception as e:
