@@ -1589,6 +1589,11 @@ class CMMCorePlus(pymmcore.CMMCore):
             for i in range(self.getNumberOfCameraChannels())
         )
 
+    def _emit_property_changed(self, device: str, prop: str, value: str) -> None:
+        """Emit propertyChanged with dedup token to suppress the C++ echo."""
+        self._callback_relay.register_property_emission(device, prop, value)
+        self.events.propertyChanged.emit(device, prop, value)
+
     def snapImage(self) -> None:
         """Acquires a single image with current settings.
 
@@ -1598,15 +1603,13 @@ class CMMCorePlus(pymmcore.CMMCore):
         if (autoshutter := self.getAutoShutter()) and (
             shutter := self.getShutterDevice()
         ):
-            self._callback_relay.register_property_emission(shutter, "State", "1")
-            self.events.propertyChanged.emit(shutter, "State", "1")
+            self._emit_property_changed(shutter, "State", "1")
         try:
             self._do_snap_image()
             self.events.imageSnapped.emit(self.getCameraDevice())
         finally:
             if autoshutter and shutter:
-                self._callback_relay.register_property_emission(shutter, "State", "0")
-                self.events.propertyChanged.emit(shutter, "State", "0")
+                self._emit_property_changed(shutter, "State", "0")
 
     @property
     def mda(self) -> MDARunner:
@@ -2027,8 +2030,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             state = args[0]
         self._do_shutter_open(shutterLabel, state)
         state = str(int(bool(state)))
-        self._callback_relay.register_property_emission(shutterLabel, "State", state)
-        self.events.propertyChanged.emit(shutterLabel, "State", state)
+        self._emit_property_changed(shutterLabel, "State", state)
 
     def _do_shutter_open(self, shutterLabel: str, state: bool, /) -> None:
         """Open or close the shutter."""
@@ -2204,8 +2206,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         """Set the current Focus Device and emit a `propertyChanged` signal."""
         if self.getFocusDevice() != focusLabel:
             super().setFocusDevice(focusLabel)
-            self._callback_relay.register_property_emission("Core", "Focus", focusLabel)
-            self.events.propertyChanged.emit("Core", "Focus", focusLabel)
+            self._emit_property_changed("Core", "Focus", focusLabel)
 
     def saveSystemConfiguration(self, filename: str) -> None:
         """Saves the current system configuration to a text file.
@@ -2379,8 +2380,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         after = [self.getProperty(device, p) for p in properties]
         if before != after:
             for i, val in enumerate(after):
-                relay.register_property_emission(device, properties[i], val)
-                self.events.propertyChanged.emit(device, properties[i], val)
+                self._emit_property_changed(device, properties[i], val)
 
     @contextmanager
     def setContext(self, **kwargs: Unpack[SetContextKwargs]) -> Iterator[None]:
