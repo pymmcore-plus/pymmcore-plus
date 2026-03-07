@@ -2374,8 +2374,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         # Suppress relay during the operation to handle v11 sync callbacks
         # (fired during yield). After yield, value-aware tokens handle v12
         # async callbacks that arrive later.
-        relay = self._callback_relay
-        with relay.property_suppressed(device, properties):
+        with self._callback_relay.property_suppressed(device, properties):
             yield
         after = [self.getProperty(device, p) for p in properties]
         if before != after:
