@@ -2,10 +2,11 @@ from __future__ import annotations
 
 import os
 import re
+import threading
 import time
 import warnings
 import weakref
-from collections import defaultdict
+from collections import defaultdict, deque
 from contextlib import contextmanager, suppress
 from datetime import datetime
 from pathlib import Path
@@ -21,7 +22,6 @@ from typing import (
     overload,
 )
 
-from psygnal import SignalInstance
 from typing_extensions import deprecated
 
 import pymmcore_plus._pymmcore as pymmcore
@@ -166,18 +166,6 @@ STATE_PROPS = (STATE, LABEL)
 class TaggedImage(NamedTuple):
     pix: np.ndarray
     tags: dict[str, Any]
-
-
-@contextmanager
-def _blockSignal(obj: Any, signal: Any) -> Iterator[None]:
-    if isinstance(signal, SignalInstance):
-        signal.block()
-        yield
-        signal.unblock()
-    else:
-        obj.blockSignals(True)
-        yield
-        obj.blockSignals(False)
 
 
 _instance: weakref.ref[CMMCorePlus] | None = None
@@ -1610,13 +1598,15 @@ class CMMCorePlus(pymmcore.CMMCore):
         if (autoshutter := self.getAutoShutter()) and (
             shutter := self.getShutterDevice()
         ):
-            self.events.propertyChanged.emit(shutter, "State", True)
+            self._callback_relay.register_property_emission(shutter, "State", "1")
+            self.events.propertyChanged.emit(shutter, "State", "1")
         try:
             self._do_snap_image()
             self.events.imageSnapped.emit(self.getCameraDevice())
         finally:
             if autoshutter and shutter:
-                self.events.propertyChanged.emit(shutter, "State", False)
+                self._callback_relay.register_property_emission(shutter, "State", "0")
+                self.events.propertyChanged.emit(shutter, "State", "0")
 
     @property
     def mda(self) -> MDARunner:
@@ -2037,6 +2027,7 @@ class CMMCorePlus(pymmcore.CMMCore):
             state = args[0]
         self._do_shutter_open(shutterLabel, state)
         state = str(int(bool(state)))
+        self._callback_relay.register_property_emission(shutterLabel, "State", state)
         self.events.propertyChanged.emit(shutterLabel, "State", state)
 
     def _do_shutter_open(self, shutterLabel: str, state: bool, /) -> None:
@@ -2206,14 +2197,14 @@ class CMMCorePlus(pymmcore.CMMCore):
         ...and send a channelGroupChanged signal.
         """
         if self.getChannelGroup() != channelGroup:
-            with _blockSignal(self.events, self.events.channelGroupChanged):
-                super().setChannelGroup(channelGroup)
+            super().setChannelGroup(channelGroup)
             self.events.channelGroupChanged.emit(channelGroup)
 
     def setFocusDevice(self, focusLabel: str) -> None:
         """Set the current Focus Device and emit a `propertyChanged` signal."""
         if self.getFocusDevice() != focusLabel:
             super().setFocusDevice(focusLabel)
+            self._callback_relay.register_property_emission("Core", "Focus", focusLabel)
             self.events.propertyChanged.emit("Core", "Focus", focusLabel)
 
     def saveSystemConfiguration(self, filename: str) -> None:
@@ -2379,11 +2370,22 @@ class CMMCorePlus(pymmcore.CMMCore):
             yield
             return
 
-        with _blockSignal(self.events, self.events.propertyChanged):
+        # Suppress relay for these properties during the operation.
+        # This handles v11 sync callbacks (fired during yield) and prevents
+        # double emissions. After yield, value-aware tokens handle v12 async
+        # callbacks that arrive later.
+        relay = self._callback_relay
+        for p in properties:
+            relay.suppress_property(device, p)
+        try:
             yield
+        finally:
+            for p in properties:
+                relay.unsuppress_property(device, p)
         after = [self.getProperty(device, p) for p in properties]
         if before != after:
             for i, val in enumerate(after):
+                relay.register_property_emission(device, properties[i], val)
                 self.events.propertyChanged.emit(device, properties[i], val)
 
     @contextmanager
@@ -2526,11 +2528,24 @@ for name in (
     )
 
 MMCORE_SIGNAL_NAMES = {n for n in dir(pymmcore.MMEventCallback) if n.startswith("on")}
-_SKIP = {
+
+# Signals where CMMCorePlus methods emit manually.
+# The relay drops these C++ callbacks entirely.
+_RELAY_SKIP = {
     "onImageSnapped",
     "onSequenceAcquisitionStopped",
     "onSequenceAcquisitionStarted",
+    "onChannelGroupChanged",
 }
+
+# Signals with custom relay logic (defined as methods on _MMCallbackRelay).
+# Excluded from dynamic method generation.
+_CUSTOM_RELAY = {
+    "onPropertyChanged",
+}
+
+_DEDUP_TTL = 2.0  # seconds
+_DEDUP_MAX_TOKENS = 64  # per (dev, prop)
 
 
 class _MMCallbackRelay(pymmcore.MMEventCallback):
@@ -2538,13 +2553,76 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
 
     def __init__(self, emitter: CMMCoreSignaler):
         self._emitter = emitter
+        self._prop_drop_tokens: dict[tuple[str, str], deque[tuple[str, float]]] = {}
+        # Keys currently suppressed (wildcard — drops any value)
+        self._prop_suppressed: set[tuple[str, str]] = set()
+        self._lock = threading.Lock()
         super().__init__()
+
+    def _cleanup_tokens(self, key: tuple[str, str]) -> None:
+        """Remove expired tokens for key. Called under lock."""
+        if key not in self._prop_drop_tokens:
+            return
+        tokens = self._prop_drop_tokens[key]
+        now = time.monotonic()
+        while tokens and tokens[0][1] < now:
+            tokens.popleft()
+        if not tokens:
+            del self._prop_drop_tokens[key]
+
+    def suppress_property(self, device: str, prop: str) -> None:
+        """Suppress all relay emissions for (device, prop)."""
+        with self._lock:
+            self._prop_suppressed.add((device, prop))
+
+    def unsuppress_property(self, device: str, prop: str) -> None:
+        """Remove suppression for (device, prop)."""
+        with self._lock:
+            self._prop_suppressed.discard((device, prop))
+
+    def register_property_emission(self, device: str, prop: str, value: str) -> None:
+        """Register a manual propertyChanged emission for dedup."""
+        val = str(value)
+        with self._lock:
+            key = (device, prop)
+            if key not in self._prop_drop_tokens:
+                self._prop_drop_tokens[key] = deque()
+            self._cleanup_tokens(key)
+            tokens = self._prop_drop_tokens.get(key)
+            if tokens is None:
+                self._prop_drop_tokens[key] = tokens = deque()
+            if len(tokens) < _DEDUP_MAX_TOKENS:
+                tokens.append((val, time.monotonic() + _DEDUP_TTL))
+
+    def onPropertyChanged(self, name: str, propName: str, propValue: str) -> None:
+        with self._lock:
+            key = (name, propName)
+            # Wildcard suppression (active during _property_change_emission_ensured)
+            if key in self._prop_suppressed:
+                return
+            # Value-aware dedup tokens
+            if key in self._prop_drop_tokens:
+                self._cleanup_tokens(key)
+                tokens = self._prop_drop_tokens.get(key)
+                if tokens:
+                    for i, (token_val, _) in enumerate(tokens):
+                        if token_val == propValue:
+                            del tokens[i]
+                            if not tokens:
+                                del self._prop_drop_tokens[key]
+                            return  # consumed — skip relay
+        try:
+            self._emitter.propertyChanged.emit(name, propName, propValue)
+        except Exception as e:
+            logger.error(
+                "Exception occurred in MMCorePlus callback %r: %s",
+                "propertyChanged",
+                e,
+            )
 
     @staticmethod
     def make_reemitter(name: str) -> Callable[..., None]:
-        # until we debug issues passing signals emitted on other threads into Qt,
-        # we skip these signals (which already had their own pymmcore-plus emitters)
-        if name in _SKIP:
+        if name in _RELAY_SKIP:
             return lambda self, *args: None
 
         sig_name = name[2].lower() + name[3:]
@@ -2554,7 +2632,9 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
                 getattr(self._emitter, sig_name).emit(*args)
             except Exception as e:
                 logger.error(
-                    "Exception occurred in MMCorePlus callback %r: %s", sig_name, e
+                    "Exception occurred in MMCorePlus callback %r: %s",
+                    sig_name,
+                    e,
                 )
 
         return reemit
@@ -2563,5 +2643,9 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
 MMCallbackRelay = type(
     "MMCallbackRelay",
     (_MMCallbackRelay,),
-    {n: _MMCallbackRelay.make_reemitter(n) for n in MMCORE_SIGNAL_NAMES},
+    {
+        n: _MMCallbackRelay.make_reemitter(n)
+        for n in MMCORE_SIGNAL_NAMES
+        if n not in _CUSTOM_RELAY
+    },
 )
