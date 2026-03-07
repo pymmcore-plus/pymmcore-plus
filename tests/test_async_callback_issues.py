@@ -301,7 +301,7 @@ def test_dedup_token_expiry(core: CMMCorePlus) -> None:
     # Manually expire it by adjusting the stored expiry
     key = (cam, "Exposure")
     with relay._lock:
-        tokens = relay._prop_drop_tokens[key]
+        tokens = relay._prop_tokens[key]
         # Set expiry to the past
         tokens[0] = (tokens[0][0], time.monotonic() - _DEDUP_TTL - 1)
 

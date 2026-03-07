@@ -2370,18 +2370,12 @@ class CMMCorePlus(pymmcore.CMMCore):
             yield
             return
 
-        # Suppress relay for these properties during the operation.
-        # This handles v11 sync callbacks (fired during yield) and prevents
-        # double emissions. After yield, value-aware tokens handle v12 async
-        # callbacks that arrive later.
+        # Suppress relay during the operation to handle v11 sync callbacks
+        # (fired during yield). After yield, value-aware tokens handle v12
+        # async callbacks that arrive later.
         relay = self._callback_relay
-        for p in properties:
-            relay.suppress_property(device, p)
-        try:
+        with relay.property_suppressed(device, properties):
             yield
-        finally:
-            for p in properties:
-                relay.unsuppress_property(device, p)
         after = [self.getProperty(device, p) for p in properties]
         if before != after:
             for i, val in enumerate(after):
@@ -2547,70 +2541,66 @@ _CUSTOM_RELAY = {
 _DEDUP_TTL = 2.0  # seconds
 _DEDUP_MAX_TOKENS = 64  # per (dev, prop)
 
+_PropKey = tuple[str, str]
+
 
 class _MMCallbackRelay(pymmcore.MMEventCallback):
     """Relays MMEventCallback methods to CMMCorePlus.signal."""
 
     def __init__(self, emitter: CMMCoreSignaler):
         self._emitter = emitter
-        self._prop_drop_tokens: dict[tuple[str, str], deque[tuple[str, float]]] = {}
-        # Keys currently suppressed (wildcard — drops any value)
-        self._prop_suppressed: set[tuple[str, str]] = set()
+        self._prop_tokens: dict[_PropKey, deque[tuple[str, float]]] = {}
+        self._prop_suppressed: set[_PropKey] = set()
         self._lock = threading.Lock()
         super().__init__()
 
-    def _cleanup_tokens(self, key: tuple[str, str]) -> None:
-        """Remove expired tokens for key. Called under lock."""
-        if key not in self._prop_drop_tokens:
-            return
-        tokens = self._prop_drop_tokens[key]
-        now = time.monotonic()
-        while tokens and tokens[0][1] < now:
-            tokens.popleft()
-        if not tokens:
-            del self._prop_drop_tokens[key]
-
-    def suppress_property(self, device: str, prop: str) -> None:
-        """Suppress all relay emissions for (device, prop)."""
+    @contextmanager
+    def property_suppressed(
+        self, device: str, properties: Sequence[str]
+    ) -> Iterator[None]:
+        """Suppress relay emissions for (device, prop) pairs during a block."""
+        keys = [(device, p) for p in properties]
         with self._lock:
-            self._prop_suppressed.add((device, prop))
-
-    def unsuppress_property(self, device: str, prop: str) -> None:
-        """Remove suppression for (device, prop)."""
-        with self._lock:
-            self._prop_suppressed.discard((device, prop))
+            self._prop_suppressed.update(keys)
+        try:
+            yield
+        finally:
+            with self._lock:
+                self._prop_suppressed.difference_update(keys)
 
     def register_property_emission(self, device: str, prop: str, value: str) -> None:
         """Register a manual propertyChanged emission for dedup."""
-        val = str(value)
         with self._lock:
             key = (device, prop)
-            if key not in self._prop_drop_tokens:
-                self._prop_drop_tokens[key] = deque()
-            self._cleanup_tokens(key)
-            tokens = self._prop_drop_tokens.get(key)
+            tokens = self._prop_tokens.get(key)
             if tokens is None:
-                self._prop_drop_tokens[key] = tokens = deque()
+                self._prop_tokens[key] = tokens = deque()
+            else:
+                self._expire_tokens(tokens)
             if len(tokens) < _DEDUP_MAX_TOKENS:
-                tokens.append((val, time.monotonic() + _DEDUP_TTL))
+                tokens.append((str(value), time.monotonic() + _DEDUP_TTL))
 
     def onPropertyChanged(self, name: str, propName: str, propValue: str) -> None:
         with self._lock:
             key = (name, propName)
-            # Wildcard suppression (active during _property_change_emission_ensured)
             if key in self._prop_suppressed:
                 return
-            # Value-aware dedup tokens
-            if key in self._prop_drop_tokens:
-                self._cleanup_tokens(key)
-                tokens = self._prop_drop_tokens.get(key)
-                if tokens:
-                    for i, (token_val, _) in enumerate(tokens):
-                        if token_val == propValue:
-                            del tokens[i]
-                            if not tokens:
-                                del self._prop_drop_tokens[key]
-                            return  # consumed — skip relay
+            tokens = self._prop_tokens.get(key)
+            if tokens:
+                self._expire_tokens(tokens)
+                # Common case: FIFO consumption (first token matches)
+                if tokens and tokens[0][0] == propValue:
+                    tokens.popleft()
+                    if not tokens:
+                        del self._prop_tokens[key]
+                    return
+                # Uncommon: out-of-order delivery, linear scan
+                for i, (val, _) in enumerate(tokens):
+                    if val == propValue:
+                        del tokens[i]
+                        if not tokens:
+                            del self._prop_tokens[key]
+                        return
         try:
             self._emitter.propertyChanged.emit(name, propName, propValue)
         except Exception as e:
@@ -2619,6 +2609,13 @@ class _MMCallbackRelay(pymmcore.MMEventCallback):
                 "propertyChanged",
                 e,
             )
+
+    @staticmethod
+    def _expire_tokens(tokens: deque[tuple[str, float]]) -> None:
+        """Remove expired tokens from front of deque. Called under lock."""
+        now = time.monotonic()
+        while tokens and tokens[0][1] < now:
+            tokens.popleft()
 
     @staticmethod
     def make_reemitter(name: str) -> Callable[..., None]:
