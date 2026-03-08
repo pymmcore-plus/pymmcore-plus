@@ -40,7 +40,7 @@ dependencies = [
     "numpy >=1.26.0; python_version >= '3.12'",
     "numpy >=1.25.2",
     "psygnal >=0.10",
-    "pymmcore >=12.0.0.75.0rc1",
+    "pymmcore >=11.10.0.74.0",
     "typing-extensions >=4",                    # not actually required at runtime
     "useq-schema >=0.7.2",
     # cli requirements included by default for now
@@ -62,7 +62,7 @@ PyQt5 = ["PyQt5 >=5.15.4"]
 PyQt6 = ["PyQt6 >=6.4.2"]
 
 [dependency-groups]
-nano = ["pymmcore-nano >=12.0.0.75.0rc1"]
+nano = ["pymmcore-nano==11.10.0.74.0"]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material>=9.5",
