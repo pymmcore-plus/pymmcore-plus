@@ -170,6 +170,10 @@ class MDAEngine(PMDAEngine):
             core = CMMCorePlus.instance()
             self._mmcore_ref = weakref.ref(core)
 
+        # stop any "continous sequence acquisition" (live mode) that may be running.
+        if core.isSequenceRunning():
+            core.stopSequenceAcquisition()
+
         # just in case a non-programmatic changes have been made in the meantime
         # https://github.com/pymmcore-plus/pymmcore-plus/issues/503
         core._last_config = ("", "")  # noqa: SLF001
