@@ -170,7 +170,7 @@ class MDAEngine(PMDAEngine):
             core = CMMCorePlus.instance()
             self._mmcore_ref = weakref.ref(core)
 
-        # stop any "continous sequence acquisition" (live mode) that may be running.
+        # stop any "continuous sequence acquisition" (live mode) that may be running.
         if core.isSequenceRunning():
             core.stopSequenceAcquisition()
 
