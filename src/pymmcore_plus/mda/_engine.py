@@ -478,8 +478,7 @@ class MDAEngine(PMDAEngine):
 
         # capture ROI
         try:
-            x, y, w, h = core.getROI()
-            state["roi"] = CameraROI(offset_x=x, offset_y=y, width=w, height=h)
+            state["roi"] = core.getROI()
         except Exception as e:
             logger.warning("Failed to capture ROI: %s", e)
 
