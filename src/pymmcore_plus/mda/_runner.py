@@ -7,12 +7,14 @@ import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
+from datetime import timedelta
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
+import humanize
 from ome_writers import (
     AcquisitionSettings,
     Dimension,
@@ -696,6 +698,11 @@ class MDARunner:
         if event.min_start_time:
             go_at = event.min_start_time + self._paused_time
             remaining = go_at - self.event_seconds_elapsed()
+            if remaining > 0:
+                logger.info(
+                    "Waiting %s until the next event",
+                    humanize.precisedelta(timedelta(seconds=remaining), format="%0.f"),
+                )
             while remaining > 0:
                 self._signals.awaitingEvent.emit(event, remaining)
                 while self._state == RunState.PAUSED:  # type: ignore[comparison-overlap]
