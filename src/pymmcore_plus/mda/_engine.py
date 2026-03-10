@@ -10,7 +10,7 @@ from typing import TYPE_CHECKING, Literal, NamedTuple, cast
 
 import numpy as np
 import useq
-from useq import AcquireImage, CameraROI, HardwareAutofocus, MDAEvent, MDASequence
+from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
@@ -47,7 +47,7 @@ if TYPE_CHECKING:
         exposure: float
         autoshutter: bool
         config_groups: dict[str, str]
-        roi: CameraROI
+        roi: tuple[int, int, int, int]
 
 
 # these are SLM devices that have a known pixel_on_value.
@@ -565,7 +565,8 @@ class MDAEngine(PMDAEngine):
 
         # restore ROI
         if "roi" in self._initial_state:
-            self._set_event_roi(MDAEvent(roi=self._initial_state["roi"]))
+            core.clearROI()
+            core.setROI(*self._initial_state["roi"])
 
         core.waitForSystem()
         # clear the state after restoration
