@@ -92,22 +92,22 @@ class MDAEngine(PMDAEngine):
         be set to `True` if FocusDirection is known (i.e. not Unknown).
     timeout_base : float
         Minimum per-image timeout in seconds for sequenced acquisitions. The actual
-        timeout used is ``max(timeout_base, exposure_s * timeout_multiplier)``.
+        timeout used is `max(timeout_base, exposure_s * timeout_multiplier)`.
         The deadline is reset after each received frame, so long sequences will not
-        time out as long as frames keep arriving. By default, this is ``5.0``.
+        time out as long as frames keep arriving. By default, this is `5.0`.
     timeout_multiplier : float
         Multiplier applied to the camera exposure time (in seconds) to compute the
-        per-image timeout for sequenced acquisitions. By default, this is ``5.0``.
+        per-image timeout for sequenced acquisitions. By default, this is `5.0`.
     timeout_first_frame : float | None
         Separate timeout in seconds for waiting for the *first* frame of a
         sequenced acquisition. This is useful when the camera is waiting for an
         external trigger that may arrive much later than the exposure time would
-        suggest. If ``None``, the standard computed timeout is used
-        for all frames including the first. By default, this is ``20.0``.
+        suggest. If `None`, the standard computed timeout is used
+        for all frames including the first. By default, this is `20.0`.
     timeout_action : Literal["raise", "warn"]
-        What to do when a sequenced acquisition times out. If ``"raise"`` (the
-        default), a `TimeoutError` is raised. If ``"warn"``, a warning is issued
-        and ``None`` is yielded for any missing frames.
+        What to do when a sequenced acquisition times out. If `"raise"` (the
+        default), a `TimeoutError` is raised. If `"warn"`, a warning is issued
+        and `None` is yielded for any missing frames.
     """
 
     def __init__(
