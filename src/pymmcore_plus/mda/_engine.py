@@ -98,12 +98,12 @@ class MDAEngine(PMDAEngine):
     timeout_multiplier : float
         Multiplier applied to the camera exposure time (in seconds) to compute the
         per-image timeout for sequenced acquisitions. By default, this is ``5.0``.
-    timeout_first_frame : float
+    timeout_first_frame : float | None
         Separate timeout in seconds for waiting for the *first* frame of a
         sequenced acquisition. This is useful when the camera is waiting for an
         external trigger that may arrive much later than the exposure time would
-        suggest. If ``0`` (the default), the standard computed timeout is used
-        for all frames including the first.
+        suggest. If ``None``, the standard computed timeout is used
+        for all frames including the first. By default, this is ``20.0``.
     timeout_action : Literal["raise", "warn"]
         What to do when a sequenced acquisition times out. If ``"raise"`` (the
         default), a `TimeoutError` is raised. If ``"warn"``, a warning is issued
@@ -128,7 +128,7 @@ class MDAEngine(PMDAEngine):
         self.restore_initial_state: bool | None = restore_initial_state
         self.timeout_base: float = timeout_base
         self.timeout_multiplier: float = timeout_multiplier
-        self.timeout_first_frame: float = timeout_first_frame
+        self.timeout_first_frame: float | None = timeout_first_frame
         self.timeout_action: Literal["raise", "warn"] = timeout_action
 
         # whether to include position metadata when fetching on-frame metadata
@@ -193,7 +193,7 @@ class MDAEngine(PMDAEngine):
 
     def _initial_timeout(self, event: MDAEvent) -> float:
         """Compute timeout for the first frame of a sequenced acquisition."""
-        if self.timeout_first_frame > 0:
+        if self.timeout_first_frame is not None:
             return self.timeout_first_frame
         return self._frame_timeout(event)
 
