@@ -490,7 +490,7 @@ def test_setContext(core: CMMCorePlus) -> None:
 def test_snap_signals(core: CMMCorePlus, anybot: Any) -> None:
     assert core.getAutoShutter()
 
-    def shutter_is(state: bool) -> Callable:
+    def shutter_is(state: str) -> Callable:
         def _check(*args: Any) -> bool:
             return args == (core.getShutterDevice(), "State", state)
 
@@ -498,7 +498,7 @@ def test_snap_signals(core: CMMCorePlus, anybot: Any) -> None:
 
     with anybot.waitSignals(
         [core.events.propertyChanged, core.events.propertyChanged],
-        check_params_cbs=[shutter_is(True), shutter_is(False)],
+        check_params_cbs=[shutter_is("1"), shutter_is("0")],
         order="strict",
     ):
         core.snapImage()
