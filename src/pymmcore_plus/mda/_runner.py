@@ -698,7 +698,7 @@ class MDARunner:
         if event.min_start_time:
             go_at = event.min_start_time + self._paused_time
             remaining = go_at - self.event_seconds_elapsed()
-            if remaining > 0:
+            if remaining > 0.5:
                 logger.info(
                     "Waiting %s until the next event",
                     humanize.precisedelta(timedelta(seconds=remaining), format="%0.f"),
