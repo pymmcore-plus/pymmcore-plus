@@ -554,10 +554,33 @@ def test_restore_initial_state_enabled_by_default(
         assert abs(final_z - changed_z) < 0.1
 
 
-def test_sequenced_acq_timeout(core: CMMCorePlus) -> None:
-    """Sequenced acquisition stops and produces no frames when timeout is exceeded."""
+def test_sequenced_acq_timeout_raise(core: CMMCorePlus) -> None:
+    """Sequenced acquisition raises TimeoutError when timeout is exceeded."""
     core.mda.engine.use_hardware_sequencing = True
-    core.mda.engine._sequenced_acq_timeout = 0.0
+    core.mda.engine.timeout_base = 0.0
+    core.mda.engine.timeout_multiplier = 0.0
+    core.mda.engine.timeout_first_frame = 0.0
+    core.mda.engine.timeout_action = "raise"
+
+    events = [
+        MDAEvent(channel="DAPI", exposure=1, min_start_time=0, index={"t": i})
+        for i in range(3)
+    ]
+
+    with pytest.raises(TimeoutError, match="Acquisition timed out"):
+        core.mda.run(events)
+
+    # Camera should have been stopped after timeout
+    assert not core.isSequenceRunning()
+
+
+def test_sequenced_acq_timeout_warn(core: CMMCorePlus) -> None:
+    """Sequenced acquisition warns and yields None for missing frames on timeout."""
+    core.mda.engine.use_hardware_sequencing = True
+    core.mda.engine.timeout_base = 0.0
+    core.mda.engine.timeout_multiplier = 0.0
+    core.mda.engine.timeout_first_frame = 0.0
+    core.mda.engine.timeout_action = "warn"
 
     events = [
         MDAEvent(channel="DAPI", exposure=1, min_start_time=0, index={"t": i})
@@ -572,7 +595,7 @@ def test_sequenced_acq_timeout(core: CMMCorePlus) -> None:
 
     core.mda.run(events)
 
-    # With zero timeout, no frames should have been captured
+    # With zero timeout and warn action, no frames should have been captured
     assert len(images) == 0
     # Camera should have been stopped after timeout
     assert not core.isSequenceRunning()
