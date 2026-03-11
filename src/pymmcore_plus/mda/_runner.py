@@ -83,6 +83,7 @@ MSG = (
     "length & shape. Iterating over it has no effect."
 )
 
+
 def _format_wait_time(seconds: float) -> str:
     """Format seconds into a human-readable string of hours, minutes, and seconds."""
     total = round(seconds)
