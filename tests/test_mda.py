@@ -13,7 +13,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus, FocusDirection
 from pymmcore_plus.mda._engine import _warn_focus_dir
-from pymmcore_plus.mda._runner import RunState, SkipEvent
+from pymmcore_plus.mda._runner import RunState, SkipEvent, _format_wait_time
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
@@ -661,3 +661,31 @@ def test_skip_event_teardown_still_called(core: CMMCorePlus) -> None:
         core.mda.run([event])
 
     teardown_mock.assert_called_once_with(event)
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [
+        (0, "0 seconds"),
+        (1, "1 second"),
+        (2, "2 seconds"),
+        (59, "59 seconds"),
+        (60, "1 minute"),
+        (61, "1 minute and 1 second"),
+        (62, "1 minute and 2 seconds"),
+        (120, "2 minutes"),
+        (125, "2 minutes and 5 seconds"),
+        (3600, "1 hour"),
+        (3601, "1 hour and 1 second"),
+        (3660, "1 hour and 1 minute"),
+        (3661, "1 hour, 1 minute and 1 second"),
+        (7322, "2 hours, 2 minutes and 2 seconds"),
+        (90061, "25 hours, 1 minute and 1 second"),
+        (93746, "26 hours, 2 minutes and 26 seconds"),
+        (0.4, "0 seconds"),
+        (0.9, "1 second"),
+        (61.7, "1 minute and 2 seconds"),
+    ],
+)
+def test_format_wait_time(seconds: float, expected: str) -> None:
+    assert _format_wait_time(seconds) == expected
