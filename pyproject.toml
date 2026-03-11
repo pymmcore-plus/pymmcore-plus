@@ -48,7 +48,6 @@ dependencies = [
     "rich >=10.2.0",
     "ome-types >=0.6.0",
     "ome-writers[tensorstore]>=0.3.0",
-    "humanize",
 ]
 
 # extras

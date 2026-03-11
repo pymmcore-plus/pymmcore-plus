@@ -7,14 +7,12 @@ import warnings
 from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
-from datetime import timedelta
 from enum import Enum
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
-import humanize
 from ome_writers import (
     AcquisitionSettings,
     Dimension,
@@ -84,6 +82,22 @@ MSG = (
     "This sequence is a placeholder for a generator of events with unknown "
     "length & shape. Iterating over it has no effect."
 )
+
+def _format_wait_time(seconds: float) -> str:
+    """Format seconds into a human-readable string of hours, minutes, and seconds."""
+    total = round(seconds)
+    h, remainder = divmod(total, 3600)
+    m, s = divmod(remainder, 60)
+    parts: list[str] = []
+    if h:
+        parts.append(f"{h} hour{'s' if h != 1 else ''}")
+    if m:
+        parts.append(f"{m} minute{'s' if m != 1 else ''}")
+    if s or not parts:
+        parts.append(f"{s} second{'s' if s != 1 else ''}")
+    if len(parts) > 1:
+        return ", ".join(parts[:-1]) + " and " + parts[-1]
+    return parts[0]
 
 
 class SkipEvent(Exception):
@@ -701,7 +715,7 @@ class MDARunner:
             if remaining > 0.5:
                 logger.info(
                     "Waiting %s until the next event",
-                    humanize.precisedelta(timedelta(seconds=remaining), format="%0.f"),
+                    _format_wait_time(remaining),
                 )
             while remaining > 0:
                 self._signals.awaitingEvent.emit(event, remaining)
