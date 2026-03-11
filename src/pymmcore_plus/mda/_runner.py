@@ -84,6 +84,23 @@ MSG = (
 )
 
 
+def _format_wait_time(seconds: float) -> str:
+    """Format seconds into a human-readable string of hours, minutes, and seconds."""
+    total = round(seconds)
+    h, remainder = divmod(total, 3600)
+    m, s = divmod(remainder, 60)
+    parts: list[str] = []
+    if h:
+        parts.append(f"{h} hour{'s' if h != 1 else ''}")
+    if m:
+        parts.append(f"{m} minute{'s' if m != 1 else ''}")
+    if s or not parts:
+        parts.append(f"{s} second{'s' if s != 1 else ''}")
+    if len(parts) > 1:
+        return ", ".join(parts[:-1]) + " and " + parts[-1]
+    return parts[0]
+
+
 class SkipEvent(Exception):
     """Raised by an engine's `setup_event` to skip the current event.
 
@@ -696,6 +713,11 @@ class MDARunner:
         if event.min_start_time:
             go_at = event.min_start_time + self._paused_time
             remaining = go_at - self.event_seconds_elapsed()
+            if remaining > 0.5:
+                logger.info(
+                    "Waiting %s until the next event",
+                    _format_wait_time(remaining),
+                )
             while remaining > 0:
                 self._signals.awaitingEvent.emit(event, remaining)
                 while self._state == RunState.PAUSED:  # type: ignore[comparison-overlap]
