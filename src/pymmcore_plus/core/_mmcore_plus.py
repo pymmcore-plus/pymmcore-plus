@@ -2372,14 +2372,20 @@ class CMMCorePlus(pymmcore.CMMCore):
             return
 
         # Suppress relay during the operation to handle MMCore v11 sync callbacks
-        # (fired during yield). After yield, value-aware tokens handle v12
-        # async callbacks that arrive later.
-        with self._callback_relay.property_suppressed(device, properties):
+        # (fired during yield). Register dedup tokens BEFORE lifting suppression
+        # so there is no window where a v12 async callback can sneak through
+        # unsuppressed and undeduped.
+        changed: list[tuple[str, str]] = []
+        relay = self._callback_relay
+        with relay.property_suppressed(device, properties):
             yield
-        after = [self.getProperty(device, p) for p in properties]
-        if before != after:
-            for i, val in enumerate(after):
-                self._emit_property_changed(device, properties[i], val)
+            after = [self.getProperty(device, p) for p in properties]
+            if before != after:
+                for i, val in enumerate(after):
+                    relay.register_property_emission(device, properties[i], val)
+                    changed.append((properties[i], val))
+        for prop, val in changed:
+            self.events.propertyChanged.emit(device, prop, val)
 
     @contextmanager
     def setContext(self, **kwargs: Unpack[SetContextKwargs]) -> Iterator[None]:

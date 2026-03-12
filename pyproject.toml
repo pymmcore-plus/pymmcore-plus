@@ -62,7 +62,7 @@ PyQt5 = ["PyQt5 >=5.15.4"]
 PyQt6 = ["PyQt6 >=6.4.2"]
 
 [dependency-groups]
-nano = ["pymmcore-nano==11.10.0.74.0"]
+nano = ["pymmcore-nano >=12.2.0.75.1"]
 docs = [
     "mkdocs >=1.4",
     "mkdocs-material>=9.5",
