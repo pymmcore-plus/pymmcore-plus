@@ -478,7 +478,7 @@ class MDAEngine(PMDAEngine):
 
         # capture ROI
         try:
-            state["roi"] = core.getROI()
+            state["roi"] = tuple(core.getROI())  # type: ignore[typeddict-item]
         except Exception as e:
             logger.warning("Failed to capture ROI: %s", e)
 
