@@ -13,7 +13,7 @@ from useq import HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus, FocusDirection
 from pymmcore_plus.mda._engine import _warn_focus_dir
-from pymmcore_plus.mda._runner import RunState, SkipEvent
+from pymmcore_plus.mda._runner import RunState, SkipEvent, _format_wait_time
 from pymmcore_plus.mda.events import MDASignaler
 
 if TYPE_CHECKING:
@@ -601,6 +601,198 @@ def test_sequenced_acq_timeout_warn(core: CMMCorePlus) -> None:
     assert not core.isSequenceRunning()
 
 
+def test_setup_event_roi(core: CMMCorePlus) -> None:
+    """Test that engine applies ROI from a setup event and restores it."""
+
+    core.mda.engine.restore_initial_state = True
+    core.mda.engine.use_hardware_sequencing = False
+
+    # capture initial ROI
+    initial_roi = tuple(core.getROI())
+
+    width, height = 128, 64
+    seq = MDASequence(
+        setup=MDAEvent(roi=(12, 32, width, height)),
+        time_plan={"interval": 0, "loops": 1},
+        channels=["DAPI"],
+    )
+
+    images: list = []
+    summary_meta: list = []
+
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any) -> None:
+        images.append(img)
+
+    @core.mda.events.sequenceStarted.connect
+    def _on_start(seq: Any, meta: Any) -> None:
+        summary_meta.append(meta)
+
+    core.mda.run(seq)
+
+    assert images[0].shape == (height, width)
+
+    # Summary metadata should include the ROI set by the setup event
+    assert len(summary_meta) == 1
+    assert summary_meta[0]["image_infos"][0]["roi"] == (12, 32, width, height)
+
+    # ROI should be restored to initial
+    assert tuple(core.getROI()) == initial_roi
+
+
+def test_setup_event_properties(core: CMMCorePlus) -> None:
+    """Test that engine applies properties from a setup event."""
+
+    core.mda.engine.restore_initial_state = True
+
+    initial_binning = "1"
+    core.setProperty("Camera", "Binning", initial_binning)
+
+    target_binning = "2"
+    seq = MDASequence(
+        setup=MDAEvent(properties=[("Camera", "Binning", target_binning)]),
+        time_plan={"interval": 0, "loops": 1},
+        channels=["DAPI"],
+    )
+
+    binning: list[str] = []
+
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any) -> None:
+        binning.append(core.getProperty("Camera", "Binning"))
+
+    core.mda.run(seq)
+
+    assert binning[0] == target_binning
+    # Binning should be restored to initial state
+    assert core.getProperty("Camera", "Binning") == initial_binning
+
+
+def test_setup_event_roi_multi_timepoint(core: CMMCorePlus) -> None:
+    """Test that ROI from setup is applied before a sequenced multi-frame sequence."""
+    from pymmcore_plus.core._sequencing import SequencedEvent
+
+    core.mda.engine.restore_initial_state = True
+    core.mda.engine.use_hardware_sequencing = True
+
+    initial_roi = tuple(core.getROI())
+    width, height = 128, 256
+    target_roi = (12, 32, width, height)
+
+    seq = MDASequence(
+        setup=MDAEvent(roi=target_roi),
+        time_plan={"interval": 0, "loops": 3},
+        channels=["DAPI"],
+    )
+
+    # Setup event is not yielded during iteration; only acquisition events are
+    events = list(core.mda.engine.event_iterator(seq))
+    assert len(events) == 1
+    assert isinstance(events[0], SequencedEvent)
+
+    images: list = []
+
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any) -> None:
+        images.append(img)
+
+    core.mda.run(seq)
+
+    # All acquired images should match the ROI dimensions
+    assert len(images) == 3
+    for img in images:
+        assert img.shape == (height, width)
+
+    # ROI should be restored after sequence
+    assert tuple(core.getROI()) == initial_roi
+
+
+def test_roi_on_sequenced_event(core: CMMCorePlus) -> None:
+    """Test that ROI is applied when events with ROI are hardware-sequenced."""
+    from pymmcore_plus.core._sequencing import SequencedEvent
+
+    assert core.mda.engine
+    core.mda.engine.use_hardware_sequencing = True
+    core.mda.engine.restore_initial_state = True
+
+    initial_roi = tuple(core.getROI())
+    width, height = 256, 256
+
+    events = [
+        MDAEvent(
+            roi=(0, 0, width, height),
+            channel="DAPI",
+            exposure=1,
+            min_start_time=0,
+            index={"t": i},
+        )
+        for i in range(3)
+    ]
+
+    # All events share the same ROI, so they should be sequenced into one
+    sequenced = list(core.mda.engine.event_iterator(events))
+    assert len(sequenced) == 1
+    assert isinstance(sequenced[0], SequencedEvent)
+    assert sequenced[0].roi is not None
+
+    images: list = []
+
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any) -> None:
+        images.append(img)
+
+    core.mda.run(events)
+
+    assert len(images) == 3
+    for img in images:
+        assert img.shape == (height, width)
+
+    # ROI should be restored after sequence
+    assert tuple(core.getROI()) == initial_roi
+
+
+def test_different_roi_breaks_sequencing(core: CMMCorePlus) -> None:
+    """Events with different ROIs should not be combined into a SequencedEvent."""
+    from pymmcore_plus.core._sequencing import SequencedEvent
+
+    assert core.mda.engine
+    core.mda.engine.use_hardware_sequencing = True
+    core.mda.engine.restore_initial_state = True
+
+    initial_roi = tuple(core.getROI())
+
+    events = [
+        MDAEvent(roi=(0, 0, 256, 256), channel="DAPI", exposure=1, index={"t": 0}),
+        MDAEvent(roi=(0, 0, 256, 256), channel="DAPI", exposure=1, index={"t": 1}),
+        MDAEvent(roi=(0, 0, 128, 128), channel="DAPI", exposure=1, index={"t": 2}),
+    ]
+
+    sequenced = list(core.mda.engine.event_iterator(events))
+    # First two share ROI -> sequenced, third has different ROI -> separate
+    assert len(sequenced) == 2
+    assert isinstance(sequenced[0], SequencedEvent)
+    assert len(sequenced[0].events) == 2
+    assert not isinstance(sequenced[1], SequencedEvent)
+
+    images: list = []
+
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any) -> None:
+        images.append(img)
+
+    core.mda.run(events)
+
+    assert len(images) == 3
+    # First two images from the 256x256 ROI
+    assert images[0].shape == (256, 256)
+    assert images[1].shape == (256, 256)
+    # Third image from the 128x128 ROI
+    assert images[2].shape == (128, 128)
+
+    # ROI should be restored after sequence
+    assert tuple(core.getROI()) == initial_roi
+
+
 def test_skip_event_from_setup(core: CMMCorePlus) -> None:
     """SkipEvent raised in setup_event skips exec and notifies the sink."""
     exec_mock = Mock()
@@ -708,3 +900,31 @@ def test_skip_event_teardown_still_called(core: CMMCorePlus) -> None:
         core.mda.run([event])
 
     teardown_mock.assert_called_once_with(event)
+
+
+@pytest.mark.parametrize(
+    ("seconds", "expected"),
+    [
+        (0, "0 seconds"),
+        (1, "1 second"),
+        (2, "2 seconds"),
+        (59, "59 seconds"),
+        (60, "1 minute"),
+        (61, "1 minute and 1 second"),
+        (62, "1 minute and 2 seconds"),
+        (120, "2 minutes"),
+        (125, "2 minutes and 5 seconds"),
+        (3600, "1 hour"),
+        (3601, "1 hour and 1 second"),
+        (3660, "1 hour and 1 minute"),
+        (3661, "1 hour, 1 minute and 1 second"),
+        (7322, "2 hours, 2 minutes and 2 seconds"),
+        (90061, "25 hours, 1 minute and 1 second"),
+        (93746, "26 hours, 2 minutes and 26 seconds"),
+        (0.4, "0 seconds"),
+        (0.9, "1 second"),
+        (61.7, "1 minute and 2 seconds"),
+    ],
+)
+def test_format_wait_time(seconds: float, expected: str) -> None:
+    assert _format_wait_time(seconds) == expected
