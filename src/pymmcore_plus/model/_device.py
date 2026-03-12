@@ -203,7 +203,6 @@ class Device(CoreObject):
         # the list of available (loadable) device names for the adapter library,
         # we keep the original adapter_name so that saved configs remain valid.
         prev_adapter_name = self.adapter_name
-        prev_library = self.library
 
         super().update_from_core(core, exclude=exclude, on_err=on_err)
 
