@@ -41,6 +41,8 @@ if TYPE_CHECKING:
 # These are the two main functions that are called from the outside
 # -----------------------------------------------------------------
 
+DEFAULT_AFFINE = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
+
 
 def summary_metadata(
     core: CMMCorePlus,
@@ -185,12 +187,13 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
         info["num_camera_adapter_channels"] = n_channels
     if (mag_factor := core.getMagnificationFactor()) != 1.0:
         info["magnification_factor"] = mag_factor
-    if (affine := core.getPixelSizeAffine(True)) != (1.0, 0.0, 0.0, 0.0, 1.0, 0.0):
-        info["pixel_size_affine"] = affine
+    affine = tuple(core.getPixelSizeAffine(True))
+    if affine != DEFAULT_AFFINE:
+        info["pixel_size_affine"] = affine  # type: ignore [typeddict-item]
 
     with suppress(RuntimeError):
-        if (roi := core.getROI()) != [0, 0, w, h]:
-            info["roi"] = tuple(roi)  # type: ignore [typeddict-item]
+        if (roi := tuple(core.getROI())) != (0, 0, w, h):
+            info["roi"] = roi  # type: ignore [typeddict-item]
     with suppress(RuntimeError):
         if any(rois := core.getMultiROI()):
             info["multi_roi"] = rois
@@ -290,9 +293,9 @@ def pixel_size_config(core: CMMCorePlus, *, config_name: str) -> PixelSizeConfig
             for dev, prop, val in core.getPixelSizeConfigData(config_name)
         ),
     }
-    affine = core.getPixelSizeAffineByID(config_name)
-    if affine != (1.0, 0.0, 0.0, 0.0, 1.0, 0.0):
-        info["pixel_size_affine"] = affine
+    affine = tuple(core.getPixelSizeAffineByID(config_name))
+    if affine != DEFAULT_AFFINE:
+        info["pixel_size_affine"] = affine  # type: ignore [typeddict-item]
     # added in v11.5
     if hasattr(core, "getPixelSizedxdz") and (px := core.getPixelSizedxdz(config_name)):
         info["pixel_size_dxdz"] = px
