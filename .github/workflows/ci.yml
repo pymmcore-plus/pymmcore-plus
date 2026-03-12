@@ -98,6 +98,10 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
         qt: [PySide6, PyQt6]
+        include:
+          - os: windows-latest
+            qt: PyQt6
+            nano: "nano"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -120,7 +124,10 @@ jobs:
           uv sync --no-dev --group test --extra ${{ matrix.qt }}
           uv pip install ./pymmcore-plus
           uv pip list
-
+      - if: matrix.nano == 'nano'
+        run: |
+          uv pip uninstall pymmcore
+          uv pip install pymmcore-nano
       - uses: pymmcore-plus/setup-mm-test-adapters@main
 
       - run: uv run pytest -v --color=yes -W ignore
