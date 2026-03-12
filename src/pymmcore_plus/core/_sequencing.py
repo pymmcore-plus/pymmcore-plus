@@ -251,6 +251,10 @@ class EventCombiner:
                 return False
             self.attribute_changes[Keyword.CoreFocus] = True
 
+        # ROI is not sequenceable, so events with different ROIs cannot be combined
+        if event.roi != e0.roi:
+            return False
+
         # SLM
         if event.slm_image != e0.slm_image:
             if new_chunk_len > self.max_lengths[Keyword.CoreSLM]:
@@ -350,6 +354,7 @@ class EventCombiner:
             channel=first_event.channel,
             min_start_time=first_event.min_start_time,
             reset_event_timer=first_event.reset_event_timer,
+            roi=first_event.roi,
         )
 
     # -------------- helper methods to query props & max lengths ----------------
