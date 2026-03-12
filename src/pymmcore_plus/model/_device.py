@@ -195,7 +195,44 @@ class Device(CoreObject):
         self.device_type = core.getDeviceType(self.name)
         self._update_core_getters()
 
+        # Preserve the current adapter_name before the super call overwrites it.
+        # Some device adapters report a different name via core.getDeviceName()
+        # than the name required by core.loadDevice(). For example, the TSI
+        # adapter registers as "TSICam" for loading but getDeviceName() returns
+        # "TSI3Cam" after initialization. If the core-reported name is not in
+        # the list of available (loadable) device names for the adapter library,
+        # we keep the original adapter_name so that saved configs remain valid.
+        prev_adapter_name = self.adapter_name
+        prev_library = self.library
+
         super().update_from_core(core, exclude=exclude, on_err=on_err)
+
+        if (
+            prev_adapter_name
+            and self.adapter_name != prev_adapter_name
+            and self.library
+        ):
+            try:
+                available = core.getAvailableDevices(self.library)
+            except RuntimeError:
+                available = ()
+            if available and self.adapter_name not in available:
+                import logging
+
+                logger = logging.getLogger(__name__)
+                logger.warning(
+                    "Device adapter %r reported device name %r via "
+                    "getDeviceName(), but that name is not in the loadable "
+                    "devices for library %r: %s. Keeping original adapter "
+                    "name %r to ensure saved configurations remain valid.",
+                    self.library,
+                    self.adapter_name,
+                    self.library,
+                    available,
+                    prev_adapter_name,
+                )
+                self.adapter_name = prev_adapter_name
+
         self.properties = [
             Property.create_from_core(core, device_name=self.name, name=prop_name)
             for prop_name in core.getDevicePropertyNames(self.name)
