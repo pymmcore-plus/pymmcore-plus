@@ -6,6 +6,7 @@ core.loadDevice()/core.getAvailableDevices(). This test ensures that
 Device.update_from_core() detects and corrects such mismatches, so that
 saved configuration files remain loadable.
 """
+
 from __future__ import annotations
 
 from unittest.mock import patch
@@ -38,17 +39,15 @@ def test_adapter_name_mismatch_corrected() -> None:
     dev = Device(name="Camera", library="DemoCamera", adapter_name="DCam")
 
     # Patch DEVICE_GETTERS so that "adapter_name" returns a name NOT in
-    # getAvailableDevices — simulating the TSI adapter bug.
+    # getAvailableDevices - simulating the TSI adapter bug.
     bad_getters = _make_bad_getters()
-    with patch.dict(
-        "pymmcore_plus.model._device.DEVICE_GETTERS", bad_getters
-    ):
+    with patch.dict("pymmcore_plus.model._device.DEVICE_GETTERS", bad_getters):
         dev.update_from_core(core)
 
     # The fix should have detected that "DCam_Internal" is not in
     # getAvailableDevices("DemoCamera") and reverted to "DCam"
     assert dev.adapter_name == "DCam", (
-        f"Expected adapter_name=\'DCam\' but got {dev.adapter_name!r}. "
+        f"Expected adapter_name='DCam' but got {dev.adapter_name!r}. "
         f"update_from_core should keep the original adapter_name when "
         f"getDeviceName() returns a name not in getAvailableDevices()."
     )
@@ -92,9 +91,7 @@ def test_model_roundtrip_with_mismatch(tmp_path) -> None:
     # Simulate what happens when ConfigWizard re-initializes devices.
     # Patch DEVICE_GETTERS to return the wrong adapter_name.
     bad_getters = _make_bad_getters()
-    with patch.dict(
-        "pymmcore_plus.model._device.DEVICE_GETTERS", bad_getters
-    ):
+    with patch.dict("pymmcore_plus.model._device.DEVICE_GETTERS", bad_getters):
         model.initialize(core, on_fail=lambda d, e: None)
 
     # adapter_name should still be correct
@@ -106,6 +103,6 @@ def test_model_roundtrip_with_mismatch(tmp_path) -> None:
     model.save(cfg_path)
     cfg_text = cfg_path.read_text()
     assert "DCam_Internal" not in cfg_text, (
-        "Saved config contains the wrong adapter name \'DCam_Internal\'"
+        "Saved config contains the wrong adapter name 'DCam_Internal'"
     )
     assert "Device,Camera,DemoCamera,DCam" in cfg_text
