@@ -31,7 +31,8 @@ def _make_bad_getters():
 
 
 def test_adapter_name_mismatch_corrected() -> None:
-    """Device.update_from_core keeps original adapter_name when core reports an unloadable name."""
+    """Device.update_from_core keeps original adapter_name when core reports an
+    unloadable name."""
     core = CMMCorePlus()
     core.loadSystemConfiguration()  # loads DemoCamera config
 
