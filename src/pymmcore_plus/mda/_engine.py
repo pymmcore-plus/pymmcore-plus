@@ -14,7 +14,7 @@ from useq import AcquireImage, HardwareAutofocus, MDAEvent, MDASequence
 
 from pymmcore_plus._logger import logger
 from pymmcore_plus._util import retry
-from pymmcore_plus.core._constants import FocusDirection, Keyword
+from pymmcore_plus.core._constants import DeviceType, FocusDirection, Keyword
 from pymmcore_plus.core._sequencing import SequencedEvent, iter_sequenced_events
 from pymmcore_plus.metadata import (
     FrameMetaV1,
@@ -323,11 +323,7 @@ class MDAEngine(PMDAEngine):
             except Exception as e:
                 logger.warning("Failed to set exposure. %s", e)
         if event.properties is not None:
-            try:
-                for dev, prop, value in event.properties:
-                    mmcore.setProperty(dev, prop, value)
-            except Exception as e:
-                logger.warning("Failed to set properties. %s", e)
+            self._set_event_properties(event.properties)
         if event.roi is not None:
             self._set_event_roi(event)
         if (
@@ -625,8 +621,7 @@ class MDAEngine(PMDAEngine):
         self._set_event_channel(event)
 
         if event.properties:
-            for dev, prop, value in event.properties:
-                core.setProperty(dev, prop, value)
+            self._set_event_properties(event.properties)
 
         if event.slm_image:
             self._set_event_slm_image(event)
@@ -938,6 +933,34 @@ class MDAEngine(PMDAEngine):
         p_idx = event.index.get("p", None)
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self.mmcore.setZPosition(cast("float", event.z_pos) + correction)
+
+    def _set_event_properties(self, properties: Sequence[useq.PropertyTuple]) -> None:
+        """Set device properties, using setPosition for stage devices."""
+        core = self.mmcore
+        for dev, prop, value in properties:
+            try:
+                if prop == Keyword.Position:
+                    dev_type = core.getDeviceType(dev)
+                    if dev_type == DeviceType.XYStage:
+                        if not isinstance(value, (list, tuple)):
+                            logger.warning(
+                                "Expected XY position to be a list or tuple, got %s. "
+                                "Ignoring.",
+                                type(value),
+                            )
+                            continue
+                        x, y, *_ = value
+                        core.setXYPosition(dev, float(x), float(y))
+                    elif dev_type == DeviceType.Stage:
+                        core.setPosition(dev, float(value))
+                    else:
+                        core.setProperty(dev, prop, value)
+                else:
+                    core.setProperty(dev, prop, value)
+            except Exception as e:
+                logger.warning(
+                    "Failed to set property %s of device %s. %s", prop, dev, e
+                )
 
     def _set_event_roi(self, event: MDAEvent) -> None:
         """Set the camera ROI for this event.
