@@ -47,6 +47,7 @@ if TYPE_CHECKING:
         exposure: float
         autoshutter: bool
         config_groups: dict[str, str]
+        roi: tuple[int, int, int, int]
 
 
 # these are SLM devices that have a known pixel_on_value.
@@ -90,6 +91,24 @@ class MDAEngine(PMDAEngine):
         config groups, exposure settings) before the sequence starts and restore it
         after completion.  If `None` (the default), `restore_initial_state` will
         be set to `True` if FocusDirection is known (i.e. not Unknown).
+    timeout_base : float
+        Minimum per-image timeout in seconds for sequenced acquisitions. The actual
+        timeout used is `max(timeout_base, exposure_s * timeout_multiplier)`.
+        The deadline is reset after each received frame, so long sequences will not
+        time out as long as frames keep arriving. By default, this is `5.0`.
+    timeout_multiplier : float
+        Multiplier applied to the camera exposure time (in seconds) to compute the
+        per-image timeout for sequenced acquisitions. By default, this is `5.0`.
+    timeout_first_frame : float | None
+        Separate timeout in seconds for waiting for the *first* frame of a
+        sequenced acquisition. This is useful when the camera is waiting for an
+        external trigger that may arrive much later than the exposure time would
+        suggest. If `None`, the standard computed timeout is used
+        for all frames including the first. By default, this is `20.0`.
+    timeout_action : Literal["raise", "warn"]
+        What to do when a sequenced acquisition times out. If `"raise"` (the
+        default), a `TimeoutError` is raised. If `"warn"`, a warning is issued
+        and `None` is yielded for any missing frames.
     """
 
     def __init__(
@@ -99,11 +118,19 @@ class MDAEngine(PMDAEngine):
         use_hardware_sequencing: bool = True,
         force_set_xy_position: bool = True,
         restore_initial_state: bool | None = None,
+        timeout_base: float = 5.0,
+        timeout_multiplier: float = 5.0,
+        timeout_first_frame: float | None = 20.0,
+        timeout_action: Literal["raise", "warn"] = "raise",
     ) -> None:
         self._mmcore_ref = weakref.ref(mmc)
         self.use_hardware_sequencing: bool = use_hardware_sequencing
         self.force_set_xy_position: bool = force_set_xy_position
         self.restore_initial_state: bool | None = restore_initial_state
+        self.timeout_base: float = timeout_base
+        self.timeout_multiplier: float = timeout_multiplier
+        self.timeout_first_frame: float | None = timeout_first_frame
+        self.timeout_action: Literal["raise", "warn"] = timeout_action
 
         # whether to include position metadata when fetching on-frame metadata
         # omitted by default when performing triggered acquisition because it's slow.
@@ -157,6 +184,34 @@ class MDAEngine(PMDAEngine):
             raise RuntimeError("The CMMCorePlus instance has been garbage collected.")
         return mmc
 
+    def _frame_timeout(self, event: MDAEvent) -> float:
+        """Compute per-frame timeout in seconds for a sequenced acquisition."""
+        exposure_s = (event.exposure or 0.0) / 1000.0
+        return max(
+            self.timeout_base,
+            exposure_s * self.timeout_multiplier,
+        )
+
+    def _initial_timeout(self, event: MDAEvent) -> float:
+        """Compute timeout for the first frame of a sequenced acquisition."""
+        if self.timeout_first_frame is not None:
+            return self.timeout_first_frame
+        return self._frame_timeout(event)
+
+    def _handle_timeout(self, timeout: float) -> None:
+        """Handle a sequenced acquisition timeout per the configured action."""
+        self.mmcore.stopSequenceAcquisition()
+        msg = (
+            f"Acquisition timed out after {timeout:.1f}s. "
+            "Consider increasing 'timeout_base' or "
+            "'timeout_multiplier' on the MDAEngine, or setting "
+            "'timeout_first_frame' if the camera is waiting for an "
+            "external trigger."
+        )
+        if self.timeout_action == "raise":
+            raise TimeoutError(msg)
+        logger.warning(msg)
+
     # ===================== Protocol Implementation =====================
 
     def setup_sequence(self, sequence: MDASequence) -> SummaryMetaV1 | None:
@@ -194,6 +249,11 @@ class MDAEngine(PMDAEngine):
 
         if self.restore_initial_state:
             self._initial_state = self._capture_state()
+
+        # Apply the setup event (ROI, properties, etc.) before computing
+        # grid FOV sizes and summary metadata so they reflect the setup state.
+        if sequence.setup is not None:
+            self.setup_single_event(sequence.setup)
 
         if px_size := core.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
@@ -322,6 +382,8 @@ class MDAEngine(PMDAEngine):
                     mmcore.setProperty(dev, prop, value)
             except Exception as e:
                 logger.warning("Failed to set properties. %s", e)
+        if event.roi is not None:
+            self._set_event_roi(event)
         if (
             # (if autoshutter wasn't set at the beginning of the sequence
             # then it never matters...)
@@ -468,6 +530,12 @@ class MDAEngine(PMDAEngine):
         except Exception as e:
             logger.warning("Failed to capture autoshutter state: %s", e)
 
+        # capture ROI
+        try:
+            state["roi"] = tuple(core.getROI())  # type: ignore[typeddict-item]
+        except Exception as e:
+            logger.warning("Failed to capture ROI: %s", e)
+
         return state
 
     def _restore_initial_state(self) -> None:
@@ -548,6 +616,11 @@ class MDAEngine(PMDAEngine):
             except Exception as e:
                 logger.warning("Failed to restore autoshutter state: %s", e)
 
+        # restore ROI
+        if "roi" in self._initial_state:
+            core.clearROI()
+            core.setROI(*self._initial_state["roi"])
+
         core.waitForSystem()
         # clear the state after restoration
         self._initial_state = {}
@@ -587,11 +660,6 @@ class MDAEngine(PMDAEngine):
                     core.stopPropertySequence(dev, prop)
                 core.loadPropertySequence(dev, prop, value_sequence)
 
-        # set all static properties, these won't change over the course of the sequence.
-        if event.properties:
-            for dev, prop, value in event.properties:
-                core.setProperty(dev, prop, value)
-
     def setup_sequenced_event(self, event: SequencedEvent) -> None:
         """Setup hardware for a sequenced (triggered) event.
 
@@ -610,8 +678,15 @@ class MDAEngine(PMDAEngine):
         # but this could be removed.
         self._set_event_channel(event)
 
+        if event.properties:
+            for dev, prop, value in event.properties:
+                core.setProperty(dev, prop, value)
+
         if event.slm_image:
             self._set_event_slm_image(event)
+
+        if event.roi:
+            self._set_event_roi(event)
 
         if core.isSequenceRunning():
             self._await_sequence_acquisition()
@@ -696,10 +771,16 @@ class MDAEngine(PMDAEngine):
         core = self.mmcore
         count = 0
         pause_warned = False
+        frame_timeout = self._frame_timeout(event)
+        timeout = self._initial_timeout(event)
+        deadline = time.monotonic() + timeout
 
         # Pop frames while sequence is running, then drain remaining buffer
-        while True:
+        while time.monotonic() < deadline:
             if remaining := core.getRemainingImageCount():
+                # Reset deadline for next frame if we have remaining images
+                timeout = frame_timeout
+                deadline = time.monotonic() + timeout
                 img, mm_meta = core.popNextImageAndMD()
                 signal = yield self._create_seqimg_payload_from_popped(
                     img,
@@ -725,6 +806,9 @@ class MDAEngine(PMDAEngine):
             else:
                 # Done acquiring and buffer empty - exit
                 break
+        else:
+            # Deadline exceeded
+            self._handle_timeout(timeout)
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
@@ -752,10 +836,16 @@ class MDAEngine(PMDAEngine):
         n_events = len(event.events)
         coordinator = _MultiCameraCoordinator(core, n_channels, n_events)
         pause_warned = False
+        frame_timeout = self._frame_timeout(event)
+        timeout = self._initial_timeout(event)
+        deadline = time.monotonic() + timeout
 
         # Unified loop: pop while running, then drain remaining buffer
-        while True:
+        while time.monotonic() < deadline:
             if core.getRemainingImageCount():
+                # Reset deadline whenever we receive data
+                timeout = frame_timeout
+                deadline = time.monotonic() + timeout
                 for payload in coordinator.pop_and_process(
                     event.events,
                     t0_ms,
@@ -775,6 +865,9 @@ class MDAEngine(PMDAEngine):
                 time.sleep(0.001)
             else:
                 break
+        else:
+            # Deadline exceeded
+            self._handle_timeout(timeout)
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
@@ -917,6 +1010,21 @@ class MDAEngine(PMDAEngine):
         p_idx = event.index.get("p", None)
         correction = self._z_correction.setdefault(p_idx, 0.0)
         self.mmcore.setZPosition(cast("float", event.z_pos) + correction)
+
+    def _set_event_roi(self, event: MDAEvent) -> None:
+        """Set the camera ROI for this event.
+
+        This method is not part of the PMDAEngine protocol (it is called by
+        `setup_single_event`), but it is made public in case a user wants to
+        subclass this engine and override ROI behavior.
+        """
+        if (roi := event.roi) is None:
+            return
+        try:
+            self.mmcore.clearROI()
+            self.mmcore.setROI(roi.offset_x, roi.offset_y, roi.width, roi.height)
+        except Exception as e:
+            logger.warning("Failed to set ROI. %s", e)
 
     def _set_event_slm_image(self, event: MDAEvent) -> None:
         if not event.slm_image:
