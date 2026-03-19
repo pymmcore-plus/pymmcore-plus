@@ -91,6 +91,24 @@ class MDAEngine(PMDAEngine):
         config groups, exposure settings) before the sequence starts and restore it
         after completion.  If `None` (the default), `restore_initial_state` will
         be set to `True` if FocusDirection is known (i.e. not Unknown).
+    timeout_base : float
+        Minimum per-image timeout in seconds for sequenced acquisitions. The actual
+        timeout used is `max(timeout_base, exposure_s * timeout_multiplier)`.
+        The deadline is reset after each received frame, so long sequences will not
+        time out as long as frames keep arriving. By default, this is `5.0`.
+    timeout_multiplier : float
+        Multiplier applied to the camera exposure time (in seconds) to compute the
+        per-image timeout for sequenced acquisitions. By default, this is `5.0`.
+    timeout_first_frame : float | None
+        Separate timeout in seconds for waiting for the *first* frame of a
+        sequenced acquisition. This is useful when the camera is waiting for an
+        external trigger that may arrive much later than the exposure time would
+        suggest. If `None`, the standard computed timeout is used
+        for all frames including the first. By default, this is `20.0`.
+    timeout_action : Literal["raise", "warn"]
+        What to do when a sequenced acquisition times out. If `"raise"` (the
+        default), a `TimeoutError` is raised. If `"warn"`, a warning is issued
+        and `None` is yielded for any missing frames.
     """
 
     def __init__(
@@ -100,11 +118,19 @@ class MDAEngine(PMDAEngine):
         use_hardware_sequencing: bool = True,
         force_set_xy_position: bool = True,
         restore_initial_state: bool | None = None,
+        timeout_base: float = 5.0,
+        timeout_multiplier: float = 5.0,
+        timeout_first_frame: float | None = 20.0,
+        timeout_action: Literal["raise", "warn"] = "raise",
     ) -> None:
         self._mmcore_ref = weakref.ref(mmc)
         self.use_hardware_sequencing: bool = use_hardware_sequencing
         self.force_set_xy_position: bool = force_set_xy_position
         self.restore_initial_state: bool | None = restore_initial_state
+        self.timeout_base: float = timeout_base
+        self.timeout_multiplier: float = timeout_multiplier
+        self.timeout_first_frame: float | None = timeout_first_frame
+        self.timeout_action: Literal["raise", "warn"] = timeout_action
 
         # whether to include position metadata when fetching on-frame metadata
         # omitted by default when performing triggered acquisition because it's slow.
@@ -157,6 +183,34 @@ class MDAEngine(PMDAEngine):
         if (mmc := self._mmcore_ref()) is None:  # pragma: no cover
             raise RuntimeError("The CMMCorePlus instance has been garbage collected.")
         return mmc
+
+    def _frame_timeout(self, event: MDAEvent) -> float:
+        """Compute per-frame timeout in seconds for a sequenced acquisition."""
+        exposure_s = (event.exposure or 0.0) / 1000.0
+        return max(
+            self.timeout_base,
+            exposure_s * self.timeout_multiplier,
+        )
+
+    def _initial_timeout(self, event: MDAEvent) -> float:
+        """Compute timeout for the first frame of a sequenced acquisition."""
+        if self.timeout_first_frame is not None:
+            return self.timeout_first_frame
+        return self._frame_timeout(event)
+
+    def _handle_timeout(self, timeout: float) -> None:
+        """Handle a sequenced acquisition timeout per the configured action."""
+        self.mmcore.stopSequenceAcquisition()
+        msg = (
+            f"Acquisition timed out after {timeout:.1f}s. "
+            "Consider increasing 'timeout_base' or "
+            "'timeout_multiplier' on the MDAEngine, or setting "
+            "'timeout_first_frame' if the camera is waiting for an "
+            "external trigger."
+        )
+        if self.timeout_action == "raise":
+            raise TimeoutError(msg)
+        logger.warning(msg)
 
     # ===================== Protocol Implementation =====================
 
@@ -712,10 +766,16 @@ class MDAEngine(PMDAEngine):
         core = self.mmcore
         count = 0
         pause_warned = False
+        frame_timeout = self._frame_timeout(event)
+        timeout = self._initial_timeout(event)
+        deadline = time.monotonic() + timeout
 
         # Pop frames while sequence is running, then drain remaining buffer
-        while True:
+        while time.monotonic() < deadline:
             if remaining := core.getRemainingImageCount():
+                # Reset deadline for next frame if we have remaining images
+                timeout = frame_timeout
+                deadline = time.monotonic() + timeout
                 img, mm_meta = core.popNextImageAndMD()
                 signal = yield self._create_seqimg_payload_from_popped(
                     img,
@@ -741,6 +801,9 @@ class MDAEngine(PMDAEngine):
             else:
                 # Done acquiring and buffer empty - exit
                 break
+        else:
+            # Deadline exceeded
+            self._handle_timeout(timeout)
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
@@ -768,10 +831,16 @@ class MDAEngine(PMDAEngine):
         n_events = len(event.events)
         coordinator = _MultiCameraCoordinator(core, n_channels, n_events)
         pause_warned = False
+        frame_timeout = self._frame_timeout(event)
+        timeout = self._initial_timeout(event)
+        deadline = time.monotonic() + timeout
 
         # Unified loop: pop while running, then drain remaining buffer
-        while True:
+        while time.monotonic() < deadline:
             if core.getRemainingImageCount():
+                # Reset deadline whenever we receive data
+                timeout = frame_timeout
+                deadline = time.monotonic() + timeout
                 for payload in coordinator.pop_and_process(
                     event.events,
                     t0_ms,
@@ -791,6 +860,9 @@ class MDAEngine(PMDAEngine):
                 time.sleep(0.001)
             else:
                 break
+        else:
+            # Deadline exceeded
+            self._handle_timeout(timeout)
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError("Buffer overflowed")
