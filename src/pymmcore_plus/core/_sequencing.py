@@ -347,6 +347,7 @@ class EventCombiner:
             properties=static_props,
             # all other "standard" MDAEvent fields are derived from the first event
             # the engine will use these values if the corresponding sequence is empty
+            pos_name=first_event.pos_name,
             x_pos=first_event.x_pos,
             y_pos=first_event.y_pos,
             z_pos=first_event.z_pos,
