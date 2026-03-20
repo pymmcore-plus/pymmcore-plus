@@ -2,14 +2,18 @@
 
 from __future__ import annotations
 
+import logging
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
 import useq
-from ome_writers import AcquisitionSettings
-
-from pymmcore_plus.mda._runner import MDARunner, _OmeWritersSink
+from ome_writers import AcquisitionSettings, Dimension
+from pymmcore_plus.mda._runner import (
+    MDARunner,
+    _OmeWritersSink,
+    _merge_user_dim_overrides,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -150,6 +154,88 @@ def test_run_with_event_iterator(core: CMMCorePlus) -> None:
             yield MDAEvent(metadata={"frame": i})
 
     core.mda.run(event_generator(), output="scratch")
+
+    view = core.mda.get_view()
+    assert view is not None
+    assert view.shape[:-2] == (3,)
+
+
+# --- _merge_user_dim_overrides tests ---
+
+
+def test_merge_applies_overridable_fields() -> None:
+    """User chunk_size, shard_size_chunks, unit, scale, translation are merged."""
+    useq_dims = [
+        Dimension(name="t", count=10, type="time", unit="second", scale=1.0),
+        Dimension(name="y", count=512, type="space", unit="micrometer"),
+        Dimension(name="x", count=512, type="space", unit="micrometer"),
+    ]
+    overrides = {
+        "t": Dimension(name="t", chunk_size=1, scale=2.0),
+        "y": Dimension(name="y", chunk_size=256, shard_size_chunks=4),
+    }
+    merged = _merge_user_dim_overrides(useq_dims, overrides)
+
+    assert merged[0].chunk_size == 1
+    assert merged[0].scale == 2.0
+    assert merged[0].count == 10  # not overridden
+    assert merged[0].unit == "second"  # not overridden (user had None)
+    assert merged[1].chunk_size == 256
+    assert merged[1].shard_size_chunks == 4
+    assert merged[2].chunk_size is None  # no override for x
+
+
+def test_merge_warns_on_count_mismatch(caplog: pytest.LogCaptureFixture) -> None:
+    """Warning emitted when user count differs from sequence-derived count."""
+    useq_dims = [
+        Dimension(name="t", count=50, type="time"),
+        Dimension(name="y", count=512, type="space"),
+        Dimension(name="x", count=512, type="space"),
+    ]
+    overrides = {
+        "t": Dimension(name="t", count=100, type="time"),
+    }
+    with caplog.at_level(logging.WARNING, logger="pymmcore-plus"):
+        _merge_user_dim_overrides(useq_dims, overrides)
+
+    assert "count=100" in caplog.text
+    assert "50" in caplog.text
+    # count should NOT be overridden
+    assert useq_dims[0].count == 50
+
+
+def test_merge_no_warning_when_values_match() -> None:
+    """No warning when user-provided count matches sequence-derived count."""
+    useq_dims = [
+        Dimension(name="t", count=50, type="time"),
+        Dimension(name="y", count=512, type="space"),
+        Dimension(name="x", count=512, type="space"),
+    ]
+    overrides = {
+        "t": Dimension(name="t", count=50, chunk_size=1, type="time"),
+    }
+    import warnings
+
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
+        merged = _merge_user_dim_overrides(useq_dims, overrides)
+
+    assert merged[0].chunk_size == 1
+
+
+def test_run_with_partial_dimension_overrides(
+    core: CMMCorePlus, tmp_path: Path
+) -> None:
+    """User-provided chunk_size on partial dims carries through to the sink."""
+    settings = AcquisitionSettings(
+        root_path=str(tmp_path / "out.ome.zarr"),
+        dimensions=[
+            Dimension(name="t", chunk_size=1),
+        ],
+        overwrite=True,
+    )
+    seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=3))
+    core.mda.run(seq, output=settings)
 
     view = core.mda.get_view()
     assert view is not None

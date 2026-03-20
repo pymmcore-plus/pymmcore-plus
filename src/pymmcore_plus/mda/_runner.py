@@ -772,6 +772,45 @@ class SinkProtocol(Protocol):
     def get_view(self) -> SinkView | None: ...
 
 
+# Fields on Dimension that users may override via partial dimension specs.
+# count, type, coords, and name come from the useq-derived dimensions.
+_DIM_OVERRIDABLE_FIELDS = (
+    "chunk_size", "shard_size_chunks", "unit", "scale", "translation"
+)
+# Fields where user values are NOT applied but a mismatch warning is emitted.
+_DIM_WARN_ON_MISMATCH_FIELDS = ("count", "type")
+
+
+def _merge_user_dim_overrides(
+    dims: list[Dimension], overrides: dict[str, Dimension]
+) -> list[Dimension]:
+    """Merge user-provided dimension customizations into useq-derived dimensions."""
+    for dim in dims:
+        if dim.name in overrides:
+            user_dim = overrides[dim.name]
+            for field in _DIM_OVERRIDABLE_FIELDS:
+                if (val := getattr(user_dim, field, None)) is not None:
+                    setattr(dim, field, val)
+            for field in _DIM_WARN_ON_MISMATCH_FIELDS:
+                user_val = getattr(user_dim, field, None)
+                derived_val = getattr(dim, field, None)
+                if (
+                    user_val is not None
+                    and derived_val is not None
+                    and user_val != derived_val
+                ):
+                    logger.warning(
+                        "User-provided dimension '%s' has %s=%r, but the "
+                        "sequence-derived value is %r. Using sequence-derived "
+                        "value.",
+                        dim.name,
+                        field,
+                        user_val,
+                        derived_val,
+                    )
+    return dims
+
+
 def _unbounded_3d_settings(
     width: int, height: int, pixel_size_um: float | None = None
 ) -> AcquisitionSettingsDict:
@@ -852,6 +891,11 @@ class _OmeWritersSink(SinkProtocol):
         width, height = info["width"], info["height"]
         pixel_size_um = info["pixel_size_um"]
 
+        # Build lookup of user-provided dimension overrides
+        user_dim_overrides = {
+            dim.name: dim for dim in self._settings.dimensions
+        }
+
         useq_settings: Mapping
         if isinstance(sequence, GeneratorMDASequence):
             useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
@@ -870,6 +914,13 @@ class _OmeWritersSink(SinkProtocol):
                     e,
                 )
                 useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
+
+        # Merge user-provided dimension customizations into useq-derived dims
+        if user_dim_overrides:
+            merged_dims = _merge_user_dim_overrides(
+                list(useq_settings["dimensions"]), user_dim_overrides
+            )
+            useq_settings = {**useq_settings, "dimensions": merged_dims}
 
         # multi-camera: add a camera dimension before Y/X so the sink
         # expects N_events * N_cameras frames instead of just N_events
