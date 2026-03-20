@@ -775,7 +775,11 @@ class SinkProtocol(Protocol):
 # Fields on Dimension that users may override via partial dimension specs.
 # count, type, coords, and name come from the useq-derived dimensions.
 _DIM_OVERRIDABLE_FIELDS = (
-    "chunk_size", "shard_size_chunks", "unit", "scale", "translation"
+    "chunk_size",
+    "shard_size_chunks",
+    "unit",
+    "scale",
+    "translation",
 )
 # Fields where user values are NOT applied but a mismatch warning is emitted.
 _DIM_WARN_ON_MISMATCH_FIELDS = ("count", "type")
@@ -892,9 +896,7 @@ class _OmeWritersSink(SinkProtocol):
         pixel_size_um = info["pixel_size_um"]
 
         # Build lookup of user-provided dimension overrides
-        user_dim_overrides = {
-            dim.name: dim for dim in self._settings.dimensions
-        }
+        user_dim_overrides = {dim.name: dim for dim in self._settings.dimensions}
 
         useq_settings: Mapping
         if isinstance(sequence, GeneratorMDASequence):

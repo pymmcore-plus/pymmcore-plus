@@ -9,10 +9,11 @@ from unittest.mock import Mock
 import pytest
 import useq
 from ome_writers import AcquisitionSettings, Dimension
+
 from pymmcore_plus.mda._runner import (
     MDARunner,
-    _OmeWritersSink,
     _merge_user_dim_overrides,
+    _OmeWritersSink,
 )
 
 if TYPE_CHECKING:
