@@ -7,7 +7,7 @@ from unittest.mock import Mock
 
 import pytest
 import useq
-from ome_writers import AcquisitionSettings, Dimension
+from ome_writers import AcquisitionSettings
 
 from pymmcore_plus.mda._runner import MDARunner, _OmeWritersSink
 
@@ -156,24 +156,14 @@ def test_run_with_event_iterator(core: CMMCorePlus) -> None:
     assert view.shape[:-2] == (3,)
 
 
-def test_run_with_partial_dimension_overrides(
-    core: CMMCorePlus, tmp_path: Path
-) -> None:
-    """User-provided chunk_size on partial dims carries through to the sink."""
-    settings = AcquisitionSettings(
-        root_path=str(tmp_path / "out.ome.zarr"),
-        # Must provide at least y, x to satisfy AcquisitionSettings validation.
-        # The "t" dim carries a user override (chunk_size=1) that should be
-        # merged into the sequence-derived dimensions.
-        dimensions=[
-            Dimension(name="t", count=3, type="time", chunk_size=1),
-            Dimension(name="y", count=512, type="space"),
-            Dimension(name="x", count=512, type="space"),
-        ],
-        overwrite=True,
-    )
+def test_run_with_dimension_overrides(core: CMMCorePlus, tmp_path: Path) -> None:
+    """dimension_overrides carries through to the written dimensions."""
     seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=3))
-    core.mda.run(seq, output=settings)
+    core.mda.run(
+        seq,
+        output=str(tmp_path / "out.ome.zarr"),
+        dimension_overrides={"t": {"chunk_size": 1}},
+    )
 
     view = core.mda.get_view()
     assert view is not None
