@@ -772,49 +772,6 @@ class SinkProtocol(Protocol):
     def get_view(self) -> SinkView | None: ...
 
 
-# Fields on Dimension that users may override via partial dimension specs.
-# count, type, coords, and name come from the useq-derived dimensions.
-_DIM_OVERRIDABLE_FIELDS = (
-    "chunk_size",
-    "shard_size_chunks",
-    "unit",
-    "scale",
-    "translation",
-)
-# Fields where user values are NOT applied but a mismatch warning is emitted.
-_DIM_WARN_ON_MISMATCH_FIELDS = ("count", "type")
-
-
-def _merge_user_dim_overrides(
-    dims: list[Dimension], overrides: dict[str, Dimension]
-) -> list[Dimension]:
-    """Merge user-provided dimension customizations into useq-derived dimensions."""
-    for dim in dims:
-        if dim.name in overrides:
-            user_dim = overrides[dim.name]
-            for field in _DIM_OVERRIDABLE_FIELDS:
-                if (val := getattr(user_dim, field, None)) is not None:
-                    setattr(dim, field, val)
-            for field in _DIM_WARN_ON_MISMATCH_FIELDS:
-                user_val = getattr(user_dim, field, None)
-                derived_val = getattr(dim, field, None)
-                if (
-                    user_val is not None
-                    and derived_val is not None
-                    and user_val != derived_val
-                ):
-                    logger.warning(
-                        "User-provided dimension '%s' has %s=%r, but the "
-                        "sequence-derived value is %r. Using sequence-derived "
-                        "value.",
-                        dim.name,
-                        field,
-                        user_val,
-                        derived_val,
-                    )
-    return dims
-
-
 def _unbounded_3d_settings(
     width: int, height: int, pixel_size_um: float | None = None
 ) -> AcquisitionSettingsDict:
@@ -895,9 +852,6 @@ class _OmeWritersSink(SinkProtocol):
         width, height = info["width"], info["height"]
         pixel_size_um = info["pixel_size_um"]
 
-        # Build lookup of user-provided dimension overrides
-        user_dim_overrides = {dim.name: dim for dim in self._settings.dimensions}
-
         useq_settings: Mapping
         if isinstance(sequence, GeneratorMDASequence):
             useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
@@ -917,13 +871,6 @@ class _OmeWritersSink(SinkProtocol):
                 )
                 useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
 
-        # Merge user-provided dimension customizations into useq-derived dims
-        if user_dim_overrides:
-            merged_dims = _merge_user_dim_overrides(
-                list(useq_settings["dimensions"]), user_dim_overrides
-            )
-            useq_settings = {**useq_settings, "dimensions": merged_dims}
-
         # multi-camera: add a camera dimension before Y/X so the sink
         # expects N_events * N_cameras frames instead of just N_events
         n_cameras = info.get("num_camera_adapter_channels", 1)
@@ -941,13 +888,42 @@ class _OmeWritersSink(SinkProtocol):
             dims.insert(len(dims) - 2, cam_dim)
             useq_settings = {**useq_settings, "dimensions": dims}
 
+        # Rebuild settings: start from user-provided settings, overlay
+        # sequence-derived dimensions and dtype from the engine.
+        derived_dims = list(useq_settings["dimensions"])
+        merged_dims = self._apply_user_dim_overrides(derived_dims)
         new_settings = {
             **self._settings.model_dump(),
             **useq_settings,
+            "dimensions": merged_dims,
             "dtype": info["dtype"],
         }
         self._settings = AcquisitionSettings.model_validate(new_settings)
         self._stream = create_stream(self._settings)
+
+    # Fields derived from the sequence that should not be overridden by user dims.
+    _DERIVED_DIM_FIELDS = frozenset({"name", "count", "type", "coords"})
+
+    def _apply_user_dim_overrides(
+        self, derived_dims: list[Dimension]
+    ) -> list[Dimension]:
+        """Apply user-provided dimension fields onto sequence-derived dimensions.
+
+        Fields like chunk_size, shard_size_chunks, unit, scale, and translation
+        are taken from the user's partial Dimension specs. Sequence-derived
+        fields (name, count, type, coords) are never overridden.
+        """
+        user_dims = {dim.name: dim for dim in self._settings.dimensions}
+        if not user_dims:
+            return derived_dims
+
+        for dim in derived_dims:
+            if (user_dim := user_dims.get(dim.name)) is None:
+                continue
+            for field, val in user_dim.model_dump(exclude_none=True).items():
+                if field not in self._DERIVED_DIM_FIELDS:
+                    setattr(dim, field, val)
+        return derived_dims
 
     def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None:
         self._stream.append(img, frame_metadata=_frame_meta_to_ome(meta))  # type: ignore[union-attr]
