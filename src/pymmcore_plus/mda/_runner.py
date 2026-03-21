@@ -34,9 +34,16 @@ if TYPE_CHECKING:
 
     import numpy as np
     from ome_writers._useq import AcquisitionSettingsDict
+    from typing_extensions import TypedDict
     from useq import MDAEvent
 
     from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
+
+    class DimensionOverride(TypedDict, total=False):
+        """Per-dimension storage overrides for sequence-derived dimensions."""
+
+        chunk_size: int
+        shard_size_chunks: int
 
     from ._engine import MDAEngine
     from ._protocol import PImagePayload
@@ -360,7 +367,7 @@ class MDARunner:
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
         overwrite: bool = False,
-        dimension_overrides: dict[str, dict[str, Any]] | None = None,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> None:
         """Run the multi-dimensional acquisition defined by `sequence`.
 
@@ -407,7 +414,7 @@ class MDARunner:
         overwrite : bool, optional
             Whether to overwrite existing files *when output is a `str` or `Path`*.
             Ignored in all other cases.  Default is False.
-        dimension_overrides : dict[str, dict[str, Any]] | None, optional
+        dimension_overrides : dict[str, DimensionOverride] | None, optional
             Per-dimension storage overrides, keyed by dimension name.
             Values are dicts of Dimension fields (e.g. chunk_size, scale, unit)
             to apply on top of the sequence-derived dimensions. Example:
@@ -488,7 +495,7 @@ class MDARunner:
     def _coerce_outputs(
         output: SingleOutput | Sequence[SingleOutput] | None,
         overwrite: bool = False,
-        dimension_overrides: dict[str, dict[str, Any]] | None = None,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> tuple[list[SupportsFrameReady], SinkProtocol | None]:
         """Normalize and validate output into a list of frameReady handlers, and a sink.
 
@@ -837,7 +844,7 @@ class _OmeWritersSink(SinkProtocol):
     def __init__(
         self,
         settings: AcquisitionSettings,
-        dimension_overrides: dict[str, dict[str, Any]] | None = None,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> None:
         self._settings = settings
         self._dimension_overrides = dimension_overrides or {}
@@ -848,7 +855,7 @@ class _OmeWritersSink(SinkProtocol):
         cls,
         output: str | Path | AcquisitionSettings,
         overwrite: bool = False,
-        dimension_overrides: dict[str, dict[str, Any]] | None = None,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> _OmeWritersSink:
         if isinstance(output, AcquisitionSettings):
             return cls(output, dimension_overrides=dimension_overrides)
@@ -879,6 +886,15 @@ class _OmeWritersSink(SinkProtocol):
         width, height = info["width"], info["height"]
         pixel_size_um = info["pixel_size_um"]
 
+        # Extract chunk/shard overrides for useq_to_acquisition_settings
+        ovr = self._dimension_overrides
+        chunk_shapes = {n: o["chunk_size"] for n, o in ovr.items() if "chunk_size" in o}
+        shard_shapes = {
+            n: o["shard_size_chunks"]
+            for n, o in ovr.items()
+            if "shard_size_chunks" in o
+        }
+
         useq_settings: Mapping
         if isinstance(sequence, GeneratorMDASequence):
             useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
@@ -889,6 +905,8 @@ class _OmeWritersSink(SinkProtocol):
                     image_width=width,
                     image_height=height,
                     pixel_size_um=pixel_size_um,
+                    chunk_shapes=chunk_shapes or None,
+                    shard_shapes=shard_shapes or None,
                 )
             except NotImplementedError as e:
                 logger.warning(
@@ -915,33 +933,13 @@ class _OmeWritersSink(SinkProtocol):
             dims.insert(len(dims) - 2, cam_dim)
             useq_settings = {**useq_settings, "dimensions": dims}
 
-        # Rebuild settings: start from user-provided settings, overlay
-        # sequence-derived dimensions and dtype from the engine.
-        derived_dims = list(useq_settings["dimensions"])
-        merged_dims = self._apply_dimension_overrides(derived_dims)
         new_settings = {
             **self._settings.model_dump(),
             **useq_settings,
-            "dimensions": merged_dims,
             "dtype": info["dtype"],
         }
         self._settings = AcquisitionSettings.model_validate(new_settings)
         self._stream = create_stream(self._settings)
-
-    # Fields derived from the sequence that should not be overridden.
-    _DERIVED_DIM_FIELDS = frozenset({"name", "count", "type", "coords"})
-
-    def _apply_dimension_overrides(self, dims: list[Dimension]) -> list[Dimension]:
-        """Apply dimension_overrides onto sequence-derived dimensions."""
-        if not self._dimension_overrides:
-            return dims
-        for dim in dims:
-            if (overrides := self._dimension_overrides.get(dim.name)) is None:
-                continue
-            for key, val in overrides.items():
-                if key not in self._DERIVED_DIM_FIELDS:
-                    setattr(dim, key, val)
-        return dims
 
     def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None:
         self._stream.append(img, frame_metadata=_frame_meta_to_ome(meta))  # type: ignore[union-attr]
