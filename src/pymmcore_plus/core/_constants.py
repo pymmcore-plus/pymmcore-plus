@@ -369,28 +369,11 @@ class PixelFormat(str, Enum):
 
     @classmethod
     def pick(cls, bit_depth: int, n_comp: int = 1) -> PixelFormat:
-        if n_comp == 1:
-            formats = (
-                (8, cls.MONO8),
-                (10, cls.MONO10),
-                (12, cls.MONO12),
-                (14, cls.MONO14),
-                (16, cls.MONO16),
-                (32, cls.MONO32),
-            )
-        elif n_comp == 3:
-            formats = (
-                (8, cls.RGB8),
-                (10, cls.RGB10),
-                (12, cls.RGB12),
-                (14, cls.RGB14),
-                (16, cls.RGB16),
-            )
-        else:
+        if n_comp not in PIXEL_FORMATS:
             raise NotImplementedError(
                 f"Unsupported Pixel Format {bit_depth=} {n_comp=}"
             )
-        for bits, fmt in formats:
+        for bits, fmt in sorted(PIXEL_FORMATS[n_comp].items()):
             if bits >= bit_depth:
                 return fmt
         raise NotImplementedError(f"Unsupported Pixel Format {bit_depth=} {n_comp=}")
@@ -401,3 +384,23 @@ class PixelFormat(str, Enum):
         if n_comp == 4:
             n_comp = 3
         return cls.pick(core.getImageBitDepth(), n_comp)
+
+
+# map of {number of components: {bit depth: PixelFormat}}
+PIXEL_FORMATS: dict[int, dict[int, PixelFormat]] = {
+    1: {
+        8: PixelFormat.MONO8,
+        10: PixelFormat.MONO10,
+        12: PixelFormat.MONO12,
+        14: PixelFormat.MONO14,
+        16: PixelFormat.MONO16,
+        32: PixelFormat.MONO32,
+    },
+    3: {
+        8: PixelFormat.RGB8,
+        10: PixelFormat.RGB10,
+        12: PixelFormat.RGB12,
+        14: PixelFormat.RGB14,
+        16: PixelFormat.RGB16,
+    },
+}
