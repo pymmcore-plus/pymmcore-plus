@@ -393,9 +393,7 @@ class PixelFormat(str, Enum):
         for bits, fmt in formats:
             if bits >= bit_depth:
                 return fmt
-        raise NotImplementedError(
-            f"Unsupported Pixel Format {bit_depth=} {n_comp=}"
-        )
+        raise NotImplementedError(f"Unsupported Pixel Format {bit_depth=} {n_comp=}")
 
     @classmethod
     def for_current_camera(cls, core: pymmcore.CMMCore) -> PixelFormat:
