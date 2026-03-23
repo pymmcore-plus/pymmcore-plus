@@ -332,30 +332,6 @@ def test_property_newly_appearing_in_later_event_triggers_sequenceability_check(
     assert not isinstance(merged[1], SequencedEvent)
 
 
-def test_sequenced_multicam_events(multicam_tester: CMMCorePlus) -> None:
-    """Verify multi-camera frames are emitted in sequential (t,c) order.
-
-    Even though cameras produce frames asynchronously, the engine should buffer
-    and emit them in predictable order: (t=0,c=0), (t=0,c=1), (t=1,c=0), (t=1,c=1)...
-    """
-    core = multicam_tester
-    frames: list[tuple[int, int, str]] = []  # (timepoint, channel, camera_name)
-
-    @core.mda.events.frameReady.connect
-    def on_frame(img: np.ndarray, event: useq.MDAEvent) -> None:
-        info = decode_image(img)
-        frames.append((event.index["t"], event.index["cam"], info.camera_info.name))
-
-    core.mda.run(useq.MDASequence(time_plan={"interval": 0, "loops": 5}))
-
-    # Verify we got all frames (5 timepoints x 2 cameras = 10 frames)
-    assert len(frames) == 10
-
-    # Verify frames arrive in perfect sequential order
-    expected = [(t, c, f"TCamera{c + 1}") for t in range(5) for c in range(2)]
-    assert frames == expected
-
-
 def test_position_keyword_change_on_stage_device_breaks_sequencing() -> None:
     """A changing 'Position' property on a stage device must break sequencing.
 
@@ -379,3 +355,27 @@ def test_position_keyword_change_on_stage_device_breaks_sequencing() -> None:
     assert len(merged) == 2
     assert not isinstance(merged[0], SequencedEvent)
     assert not isinstance(merged[1], SequencedEvent)
+
+
+def test_sequenced_multicam_events(multicam_tester: CMMCorePlus) -> None:
+    """Verify multi-camera frames are emitted in sequential (t,c) order.
+
+    Even though cameras produce frames asynchronously, the engine should buffer
+    and emit them in predictable order: (t=0,c=0), (t=0,c=1), (t=1,c=0), (t=1,c=1)...
+    """
+    core = multicam_tester
+    frames: list[tuple[int, int, str]] = []  # (timepoint, channel, camera_name)
+
+    @core.mda.events.frameReady.connect
+    def on_frame(img: np.ndarray, event: useq.MDAEvent) -> None:
+        info = decode_image(img)
+        frames.append((event.index["t"], event.index["cam"], info.camera_info.name))
+
+    core.mda.run(useq.MDASequence(time_plan={"interval": 0, "loops": 5}))
+
+    # Verify we got all frames (5 timepoints x 2 cameras = 10 frames)
+    assert len(frames) == 10
+
+    # Verify frames arrive in perfect sequential order
+    expected = [(t, c, f"TCamera{c + 1}") for t in range(5) for c in range(2)]
+    assert frames == expected
