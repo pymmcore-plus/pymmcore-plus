@@ -308,30 +308,6 @@ def test_position_property_changing_value_breaks_sequencing() -> None:
     assert not isinstance(merged[1], SequencedEvent)
 
 
-def test_property_newly_appearing_in_later_event_triggers_sequenceability_check() -> None:
-    """A property absent from the first event but present in a later event is checked.
-
-    Only new_val is None is silently skipped; old_val is None (property newly
-    appears) still triggers the normal sequenceability path.
-    """
-    core = MagicMock()
-    core.isPropertySequenceable.side_effect = RuntimeError("not sequenceable")
-    events = [
-        useq.MDAEvent(),
-        useq.MDAEvent(properties=[useq.PropertyTuple("Dev", "Prop", "val")]),
-    ]
-
-    merged = list(iter_sequenced_events(core, events))
-
-    # isPropertySequenceable must be called because the property appears anew.
-    assert call("Dev", "Prop") in core.isPropertySequenceable.call_args_list
-
-    # Not sequenceable (RuntimeError) → each event is its own batch.
-    assert len(merged) == 2
-    assert not isinstance(merged[0], SequencedEvent)
-    assert not isinstance(merged[1], SequencedEvent)
-
-
 def test_position_keyword_change_on_stage_device_breaks_sequencing() -> None:
     """A changing 'Position' property on a stage device must break sequencing.
 
@@ -352,6 +328,30 @@ def test_position_keyword_change_on_stage_device_breaks_sequencing() -> None:
     core.isPropertySequenceable.assert_not_called()
 
     # The position change must split the batch.
+    assert len(merged) == 2
+    assert not isinstance(merged[0], SequencedEvent)
+    assert not isinstance(merged[1], SequencedEvent)
+
+
+def test_property_newly_appearing_in_later_event_triggers_sequenceability_check() -> None:
+    """A property absent from the first event but present in a later event is checked.
+
+    Only new_val is None is silently skipped; old_val is None (property newly
+    appears) still triggers the normal sequenceability path.
+    """
+    core = MagicMock()
+    core.isPropertySequenceable.side_effect = RuntimeError("not sequenceable")
+    events = [
+        useq.MDAEvent(),
+        useq.MDAEvent(properties=[useq.PropertyTuple("Dev", "Prop", "val")]),
+    ]
+
+    merged = list(iter_sequenced_events(core, events))
+
+    # isPropertySequenceable must be called because the property appears anew.
+    assert call("Dev", "Prop") in core.isPropertySequenceable.call_args_list
+
+    # Not sequenceable (RuntimeError) → each event is its own batch.
     assert len(merged) == 2
     assert not isinstance(merged[0], SequencedEvent)
     assert not isinstance(merged[1], SequencedEvent)
