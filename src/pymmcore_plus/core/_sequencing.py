@@ -267,8 +267,11 @@ class EventCombiner:
         for dev_prop in all_props:
             new_val = event_props.get(dev_prop)
             old_val = self.first_event_props.get(dev_prop)
+            # If the new event doesn't mention the property, treat it as static:
+            # the first event's value will be applied before the sequence starts.
+            if new_val is None:
+                continue
             if new_val != old_val:
-                # if the property has changed, (or is missing in one dict)
                 if new_chunk_len > self._get_property_max_length(dev_prop):
                     return False
                 self.attribute_changes[dev_prop] = True
