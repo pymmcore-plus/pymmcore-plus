@@ -333,7 +333,9 @@ def test_position_keyword_change_on_stage_device_breaks_sequencing() -> None:
     assert not isinstance(merged[1], SequencedEvent)
 
 
-def test_property_newly_appearing_in_later_event_triggers_sequenceability_check() -> None:
+def test_property_newly_appearing_in_later_event_triggers_sequenceability_check() -> (
+    None
+):
     """A property absent from the first event but present in a later event is checked.
 
     Only new_val is None is silently skipped; old_val is None (property newly
