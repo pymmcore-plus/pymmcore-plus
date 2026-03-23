@@ -272,6 +272,13 @@ class EventCombiner:
             if new_val is None:
                 continue
             if new_val != old_val:
+                dev, prop = dev_prop
+                # Stage positions are moved via setPosition/setXYPosition
+                # (see MDAEngine._set_event_properties), not via property sequences.
+                if prop == Keyword.Position:
+                    dev_type = self.core.getDeviceType(dev)
+                    if dev_type in (DeviceType.Stage, DeviceType.XYStage):
+                        return False
                 if new_chunk_len > self._get_property_max_length(dev_prop):
                     return False
                 self.attribute_changes[dev_prop] = True

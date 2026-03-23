@@ -11,6 +11,7 @@ import pytest
 import useq
 
 from pymmcore_plus import CMMCorePlus
+from pymmcore_plus.core._constants import DeviceType
 from pymmcore_plus.core._sequencing import (
     SequencedEvent,
     get_all_sequenceable,
@@ -353,3 +354,28 @@ def test_sequenced_multicam_events(multicam_tester: CMMCorePlus) -> None:
     # Verify frames arrive in perfect sequential order
     expected = [(t, c, f"TCamera{c + 1}") for t in range(5) for c in range(2)]
     assert frames == expected
+
+
+def test_position_keyword_change_on_stage_device_breaks_sequencing() -> None:
+    """A changing 'Position' property on a stage device must break sequencing.
+
+    The engine uses setPosition / setXYPosition for stage devices (see
+    _set_event_properties), so stage position changes are never executed as
+    property sequences.  When both events carry 'Position' with different values,
+    can_extend must return False without querying isPropertySequenceable.
+    """
+    core = MagicMock()
+    core.getDeviceType.return_value = DeviceType.Stage
+    events = [
+        useq.MDAEvent(properties=[useq.PropertyTuple("ZDrive", "Position", 4330.0)]),
+        useq.MDAEvent(properties=[useq.PropertyTuple("ZDrive", "Position", 4340.0)]),
+    ]
+    merged = list(iter_sequenced_events(core, events))
+
+    # isPropertySequenceable must NOT be called — stage position is not a property sequence.
+    core.isPropertySequenceable.assert_not_called()
+
+    # The position change must split the batch.
+    assert len(merged) == 2
+    assert not isinstance(merged[0], SequencedEvent)
+    assert not isinstance(merged[1], SequencedEvent)
