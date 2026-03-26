@@ -325,7 +325,7 @@ def test_keep_shutter_open(core: CMMCorePlus) -> None:
 
 
 def test_autoshutter_off_keeps_shutter_open(core: CMMCorePlus) -> None:
-    """If autoshutter is off and the shutter is manually opened, MDA should not close it."""
+    """If autoshutter is off and shutter is manually opened, MDA should not close it."""
     mda = MDASequence(
         time_plan=useq.TIntervalLoops(interval=0.1, loops=3),
         channels=[useq.Channel(config="DAPI")],
