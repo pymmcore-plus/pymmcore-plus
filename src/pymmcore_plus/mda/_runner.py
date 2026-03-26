@@ -852,6 +852,15 @@ class _OmeWritersSink(SinkProtocol):
         width, height = info["width"], info["height"]
         pixel_size_um = info["pixel_size_um"]
 
+        # Waiting on https://github.com/pymmcore-plus/pymmcore-plus/pull/596
+        chunk_shapes = {
+            "t": 1,
+            "c": 1,
+            "z": min(512, sequence.sizes["z"]),
+            "y": height,
+            "x": width,
+        }
+
         useq_settings: Mapping
         if isinstance(sequence, GeneratorMDASequence):
             useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
@@ -862,6 +871,7 @@ class _OmeWritersSink(SinkProtocol):
                     image_width=width,
                     image_height=height,
                     pixel_size_um=pixel_size_um,
+                    chunk_shapes=chunk_shapes,
                 )
             except NotImplementedError as e:
                 logger.warning(
