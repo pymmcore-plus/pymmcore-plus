@@ -4,6 +4,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any, TypedDict
 
 import pymmcore_plus
+import pymmcore_plus._pymmcore as _pymmcore
 from pymmcore_plus._util import timestamp
 from pymmcore_plus.core._constants import DeviceType, PixelFormat
 
@@ -126,7 +127,7 @@ def device_info(
             core,
             device=label,
             cached=cached,
-            include_property_details=include_property_details,
+            include_details=include_property_details,
         ),
     }
     if parent := core.getParentLabel(label):
@@ -153,7 +154,8 @@ def device_info(
 def system_info(core: CMMCorePlus) -> SystemInfo:
     """Return general system information."""
     return {
-        "pymmcore_version": pymmcore_plus.__version__,
+        "pymmcore_version": _pymmcore.__version__,
+        "pymmcore_backend": _pymmcore.BACKEND,
         "pymmcore_plus_version": pymmcore_plus.__version__,
         "mmcore_version": core.getVersionInfo(),
         "device_api_version": core.getAPIVersionInfo(),
@@ -161,8 +163,8 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
         "system_configuration_file": core.systemConfigurationFile(),
         "primary_log_file": core.getPrimaryLogFile(),
         "sequence_buffer_size_mb": core.getCircularBufferMemoryFootprint(),
-        "continuous_focus_enabled": core.isContinuousFocusEnabled(),
-        "continuous_focus_locked": core.isContinuousFocusLocked(),
+        # "continuous_focus_enabled": core.isContinuousFocusEnabled(),
+        # "continuous_focus_locked": core.isContinuousFocusLocked(),
         "auto_shutter": core.getAutoShutter(),
         "timeout_ms": core.getTimeoutMs(),
     }
@@ -362,7 +364,7 @@ def property_info(
     if not include_property_details:
         return info
     info["data_type"] = core.getPropertyType(device, prop).__repr__()
-    info["allowed_values"] = core.getAllowedPropertyValues(device, prop)
+    info["allowed_values"] = tuple(core.getAllowedPropertyValues(device, prop))
     info["is_read_only"] = core.isPropertyReadOnly(device, prop)
     if core.isPropertyPreInit(device, prop):
         info["is_pre_init"] = True
@@ -382,7 +384,7 @@ def properties(
     device: str,
     *,
     cached: bool = True,
-    include_property_details: bool = True,
+    include_details: bool = True,
 ) -> tuple[PropertyInfo, ...]:
     """Return a dictionary of device properties values for all loaded devices."""
     # this actually appears to be faster than getSystemStateCache
@@ -392,7 +394,7 @@ def properties(
             device,
             prop,
             cached=cached,
-            include_property_details=include_property_details,
+            include_property_details=include_details,
         )
         for prop in core.getDevicePropertyNames(device)
     )

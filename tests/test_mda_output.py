@@ -10,7 +10,8 @@ import pytest
 import useq
 from ome_writers import AcquisitionSettings
 
-from pymmcore_plus.mda._runner import MDARunner, _OmeWritersSink
+from pymmcore_plus.mda._runner import MDARunner
+from pymmcore_plus.mda._sink import OmeWritersSink
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
@@ -36,36 +37,36 @@ SUMMARY_META_KEYS = {
 
 
 @pytest.fixture
-def zarr_sink(tmp_path: Path) -> _OmeWritersSink:
-    return _OmeWritersSink.from_output(tmp_path / "out.ome.zarr")
+def zarr_sink(tmp_path: Path) -> OmeWritersSink:
+    return OmeWritersSink.from_output(tmp_path / "out.ome.zarr")
 
 
 def test_from_output_path(tmp_path: Path) -> None:
     dest = tmp_path / "out.ome.zarr"
-    sink = _OmeWritersSink.from_output(dest)
+    sink = OmeWritersSink.from_output(dest)
     assert sink._settings.root_path == str(dest)
 
 
 def test_from_output_scratch() -> None:
-    sink = _OmeWritersSink.from_output("scratch")
+    sink = OmeWritersSink.from_output("scratch")
     assert sink._settings.format.name == "scratch"
-    sink = _OmeWritersSink.from_output("memory")
+    sink = OmeWritersSink.from_output("memory")
     assert sink._settings.format.name == "scratch"
 
 
 def test_from_output_acquisition_settings() -> None:
     settings = AcquisitionSettings(root_path="/tmp/test.ome.zarr")
-    sink = _OmeWritersSink.from_output(settings)
+    sink = OmeWritersSink.from_output(settings)
     assert sink._settings == settings
 
 
-def test_sink_get_close_before_setup(zarr_sink: _OmeWritersSink) -> None:
+def test_sink_get_close_before_setup(zarr_sink: OmeWritersSink) -> None:
     assert zarr_sink.get_view() is None
     zarr_sink.close()  # should not raise
 
 
 def test_sink_skip_delegates_to_stream() -> None:
-    sink = _OmeWritersSink(AcquisitionSettings(root_path="/tmp/x.ome.zarr"))
+    sink = OmeWritersSink(AcquisitionSettings(root_path="/tmp/x.ome.zarr"))
     mock_stream = Mock()
     sink._stream = mock_stream
     sink.skip(frames=3)
@@ -114,8 +115,8 @@ def test_run_with_tiff_output(core: CMMCorePlus, tmp_path: Path) -> None:
     pmc = [m for m in sa.map_annotations if m.namespace == "pymmcore_plus"]
     assert len(pmc) == 1
     entries = {e.k: e.value for e in pmc[0].value.ms}
-    assert "summary_metadata" in entries
-    summary = json.loads(entries["summary_metadata"])
+    assert "summary_metadata_json" in entries
+    summary = json.loads(entries["summary_metadata_json"])
     assert SUMMARY_META_KEYS <= set(summary)
 
 

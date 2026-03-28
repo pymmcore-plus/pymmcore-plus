@@ -259,14 +259,13 @@ class MDAEngine(PMDAEngine):
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = core.getAutoShutter()
-        return self.get_summary_metadata(
-            mda_sequence=sequence, include_property_details=False
-        )
+        return self.get_summary_metadata(mda_sequence=sequence)
 
     def get_summary_metadata(
         self,
         mda_sequence: MDASequence | None,
-        include_property_details: bool = True,
+        *,
+        include_property_details: bool = False,
     ) -> SummaryMetaV1:
         return summary_metadata(
             self.mmcore,
