@@ -127,7 +127,8 @@ class SystemInfo(TypedDict):
     pymmcore_version : str
         The version of the PyMMCore library.
     pymmcore_backend : str
-        The name of the PyMMCore backend in use (e.g. "pymmcore" or "pymmcore-nano").
+        *Not Required*. The name of the PyMMCore backend in use (e.g. "pymmcore" or
+        "pymmcore-nano").
     pymmcore_plus_version : str
         The version of the PyMMCore Plus library.
     mmcore_version : str
@@ -158,7 +159,7 @@ class SystemInfo(TypedDict):
     """
 
     pymmcore_version: str
-    pymmcore_backend: str
+    pymmcore_backend: NotRequired[str]
     pymmcore_plus_version: str
     mmcore_version: str
     device_api_version: str
