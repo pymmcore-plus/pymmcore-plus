@@ -30,9 +30,9 @@ class PropertyInfo(TypedDict):
     value : str | None
         The current value of the property, if any.
     data_type : Literal["undefined", "float", "int", "str"]
-        The data type of the `value` field.
+        *Not Required*. The data type of the `value` field.
     is_read_only : bool
-        Whether the property is read-only.
+        *Not Required*. Whether the property is read-only.
     allowed_values : tuple[str, ...]
         *Not Required*. The allowed values for the property, if any.  Consumers should
         not depend on this field being present.
@@ -51,8 +51,8 @@ class PropertyInfo(TypedDict):
 
     name: str
     value: str | None
-    data_type: Literal["undefined", "float", "int", "str"]
-    is_read_only: bool
+    data_type: NotRequired[Literal["undefined", "float", "int", "str"]]
+    is_read_only: NotRequired[bool]
     allowed_values: NotRequired[tuple[str, ...]]
     is_pre_init: NotRequired[bool]
     limits: NotRequired[tuple[float, float]]
