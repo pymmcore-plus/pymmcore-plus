@@ -416,9 +416,9 @@ class MDARunner:
             Ignored in all other cases.  Default is False.
         dimension_overrides : dict[str, DimensionOverride] | None, optional
             Per-dimension storage overrides, keyed by dimension name.
-            Values are dicts of Dimension fields (e.g. chunk_size, scale, unit)
+            Values are dicts of Dimension fields ("chunk_size", "shard_size_chunks")
             to apply on top of the sequence-derived dimensions. Example:
-            ``{"t": {"chunk_size": 1}, "y": {"chunk_size": 256}}``.
+            `{"t": {"chunk_size": 1}, "y": {"chunk_size": 256}}`.
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
