@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import threading
 import time
 import types
@@ -13,6 +14,7 @@ from typing import TYPE_CHECKING, Any, Protocol
 from unittest.mock import MagicMock
 from weakref import WeakSet
 
+from ome_types.model import Map, MapAnnotation, StructuredAnnotations
 from ome_writers import (
     AcquisitionSettings,
     Dimension,
@@ -815,6 +817,29 @@ def _frame_meta_to_ome(meta: FrameMetaV1) -> dict:
     return d
 
 
+def _serialize_summary_meta(meta: SummaryMetaV1) -> dict[str, Any]:
+    """Convert SummaryMetaV1 to a JSON-serializable dict."""
+    d = dict(meta)
+    if "mda_sequence" in d and hasattr(d["mda_sequence"], "model_dump"):
+        d["mda_sequence"] = d["mda_sequence"].model_dump(mode="json")
+    return d
+
+
+def _enrich_tiff_with_summary(
+    metadata: dict[int, Any], summary_dict: dict[str, Any]
+) -> None:
+    """Add summary metadata to OME-TIFF as MapAnnotations."""
+    summary_json = json.dumps(summary_dict)
+    for _pos_idx, ome_model in metadata.items():
+        if not ome_model.structured_annotations:
+            ome_model.structured_annotations = StructuredAnnotations()
+        annotation = MapAnnotation(
+            namespace="pymmcore_plus",
+            value=Map.model_validate({"summary_metadata": summary_json}),
+        )
+        ome_model.structured_annotations.map_annotations.append(annotation)
+
+
 class _OmeWritersSink(SinkProtocol):
     """Our default built-in data sink.
 
@@ -824,6 +849,7 @@ class _OmeWritersSink(SinkProtocol):
     def __init__(self, settings: AcquisitionSettings) -> None:
         self._settings = settings
         self._stream: OMEStream | None = None
+        self._summary_meta: SummaryMetaV1 | None = None
 
     @classmethod
     def from_output(
@@ -895,6 +921,8 @@ class _OmeWritersSink(SinkProtocol):
         }
         self._settings = AcquisitionSettings.model_validate(new_settings)
         self._stream = create_stream(self._settings)
+        self._summary_meta = meta
+        self._write_summary_metadata()
 
     def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None:
         self._stream.append(img, frame_metadata=_frame_meta_to_ome(meta))  # type: ignore[union-attr]
@@ -905,8 +933,33 @@ class _OmeWritersSink(SinkProtocol):
     def close(self) -> None:
         if self._stream is not None:
             self._stream.close()
+            self._write_summary_metadata(after_close=True)
 
     def get_view(self) -> SinkView | None:
         if self._stream is None:
             return None
         return self._stream.view(dynamic_shape=True, strict=False)
+
+    def _write_summary_metadata(self, *, after_close: bool = False) -> None:
+        """Write summary metadata to the stream in a format-aware way.
+
+        For OME-Zarr this is called immediately after stream creation.
+        For OME-TIFF this must be called after close (TIFF requires finalization
+        before metadata can be updated).
+        """
+        if self._stream is None or self._summary_meta is None:
+            return
+
+        fmt = self._settings.format.name
+        summary_dict = _serialize_summary_meta(self._summary_meta)
+
+        if fmt == "ome-zarr" and not after_close:
+            metadata = self._stream.get_metadata()
+            for _path, attrs in metadata.items():
+                attrs.setdefault("pymmcore_plus", {})["summary_metadata"] = summary_dict
+            self._stream.update_metadata(metadata)
+
+        elif fmt == "ome-tiff" and after_close:
+            metadata = self._stream.get_metadata()
+            _enrich_tiff_with_summary(metadata, summary_dict)
+            self._stream.update_metadata(metadata)

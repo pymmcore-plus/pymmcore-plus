@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
@@ -16,6 +17,19 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     from pymmcore_plus import CMMCorePlus
+
+SUMMARY_META_KEYS = {
+    "config_groups",
+    "datetime",
+    "devices",
+    "format",
+    "image_infos",
+    "mda_sequence",
+    "pixel_size_configs",
+    "position",
+    "system_info",
+    "version",
+}
 
 
 # --- _OmeWritersSink unit tests ---
@@ -76,6 +90,13 @@ def test_run_with_zarr_output(core: CMMCorePlus, tmp_path: Path) -> None:
     assert view.shape[:-2] == (2,)
     assert out.exists()
 
+    # verify summary metadata was written to zarr.json
+    zarr_jsons = list(out.rglob("zarr.json"))
+    assert zarr_jsons
+    root_json = json.loads(min(zarr_jsons, key=lambda p: len(p.parts)).read_text())
+    summary = root_json["attributes"]["pymmcore_plus"]["summary_metadata"]
+    assert SUMMARY_META_KEYS <= set(summary)
+
 
 def test_run_with_tiff_output(core: CMMCorePlus, tmp_path: Path) -> None:
     runner = core.mda
@@ -83,6 +104,19 @@ def test_run_with_tiff_output(core: CMMCorePlus, tmp_path: Path) -> None:
     seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=2))
     runner.run(seq, output=out)
     assert out.exists()
+
+    # verify summary metadata was written as MapAnnotation
+    import ome_types
+
+    ome = ome_types.from_tiff(str(out))
+    sa = ome.structured_annotations
+    assert sa is not None
+    pmc = [m for m in sa.map_annotations if m.namespace == "pymmcore_plus"]
+    assert len(pmc) == 1
+    entries = {e.k: e.value for e in pmc[0].value.ms}
+    assert "summary_metadata" in entries
+    summary = json.loads(entries["summary_metadata"])
+    assert SUMMARY_META_KEYS <= set(summary)
 
 
 def test_run_with_acquisition_settings(core: CMMCorePlus, tmp_path: Path) -> None:
