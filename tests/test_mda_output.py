@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
@@ -158,13 +159,8 @@ def test_run_with_event_iterator(core: CMMCorePlus) -> None:
 
 def test_run_with_dimension_overrides(core: CMMCorePlus, tmp_path: Path) -> None:
     """dimension_overrides carries through to the written dimensions."""
-    seq = useq.MDASequence(time_plan=useq.TIntervalLoops(interval=0, loops=3))
-    core.mda.run(
-        seq,
-        output=str(tmp_path / "out.ome.zarr"),
-        dimension_overrides={"t": {"chunk_size": 1}},
-    )
-
-    view = core.mda.get_view()
-    assert view is not None
-    assert view.shape[:-2] == (3,)
+    seq = useq.MDASequence(z_plan=useq.ZRangeAround(range=4, step=1))
+    dest = tmp_path / "test.ome.zarr"
+    core.mda.run(seq, output=dest, dimension_overrides={"z": {"chunk_size": 5}})
+    metadata = json.loads((dest / "0" / "zarr.json").read_bytes())
+    assert metadata["chunk_grid"]["configuration"]["chunk_shape"][0] == 5
