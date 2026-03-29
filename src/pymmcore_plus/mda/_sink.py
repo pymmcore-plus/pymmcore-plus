@@ -25,7 +25,7 @@ if TYPE_CHECKING:
     from ome_writers._useq import AcquisitionSettingsDict
     from useq import MDAEvent, MDASequence
 
-    from pymmcore_plus.mda._runner import SinkView
+    from pymmcore_plus.mda._runner import DimensionOverride, SinkView
     from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
 
 
@@ -43,21 +43,35 @@ class OmeWritersSink(SinkProtocol):
     uses ome-writers to write to OME-Zarr or OME-TIFF, or scratch (tmp/memory).
     """
 
-    def __init__(self, settings: AcquisitionSettings) -> None:
+    def __init__(
+        self,
+        settings: AcquisitionSettings,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
+    ) -> None:
         self._settings = settings
+        self._dimension_overrides = dimension_overrides or {}
         self._stream: OMEStream | None = None
         self._summary_meta: SummaryMetaV1 | None = None
 
     @classmethod
     def from_output(
-        cls, output: str | Path | AcquisitionSettings, overwrite: bool = False
+        cls,
+        output: str | Path | AcquisitionSettings,
+        overwrite: bool = False,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> OmeWritersSink:
         if isinstance(output, AcquisitionSettings):
-            return cls(output)
+            return cls(output, dimension_overrides=dimension_overrides)
         stripped = str(output).rstrip("/").rstrip(":").lower()
         if stripped in ("memory", "scratch"):
-            return cls(AcquisitionSettings(format="scratch", overwrite=overwrite))  # pyright: ignore
-        return cls(AcquisitionSettings(root_path=str(output), overwrite=overwrite))
+            return cls(
+                AcquisitionSettings(format="scratch", overwrite=overwrite),  # pyright: ignore
+                dimension_overrides=dimension_overrides,
+            )
+        return cls(
+            AcquisitionSettings(root_path=str(output), overwrite=overwrite),
+            dimension_overrides=dimension_overrides,
+        )
 
     def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None:
         # FIXME?
@@ -93,6 +107,14 @@ class OmeWritersSink(SinkProtocol):
                     e,
                 )
                 useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
+
+        # Apply dimension overrides (chunk_size, shard_size_chunks) to all paths
+        if overrides := self._dimension_overrides:
+            dims = list(useq_settings["dimensions"])
+            for i, dim in enumerate(dims):
+                if dim.name in overrides:
+                    dims[i] = dim.model_copy(update=overrides[dim.name])
+            useq_settings["dimensions"] = dims
 
         # multi-camera: add a camera dimension before Y/X so the sink
         # expects N_events * N_cameras frames instead of just N_events

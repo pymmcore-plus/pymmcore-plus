@@ -28,10 +28,17 @@ if TYPE_CHECKING:
     from typing import TypeAlias
 
     import numpy as np
+    from typing_extensions import TypedDict
     from useq import MDAEvent
 
     from pymmcore_plus.mda._sink import SinkProtocol
     from pymmcore_plus.metadata.schema import FrameMetaV1
+
+    class DimensionOverride(TypedDict, total=False):
+        """Per-dimension storage overrides for sequence-derived dimensions."""
+
+        chunk_size: int
+        shard_size_chunks: int
 
     from ._engine import MDAEngine
     from ._protocol import PImagePayload
@@ -334,6 +341,7 @@ class MDARunner:
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
         overwrite: bool = False,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> None:
         """Run the multi-dimensional acquisition defined by `sequence`.
 
@@ -380,10 +388,17 @@ class MDARunner:
         overwrite : bool, optional
             Whether to overwrite existing files *when output is a `str` or `Path`*.
             Ignored in all other cases.  Default is False.
+        dimension_overrides : dict[str, DimensionOverride] | None, optional
+            Per-dimension storage overrides, keyed by dimension name.
+            Values are dicts of Dimension fields ("chunk_size", "shard_size_chunks")
+            to apply on top of the sequence-derived dimensions. Example:
+            `{"t": {"chunk_size": 1}, "y": {"chunk_size": 256}}`.
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-        handlers, sink = self._coerce_outputs(output, overwrite=overwrite)
+        handlers, sink = self._coerce_outputs(
+            output, overwrite=overwrite, dimension_overrides=dimension_overrides
+        )
         self._sink = sink
         with self._handlers_connected(handlers):
             # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
@@ -454,6 +469,7 @@ class MDARunner:
     def _coerce_outputs(
         output: SingleOutput | Sequence[SingleOutput] | None,
         overwrite: bool = False,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> tuple[list[SupportsFrameReady], SinkProtocol | None]:
         """Normalize and validate output into a list of frameReady handlers, and a sink.
 
@@ -479,7 +495,11 @@ class MDARunner:
                         "as output.  Open a feature request if you would like to see "
                         "support for multiple data sinks."
                     )
-                sink = OmeWritersSink.from_output(item, overwrite=overwrite)
+                sink = OmeWritersSink.from_output(
+                    item,
+                    overwrite=overwrite,
+                    dimension_overrides=dimension_overrides,
+                )
             else:
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
