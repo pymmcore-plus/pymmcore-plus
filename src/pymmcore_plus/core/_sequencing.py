@@ -275,6 +275,8 @@ class EventCombiner:
                 dev, prop = dev_prop
                 # Stage positions are moved via setPosition/setXYPosition
                 # (see MDAEngine._set_event_properties), not via property sequences.
+                # TODO: we could technically support this in SequencedEvent
+                # with dict mapping device labels to position sequences.
                 if prop == Keyword.Position:
                     dev_type = self.core.getDeviceType(dev)
                     if dev_type in (DeviceType.Stage, DeviceType.XYStage):
