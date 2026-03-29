@@ -324,6 +324,34 @@ def test_keep_shutter_open(core: CMMCorePlus) -> None:
     # index={'p': 1, 'z': 3, 't': 2},                          False, False)
 
 
+def test_autoshutter_off_keeps_shutter_open(core: CMMCorePlus) -> None:
+    """If autoshutter is off and shutter is manually opened, MDA should not close it."""
+    mda = MDASequence(
+        time_plan=useq.TIntervalLoops(interval=0.1, loops=3),
+        channels=[useq.Channel(config="DAPI")],
+    )
+
+    # disable autoshutter and manually open the shutter
+    core.setAutoShutter(False)
+    core.setShutterOpen(True)
+
+    @core.mda.events.frameReady.connect
+    def _on_frame(img: Any, event: MDAEvent) -> None:
+        # shutter should remain open throughout the entire MDA
+        assert core.getShutterOpen() is True
+        # autoshutter should remain off
+        assert core.getAutoShutter() is False
+
+    core.mda.run(mda)
+
+    # after the MDA, the shutter should still be open and autoshutter still off
+    assert core.getShutterOpen() is True
+    assert core.getAutoShutter() is False
+
+    # cleanup
+    core.setShutterOpen(False)
+
+
 def test_engine_protocol(core: CMMCorePlus) -> None:
     mock1 = Mock()
     mock2 = Mock()

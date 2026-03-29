@@ -415,7 +415,7 @@ class MDAEngine(PMDAEngine):
         except Exception as e:
             logger.warning("Failed to snap image. %s", e)
             return
-        if not event.keep_shutter_open:
+        if not event.keep_shutter_open and self._autoshutter_was_set:
             mmcore.setShutterOpen(False)
 
         # most cameras will only have a single channel
