@@ -254,8 +254,8 @@ def test_position_property_absent_in_later_events_treated_as_static() -> None:
     AbsolutePosition.properties (useq-schema) attaches a non-default focus-stage
     offset (e.g. ZDrive.Position) only to the first z-event of each position.
     These events must still be batched together, and the property from the first
-    event must appear as a static property on the SequencedEvent — not in
-    property_sequences — so the engine can apply it once before the sequence starts.
+    event must appear as a static property on the SequencedEvent - not in
+    property_sequences - so the engine can apply it once before the sequence starts.
     """
     core = MagicMock()
     events = [
@@ -302,7 +302,7 @@ def test_position_property_changing_value_breaks_sequencing() -> None:
     # isPropertySequenceable IS called when the property changes value.
     assert call("Dev", "Prop") in core.isPropertySequenceable.call_args_list
 
-    # The value change must split the batch — each event is its own output.
+    # The value change must split the batch - each event is its own output.
     assert len(merged) == 2
     assert not isinstance(merged[0], SequencedEvent)
     assert not isinstance(merged[1], SequencedEvent)
@@ -324,7 +324,8 @@ def test_position_keyword_change_on_stage_device_breaks_sequencing() -> None:
     ]
     merged = list(iter_sequenced_events(core, events))
 
-    # isPropertySequenceable must NOT be called — stage position is not a property sequence.
+    # isPropertySequenceable must NOT be called -
+    # stage position is not a property sequence.
     core.isPropertySequenceable.assert_not_called()
 
     # The position change must split the batch.
