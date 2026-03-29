@@ -56,7 +56,7 @@ if TYPE_CHECKING:
     from pymmcore import DeviceLabel
     from useq import MDAEvent
 
-    from pymmcore_plus.mda._runner import SingleOutput
+    from pymmcore_plus.mda._runner import DimensionOverride, SingleOutput
     from pymmcore_plus.metadata.schema import SummaryMetaV1
 
     _T = TypeVar("_T")
@@ -1625,6 +1625,7 @@ class CMMCorePlus(pymmcore.CMMCore):
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
         block: bool = False,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> Thread:
         """Run a sequence of [useq.MDAEvent][] on a new thread.
 
@@ -1653,6 +1654,9 @@ class CMMCorePlus(pymmcore.CMMCore):
             - A sequence of either of the above. (all will be connected)
         block : bool, optional
             If True, block until the sequence is complete, by default False.
+        dimension_overrides : dict[str, DimensionOverride] | None, optional
+            Per-dimension storage overrides, keyed by dimension name.
+            See `MDARunner.run` for details.
 
         Returns
         -------
@@ -1664,7 +1668,11 @@ class CMMCorePlus(pymmcore.CMMCore):
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        th = Thread(target=self.mda.run, args=(events,), kwargs={"output": output})
+        th = Thread(
+            target=self.mda.run,
+            args=(events,),
+            kwargs={"output": output, "dimension_overrides": dimension_overrides},
+        )
         th.start()
         if block:
             th.join()

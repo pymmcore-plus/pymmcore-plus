@@ -4,7 +4,7 @@ import threading
 import time
 import types
 import warnings
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
@@ -34,9 +34,16 @@ if TYPE_CHECKING:
 
     import numpy as np
     from ome_writers._useq import AcquisitionSettingsDict
+    from typing_extensions import TypedDict
     from useq import MDAEvent
 
     from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
+
+    class DimensionOverride(TypedDict, total=False):
+        """Per-dimension storage overrides for sequence-derived dimensions."""
+
+        chunk_size: int
+        shard_size_chunks: int
 
     from ._engine import MDAEngine
     from ._protocol import PImagePayload
@@ -360,6 +367,7 @@ class MDARunner:
         *,
         output: SingleOutput | Sequence[SingleOutput] | None = None,
         overwrite: bool = False,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> None:
         """Run the multi-dimensional acquisition defined by `sequence`.
 
@@ -406,10 +414,17 @@ class MDARunner:
         overwrite : bool, optional
             Whether to overwrite existing files *when output is a `str` or `Path`*.
             Ignored in all other cases.  Default is False.
+        dimension_overrides : dict[str, DimensionOverride] | None, optional
+            Per-dimension storage overrides, keyed by dimension name.
+            Values are dicts of Dimension fields ("chunk_size", "shard_size_chunks")
+            to apply on top of the sequence-derived dimensions. Example:
+            `{"t": {"chunk_size": 1}, "y": {"chunk_size": 256}}`.
         """
         error = None
         sequence = events if isinstance(events, MDASequence) else GeneratorMDASequence()
-        handlers, sink = self._coerce_outputs(output, overwrite=overwrite)
+        handlers, sink = self._coerce_outputs(
+            output, overwrite=overwrite, dimension_overrides=dimension_overrides
+        )
         self._sink = sink
         with self._handlers_connected(handlers):
             # NOTE: it's important that `_prepare_to_run` and `_finish_run` are
@@ -480,6 +495,7 @@ class MDARunner:
     def _coerce_outputs(
         output: SingleOutput | Sequence[SingleOutput] | None,
         overwrite: bool = False,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> tuple[list[SupportsFrameReady], SinkProtocol | None]:
         """Normalize and validate output into a list of frameReady handlers, and a sink.
 
@@ -505,7 +521,11 @@ class MDARunner:
                         "as output.  Open a feature request if you would like to see "
                         "support for multiple data sinks."
                     )
-                sink = _OmeWritersSink.from_output(item, overwrite=overwrite)
+                sink = _OmeWritersSink.from_output(
+                    item,
+                    overwrite=overwrite,
+                    dimension_overrides=dimension_overrides,
+                )
             else:
                 if not callable(getattr(item, "frameReady", None)):
                     raise TypeError(
@@ -821,20 +841,34 @@ class _OmeWritersSink(SinkProtocol):
     uses ome-writers to write to OME-Zarr or OME-TIFF, or scratch (tmp/memory).
     """
 
-    def __init__(self, settings: AcquisitionSettings) -> None:
+    def __init__(
+        self,
+        settings: AcquisitionSettings,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
+    ) -> None:
         self._settings = settings
+        self._dimension_overrides = dimension_overrides or {}
         self._stream: OMEStream | None = None
 
     @classmethod
     def from_output(
-        cls, output: str | Path | AcquisitionSettings, overwrite: bool = False
+        cls,
+        output: str | Path | AcquisitionSettings,
+        overwrite: bool = False,
+        dimension_overrides: dict[str, DimensionOverride] | None = None,
     ) -> _OmeWritersSink:
         if isinstance(output, AcquisitionSettings):
-            return cls(output)
+            return cls(output, dimension_overrides=dimension_overrides)
         stripped = str(output).rstrip("/").rstrip(":").lower()
         if stripped in ("memory", "scratch"):
-            return cls(AcquisitionSettings(format="scratch", overwrite=overwrite))  # pyright: ignore
-        return cls(AcquisitionSettings(root_path=str(output), overwrite=overwrite))
+            return cls(
+                AcquisitionSettings(format="scratch", overwrite=overwrite),  # pyright: ignore
+                dimension_overrides=dimension_overrides,
+            )
+        return cls(
+            AcquisitionSettings(root_path=str(output), overwrite=overwrite),
+            dimension_overrides=dimension_overrides,
+        )
 
     def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None:
         # FIXME?
@@ -852,7 +886,7 @@ class _OmeWritersSink(SinkProtocol):
         width, height = info["width"], info["height"]
         pixel_size_um = info["pixel_size_um"]
 
-        useq_settings: Mapping
+        useq_settings: AcquisitionSettingsDict
         if isinstance(sequence, GeneratorMDASequence):
             useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
         else:
@@ -870,6 +904,14 @@ class _OmeWritersSink(SinkProtocol):
                     e,
                 )
                 useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
+
+        # Apply dimension overrides (chunk_size, shard_size_chunks) to all paths
+        if overrides := self._dimension_overrides:
+            dims = list(useq_settings["dimensions"])
+            for i, dim in enumerate(dims):
+                if dim.name in overrides:
+                    dims[i] = dim.model_copy(update=overrides[dim.name])
+            useq_settings["dimensions"] = dims
 
         # multi-camera: add a camera dimension before Y/X so the sink
         # expects N_events * N_cameras frames instead of just N_events
