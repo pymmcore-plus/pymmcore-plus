@@ -4,7 +4,7 @@ import threading
 import time
 import types
 import warnings
-from collections.abc import Callable, Iterable, Iterator, Mapping, Sequence
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass, field
 from enum import Enum
@@ -886,16 +886,7 @@ class _OmeWritersSink(SinkProtocol):
         width, height = info["width"], info["height"]
         pixel_size_um = info["pixel_size_um"]
 
-        # Extract chunk/shard overrides for useq_to_acquisition_settings
-        ovr = self._dimension_overrides
-        chunk_shapes = {n: o["chunk_size"] for n, o in ovr.items() if "chunk_size" in o}
-        shard_shapes = {
-            n: o["shard_size_chunks"]
-            for n, o in ovr.items()
-            if "shard_size_chunks" in o
-        }
-
-        useq_settings: Mapping
+        useq_settings: AcquisitionSettingsDict
         if isinstance(sequence, GeneratorMDASequence):
             useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
         else:
@@ -905,8 +896,6 @@ class _OmeWritersSink(SinkProtocol):
                     image_width=width,
                     image_height=height,
                     pixel_size_um=pixel_size_um,
-                    chunk_shapes=chunk_shapes or None,
-                    shard_shapes=shard_shapes or None,
                 )
             except NotImplementedError as e:
                 logger.warning(
@@ -915,6 +904,14 @@ class _OmeWritersSink(SinkProtocol):
                     e,
                 )
                 useq_settings = _unbounded_3d_settings(width, height, pixel_size_um)
+
+        # Apply dimension overrides (chunk_size, shard_size_chunks) to all paths
+        if overrides := self._dimension_overrides:
+            dims = list(useq_settings["dimensions"])
+            for i, dim in enumerate(dims):
+                if dim.name in overrides:
+                    dims[i] = dim.model_copy(update=overrides[dim.name])
+            useq_settings["dimensions"] = dims
 
         # multi-camera: add a camera dimension before Y/X so the sink
         # expects N_events * N_cameras frames instead of just N_events

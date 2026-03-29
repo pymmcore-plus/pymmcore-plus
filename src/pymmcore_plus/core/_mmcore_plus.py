@@ -1668,10 +1668,11 @@ class CMMCorePlus(pymmcore.CMMCore):
             raise ValueError(
                 "Cannot start an MDA while the previous MDA is still running."
             )
-        kwargs: dict[str, Any] = {"output": output}
-        if dimension_overrides is not None:
-            kwargs["dimension_overrides"] = dimension_overrides
-        th = Thread(target=self.mda.run, args=(events,), kwargs=kwargs)
+        th = Thread(
+            target=self.mda.run,
+            args=(events,),
+            kwargs={"output": output, "dimension_overrides": dimension_overrides},
+        )
         th.start()
         if block:
             th.join()
