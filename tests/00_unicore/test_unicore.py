@@ -461,6 +461,11 @@ def test_config_group_channel_groups():
     core.deleteConfigGroup("channel")
     assert not core.getChannelGroup()
 
+    # setProperty("Core", "ChannelGroup", ...) should route to setChannelGroup
+    core.defineConfigGroup("channel2")
+    core.setProperty("Core", "ChannelGroup", "channel2")
+    assert core.getChannelGroup() == "channel2"
+
 
 def test_config_group_events():
     """Test that config group operations emit the correct events."""
