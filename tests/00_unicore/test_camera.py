@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 DEV = "Camera"
 
+
 np.random.seed(42)
 SENSOR_SHAPE = (512, 512)
 DTYPE = np.uint16
@@ -432,3 +433,14 @@ def test_camera_channels_numbers() -> None:
     assert core.getCameraDevice() == DEV
 
     assert core.getNumberOfCameraChannels() == 1
+
+
+def test_set_camera_device_via_set_property():
+    """setProperty('Core', 'Camera', label) should route to setCameraDevice."""
+    core = UniMMCore()
+    core.loadPyDevice(DEV, MyCamera())
+    core.initializeDevice(DEV)
+
+    core.setProperty("Core", "Camera", DEV)
+
+    assert core.getCameraDevice() == DEV

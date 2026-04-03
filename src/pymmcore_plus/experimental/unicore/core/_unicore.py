@@ -541,11 +541,21 @@ class UniMMCore(CMMCorePlus):
     def setProperty(
         self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
-        # FIXME:
-        # this single case is probably just the tip of the iceberg when label is "Core"
-        if label == KW.CoreDevice and propName == KW.CoreChannelGroup:
-            self.setChannelGroup(str(propValue))
-            return
+        # Route Core device-selection properties to their dedicated setter methods,
+        # which handle Python devices correctly.
+        if label == KW.CoreDevice:
+            _core_device_setters: dict[str, Callable[[str], None]] = {
+                KW.CoreChannelGroup: self.setChannelGroup,
+                KW.CoreFocus: self.setFocusDevice,
+                KW.CoreCamera: self.setCameraDevice,
+                KW.CoreXYStage: self.setXYStageDevice,
+                KW.CoreShutter: self.setShutterDevice,
+                KW.CoreSLM: self.setSLMDevice,
+            }
+            setter = _core_device_setters.get(propName)
+            if setter is not None:
+                setter(str(propValue))
+                return
 
         if label not in self._pydevices:  # pragma: no cover
             return super().setProperty(label, propName, propValue)
