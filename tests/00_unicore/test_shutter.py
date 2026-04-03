@@ -54,3 +54,14 @@ def test_shutter_device_basic_functionality(unicore: UniMMCore) -> None:
     assert unicore.getShutterOpen() is True
     unicore.setShutterOpen(False)
     assert unicore.getShutterOpen() is False
+
+
+def test_set_shutter_device_via_set_property():
+    """setProperty('Core', 'Shutter', label) should route to setShutterDevice."""
+    core = UniMMCore()
+    core.loadPyDevice(DEV, MyShutterDevice())
+    core.initializeDevice(DEV)
+
+    core.setProperty("Core", "Shutter", DEV)
+
+    assert core.getShutterDevice() == DEV

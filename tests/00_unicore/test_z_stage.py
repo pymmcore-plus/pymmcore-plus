@@ -84,3 +84,17 @@ def test_unicore_z_stage():
     assert core.getZPosition() == 10.0
     assert stage.previous_position == 20.0
     assert stage.origin == 20.0
+
+
+def test_set_focus_device_via_set_property():
+    """setProperty('Core', 'Focus', label) should route to setFocusDevice."""
+    core = UniMMCore()
+
+    stage = MyZStage()
+    core.loadPyDevice("ZStage", stage)
+    core.initializeDevice("ZStage")
+
+    # This is the path taken by pymmcore-widgets StageWidget
+    core.setProperty("Core", "Focus", "ZStage")
+
+    assert core.getFocusDevice() == "ZStage"
