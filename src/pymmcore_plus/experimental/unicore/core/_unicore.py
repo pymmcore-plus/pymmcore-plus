@@ -544,12 +544,13 @@ class UniMMCore(CMMCorePlus):
         # Route Core device-selection properties to their dedicated setter methods,
         # which handle Python devices correctly.
         if label == KW.CoreDevice:
-            _core_device_setters = {
+            _core_device_setters: dict[str, Callable[[str], None]] = {
                 KW.CoreChannelGroup: self.setChannelGroup,
                 KW.CoreFocus: self.setFocusDevice,
                 KW.CoreCamera: self.setCameraDevice,
                 KW.CoreXYStage: self.setXYStageDevice,
                 KW.CoreShutter: self.setShutterDevice,
+                KW.CoreSLM: self.setSLMDevice,
             }
             setter = _core_device_setters.get(propName)
             if setter is not None:
