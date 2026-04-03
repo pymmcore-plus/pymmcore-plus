@@ -4,6 +4,7 @@ from contextlib import suppress
 from typing import TYPE_CHECKING, Any, TypedDict
 
 import pymmcore_plus
+import pymmcore_plus._pymmcore as _pymmcore
 from pymmcore_plus._util import timestamp
 from pymmcore_plus.core._constants import DeviceType, PixelFormat
 
@@ -50,6 +51,7 @@ def summary_metadata(
     mda_sequence: useq.MDASequence | None = None,
     cached: bool = True,
     include_time: bool = True,
+    include_property_details: bool = True,
 ) -> SummaryMetaV1:
     """Return a summary metadata for the current state of the system.
 
@@ -59,7 +61,9 @@ def summary_metadata(
     summary: SummaryMetaV1 = {
         "format": "summary-dict",
         "version": "1.0",
-        "devices": devices_info(core, cached=cached),
+        "devices": devices_info(
+            core, cached=cached, include_property_details=include_property_details
+        ),
         "system_info": system_info(core),
         "image_infos": image_infos(core),
         "position": position(core),
@@ -104,7 +108,13 @@ def frame_metadata(
 # ----------------------------------------------
 
 
-def device_info(core: CMMCorePlus, *, label: str, cached: bool = True) -> DeviceInfo:
+def device_info(
+    core: CMMCorePlus,
+    *,
+    label: str,
+    cached: bool = True,
+    include_property_details: bool = True,
+) -> DeviceInfo:
     """Return information about a specific device label."""
     devtype = core.getDeviceType(label)
     info: DeviceInfo = {
@@ -113,7 +123,12 @@ def device_info(core: CMMCorePlus, *, label: str, cached: bool = True) -> Device
         "name": core.getDeviceName(label),
         "type": devtype.name,
         "description": core.getDeviceDescription(label),
-        "properties": properties(core, device=label, cached=cached),
+        "properties": properties(
+            core,
+            device=label,
+            cached=cached,
+            include_details=include_property_details,
+        ),
     }
     if parent := core.getParentLabel(label):
         info["parent_label"] = parent
@@ -139,7 +154,8 @@ def device_info(core: CMMCorePlus, *, label: str, cached: bool = True) -> Device
 def system_info(core: CMMCorePlus) -> SystemInfo:
     """Return general system information."""
     return {
-        "pymmcore_version": pymmcore_plus.__version__,
+        "pymmcore_version": _pymmcore.__version__,
+        "pymmcore_backend": _pymmcore.BACKEND,
         "pymmcore_plus_version": pymmcore_plus.__version__,
         "mmcore_version": core.getVersionInfo(),
         "device_api_version": core.getAPIVersionInfo(),
@@ -147,8 +163,8 @@ def system_info(core: CMMCorePlus) -> SystemInfo:
         "system_configuration_file": core.systemConfigurationFile(),
         "primary_log_file": core.getPrimaryLogFile(),
         "sequence_buffer_size_mb": core.getCircularBufferMemoryFootprint(),
-        "continuous_focus_enabled": core.isContinuousFocusEnabled(),
-        "continuous_focus_locked": core.isContinuousFocusLocked(),
+        # "continuous_focus_enabled": core.isContinuousFocusEnabled(),
+        # "continuous_focus_locked": core.isContinuousFocusLocked(),
         "auto_shutter": core.getAutoShutter(),
         "timeout_ms": core.getTimeoutMs(),
     }
@@ -308,10 +324,20 @@ def pixel_size_config(core: CMMCorePlus, *, config_name: str) -> PixelSizeConfig
     return info
 
 
-def devices_info(core: CMMCorePlus, cached: bool = True) -> tuple[DeviceInfo, ...]:
+def devices_info(
+    core: CMMCorePlus,
+    cached: bool = True,
+    include_property_details: bool = True,
+) -> tuple[DeviceInfo, ...]:
     """Return a dictionary of device information for all loaded devices."""
     return tuple(
-        device_info(core, label=lbl, cached=cached) for lbl in core.getLoadedDevices()
+        device_info(
+            core,
+            label=lbl,
+            cached=cached,
+            include_property_details=include_property_details,
+        )
+        for lbl in core.getLoadedDevices()
     )
 
 
@@ -321,6 +347,7 @@ def property_info(
     prop: str,
     *,
     cached: bool = True,
+    include_property_details: bool = True,
 ) -> PropertyInfo:
     """Return information on a specific device property."""
     try:
@@ -333,10 +360,12 @@ def property_info(
     info: PropertyInfo = {
         "name": prop,
         "value": value,
-        "data_type": core.getPropertyType(device, prop).__repr__(),
-        "allowed_values": core.getAllowedPropertyValues(device, prop),
-        "is_read_only": core.isPropertyReadOnly(device, prop),
     }
+    if not include_property_details:
+        return info
+    info["data_type"] = core.getPropertyType(device, prop).__repr__()
+    info["allowed_values"] = tuple(core.getAllowedPropertyValues(device, prop))
+    info["is_read_only"] = core.isPropertyReadOnly(device, prop)
     if core.isPropertyPreInit(device, prop):
         info["is_pre_init"] = True
     if core.isPropertySequenceable(device, prop):
@@ -351,12 +380,22 @@ def property_info(
 
 
 def properties(
-    core: CMMCorePlus, device: str, *, cached: bool = True
+    core: CMMCorePlus,
+    device: str,
+    *,
+    cached: bool = True,
+    include_details: bool = True,
 ) -> tuple[PropertyInfo, ...]:
     """Return a dictionary of device properties values for all loaded devices."""
     # this actually appears to be faster than getSystemStateCache
     return tuple(
-        property_info(core, device, prop, cached=cached)
+        property_info(
+            core,
+            device,
+            prop,
+            cached=cached,
+            include_property_details=include_details,
+        )
         for prop in core.getDevicePropertyNames(device)
     )
 

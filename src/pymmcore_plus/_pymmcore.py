@@ -1,17 +1,18 @@
 """Internal module to choose between pymmcore and pymmcore-nano."""
 
 import re
-from typing import NamedTuple
+from typing import Literal, NamedTuple
 
+BACKEND: Literal["pymmcore", "pymmcore-nano"]
 try:
     from pymmcore_nano import *  # noqa F403
-    from pymmcore_nano import __version__
+    from pymmcore_nano import __version__ as __version__
 
     BACKEND = "pymmcore-nano"
     NANO = True
 except ImportError:
     from pymmcore import *  # noqa F403
-    from pymmcore import __version__
+    from pymmcore import __version__ as __version__
 
     BACKEND = "pymmcore"
     NANO = False
