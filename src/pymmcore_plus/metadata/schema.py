@@ -30,9 +30,9 @@ class PropertyInfo(TypedDict):
     value : str | None
         The current value of the property, if any.
     data_type : Literal["undefined", "float", "int", "str"]
-        The data type of the `value` field.
+        *Not Required*. The data type of the `value` field.
     is_read_only : bool
-        Whether the property is read-only.
+        *Not Required*. Whether the property is read-only.
     allowed_values : tuple[str, ...]
         *Not Required*. The allowed values for the property, if any.  Consumers should
         not depend on this field being present.
@@ -51,8 +51,8 @@ class PropertyInfo(TypedDict):
 
     name: str
     value: str | None
-    data_type: Literal["undefined", "float", "int", "str"]
-    is_read_only: bool
+    data_type: NotRequired[Literal["undefined", "float", "int", "str"]]
+    is_read_only: NotRequired[bool]
     allowed_values: NotRequired[tuple[str, ...]]
     is_pre_init: NotRequired[bool]
     limits: NotRequired[tuple[float, float]]
@@ -126,6 +126,9 @@ class SystemInfo(TypedDict):
     ----------
     pymmcore_version : str
         The version of the PyMMCore library.
+    pymmcore_backend : str
+        *Not Required*. The name of the PyMMCore backend in use (e.g. "pymmcore" or
+        "pymmcore-nano").
     pymmcore_plus_version : str
         The version of the PyMMCore Plus library.
     mmcore_version : str
@@ -145,17 +148,18 @@ class SystemInfo(TypedDict):
         The size of the circular buffer available for storing images during
         hardware-triggered sequence acquisition.
     continuous_focus_enabled : bool
-        Whether continuous focus is enabled.
+        *Not Required*. Whether continuous focus is enabled.
     continuous_focus_locked : bool
-        Whether continuous focus is currently locked.
+        *Not Required*. Whether continuous focus is currently locked.
     auto_shutter : bool
-        Whether auto-shutter is currently active.
+        *Not Required*. Whether auto-shutter is currently active.
     timeout_ms : int | None
         *Not Required*. The current timeout in milliseconds for the system. The default
         timeout is 5000 ms.
     """
 
     pymmcore_version: str
+    pymmcore_backend: NotRequired[str]
     pymmcore_plus_version: str
     mmcore_version: str
     device_api_version: str
@@ -163,9 +167,9 @@ class SystemInfo(TypedDict):
     system_configuration_file: str | None
     primary_log_file: str
     sequence_buffer_size_mb: int
-    continuous_focus_enabled: bool
-    continuous_focus_locked: bool
-    auto_shutter: bool
+    continuous_focus_enabled: NotRequired[bool]
+    continuous_focus_locked: NotRequired[bool]
+    auto_shutter: NotRequired[bool]
     timeout_ms: NotRequired[int]
 
 

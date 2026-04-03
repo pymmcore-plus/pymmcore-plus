@@ -36,7 +36,7 @@ from .core import (
     PropertyType,
 )
 from .core.events import CMMCoreSignaler, PCoreSignaler
-from .mda._runner import GeneratorMDASequence
+from .mda._generator_sequence import GeneratorMDASequence
 
 __all__ = [
     "AbstractChangeAccumulator",

@@ -251,6 +251,10 @@ class EventCombiner:
                 return False
             self.attribute_changes[Keyword.CoreFocus] = True
 
+        # ROI is not sequenceable, so events with different ROIs cannot be combined
+        if event.roi != e0.roi:
+            return False
+
         # SLM
         if event.slm_image != e0.slm_image:
             if new_chunk_len > self.max_lengths[Keyword.CoreSLM]:
@@ -263,8 +267,20 @@ class EventCombiner:
         for dev_prop in all_props:
             new_val = event_props.get(dev_prop)
             old_val = self.first_event_props.get(dev_prop)
+            # If the new event doesn't mention the property, treat it as static:
+            # the first event's value will be applied before the sequence starts.
+            if new_val is None:
+                continue
             if new_val != old_val:
-                # if the property has changed, (or is missing in one dict)
+                dev, prop = dev_prop
+                # Stage positions are moved via setPosition/setXYPosition
+                # (see MDAEngine._set_event_properties), not via property sequences.
+                # TODO: we could technically support this in SequencedEvent
+                # with dict mapping device labels to position sequences.
+                if prop == Keyword.Position:
+                    dev_type = self.core.getDeviceType(dev)
+                    if dev_type in (DeviceType.Stage, DeviceType.XYStage):
+                        return False
                 if new_chunk_len > self._get_property_max_length(dev_prop):
                     return False
                 self.attribute_changes[dev_prop] = True
@@ -343,6 +359,7 @@ class EventCombiner:
             properties=static_props,
             # all other "standard" MDAEvent fields are derived from the first event
             # the engine will use these values if the corresponding sequence is empty
+            pos_name=first_event.pos_name,
             x_pos=first_event.x_pos,
             y_pos=first_event.y_pos,
             z_pos=first_event.z_pos,
@@ -350,6 +367,7 @@ class EventCombiner:
             channel=first_event.channel,
             min_start_time=first_event.min_start_time,
             reset_event_timer=first_event.reset_event_timer,
+            roi=first_event.roi,
         )
 
     # -------------- helper methods to query props & max lengths ----------------

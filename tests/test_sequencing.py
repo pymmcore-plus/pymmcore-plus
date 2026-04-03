@@ -11,6 +11,7 @@ import pytest
 import useq
 
 from pymmcore_plus import CMMCorePlus
+from pymmcore_plus.core._constants import DeviceType
 from pymmcore_plus.core._sequencing import (
     SequencedEvent,
     get_all_sequenceable,
@@ -245,6 +246,118 @@ def multicam_tester() -> Iterator[CMMCorePlus]:
     core.setCameraDevice("MCam")
 
     yield core
+
+
+def test_position_property_absent_in_later_events_treated_as_static() -> None:
+    """Properties on only the first event of a batch are treated as static.
+
+    AbsolutePosition.properties (useq-schema) attaches a non-default focus-stage
+    offset (e.g. ZDrive.Position) only to the first z-event of each position.
+    These events must still be batched together, and the property from the first
+    event must appear as a static property on the SequencedEvent - not in
+    property_sequences - so the engine can apply it once before the sequence starts.
+    """
+    core = MagicMock()
+    events = [
+        useq.MDAEvent(properties=[useq.PropertyTuple("Dev", "Prop", "val")]),
+        useq.MDAEvent(),
+        useq.MDAEvent(),
+    ]
+
+    merged = list(iter_sequenced_events(core, events))
+
+    # isPropertySequenceable must NOT be called:
+    # the absent-property shortcut (new_val is None → continue) avoids the check.
+    assert call("Dev", "Prop") not in core.isPropertySequenceable.call_args_list
+
+    # All events combine into a single SequencedEvent.
+    assert len(merged) == 1
+    seq = merged[0]
+    assert isinstance(seq, SequencedEvent)
+    assert len(seq.events) == 3
+
+    # The property from the first event must be a static property on the SequencedEvent.
+    assert useq.PropertyTuple("Dev", "Prop", "val") in seq.properties
+
+    # It must NOT appear in property_sequences (which would cause a length mismatch).
+    assert ("Dev", "Prop") not in seq.property_sequences
+
+
+def test_position_property_changing_value_breaks_sequencing() -> None:
+    """A property whose value explicitly changes must still break sequencing.
+
+    The fix only skips the sequenceability check when the property is *absent* in
+    the new event (new_val is None).  When it is present with a different value,
+    the normal path applies: check sequenceability, and split if not sequenceable.
+    """
+    core = MagicMock()
+    core.isPropertySequenceable.side_effect = RuntimeError("not sequenceable")
+    events = [
+        useq.MDAEvent(properties=[useq.PropertyTuple("Dev", "Prop", "val1")]),
+        useq.MDAEvent(properties=[useq.PropertyTuple("Dev", "Prop", "val2")]),
+    ]
+
+    merged = list(iter_sequenced_events(core, events))
+
+    # isPropertySequenceable IS called when the property changes value.
+    assert call("Dev", "Prop") in core.isPropertySequenceable.call_args_list
+
+    # The value change must split the batch - each event is its own output.
+    assert len(merged) == 2
+    assert not isinstance(merged[0], SequencedEvent)
+    assert not isinstance(merged[1], SequencedEvent)
+
+
+def test_position_keyword_change_on_stage_device_breaks_sequencing() -> None:
+    """A changing 'Position' property on a stage device must break sequencing.
+
+    The engine uses setPosition / setXYPosition for stage devices (see
+    _set_event_properties), so stage position changes are never executed as
+    property sequences.  When both events carry 'Position' with different values,
+    can_extend must return False without querying isPropertySequenceable.
+    """
+    core = MagicMock()
+    core.getDeviceType.return_value = DeviceType.Stage
+    events = [
+        useq.MDAEvent(properties=[useq.PropertyTuple("ZDrive", "Position", 4330.0)]),
+        useq.MDAEvent(properties=[useq.PropertyTuple("ZDrive", "Position", 4340.0)]),
+    ]
+    merged = list(iter_sequenced_events(core, events))
+
+    # isPropertySequenceable must NOT be called -
+    # stage position is not a property sequence.
+    core.isPropertySequenceable.assert_not_called()
+
+    # The position change must split the batch.
+    assert len(merged) == 2
+    assert not isinstance(merged[0], SequencedEvent)
+    assert not isinstance(merged[1], SequencedEvent)
+
+
+def test_property_newly_appearing_in_later_event_triggers_sequenceability_check() -> (
+    None
+):
+    """A property absent from the first event but present in a later event is checked.
+
+    Only new_val is None is silently skipped; old_val is None (property newly
+    appears) still triggers the normal sequenceability path.
+    """
+    core = MagicMock()
+    core.isPropertySequenceable.side_effect = RuntimeError("not sequenceable")
+    events = [
+        useq.MDAEvent(),
+        useq.MDAEvent(properties=[useq.PropertyTuple("Dev", "Prop", "val")]),
+    ]
+
+    merged = list(iter_sequenced_events(core, events))
+
+    # isPropertySequenceable must be called because the property appears anew.
+    assert call("Dev", "Prop") in core.isPropertySequenceable.call_args_list
+
+    # Not sequenceable (RuntimeError) → each event is its own batch.
+    assert len(merged) == 2
+    assert not isinstance(merged[0], SequencedEvent)
+    assert not isinstance(merged[1], SequencedEvent)
 
 
 def test_sequenced_multicam_events(multicam_tester: CMMCorePlus) -> None:

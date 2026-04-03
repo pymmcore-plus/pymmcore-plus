@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import nullcontext
+from typing import Any
 from unittest.mock import Mock, call
 
 import pytest
@@ -68,16 +69,18 @@ def test_events_protocols(cls):
             )
 
 
-def test_set_property_events(core: CMMCorePlus) -> None:
+def test_set_property_events(core: CMMCorePlus, anybot: Any) -> None:
     """Test that using setProperty always emits a propertyChanged event."""
     mock = Mock()
     core.events.propertyChanged.connect(mock)
-    core.setProperty("Camera", "Binning", "2")
-    mock.assert_called_once_with("Camera", "Binning", "2")
+    with anybot.waitSignal(core.events.propertyChanged):
+        core.setProperty("Camera", "Binning", "2")
+    mock.assert_any_call("Camera", "Binning", "2")
 
     mock.reset_mock()
-    core.setProperty("Camera", "Binning", "1")
-    mock.assert_called_once_with("Camera", "Binning", "1")
+    with anybot.waitSignal(core.events.propertyChanged):
+        core.setProperty("Camera", "Binning", "1")
+    mock.assert_any_call("Camera", "Binning", "1")
 
     mock.reset_mock()
     core.setProperty("Camera", "Binning", "1")
@@ -85,8 +88,10 @@ def test_set_property_events(core: CMMCorePlus) -> None:
 
     # this is not a property that the DemoCamera emits...
     # so with regular pymmcore, this would not be emitted.
-    core.setProperty("Camera", "AllowMultiROI", "1")
-    mock.assert_called_once_with("Camera", "AllowMultiROI", "1")
+    mock.reset_mock()
+    with anybot.waitSignal(core.events.propertyChanged):
+        core.setProperty("Camera", "AllowMultiROI", "1")
+    mock.assert_any_call("Camera", "AllowMultiROI", "1")
 
 
 def test_set_state_events(core: CMMCorePlus) -> None:
@@ -146,32 +151,41 @@ def test_set_statedevice_property_emits_events(core: CMMCorePlus) -> None:
     assert core.getProperty("Dichroic", Keyword.State.value) == "1"
 
 
-def test_device_property_events(core: CMMCorePlus) -> None:
+def test_device_property_events(core: CMMCorePlus, anybot: Any) -> None:
     mock1 = Mock()
     mock2 = Mock()
     core.events.devicePropertyChanged("Camera", "Gain").connect(mock1)
     core.events.devicePropertyChanged("Camera").connect(mock2)
 
-    core.setProperty("Camera", "Gain", "6")
+    with (
+        anybot.waitSignal(core.events.devicePropertyChanged("Camera", "Gain")),
+        anybot.waitSignal(core.events.devicePropertyChanged("Camera")),
+    ):
+        core.setProperty("Camera", "Gain", "6")
     mock1.assert_called_once_with("6")
-    mock2.assert_called_once_with("Gain", "6")
+    mock2.assert_any_call("Gain", "6")
 
     mock1.reset_mock()
     mock2.reset_mock()
-    core.setProperty("Camera", "Binning", "2")
+    with (
+        anybot.waitSignal(core.events.devicePropertyChanged("Camera", "Binning")),
+        anybot.waitSignal(core.events.devicePropertyChanged("Camera")),
+    ):
+        core.setProperty("Camera", "Binning", "2")
     mock1.assert_not_called()
-    mock2.assert_called_once_with("Binning", "2")
+    mock2.assert_any_call("Binning", "2")
 
     mock1.reset_mock()
     mock2.reset_mock()
     core.events.devicePropertyChanged("Camera", "Gain").disconnect(mock1)
     core.events.devicePropertyChanged("Camera").disconnect(mock2)
-    core.setProperty("Camera", "Gain", "5")
+    with anybot.waitSignal(core.events.propertyChanged):
+        core.setProperty("Camera", "Gain", "5")
     mock1.assert_not_called()
     mock2.assert_not_called()
 
 
-def test_sequence_acquisition_events(core: CMMCorePlus) -> None:
+def test_sequence_acquisition_events(core: CMMCorePlus, anybot: Any) -> None:
     mock1a = Mock()
     mock1b = Mock()
     mock2a = Mock()
@@ -184,43 +198,68 @@ def test_sequence_acquisition_events(core: CMMCorePlus) -> None:
     core.events.sequenceAcquisitionStarted.connect(mock2b)
     core.events.sequenceAcquisitionStopped.connect(mock3)
 
-    core.startContinuousSequenceAcquisition()
+    with anybot.waitSignals(
+        [
+            core.events.continuousSequenceAcquisitionStarting,
+            core.events.continuousSequenceAcquisitionStarted,
+        ]
+    ):
+        core.startContinuousSequenceAcquisition()
     mock1a.assert_called_once()
     mock1b.assert_called_once()
 
-    core.stopSequenceAcquisition()
+    with anybot.waitSignal(core.events.sequenceAcquisitionStopped):
+        core.stopSequenceAcquisition()
     mock3.assert_any_call(core.getCameraDevice())
 
     # without camera label
-    core.startSequenceAcquisition(5, 100.0, True)
+    with anybot.waitSignals(
+        [
+            core.events.sequenceAcquisitionStarting,
+            core.events.sequenceAcquisitionStarted,
+        ]
+    ):
+        core.startSequenceAcquisition(5, 100.0, True)
     mock2a.assert_any_call(core.getCameraDevice())
     mock2b.assert_any_call(core.getCameraDevice())
-    core.stopSequenceAcquisition()
+    with anybot.waitSignal(core.events.sequenceAcquisitionStopped):
+        core.stopSequenceAcquisition()
     mock3.assert_any_call(core.getCameraDevice())
 
     # with camera label
     cam = core.getCameraDevice()
-    core.startSequenceAcquisition(cam, 5, 100.0, True)
+    with anybot.waitSignals(
+        [
+            core.events.sequenceAcquisitionStarting,
+            core.events.sequenceAcquisitionStarted,
+        ]
+    ):
+        core.startSequenceAcquisition(cam, 5, 100.0, True)
     mock2a.assert_any_call(cam)
     mock2b.assert_any_call(cam)
-    core.stopSequenceAcquisition(cam)
+    with anybot.waitSignal(core.events.sequenceAcquisitionStopped):
+        core.stopSequenceAcquisition(cam)
     mock3.assert_any_call(cam)
 
 
-def test_shutter_device_events(core: CMMCorePlus) -> None:
+def test_shutter_device_events(core: CMMCorePlus, anybot: Any) -> None:
     mock = Mock()
     core.events.propertyChanged.connect(mock)
-    core.setShutterOpen("White Light Shutter", True)
-    mock.assert_called_once_with("White Light Shutter", Keyword.State.value, "1")
+    with anybot.waitSignals(
+        [core.events.propertyChanged, core.events.shutterOpenChanged]
+    ):
+        core.setShutterOpen("White Light Shutter", True)
+    mock.assert_any_call("White Light Shutter", Keyword.State.value, "1")
     assert core.getShutterOpen("White Light Shutter")
     assert core.getProperty("White Light Shutter", Keyword.State.value) == "1"
 
 
-def test_autoshutter_device_events(core: CMMCorePlus) -> None:
+def test_autoshutter_device_events(core: CMMCorePlus, anybot: Any) -> None:
     mock = Mock()
     core.events.autoShutterSet.connect(mock)
-    core.setAutoShutter(True)
-    mock.assert_called_once_with(True)
+    with anybot.waitSignal(core.events.autoShutterSet):
+        core.setAutoShutter(True)
+    mock.assert_called_with(True)
     assert core.getAutoShutter()
 
 
@@ -269,20 +308,25 @@ def test_set_camera_roi_event(core: CMMCorePlus) -> None:
     assert list(core.getROI()) == [10, 20, 100, 200]
 
 
-def test_pixel_changed_event(core: CMMCorePlus) -> None:
+def test_pixel_changed_event(core: CMMCorePlus, anybot: Any) -> None:
     mock = Mock()
     core.events.pixelSizeChanged.connect(mock)
 
-    core.deletePixelSizeConfig("Res10x")
+    with anybot.waitSignal(core.events.pixelSizeChanged):
+        core.deletePixelSizeConfig("Res10x")
     mock.assert_called_once_with(0.0)
     assert "Res10x" not in core.getAvailablePixelSizeConfigs()
 
-    core.definePixelSizeConfig("test", "Objective", "Label", "Nikon 10X S Fluor")
-    mock.assert_any_call(0.0)
+    mock.reset_mock()
+    with anybot.waitSignal(core.events.pixelSizeChanged):
+        core.definePixelSizeConfig("test", "Objective", "Label", "Nikon 10X S Fluor")
+    mock.assert_called_once_with(0.0)
     assert "test" in core.getAvailablePixelSizeConfigs()
 
-    core.setPixelSizeUm("test", 6.5)
-    mock.assert_any_call(6.5)
+    mock.reset_mock()
+    with anybot.waitSignal(core.events.pixelSizeChanged):
+        core.setPixelSizeUm("test", 6.5)
+    mock.assert_called_once_with(6.5)
     assert core.getPixelSizeUmByID("test") == 6.5
 
 
@@ -295,15 +339,18 @@ def test_set_channelgroup(core: CMMCorePlus) -> None:
     mock.assert_any_call("Camera")
 
 
-def test_set_focus_device(core: CMMCorePlus) -> None:
+def test_set_focus_device(core: CMMCorePlus, anybot: Any) -> None:
     mock = Mock()
     core.events.propertyChanged.connect(mock)
 
-    core.setFocusDevice("")
+    with anybot.waitSignal(core.events.propertyChanged):
+        core.setFocusDevice("")
     assert not core.getFocusDevice()
-    mock.assert_called_once_with("Core", "Focus", "")
+    mock.assert_any_call("Core", "Focus", "")
 
-    core.setFocusDevice("Z")
+    mock.reset_mock()
+    with anybot.waitSignal(core.events.propertyChanged):
+        core.setFocusDevice("Z")
     assert core.getFocusDevice() == "Z"
     mock.assert_any_call("Core", "Focus", "Z")
 

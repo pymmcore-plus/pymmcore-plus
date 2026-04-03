@@ -32,7 +32,7 @@ from pymmcore_plus.core._constants import Keyword
 if TYPE_CHECKING:
     from typing import Literal, TypeAlias
 
-    from pymmcore_plus.metadata.schema import DeviceInfo, SummaryMetaV1
+    from pymmcore_plus.metadata.schema import DeviceInfo, ImageInfo, SummaryMetaV1
 
     from ._objects import Bounds, SampleObject, TransformFn
 
@@ -132,8 +132,7 @@ class RenderEngine:
         self, props: ImageProps, stage_x: float, stage_y: float
     ) -> np.ndarray:
         # Sample pixel size: how many µm in the sample each pixel represents
-        # This accounts for both the physical sensor pixel size and magnification
-        sample_pixel = props.sample_pixel_size  # pixel_size / magnification
+        sample_pixel = props.sample_pixel_size
 
         # Compute field of view (FOV) rectangle in sample/world coordinates
         # The FOV is centered on the stage position
@@ -320,6 +319,13 @@ def _get_camera(state: SummaryMetaV1) -> DeviceInfo | None:
     return next((dev for dev in state["devices"] if dev["label"] == camera_label), None)
 
 
+def _get_image_info(state: SummaryMetaV1) -> ImageInfo | None:
+    """Get Image device info from state."""
+    if state["image_infos"]:
+        return state["image_infos"][0]
+    return None
+
+
 @dataclass
 class ImageProps:
     """Camera and optical properties extracted from device state.
@@ -351,10 +357,8 @@ class ImageProps:
     photon_flux : float
         Peak photon emission rate in photons/pixel/second for intensity=255
         fluorophores. Default 1000.
-    pixel_size : float
-        Physical pixel size on the camera sensor in micrometers. Default 6.5.
-    magnification : float
-        Objective magnification. Default 20.0.
+    sample_pixel_size : float
+        Effective pixel size in sample space (µm/pixel). Default 0.325.
     full_well_capacity : float
         Full well capacity in electrons. Default 18000.
     qe : float
@@ -370,15 +374,9 @@ class ImageProps:
     img_height: int = 512
     binning: int = 1
     photon_flux: float = 1000.0
-    pixel_size: float = 6.5  # physical sensor pixel size (µm)
-    magnification: float = 20.0
+    sample_pixel_size: float = 0.325  # effective pixel size in sample space (µm/pixel)
     full_well_capacity: float = 18000.0
     qe: float = 0.8
-
-    @property
-    def sample_pixel_size(self) -> float:
-        """Effective pixel size in sample space (µm/pixel)."""
-        return self.pixel_size / self.magnification
 
 
 @no_type_check
@@ -425,6 +423,11 @@ def img_props(state: SummaryMetaV1) -> ImageProps:
 
     if props.get("bit_depth") and props["bit_depth"] < 10:
         props["offset"] = 10.0  # lower offset for low bit depth cameras
+
+    if image_info := _get_image_info(state):
+        props["sample_pixel_size"] = float(image_info["pixel_size_um"])
+        props.setdefault("img_width", int(image_info["width"]))
+        props.setdefault("img_height", int(image_info["height"]))
 
     return ImageProps(**props)
 

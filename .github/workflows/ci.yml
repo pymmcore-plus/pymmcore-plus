@@ -74,7 +74,7 @@ jobs:
       - run: uv run coverage run -p -m pytest -v --color=yes ${{ matrix.resolution == 'lowest-direct' && '-W ignore' || '' }}
 
       - name: Upload coverage
-        uses: actions/upload-artifact@v6
+        uses: actions/upload-artifact@v7
         with:
           name: covreport-${{ matrix.os }}-py${{ matrix.python-version }}-${{ matrix.add-group }}-${{ matrix.nano}}-${{ matrix.resolution }}
           path: ./.coverage*
@@ -88,7 +88,7 @@ jobs:
       codecov_token: ${{ secrets.CODECOV_TOKEN }}
 
   test-pymmcore-widgets:
-    name: test pymmcore-widgets
+    name: test pymmcore-widgets (${{ matrix.os }}, ${{ matrix.qt }}${{ matrix.nano == 'nano' && ', nano' || '' }})
     runs-on: ${{ matrix.os }}
     env:
       UV_MANAGED_PYTHON: "1"
@@ -98,6 +98,11 @@ jobs:
       matrix:
         os: [macos-latest, windows-latest]
         qt: [PySide6, PyQt6]
+        nano: [""]
+        include:
+          - os: windows-latest
+            qt: PyQt6
+            nano: "nano"
     steps:
       - uses: actions/checkout@v6
         with:
@@ -120,9 +125,11 @@ jobs:
           uv sync --no-dev --group test --extra ${{ matrix.qt }}
           uv pip install ./pymmcore-plus
           uv pip list
-
+      - if: matrix.nano == 'nano'
+        run: |
+          uv pip uninstall pymmcore
+          uv pip install pymmcore-nano
       - uses: pymmcore-plus/setup-mm-test-adapters@main
-
       - run: uv run pytest -v --color=yes -W ignore
 
   test-pymmcore-gui:

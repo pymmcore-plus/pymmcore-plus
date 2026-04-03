@@ -7,20 +7,18 @@ from ._config_group import ConfigGroup, ConfigPreset, Setting
 
 if TYPE_CHECKING:
     from collections.abc import Container, Iterable, MutableMapping
-    from typing import Any, Final, TypeAlias
+    from typing import Any, Final
 
     from typing_extensions import (
         Self,  # py310
     )
 
     from pymmcore_plus import CMMCorePlus
-    from pymmcore_plus.metadata.schema import PixelSizeConfigPreset
+    from pymmcore_plus.metadata.schema import AffineTuple, PixelSizeConfigPreset
 
     from ._core_link import ErrCallback
 
-    AffineTuple: TypeAlias = tuple[float, float, float, float, float, float]
-
-DEFAULT_AFFINE: Final[AffineTuple] = (1, 0, 0, 0, 1, 0)
+DEFAULT_AFFINE: Final[AffineTuple] = (1.0, 0.0, 0.0, 0.0, 1.0, 0.0)
 PIXEL_SIZE_GROUP: Final = "PixelSizeGroup"
 
 
@@ -39,7 +37,7 @@ class PixelSizePreset(ConfigPreset):
         obj = super().from_metadata(meta)
         obj.pixel_size_um = meta["pixel_size_um"]
         if "pixel_size_affine" in meta:
-            obj.affine = meta["pixel_size_affine"]
+            obj.affine = tuple(float(x) for x in meta["pixel_size_affine"])  # type: ignore[assignment]
         if "pixel_size_dxdz" in meta:
             obj.angle_dxdz = meta["pixel_size_dxdz"]
         if "pixel_size_dydz" in meta:
@@ -86,7 +84,7 @@ class PixelSizeGroup(ConfigGroup):
                 preset: PixelSizePreset(
                     name=preset,
                     pixel_size_um=core.getPixelSizeUmByID(preset),
-                    affine=core.getPixelSizeAffineByID(preset),
+                    affine=tuple(float(x) for x in core.getPixelSizeAffineByID(preset)),  # type: ignore[arg-type]
                     settings=[Setting(*d) for d in core.getPixelSizeConfigData(preset)],
                 )
                 for preset in core.getAvailablePixelSizeConfigs()
