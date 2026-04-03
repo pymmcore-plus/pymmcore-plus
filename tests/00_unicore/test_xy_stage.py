@@ -199,3 +199,14 @@ def test_unicore_xy_stepper_stage_sequenceable():
 
     core.stopXYStageSequence(XYDEV)
     assert dev.SEQ_STOPPED
+
+
+def test_set_xy_stage_device_via_set_property():
+    """setProperty('Core', 'XYStage', label) should route to setXYStageDevice."""
+    core = UniMMCore()
+    core.loadPyDevice(XYDEV, MyStage())
+    core.initializeDevice(XYDEV)
+
+    core.setProperty("Core", "XYStage", XYDEV)
+
+    assert core.getXYStageDevice() == XYDEV
