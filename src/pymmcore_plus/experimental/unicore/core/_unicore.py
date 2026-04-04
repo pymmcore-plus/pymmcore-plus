@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
+from pymmcore_plus import _pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._constants import DeviceInitializationState
@@ -35,21 +36,20 @@ class UniMMCore(CMMCorePlus):
     """
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
+        if not _pymmcore.BACKEND == "pymmcore-nano":
+            raise RuntimeError(
+                "UniMMCore requires the 'pymmcore-nano' backend. "
+                f"Current backend: {_pymmcore.BACKEND}"
+            )
+
         # Track which labels are Python devices and keep refs to Device objects
         self._pydevices: dict[str, Device] = {}
         super().__init__(*args, **kwargs)
 
-        weakref.finalize(
-            self,
-            UniMMCore._cleanup_python_state,
-            self._pydevices,
-        )
+        weakref.finalize(self, UniMMCore._cleanup_python_state, self._pydevices)
 
     @staticmethod
     def _cleanup_python_state(pydevices: dict[str, Device]) -> None:
-        for dev in pydevices.values():
-            with suppress(Exception):
-                dev.shutdown()
         pydevices.clear()
 
     # -----------------------------------------------------------------------

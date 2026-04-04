@@ -10,9 +10,6 @@ from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
 from pymmcore_plus.core._constants import PropertyType
-from pymmcore_plus.experimental.unicore.devices._bridge import (
-    _register_bridge_properties,
-)
 from pymmcore_plus.experimental.unicore.devices._properties import (
     PropertyController,
     PropertyInfo,
@@ -24,6 +21,7 @@ if TYPE_CHECKING:
     from collections.abc import Callable, KeysView, Sequence
 
     from pymmcore_nano import DeviceCallbacks
+    from pymmcore_nano.protocols import CreatePropertyFn
     from typing_extensions import Any, Self
 
     from ._properties import PropArg, TDev, TProp
@@ -105,22 +103,26 @@ class Device(_Lockable, ABC):
 
         @wraps(user_init)
         def bridge_initialize(
-            self: Any, create_property: Any = None, notify: Any = None
+            dev: Device, create_property: Any = None, notify: Any = None
         ) -> None:
             if notify is not None:
-                self._notify_ = notify
+                dev._notify_ = notify
             try:
-                user_init(self)
-                self._initialized_ = True
+                user_init(dev)
+                dev._initialized_ = True
             except Exception as e:
-                self._initialized_ = e
-                logger.exception(f"Failed to initialize device {self.get_label()!r}")
+                dev._initialized_ = e
+                logger.exception(f"Failed to initialize device {dev.get_label()!r}")
                 return  # Don't register properties if init failed
             if create_property is not None:
-                _register_bridge_properties(self, create_property)
-                self._post_bridge_initialize()
+                dev._register_bridge_properties(create_property)
+                dev._post_bridge_initialize()
 
         return bridge_initialize
+
+    def _register_bridge_properties(self, create_property: CreatePropertyFn) -> None:
+        for ctrl in self._prop_controllers_.values():
+            _register_one_property(self, ctrl, create_property)
 
     def register_property(
         self,
@@ -188,9 +190,7 @@ class Device(_Lockable, ABC):
             self._notify_ = notify
         self._initialized_ = True
         if create_property is not None:
-            from ._bridge import _register_bridge_properties
-
-            _register_bridge_properties(self, create_property)
+            self._register_bridge_properties(create_property)
             self._post_bridge_initialize()
 
     def _post_bridge_initialize(self) -> None:
@@ -375,3 +375,55 @@ class SequenceableDevice(Device, Generic[SeqT]):
 
     def stop_sequence(self) -> None:
         """Stop the sequence."""
+
+
+# MM property type enum values (matches MM::PropertyType in C++)
+_PROP_TYPE_MAP: dict[PropertyType, int] = {
+    PropertyType.Undef: 1,  # MM::String
+    PropertyType.String: 1,  # MM::String
+    PropertyType.Float: 2,  # MM::Float
+    PropertyType.Integer: 3,  # MM::Integer
+    PropertyType.Boolean: 1,  # store as string
+    PropertyType.Enum: 1,  # store as string
+}
+
+
+def _register_one_property(
+    device: Device, ctrl: PropertyController, create_property: CreatePropertyFn
+) -> None:
+    info = ctrl.property
+    prop_type = info.type
+    default_str = str(info.default_value) if info.default_value is not None else ""
+
+    if (limits := info.limits) is not None:
+        limits = (float(limits[0]), float(limits[1]))
+
+    if (allowed := info.allowed_values) is not None:
+        allowed = [str(v) for v in info.allowed_values]
+
+    # The C++ bridge expects all property values as strings, so we use the prop_type's
+    # parse_value method to convert from string to the appropriate Python type in the
+    # setter and sequence loader.
+    _parse = prop_type.parse_value
+    setter = (lambda s: ctrl.fset(device, _parse(s))) if ctrl.fset else None
+    seq_loader = (
+        (lambda seq: ctrl.load_sequence(device, [_parse(s) for s in seq]))
+        if ctrl.fseq_load
+        else None
+    )
+
+    device._property_handles_[info.name] = create_property(
+        info.name,
+        default_str,
+        _PROP_TYPE_MAP.get(prop_type, 1),
+        ctrl.is_read_only,
+        getter=ctrl.fget.__get__(device) if ctrl.fget else None,
+        setter=setter,
+        pre_init=info.is_pre_init,
+        limits=limits,
+        allowed_values=allowed,
+        sequence_max_length=info.sequence_max_length if ctrl.is_sequenceable else 0,
+        sequence_loader=seq_loader,
+        sequence_starter=ctrl.fseq_start.__get__(device) if ctrl.fseq_start else None,
+        sequence_stopper=ctrl.fseq_stop.__get__(device) if ctrl.fseq_stop else None,
+    )
