@@ -5,7 +5,6 @@ import threading
 from abc import ABC
 from collections import ChainMap
 from enum import EnumMeta
-from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
@@ -73,45 +72,13 @@ class Device(_Lockable, ABC):
         self._notify_: DeviceCallbacks | None = None
 
     def __init_subclass__(cls) -> None:
-        """Initialize the property controllers and wrap initialize for bridge."""
+        """Collect property controllers from class hierarchy."""
         cls._cls_prop_controllers = {}
         for base in cls.__mro__:
             for p in base.__dict__.values():
                 if isinstance(p, PropertyController):
                     cls._cls_prop_controllers[p.property.name] = p
-
-        # Wrap user-defined initialize() so C++ bridge can call it with
-        # (create_property, notify) args while user code defines initialize(self).
-        if "initialize" in cls.__dict__:
-            user_init = cls.__dict__["initialize"]
-            # Only wrap if the user's initialize doesn't already accept bridge args
-            if callable(user_init) and getattr(user_init, "__code__", None):
-                nargs = user_init.__code__.co_argcount  # includes self
-                if nargs == 1:  # just (self,)
-                    cls.initialize = Device._wrap_initialize(user_init)
-
         return super().__init_subclass__()
-
-    @staticmethod
-    def _wrap_initialize(user_init: Callable) -> Callable:
-        """Wrap a device author's initialize(self) to accept bridge args.
-
-        The C++ bridge calls initialize(create_property, notify). Device authors
-        write initialize(self) with no extra args. This wrapper bridges the gap.
-        """
-
-        @wraps(user_init)
-        def bridge_initialize(
-            dev: Device, create_property: Any = None, notify: Any = None
-        ) -> None:
-            if notify is not None:
-                dev._notify_ = notify
-            user_init(dev)
-            if create_property is not None:
-                dev._register_bridge_properties(create_property)
-                dev._post_bridge_initialize()
-
-        return bridge_initialize
 
     def _register_bridge_properties(self, create_property: CreatePropertyFn) -> None:
         for ctrl in self._prop_controllers_.values():
@@ -173,17 +140,21 @@ class Device(_Lockable, ABC):
         )
         self._prop_controllers_[name] = controller
 
-    def initialize(self, create_property: Any = None, notify: Any = None) -> None:
-        """Initialize the device.
+    def initialize(self) -> None:
+        """Initialize the device. Override in subclasses."""
 
-        The C++ bridge calls this with (create_property, notify). Device authors
-        override this with no extra args — __init_subclass__ wraps it automatically.
+    def initialize_bridge(
+        self, create_property: CreatePropertyFn, notify: DeviceCallbacks
+    ) -> None:
+        """Called by the C++ bridge during initializeDevice().
+
+        Sets up notifications, calls the device author's initialize(),
+        then registers all properties with C++.
         """
-        if notify is not None:
-            self._notify_ = notify
-        if create_property is not None:
-            self._register_bridge_properties(create_property)
-            self._post_bridge_initialize()
+        self._notify_ = notify
+        self.initialize()
+        self._register_bridge_properties(create_property)
+        self._post_bridge_initialize()
 
     def _post_bridge_initialize(self) -> None:
         """Hook called after bridge properties are registered.
