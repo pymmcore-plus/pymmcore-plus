@@ -1092,15 +1092,13 @@ def test_core_device_has_no_parent():
     assert core.getParentLabel("Core") == ""
 
 
-def test_cross_language_parent_rejected():
-    """Test that cross-language hub/peripheral relationships are rejected."""
+def test_cross_language_parent_allowed():
+    """Test that cross-language hub/peripheral relationships work via C++ bridge."""
     core = UniMMCore()
 
-    # Load a C++ device
     core.loadDevice("cpp_cam", "DemoCamera", "DCam")
     core.initializeDevice("cpp_cam")
 
-    # Load a Python device
     py_hub = MyHub()
     core.loadPyDevice("py_hub", py_hub)
     core.initializeDevice("py_hub")
@@ -1109,15 +1107,11 @@ def test_cross_language_parent_rejected():
     core.loadPyDevice("py_child", py_child)
     core.initializeDevice("py_child")
 
-    # Cross-language parent/child should fail (or be silently handled by C++)
-    with pytest.raises((RuntimeError, ValueError), match="cross-language|Cannot"):
-        core.setParentLabel("py_child", "cpp_cam")
+    # Cross-language relationships work (all devices are real C++ devices via bridge)
+    core.setParentLabel("py_child", "cpp_cam")
+    assert core.getParentLabel("py_child") == "cpp_cam"
 
-    with pytest.raises((RuntimeError, ValueError), match="cross-language|Cannot"):
-        core.setParentLabel("cpp_cam", "py_hub")
-
-    # Same-language relationships should work
-    core.setParentLabel("py_child", "py_hub")  # Python -> Python OK
+    core.setParentLabel("py_child", "py_hub")
     assert core.getParentLabel("py_child") == "py_hub"
 
 

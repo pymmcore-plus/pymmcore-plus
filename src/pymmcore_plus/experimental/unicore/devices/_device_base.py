@@ -23,9 +23,8 @@ logger = logging.getLogger(__name__)
 if TYPE_CHECKING:
     from collections.abc import Callable, KeysView, Sequence
 
+    from pymmcore_nano import DeviceCallbacks
     from typing_extensions import Any, Self
-
-    from pymmcore_plus._pymmcore import DeviceCallbacks
 
     from ._properties import PropArg, TDev, TProp
 

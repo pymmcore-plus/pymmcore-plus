@@ -151,7 +151,7 @@ class UniMMCore(CMMCorePlus):
     ) -> None:
         if label in self._pydevices:
             # Validate and set via Python property controller rather than going
-            # through CMMCore's C++ property system. This is desireable because
+            # through CMMCore's C++ property system. This is desirable because
             # MM::FloatProperty::Set(const char*) uses atof() to parse strings,
             # which silently converts invalid input to 0.0 (e.g. atof("bad") == 0).
             # By the time the bridge's AfterSet action functor fires, the property
@@ -241,41 +241,6 @@ class UniMMCore(CMMCorePlus):
         raise RuntimeError(
             f"No peripheral with name {peripheralLabel!r} installed in hub {hubLabel!r}"
         )
-
-    def getLoadedPeripheralDevices(
-        self, hubLabel: DeviceLabel | str
-    ) -> tuple[DeviceLabel, ...]:
-        cpp_peripherals = super().getLoadedPeripheralDevices(hubLabel)
-        # Also check Python devices for matching parent label
-        py_peripherals = tuple(
-            cast("DeviceLabel", label)
-            for label, dev in self._pydevices.items()
-            if dev.get_parent_label() == hubLabel
-        )
-        return tuple(cpp_peripherals) + py_peripherals
-
-    def setParentLabel(
-        self, deviceLabel: DeviceLabel | str, parentHubLabel: DeviceLabel | str
-    ) -> None:
-        if deviceLabel == KW.CoreDevice:
-            return
-        # Reject cross-language hub/peripheral relationships
-        device_is_py = deviceLabel in self._pydevices
-        parent_is_py = parentHubLabel in self._pydevices
-        if parentHubLabel and device_is_py != parent_is_py:
-            raise RuntimeError(
-                "Cannot set cross-language parent/child relationship between "
-                "C++ and Python devices"
-            )
-        if device_is_py:
-            self._pydevices[deviceLabel].set_parent_label(parentHubLabel)
-        else:
-            super().setParentLabel(deviceLabel, parentHubLabel)
-
-    def getParentLabel(self, peripheralLabel: DeviceLabel | str) -> str:
-        if peripheralLabel not in self._pydevices:
-            return super().getParentLabel(peripheralLabel)
-        return self._pydevices[peripheralLabel].get_parent_label()
 
     def unloadDevice(self, label: DeviceLabel | str) -> None:
         self._pydevices.pop(label, None)
@@ -495,7 +460,8 @@ class UniMMCore(CMMCorePlus):
         imageSequence: Sequence[Any],
     ) -> None:
         if slmLabel not in self._pydevices:
-            return super().loadSLMSequence(slmLabel, imageSequence)
+            super().loadSLMSequence(slmLabel, imageSequence)
+            return
         dev = self._pydevices[slmLabel]
         if not isinstance(dev, SLMDevice):
             return
