@@ -8,10 +8,10 @@ from typing import TYPE_CHECKING, Any
 import numpy as np
 import pytest
 import useq
+from pymmcore_plus.experimental.unicore.core._sequence_buffer import SequenceBuffer
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.experimental.unicore import CameraDevice
-from pymmcore_plus.experimental.unicore.core._sequence_buffer import SequenceBuffer
 from pymmcore_plus.experimental.unicore.core._unicore import UniMMCore
 
 if TYPE_CHECKING:
