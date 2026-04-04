@@ -344,6 +344,15 @@ class UniMMCore(CMMCorePlus):
         """Returns True if the specified device label corresponds to a Python device."""
         return label in self._pydevices
 
+    def getPyDevice(self, label: DeviceLabel | str) -> Device:
+        """Return the Python device instance registered under *label*.
+
+        Raises KeyError if *label* is not a loaded Python device.
+        """
+        return self._pydevices[label]
+
+    get_py_device = getPyDevice
+
     def _cleanup_sequence_state(self, only_label: str | None = None) -> None:
         """Stop and clean up python-side sequence acquisition threads and state.
 
