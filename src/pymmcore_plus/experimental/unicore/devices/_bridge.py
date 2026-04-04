@@ -105,6 +105,34 @@ def _register_one_property(
     if info.allowed_values is not None:
         allowed = [str(v) for v in info.allowed_values]
 
+    # Sequencing callbacks
+    seq_max = info.sequence_max_length if ctrl.is_sequenceable else 0
+    seq_loader = None
+    seq_starter = None
+    seq_stopper = None
+    if seq_max > 0:
+        if ctrl.fseq_load is not None:
+
+            def _seq_loader(str_seq: list[str], _ctrl=ctrl, _pt=prop_type) -> None:
+                typed_seq = [_parse_string_value(s, _pt) for s in str_seq]
+                _ctrl.load_sequence(device, typed_seq)
+
+            seq_loader = _seq_loader
+
+        if ctrl.fseq_start is not None:
+
+            def _seq_starter(_ctrl=ctrl) -> None:
+                _ctrl.start_sequence(device)
+
+            seq_starter = _seq_starter
+
+        if ctrl.fseq_stop is not None:
+
+            def _seq_stopper(_ctrl=ctrl) -> None:
+                _ctrl.stop_sequence(device)
+
+            seq_stopper = _seq_stopper
+
     handle = create_property(
         info.name,
         default_str,
@@ -115,5 +143,9 @@ def _register_one_property(
         pre_init=info.is_pre_init,
         limits=limits,
         allowed_values=allowed,
+        sequence_max_length=seq_max,
+        sequence_loader=seq_loader,
+        sequence_starter=seq_starter,
+        sequence_stopper=seq_stopper,
     )
     device._property_handles_[info.name] = handle

@@ -386,21 +386,8 @@ class UniMMCore(CMMCorePlus):
         return False
 
     # -----------------------------------------------------------------------
-    # Property sequencing overrides (C++ bridge hardcodes sequencing to false)
-    # These stay until pymmcore-nano adds native sequencing support.
+    # Thin overrides for type conversion (C++ expects strings)
     # -----------------------------------------------------------------------
-
-    def isPropertySequenceable(self, label: DeviceLabel | str, propName: str) -> bool:
-        if label not in self._pydevices:
-            return super().isPropertySequenceable(label, propName)
-        return self._pydevices[label].is_property_sequenceable(propName)
-
-    def getPropertySequenceMaxLength(
-        self, label: DeviceLabel | str, propName: str
-    ) -> int:
-        if label not in self._pydevices:
-            return super().getPropertySequenceMaxLength(label, propName)
-        return self._pydevices[label].get_property_info(propName).sequence_max_length
 
     def loadPropertySequence(
         self,
@@ -408,19 +395,12 @@ class UniMMCore(CMMCorePlus):
         propName: str,
         eventSequence: Sequence[Any],
     ) -> None:
-        if label not in self._pydevices:
-            return super().loadPropertySequence(label, propName, eventSequence)
-        self._pydevices[label].load_property_sequence(propName, eventSequence)
+        # C++ expects Sequence[str]
+        super().loadPropertySequence(label, propName, [str(v) for v in eventSequence])
 
-    def startPropertySequence(self, label: DeviceLabel | str, propName: str) -> None:
-        if label not in self._pydevices:
-            return super().startPropertySequence(label, propName)
-        self._pydevices[label].start_property_sequence(propName)
-
-    def stopPropertySequence(self, label: DeviceLabel | str, propName: str) -> None:
-        if label not in self._pydevices:
-            return super().stopPropertySequence(label, propName)
-        self._pydevices[label].stop_property_sequence(propName)
+    # -----------------------------------------------------------------------
+    # Device-type-specific sequencing (bridge doesn't support these yet)
+    # -----------------------------------------------------------------------
 
     # -- Exposure sequencing --
 
@@ -432,11 +412,8 @@ class UniMMCore(CMMCorePlus):
     def getExposureSequenceMaxLength(self, cameraLabel: DeviceLabel | str) -> int:
         if cameraLabel not in self._pydevices:
             return super().getExposureSequenceMaxLength(cameraLabel)
-        return (
-            self._pydevices[cameraLabel]
-            .get_property_info(KW.Exposure)
-            .sequence_max_length
-        )
+        info = self._pydevices[cameraLabel].get_property_info(KW.Exposure)
+        return info.sequence_max_length
 
     def loadExposureSequence(
         self,
@@ -465,17 +442,13 @@ class UniMMCore(CMMCorePlus):
         if stageLabel not in self._pydevices:
             return super().isStageSequenceable(stageLabel)
         dev = self._pydevices[stageLabel]
-        if isinstance(dev, StageDevice):
-            return dev.is_sequenceable()
-        return False
+        return isinstance(dev, StageDevice) and dev.is_sequenceable()
 
     def getStageSequenceMaxLength(self, stageLabel: DeviceLabel | str) -> int:
         if stageLabel not in self._pydevices:
             return super().getStageSequenceMaxLength(stageLabel)
         dev = self._pydevices[stageLabel]
-        if isinstance(dev, StageDevice):
-            return dev.get_sequence_max_length()
-        return 0
+        return dev.get_sequence_max_length() if isinstance(dev, StageDevice) else 0
 
     def loadStageSequence(
         self,
@@ -508,17 +481,13 @@ class UniMMCore(CMMCorePlus):
         if xyStageLabel not in self._pydevices:
             return super().isXYStageSequenceable(xyStageLabel)
         dev = self._pydevices[xyStageLabel]
-        if isinstance(dev, XYStageDevice):
-            return dev.is_sequenceable()
-        return False
+        return isinstance(dev, XYStageDevice) and dev.is_sequenceable()
 
     def getXYStageSequenceMaxLength(self, xyStageLabel: DeviceLabel | str) -> int:
         if xyStageLabel not in self._pydevices:
             return super().getXYStageSequenceMaxLength(xyStageLabel)
         dev = self._pydevices[xyStageLabel]
-        if isinstance(dev, XYStageDevice):
-            return dev.get_sequence_max_length()
-        return 0
+        return dev.get_sequence_max_length() if isinstance(dev, XYStageDevice) else 0
 
     def loadXYStageSequence(
         self,
@@ -536,8 +505,8 @@ class UniMMCore(CMMCorePlus):
             seq = tuple(zip(xSequence, ySequence, strict=False))
             if len(seq) > dev.get_sequence_max_length():
                 raise ValueError(
-                    f"Sequence is too long. Max length is "
-                    f"{dev.get_sequence_max_length()}"
+                    f"Sequence is too long. "
+                    f"Max length is {dev.get_sequence_max_length()}"
                 )
             dev.send_sequence(seq)
 

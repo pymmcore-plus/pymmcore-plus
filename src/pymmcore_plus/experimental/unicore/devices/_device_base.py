@@ -291,6 +291,8 @@ class Device(_Lockable, ABC):
     def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
         """Set the sequence max length of a property."""
         self._get_prop_or_raise(prop_name).property.sequence_max_length = max_length
+        if prop_name in self._property_handles_:
+            self._property_handles_[prop_name].set_sequence_max_length(max_length)
 
     def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
         """Load a sequence into a property."""
