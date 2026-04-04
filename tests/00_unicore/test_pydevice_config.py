@@ -9,6 +9,7 @@ import pytest
 
 from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.experimental.unicore import StateDevice, UniMMCore
+from pymmcore_plus.experimental.unicore.devices._device_base import Device
 
 if TYPE_CHECKING:
     from pathlib import Path
@@ -113,6 +114,17 @@ def test_load_mixed_config(mixed_cfg_path: Path) -> None:
     assert core.getDeviceLibrary("Dichroic") == "tests.00_unicore.test_pydevice_config"
     assert core.getDeviceName("Dichroic") == "PyFilterWheel"
     assert not core.isPyDevice("Emission")
+
+    # getPyDevice returns the Python device instance
+    device = core.getPyDevice("Dichroic")
+    assert isinstance(device, Device)
+    assert device is core.get_py_device("Dichroic")  # snake_case alias
+
+    # getPyDevice raises KeyError for C++ devices and unknown labels
+    with pytest.raises(KeyError):
+        core.getPyDevice("Emission")
+    with pytest.raises(KeyError):
+        core.getPyDevice("NoSuchDevice")
 
 
 def test_python_device_labels(mixed_cfg_path: Path) -> None:
