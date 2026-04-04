@@ -95,7 +95,7 @@ def test_unicore_xy_stage():
     assert stage.STOPPED
 
     core.setXYStageDevice("")
-    assert core._pycore.current(Keyword.CoreXYStage) is None
+    assert core.getXYStageDevice() == ""
 
 
 # this one is also sequenceable

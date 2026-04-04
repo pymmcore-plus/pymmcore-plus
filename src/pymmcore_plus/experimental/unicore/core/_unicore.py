@@ -189,8 +189,12 @@ class UniMMCore(CMMCorePlus):
         self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
         if label in self._pydevices:
-            # Validate via Python property controller (read-only, limits, etc.)
-            self._pydevices[label].set_property_value(propName, propValue)
+            dev = self._pydevices[label]
+            # Validate and set via Python property controller
+            dev.set_property_value(propName, propValue)
+            # Notify CMMCore (updates state cache, posts async notifications)
+            if dev._notify_ is not None:
+                dev._notify_.on_property_changed(propName, str(propValue))
             return
         super().setProperty(label, propName, propValue)
 
@@ -535,6 +539,11 @@ class UniMMCore(CMMCorePlus):
             if len(xSequence) != len(ySequence):
                 raise ValueError("xSequence and ySequence must have the same length")
             seq = tuple(zip(xSequence, ySequence, strict=False))
+            if len(seq) > dev.get_sequence_max_length():
+                raise ValueError(
+                    f"Sequence is too long. Max length is "
+                    f"{dev.get_sequence_max_length()}"
+                )
             dev.send_sequence(seq)
 
     def startXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:

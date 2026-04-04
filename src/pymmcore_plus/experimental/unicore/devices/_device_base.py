@@ -127,6 +127,7 @@ class Device(_Lockable, ABC):
                 from ._bridge import _register_bridge_properties
 
                 _register_bridge_properties(self, create_property)
+                self._post_bridge_initialize()
 
         return bridge_initialize
 
@@ -199,6 +200,14 @@ class Device(_Lockable, ABC):
             from ._bridge import _register_bridge_properties
 
             _register_bridge_properties(self, create_property)
+            self._post_bridge_initialize()
+
+    def _post_bridge_initialize(self) -> None:
+        """Hook called after bridge properties are registered.
+
+        Subclasses (e.g. StateDevice) can override to perform additional
+        C++ bridge setup that depends on properties being registered first.
+        """
 
     def shutdown(self) -> None:
         """Shutdown the device."""
