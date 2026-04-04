@@ -141,11 +141,9 @@ def test_failed_device_init():
 
     core.loadDevice(PYDEV, __name__, BadDevice.__name__)
     assert PYDEV in core.getLoadedDevices()
-    core.initializeAllDevices()
-    assert (
-        core.getDeviceInitializationState(PYDEV)
-        is DeviceInitializationState.InitializationFailed
-    )
+    # Matches C++ behavior: initializeAllDevices aborts on first failure
+    with pytest.raises(RuntimeError, match="Bad device"):
+        core.initializeAllDevices()
 
 
 def test_device_load_from_module():

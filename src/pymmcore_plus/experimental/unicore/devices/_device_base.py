@@ -63,7 +63,6 @@ class Device(_Lockable, ABC):
         # NOTE: The following attributes are here for the core to manipulate.
         # Device Adapter subclasses should not touch these attributes.
         self._label_: str = ""
-        self._initialized_: bool | BaseException = False
         self._prop_controllers_ = ChainMap[str, PropertyController](
             {}, self._cls_prop_controllers
         )
@@ -107,13 +106,7 @@ class Device(_Lockable, ABC):
         ) -> None:
             if notify is not None:
                 dev._notify_ = notify
-            try:
-                user_init(dev)
-                dev._initialized_ = True
-            except Exception as e:
-                dev._initialized_ = e
-                logger.exception(f"Failed to initialize device {dev.get_label()!r}")
-                return  # Don't register properties if init failed
+            user_init(dev)
             if create_property is not None:
                 dev._register_bridge_properties(create_property)
                 dev._post_bridge_initialize()
@@ -188,7 +181,6 @@ class Device(_Lockable, ABC):
         """
         if notify is not None:
             self._notify_ = notify
-        self._initialized_ = True
         if create_property is not None:
             self._register_bridge_properties(create_property)
             self._post_bridge_initialize()

@@ -6,8 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 from pymmcore_plus import _pymmcore
-from pymmcore_plus.core import CMMCorePlus, DeviceType
-from pymmcore_plus.core._constants import DeviceInitializationState
+from pymmcore_plus.core import CMMCorePlus
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 
@@ -121,21 +120,6 @@ class UniMMCore(CMMCorePlus):
             return super().getDeviceDescription(label)
         return self._pydevices[label].description()
 
-    def getDeviceInitializationState(self, label: str) -> Any:
-        if label not in self._pydevices:
-            return super().getDeviceInitializationState(label)
-        state = self._pydevices[label]._initialized_
-        if state is True:
-            return DeviceInitializationState.InitializedSuccessfully
-        if state is False:
-            return DeviceInitializationState.Uninitialized
-        return DeviceInitializationState.InitializationFailed
-
-    def getDeviceType(self, label: str) -> DeviceType:
-        if label not in self._pydevices:
-            return super().getDeviceType(label)
-        return self._pydevices[label].type()
-
     # -- setProperty: enforce Python-side validation before C++ --
 
     def setProperty(
@@ -206,8 +190,8 @@ class UniMMCore(CMMCorePlus):
         return ""
 
     def unloadDevice(self, label: DeviceLabel | str) -> None:
-        self._pydevices.pop(label, None)
         super().unloadDevice(label)
+        self._pydevices.pop(label, None)
 
     def unloadAllDevices(self) -> None:
         with suppress(Exception):
