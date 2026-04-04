@@ -560,6 +560,85 @@ class UniMMCore(CMMCorePlus):
         if isinstance(dev, XYStageDevice):
             dev.stop_sequence()
 
+    # -- SLM overrides --
+
+    def getSLMImage(self, slmLabel: DeviceLabel | str) -> Any:
+        """Get the current image from a Python SLM device."""
+        if slmLabel not in self._pydevices:
+            raise NotImplementedError(
+                "getSLMImage is not implemented for C++ SLM devices."
+            )
+        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
+
+        dev = self._pydevices[slmLabel]
+        if isinstance(dev, SLMDevice):
+            return dev.get_image()
+        raise RuntimeError(f"Device {slmLabel!r} is not an SLM device")
+
+    # -- SLM sequencing --
+
+    def getSLMSequenceMaxLength(self, slmLabel: DeviceLabel | str) -> int:
+        if slmLabel not in self._pydevices:
+            return super().getSLMSequenceMaxLength(slmLabel)
+        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
+
+        dev = self._pydevices[slmLabel]
+        if isinstance(dev, SLMDevice):
+            return dev.get_sequence_max_length()
+        return 0
+
+    def loadSLMSequence(
+        self,
+        slmLabel: DeviceLabel | str,
+        imageSequence: Sequence[Any],
+    ) -> None:
+        if slmLabel not in self._pydevices:
+            return super().loadSLMSequence(slmLabel, imageSequence)
+        import numpy as np
+
+        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
+
+        dev = self._pydevices[slmLabel]
+        if not isinstance(dev, SLMDevice):
+            return
+        m = dev.get_sequence_max_length()
+        if m == 0:
+            raise RuntimeError(f"SLM {slmLabel!r} does not support sequences.")
+        shape = dev.shape()
+        dtype = np.dtype(dev.dtype())
+        arrays: list[Any] = []
+        for i, img in enumerate(imageSequence):
+            if isinstance(img, bytes):
+                arr = np.frombuffer(img, dtype=dtype).reshape(shape)
+            else:
+                arr = np.asarray(img, dtype=dtype)
+                if arr.shape != shape:
+                    raise ValueError(
+                        f"Image {i} shape {arr.shape} does not match SLM shape {shape}"
+                    )
+            arrays.append(arr)
+        if len(arrays) > m:
+            raise ValueError(f"Sequence length {len(arrays)} exceeds maximum {m}.")
+        dev.send_sequence(arrays)
+
+    def startSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
+        if slmLabel not in self._pydevices:
+            return super().startSLMSequence(slmLabel)
+        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
+
+        dev = self._pydevices[slmLabel]
+        if isinstance(dev, SLMDevice):
+            dev.start_sequence()
+
+    def stopSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
+        if slmLabel not in self._pydevices:
+            return super().stopSLMSequence(slmLabel)
+        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
+
+        dev = self._pydevices[slmLabel]
+        if isinstance(dev, SLMDevice):
+            dev.stop_sequence()
+
 
 def _values_match(current: Any, expected: Any) -> bool:
     """Compare property values with numeric-aware comparison."""
