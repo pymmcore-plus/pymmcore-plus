@@ -310,14 +310,13 @@ class CameraDevice(Device):
         self,
         num_images: int,
         interval_ms: float,
-        stop_on_overflow: bool,
-        insert_image: Callable[[np.ndarray, dict | None], None],
+        insert_image: Callable[[np.ndarray, dict | None], bool],
     ) -> None:
         """Start sequence acquisition via the generator-to-callback bridge.
 
         Runs the camera's start_sequence() generator in a background thread,
         calling insert_image per frame to push into CMMCore's circular buffer.
-        This mirrors what C++ device adapter threads do.
+        insert_image returns False on buffer overflow.
         """
         from time import perf_counter_ns
 
@@ -359,7 +358,8 @@ class CameraDevice(Device):
                             Keyword.Elapsed_Time_ms: f"{elapsed_ms:.4f}",
                             **(dict(metadata) if metadata else {}),
                         }
-                        _insert(buf, md)
+                        if not _insert(buf, md):
+                            break  # buffer overflow
                     if stop_event.is_set():
                         break
             except (StopIteration, GeneratorExit):

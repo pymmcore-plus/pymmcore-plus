@@ -154,7 +154,6 @@ def test_slm_image_operations(device: str) -> None:
     # Test RGB uniform values
     core.setSLMPixelsTo(DEV, 255, 128, 64)  # Set all pixels to RGB(255, 128, 64)
 
-    # Test setting color image
     core.setSLMImage(DEV, TEST_COLOR_IMAGE)
     core.displaySLMImage(DEV)
 
