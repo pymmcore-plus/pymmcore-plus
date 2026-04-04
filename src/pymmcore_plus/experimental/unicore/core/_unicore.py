@@ -1,15 +1,21 @@
 from __future__ import annotations
 
+import time
 import weakref
 from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
+import numpy as np
+
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType
 from pymmcore_plus.core import Keyword as KW
+from pymmcore_plus.core._constants import DeviceInitializationState
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
+from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
+from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 from pymmcore_plus.experimental.unicore.devices._stage import (
     StageDevice,
     XYStageDevice,
@@ -28,8 +34,6 @@ class _PyDeviceRegistry(dict):
 
     def wait_for_device_type(self, dev_type: int, timeout_ms: float = 5000) -> None:
         """Wait for all Python devices of the given type to not be busy."""
-        import time
-
         deadline = time.perf_counter() + timeout_ms / 1000
         for dev in self.values():
             if dev_type != DeviceType.Any and dev.type() != dev_type:
@@ -169,8 +173,6 @@ class UniMMCore(CMMCorePlus):
     def getDeviceInitializationState(self, label: str) -> Any:
         if label not in self._pydevices:
             return super().getDeviceInitializationState(label)
-        from pymmcore_plus.core._constants import DeviceInitializationState
-
         state = self._pydevices[label]._initialized_
         if state is True:
             return DeviceInitializationState.InitializedSuccessfully
@@ -258,8 +260,6 @@ class UniMMCore(CMMCorePlus):
     ) -> tuple[DeviceName, ...]:
         if hubLabel not in self._pydevices:
             return tuple(super().getInstalledDevices(hubLabel))
-        from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
-
         dev = self._pydevices[hubLabel]
         if isinstance(dev, HubDevice):
             peripherals = dev.get_installed_peripherals()
@@ -271,8 +271,6 @@ class UniMMCore(CMMCorePlus):
     ) -> str:
         if hubLabel not in self._pydevices:
             return super().getInstalledDeviceDescription(hubLabel, peripheralLabel)
-        from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
-
         dev = self._pydevices[hubLabel]
         if isinstance(dev, HubDevice):
             for p in dev.get_installed_peripherals():
@@ -568,8 +566,6 @@ class UniMMCore(CMMCorePlus):
             raise NotImplementedError(
                 "getSLMImage is not implemented for C++ SLM devices."
             )
-        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-
         dev = self._pydevices[slmLabel]
         if isinstance(dev, SLMDevice):
             return dev.get_image()
@@ -580,8 +576,6 @@ class UniMMCore(CMMCorePlus):
     def getSLMSequenceMaxLength(self, slmLabel: DeviceLabel | str) -> int:
         if slmLabel not in self._pydevices:
             return super().getSLMSequenceMaxLength(slmLabel)
-        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-
         dev = self._pydevices[slmLabel]
         if isinstance(dev, SLMDevice):
             return dev.get_sequence_max_length()
@@ -594,10 +588,6 @@ class UniMMCore(CMMCorePlus):
     ) -> None:
         if slmLabel not in self._pydevices:
             return super().loadSLMSequence(slmLabel, imageSequence)
-        import numpy as np
-
-        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-
         dev = self._pydevices[slmLabel]
         if not isinstance(dev, SLMDevice):
             return
@@ -624,8 +614,6 @@ class UniMMCore(CMMCorePlus):
     def startSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
         if slmLabel not in self._pydevices:
             return super().startSLMSequence(slmLabel)
-        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-
         dev = self._pydevices[slmLabel]
         if isinstance(dev, SLMDevice):
             dev.start_sequence()
@@ -633,8 +621,6 @@ class UniMMCore(CMMCorePlus):
     def stopSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
         if slmLabel not in self._pydevices:
             return super().stopSLMSequence(slmLabel)
-        from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-
         dev = self._pydevices[slmLabel]
         if isinstance(dev, SLMDevice):
             dev.stop_sequence()

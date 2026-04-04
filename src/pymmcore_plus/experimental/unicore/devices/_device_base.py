@@ -1,17 +1,24 @@
 from __future__ import annotations
 
+import logging
 import threading
 from abc import ABC
 from collections import ChainMap
 from enum import EnumMeta
+from functools import wraps
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
 from pymmcore_plus.core._constants import PropertyType
+from pymmcore_plus.experimental.unicore.devices._bridge import (
+    _register_bridge_properties,
+)
 from pymmcore_plus.experimental.unicore.devices._properties import (
     PropertyController,
     PropertyInfo,
 )
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, KeysView, Sequence
@@ -104,7 +111,6 @@ class Device(_Lockable, ABC):
         The C++ bridge calls initialize(create_property, notify). Device authors
         write initialize(self) with no extra args. This wrapper bridges the gap.
         """
-        from functools import wraps
 
         @wraps(user_init)
         def bridge_initialize(
@@ -117,15 +123,9 @@ class Device(_Lockable, ABC):
                 self._initialized_ = True
             except Exception as e:
                 self._initialized_ = e
-                import logging
-
-                logging.getLogger(__name__).exception(
-                    f"Failed to initialize device {self.get_label()!r}"
-                )
+                logger.exception(f"Failed to initialize device {self.get_label()!r}")
                 return  # Don't register properties if init failed
             if create_property is not None:
-                from ._bridge import _register_bridge_properties
-
                 _register_bridge_properties(self, create_property)
                 self._post_bridge_initialize()
 

@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import threading
+import traceback
 from abc import abstractmethod
+from time import perf_counter_ns
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -318,8 +320,6 @@ class CameraDevice(Device):
         calling insert_image per frame to push into CMMCore's circular buffer.
         insert_image returns False on buffer overflow.
         """
-        from time import perf_counter_ns
-
         stop_event = threading.Event()
         self._bridge_stop_event = stop_event
 
@@ -365,8 +365,6 @@ class CameraDevice(Device):
             except (StopIteration, GeneratorExit):
                 pass
             except Exception:
-                import traceback
-
                 traceback.print_exc()
             finally:
                 self._capturing = False
