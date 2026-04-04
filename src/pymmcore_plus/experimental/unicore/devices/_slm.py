@@ -80,3 +80,33 @@ class SLMDevice(SequenceableDevice[np.ndarray]):
         """Stop a sequence of images on the SLM."""
         # Default implementation - override in subclasses that support sequencing
         raise NotImplementedError("This SLM device does not support sequences.")
+
+    # -- Bridge protocol defaults --
+
+    def get_width(self) -> int:
+        return self.shape()[1]
+
+    def get_height(self) -> int:
+        return self.shape()[0]
+
+    def get_number_of_components(self) -> int:
+        s = self.shape()
+        return 1 if len(s) == 2 else s[2]
+
+    def get_bytes_per_pixel(self) -> int:
+        return int(np.dtype(self.dtype()).itemsize)
+
+    def set_pixels_to(self, intensity: int) -> None:
+        """Set all pixels to a uniform intensity."""
+        pixels = np.full(self.shape(), intensity, dtype=self.dtype())
+        self.set_image(pixels)
+
+    def set_pixels_to_rgb(self, r: int, g: int, b: int) -> None:
+        """Set all pixels to a uniform RGB color."""
+        shape = self.shape()
+        h, w = shape[0], shape[1]
+        rgb = np.array([r, g, b], dtype=self.dtype())
+        pixels = np.broadcast_to(rgb, (h, w, 3)).copy()
+        if len(shape) == 2:
+            pixels = np.mean(pixels, axis=2).astype(self.dtype())
+        self.set_image(pixels)

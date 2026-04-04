@@ -40,7 +40,7 @@ dependencies = [
     "numpy >=1.26.0; python_version >= '3.12'",
     "numpy >=1.25.2",
     "psygnal >=0.10",
-    "pymmcore >=11.10.0.74.0",
+    # "pymmcore >=11.10.0.74.0",
     "typing-extensions >=4",                    # not actually required at runtime
     "useq-schema >=0.9",
     # cli requirements included by default for now
@@ -48,6 +48,7 @@ dependencies = [
     "rich >=10.2.0",
     "ome-types >=0.6.0",
     "ome-writers[tensorstore]>=0.3.0",
+    "pymmcore-nano",
 ]
 
 # extras
@@ -102,6 +103,7 @@ dev = [
 
 [tool.uv.sources]
 pymmcore-plus = { workspace = true }
+pymmcore-nano = { path = "../pymmcore-nano" }
 
 [tool.uv]
 override-dependencies = [

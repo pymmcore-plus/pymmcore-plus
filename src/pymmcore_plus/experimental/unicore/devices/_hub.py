@@ -48,3 +48,9 @@ class HubDevice(Device):
             this hub.
         """
         return ()
+
+    # -- Bridge protocol --
+
+    def detect_installed_devices(self) -> None:
+        """Called by C++ bridge to detect peripherals."""
+        self.get_installed_peripherals()

@@ -156,3 +156,9 @@ class StateDevice(Device):
         pos = self._label_to_state.get(label)
         if pos != self.get_property_value(Keyword.State):
             self.set_property_value(Keyword.State, pos)  # will trigger set_state
+
+    # -- Bridge protocol --
+
+    def get_number_of_positions(self) -> int:
+        """Return the number of available positions."""
+        return len(self._state_to_label)

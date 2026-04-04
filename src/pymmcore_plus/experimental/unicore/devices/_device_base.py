@@ -65,6 +65,10 @@ class Device(_Lockable, ABC):
         )
         self._core_proxy_: CMMCoreProxy | None = None
         self._parent_label_: str = ""  # label of the parent hub device
+        # Bridge support: PropertyHandle refs for dynamic property updates
+        self._property_handles_: dict[str, Any] = {}
+        # Bridge support: DeviceCallbacks for notifying CMMCore
+        self._notify_: Any = None
 
     @property
     def core(self) -> CMMCoreProxy:
@@ -74,13 +78,57 @@ class Device(_Lockable, ABC):
         return self._core_proxy_
 
     def __init_subclass__(cls) -> None:
-        """Initialize the property controllers."""
+        """Initialize the property controllers and wrap initialize for bridge."""
         cls._cls_prop_controllers = {}
         for base in cls.__mro__:
             for p in base.__dict__.values():
                 if isinstance(p, PropertyController):
                     cls._cls_prop_controllers[p.property.name] = p
+
+        # Wrap user-defined initialize() so C++ bridge can call it with
+        # (create_property, notify) args while user code defines initialize(self).
+        if "initialize" in cls.__dict__:
+            user_init = cls.__dict__["initialize"]
+            # Only wrap if the user's initialize doesn't already accept bridge args
+            if callable(user_init) and getattr(user_init, "__code__", None):
+                nargs = user_init.__code__.co_argcount  # includes self
+                if nargs == 1:  # just (self,)
+                    cls.initialize = Device._wrap_initialize(user_init)
+
         return super().__init_subclass__()
+
+    @staticmethod
+    def _wrap_initialize(user_init: Callable) -> Callable:
+        """Wrap a device author's initialize(self) to accept bridge args.
+
+        The C++ bridge calls initialize(create_property, notify). Device authors
+        write initialize(self) with no extra args. This wrapper bridges the gap.
+        """
+        from functools import wraps
+
+        @wraps(user_init)
+        def bridge_initialize(
+            self: Any, create_property: Any = None, notify: Any = None
+        ) -> None:
+            if notify is not None:
+                self._notify_ = notify
+            try:
+                user_init(self)
+                self._initialized_ = True
+            except Exception as e:
+                self._initialized_ = e
+                import logging
+
+                logging.getLogger(__name__).exception(
+                    f"Failed to initialize device {self.get_label()!r}"
+                )
+                return  # Don't register properties if init failed
+            if create_property is not None:
+                from ._bridge import _register_bridge_properties
+
+                _register_bridge_properties(self, create_property)
+
+        return bridge_initialize
 
     def register_property(
         self,
@@ -138,8 +186,19 @@ class Device(_Lockable, ABC):
         )
         self._prop_controllers_[name] = controller
 
-    def initialize(self) -> None:
-        """Initialize the device."""
+    def initialize(self, create_property: Any = None, notify: Any = None) -> None:
+        """Initialize the device.
+
+        The C++ bridge calls this with (create_property, notify). Device authors
+        override this with no extra args — __init_subclass__ wraps it automatically.
+        """
+        if notify is not None:
+            self._notify_ = notify
+        self._initialized_ = True
+        if create_property is not None:
+            from ._bridge import _register_bridge_properties
+
+            _register_bridge_properties(self, create_property)
 
     def shutdown(self) -> None:
         """Shutdown the device."""
@@ -213,12 +272,20 @@ class Device(_Lockable, ABC):
     ) -> None:
         """Set the allowed values of a property."""
         self._get_prop_or_raise(prop_name).property.allowed_values = allowed_values
+        if prop_name in self._property_handles_:
+            self._property_handles_[prop_name].set_allowed_values(
+                [str(v) for v in allowed_values]
+            )
 
     def set_property_limits(
         self, prop_name: str, limits: tuple[float, float] | None
     ) -> None:
         """Set the limits of a property."""
         self._get_prop_or_raise(prop_name).property.limits = limits
+        if limits is not None and prop_name in self._property_handles_:
+            self._property_handles_[prop_name].set_limits(
+                float(limits[0]), float(limits[1])
+            )
 
     def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
         """Set the sequence max length of a property."""
