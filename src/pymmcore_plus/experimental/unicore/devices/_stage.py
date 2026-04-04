@@ -104,6 +104,22 @@ class StageDevice(_BaseStage[float]):
         """Return True if the stage supports triggered sequences."""
         return self.is_sequenceable()
 
+    def get_stage_sequence_max_length(self) -> int:
+        """Return maximum stage sequence length."""
+        return self.get_sequence_max_length()
+
+    def load_stage_sequence(self, positions: list[float]) -> None:
+        """Load a stage position sequence."""
+        self.send_sequence(tuple(positions))
+
+    def start_stage_sequence(self) -> None:
+        """Start the loaded stage sequence."""
+        self.start_sequence()
+
+    def stop_stage_sequence(self) -> None:
+        """Stop the running stage sequence."""
+        self.stop_sequence()
+
 
 # TODO: consider if we can just subclass StageDevice instead of _BaseStage
 class XYStageDevice(_BaseStage[tuple[float, float]]):
@@ -204,6 +220,22 @@ class XYStageDevice(_BaseStage[tuple[float, float]]):
     def is_xy_stage_sequenceable(self) -> bool:
         """Return True if the XY stage supports triggered sequences."""
         return self.is_sequenceable()
+
+    def get_xy_stage_sequence_max_length(self) -> int:
+        """Return maximum XY stage sequence length."""
+        return self.get_sequence_max_length()
+
+    def load_xy_stage_sequence(self, positions: list[tuple[float, float]]) -> None:
+        """Load an XY stage position sequence."""
+        self.send_sequence(tuple(positions))
+
+    def start_xy_stage_sequence(self) -> None:
+        """Start the loaded XY stage sequence."""
+        self.start_sequence()
+
+    def stop_xy_stage_sequence(self) -> None:
+        """Stop the running XY stage sequence."""
+        self.stop_sequence()
 
 
 class XYStepperStageDevice(XYStageDevice):

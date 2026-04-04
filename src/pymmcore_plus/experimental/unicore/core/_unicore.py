@@ -5,19 +5,12 @@ from contextlib import suppress
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
-import numpy as np
-
 from pymmcore_plus import _pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType
-from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._constants import DeviceInitializationState
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
 from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
-from pymmcore_plus.experimental.unicore.devices._stage import (
-    StageDevice,
-    XYStageDevice,
-)
 
 from ._config import load_system_configuration, save_system_configuration
 
@@ -305,132 +298,6 @@ class UniMMCore(CMMCorePlus):
         # C++ expects Sequence[str]
         super().loadPropertySequence(label, propName, [str(v) for v in eventSequence])
 
-    # -----------------------------------------------------------------------
-    # Device-type-specific sequencing (bridge doesn't support these yet)
-    # -----------------------------------------------------------------------
-
-    # -- Exposure sequencing --
-
-    def isExposureSequenceable(self, cameraLabel: DeviceLabel | str) -> bool:
-        if cameraLabel not in self._pydevices:
-            return super().isExposureSequenceable(cameraLabel)
-        return self._pydevices[cameraLabel].is_property_sequenceable(KW.Exposure)
-
-    def getExposureSequenceMaxLength(self, cameraLabel: DeviceLabel | str) -> int:
-        if cameraLabel not in self._pydevices:
-            return super().getExposureSequenceMaxLength(cameraLabel)
-        info = self._pydevices[cameraLabel].get_property_info(KW.Exposure)
-        return info.sequence_max_length
-
-    def loadExposureSequence(
-        self,
-        cameraLabel: DeviceLabel | str,
-        exposureSequence_ms: Sequence[float],
-    ) -> None:
-        if cameraLabel not in self._pydevices:
-            return super().loadExposureSequence(cameraLabel, exposureSequence_ms)
-        self._pydevices[cameraLabel].load_property_sequence(
-            KW.Exposure, exposureSequence_ms
-        )
-
-    def startExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
-        if cameraLabel not in self._pydevices:
-            return super().startExposureSequence(cameraLabel)
-        self._pydevices[cameraLabel].start_property_sequence(KW.Exposure)
-
-    def stopExposureSequence(self, cameraLabel: DeviceLabel | str) -> None:
-        if cameraLabel not in self._pydevices:
-            return super().stopExposureSequence(cameraLabel)
-        self._pydevices[cameraLabel].stop_property_sequence(KW.Exposure)
-
-    # -- Stage sequencing --
-
-    def isStageSequenceable(self, stageLabel: DeviceLabel | str) -> bool:
-        if stageLabel not in self._pydevices:
-            return super().isStageSequenceable(stageLabel)
-        dev = self._pydevices[stageLabel]
-        return isinstance(dev, StageDevice) and dev.is_sequenceable()
-
-    def getStageSequenceMaxLength(self, stageLabel: DeviceLabel | str) -> int:
-        if stageLabel not in self._pydevices:
-            return super().getStageSequenceMaxLength(stageLabel)
-        dev = self._pydevices[stageLabel]
-        return dev.get_sequence_max_length() if isinstance(dev, StageDevice) else 0
-
-    def loadStageSequence(
-        self,
-        stageLabel: DeviceLabel | str,
-        positionSequence: Sequence[float],
-    ) -> None:
-        if stageLabel not in self._pydevices:
-            return super().loadStageSequence(stageLabel, positionSequence)
-        dev = self._pydevices[stageLabel]
-        if isinstance(dev, StageDevice):
-            dev.send_sequence(tuple(positionSequence))
-
-    def startStageSequence(self, stageLabel: DeviceLabel | str) -> None:
-        if stageLabel not in self._pydevices:
-            return super().startStageSequence(stageLabel)
-        dev = self._pydevices[stageLabel]
-        if isinstance(dev, StageDevice):
-            dev.start_sequence()
-
-    def stopStageSequence(self, stageLabel: DeviceLabel | str) -> None:
-        if stageLabel not in self._pydevices:
-            return super().stopStageSequence(stageLabel)
-        dev = self._pydevices[stageLabel]
-        if isinstance(dev, StageDevice):
-            dev.stop_sequence()
-
-    # -- XYStage sequencing --
-
-    def isXYStageSequenceable(self, xyStageLabel: DeviceLabel | str) -> bool:
-        if xyStageLabel not in self._pydevices:
-            return super().isXYStageSequenceable(xyStageLabel)
-        dev = self._pydevices[xyStageLabel]
-        return isinstance(dev, XYStageDevice) and dev.is_sequenceable()
-
-    def getXYStageSequenceMaxLength(self, xyStageLabel: DeviceLabel | str) -> int:
-        if xyStageLabel not in self._pydevices:
-            return super().getXYStageSequenceMaxLength(xyStageLabel)
-        dev = self._pydevices[xyStageLabel]
-        return dev.get_sequence_max_length() if isinstance(dev, XYStageDevice) else 0
-
-    def loadXYStageSequence(
-        self,
-        xyStageLabel: DeviceLabel | str,
-        xSequence: Sequence[float],
-        ySequence: Sequence[float],
-        /,
-    ) -> None:
-        if xyStageLabel not in self._pydevices:
-            return super().loadXYStageSequence(xyStageLabel, xSequence, ySequence)
-        dev = self._pydevices[xyStageLabel]
-        if isinstance(dev, XYStageDevice):
-            if len(xSequence) != len(ySequence):
-                raise ValueError("xSequence and ySequence must have the same length")
-            seq = tuple(zip(xSequence, ySequence, strict=False))
-            if len(seq) > dev.get_sequence_max_length():
-                raise ValueError(
-                    f"Sequence is too long. "
-                    f"Max length is {dev.get_sequence_max_length()}"
-                )
-            dev.send_sequence(seq)
-
-    def startXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
-        if xyStageLabel not in self._pydevices:
-            return super().startXYStageSequence(xyStageLabel)
-        dev = self._pydevices[xyStageLabel]
-        if isinstance(dev, XYStageDevice):
-            dev.start_sequence()
-
-    def stopXYStageSequence(self, xyStageLabel: DeviceLabel | str) -> None:
-        if xyStageLabel not in self._pydevices:
-            return super().stopXYStageSequence(xyStageLabel)
-        dev = self._pydevices[xyStageLabel]
-        if isinstance(dev, XYStageDevice):
-            dev.stop_sequence()
-
     # -- SLM overrides --
 
     def getSLMImage(self, slmLabel: DeviceLabel | str) -> Any:
@@ -443,61 +310,6 @@ class UniMMCore(CMMCorePlus):
         if isinstance(dev, SLMDevice):
             return dev.get_image()
         raise RuntimeError(f"Device {slmLabel!r} is not an SLM device")
-
-    # -- SLM sequencing --
-
-    def getSLMSequenceMaxLength(self, slmLabel: DeviceLabel | str) -> int:
-        if slmLabel not in self._pydevices:
-            return super().getSLMSequenceMaxLength(slmLabel)
-        dev = self._pydevices[slmLabel]
-        if isinstance(dev, SLMDevice):
-            return dev.get_sequence_max_length()
-        return 0
-
-    def loadSLMSequence(
-        self,
-        slmLabel: DeviceLabel | str,
-        imageSequence: Sequence[Any],
-    ) -> None:
-        if slmLabel not in self._pydevices:
-            super().loadSLMSequence(slmLabel, imageSequence)
-            return
-        dev = self._pydevices[slmLabel]
-        if not isinstance(dev, SLMDevice):
-            return
-        m = dev.get_sequence_max_length()
-        if m == 0:
-            raise RuntimeError(f"SLM {slmLabel!r} does not support sequences.")
-        shape = dev.shape()
-        dtype = np.dtype(dev.dtype())
-        arrays: list[Any] = []
-        for i, img in enumerate(imageSequence):
-            if isinstance(img, bytes):
-                arr = np.frombuffer(img, dtype=dtype).reshape(shape)
-            else:
-                arr = np.asarray(img, dtype=dtype)
-                if arr.shape != shape:
-                    raise ValueError(
-                        f"Image {i} shape {arr.shape} does not match SLM shape {shape}"
-                    )
-            arrays.append(arr)
-        if len(arrays) > m:
-            raise ValueError(f"Sequence length {len(arrays)} exceeds maximum {m}.")
-        dev.send_sequence(arrays)
-
-    def startSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
-        if slmLabel not in self._pydevices:
-            return super().startSLMSequence(slmLabel)
-        dev = self._pydevices[slmLabel]
-        if isinstance(dev, SLMDevice):
-            dev.start_sequence()
-
-    def stopSLMSequence(self, slmLabel: DeviceLabel | str) -> None:
-        if slmLabel not in self._pydevices:
-            return super().stopSLMSequence(slmLabel)
-        dev = self._pydevices[slmLabel]
-        if isinstance(dev, SLMDevice):
-            dev.stop_sequence()
 
 
 def _values_match(current: Any, expected: Any) -> bool:

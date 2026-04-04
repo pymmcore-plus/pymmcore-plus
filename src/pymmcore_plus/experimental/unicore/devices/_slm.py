@@ -83,6 +83,26 @@ class SLMDevice(SequenceableDevice[np.ndarray]):
 
     # -- Bridge protocol defaults --
 
+    def is_slm_sequenceable(self) -> bool:
+        """Return True if the SLM supports image sequences."""
+        return self.is_sequenceable()
+
+    def get_slm_sequence_max_length(self) -> int:
+        """Return maximum SLM image sequence length."""
+        return self.get_sequence_max_length()
+
+    def load_slm_sequence(self, images: list[np.ndarray]) -> None:
+        """Load an image sequence to the SLM."""
+        self.send_sequence(tuple(images))
+
+    def start_slm_sequence(self) -> None:
+        """Start the loaded SLM image sequence."""
+        self.start_sequence()
+
+    def stop_slm_sequence(self) -> None:
+        """Stop the running SLM image sequence."""
+        self.stop_sequence()
+
     def get_width(self) -> int:
         return self.shape()[1]
 

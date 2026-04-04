@@ -283,6 +283,23 @@ class CameraDevice(Device):
         """Return True if the camera supports exposure sequences."""
         return self.is_property_sequenceable(Keyword.Exposure)
 
+    def get_exposure_sequence_max_length(self) -> int:
+        """Return maximum exposure sequence length."""
+        info = self.get_property_info(Keyword.Exposure)
+        return info.sequence_max_length
+
+    def load_exposure_sequence(self, sequence: list[float]) -> None:
+        """Load an exposure sequence."""
+        self.load_property_sequence(Keyword.Exposure, sequence)
+
+    def start_exposure_sequence(self) -> None:
+        """Start the loaded exposure sequence."""
+        self.start_property_sequence(Keyword.Exposure)
+
+    def stop_exposure_sequence(self) -> None:
+        """Stop the running exposure sequence."""
+        self.stop_property_sequence(Keyword.Exposure)
+
     def snap_image(self) -> None:
         """Snap a single image using the generator protocol."""
         buf = None
