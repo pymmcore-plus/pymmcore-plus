@@ -12,7 +12,6 @@ import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._constants import DeviceInitializationState
-from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
 from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
@@ -131,8 +130,6 @@ class UniMMCore(CMMCorePlus):
         if label in self.getLoadedDevices():
             raise ValueError(f"The specified device label {label!r} is already in use")
 
-        # Give device access to core proxy for events
-        device._core_proxy_ = create_core_proxy(self)
         device._label_ = label
 
         # Determine MM device type

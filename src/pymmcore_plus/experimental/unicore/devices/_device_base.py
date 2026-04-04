@@ -25,7 +25,7 @@ if TYPE_CHECKING:
 
     from typing_extensions import Any, Self
 
-    from pymmcore_plus.experimental.unicore._proxy import CMMCoreProxy
+    from pymmcore_plus._pymmcore import DeviceCallbacks
 
     from ._properties import PropArg, TDev, TProp
 
@@ -70,19 +70,11 @@ class Device(_Lockable, ABC):
         self._prop_controllers_ = ChainMap[str, PropertyController](
             {}, self._cls_prop_controllers
         )
-        self._core_proxy_: CMMCoreProxy | None = None
         self._parent_label_: str = ""  # label of the parent hub device
-        # Bridge support: PropertyHandle refs for dynamic property updates
+        # PropertyHandle refs for dynamic property updates via C++ bridge
         self._property_handles_: dict[str, Any] = {}
-        # Bridge support: DeviceCallbacks for notifying CMMCore
-        self._notify_: Any = None
-
-    @property
-    def core(self) -> CMMCoreProxy:
-        """The device may use this to access a restricted subset of the Core API."""
-        if self._core_proxy_ is None:
-            raise AttributeError("CoreProxy not set. Has this device been loaded?")
-        return self._core_proxy_
+        # DeviceCallbacks for notifying CMMCore (set during initialize)
+        self._notify_: DeviceCallbacks | None = None
 
     def __init_subclass__(cls) -> None:
         """Initialize the property controllers and wrap initialize for bridge."""

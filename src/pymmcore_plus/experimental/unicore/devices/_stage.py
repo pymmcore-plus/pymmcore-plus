@@ -258,7 +258,8 @@ class XYStepperStageDevice(XYStageDevice):
         y_steps = self._origin_y_steps + steps_y
         self.set_position_steps(x_steps, y_steps)
 
-        self.core.events.XYStagePositionChanged.emit(self.get_label(), x, y)
+        if self._notify_ is not None:
+            self._notify_.on_xy_stage_position_changed(x, y)
 
     def get_position_um(self) -> tuple[float, float]:
         """Get the position of the XY stage in microns."""
@@ -301,7 +302,8 @@ class XYStepperStageDevice(XYStageDevice):
         self.set_relative_position_steps(steps_x, steps_y)
 
         x, y = self.get_position_um()
-        self.core.events.XYStagePositionChanged.emit(self.get_label(), x, y)
+        if self._notify_ is not None:
+            self._notify_.on_xy_stage_position_changed(x, y)
 
     def set_adapter_origin_um(self, x: float = 0.0, y: float = 0.0) -> None:
         """Alter the software coordinate translation between micrometers and steps.

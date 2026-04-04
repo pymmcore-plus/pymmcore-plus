@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from types import ModuleType
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
@@ -86,8 +85,7 @@ def test_device_load_unload():
 
     device = MyDevice()
     assert device.get_label() != PYDEV
-    with pytest.raises(AttributeError):
-        _ = device.core
+    assert device._notify_ is None
 
     core.loadPyDevice(PYDEV, device)
 
@@ -95,7 +93,6 @@ def test_device_load_unload():
         core.loadPyDevice(PYDEV, device)
 
     assert device.get_label() == PYDEV
-    assert isinstance(device.core, ModuleType)  # proxy object
 
     assert PYDEV in core.getLoadedDevices()
     assert core.getDeviceLibrary(PYDEV) == __name__  # because it's in this module
@@ -108,12 +105,13 @@ def test_device_load_unload():
         is DeviceInitializationState.Uninitialized
     )
     core.initializeDevice(PYDEV)
+    assert device._notify_ is not None
     assert (
         core.getDeviceInitializationState(PYDEV)
         is DeviceInitializationState.InitializedSuccessfully
     )
 
-    with pytest.raises((ValueError, RuntimeError), match="wrong.+type"):
+    with pytest.raises((ValueError, RuntimeError), match=r"wrong.+type"):
         core.setXYPosition(PYDEV, 1, 1)
 
     del device

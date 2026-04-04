@@ -147,8 +147,13 @@ def test_unicore_xy_stepper_stage():
     core.initializeDevice(XYDEV)
     core.setXYStageDevice(XYDEV)
 
-    # test position
+    # test position (notification is async via DeviceCallbacks)
     core.setXYPosition(100.5, 200.5)
+    import time
+
+    deadline = time.monotonic() + 1.0
+    while mock.call_count < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
     mock.assert_called_once_with(XYDEV, 100.5, 200.5)
     assert stage.position_steps == (1005, 2005)
     assert core.getXYPosition() == (100.5, 200.5)
@@ -161,8 +166,13 @@ def test_unicore_xy_stepper_stage():
     assert stage.position_steps == (-1055, -2055)
     assert core.getXYPosition() == (105.5, 205.5)
 
+    # Wait for async XYStagePositionChanged callback to settle before reset
+    time.sleep(0.1)
     mock.reset_mock()
     core.setRelativeXYPosition(1.5, 2.5)
+    deadline = time.monotonic() + 1.0
+    while mock.call_count < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
     mock.assert_called_once_with(XYDEV, 107.0, 208.0)
     assert core.getXYPosition() == (107.0, 208.0)
     steps = stage.position_steps
