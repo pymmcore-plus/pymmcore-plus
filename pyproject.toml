@@ -103,7 +103,7 @@ dev = [
 
 [tool.uv.sources]
 pymmcore-plus = { workspace = true }
-pymmcore-nano = { path = "../pymmcore-nano" }
+pymmcore-nano = { git = "https://github.com/tlambert03/pymmcore-nano", rev = "unicore" }
 
 [tool.uv]
 override-dependencies = [
