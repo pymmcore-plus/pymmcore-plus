@@ -237,10 +237,6 @@ class PropertyController(Generic[TDev, TProp]):
 
     # -- String-based entry points for C++ bridge callbacks --
 
-    def set_from_string(self, instance: TDev, val_str: str) -> None:
-        """Parse a string value and call fset. Used by C++ bridge AfterSet."""
-        self.fset(instance, self.property.type.parse_value(val_str))
-
     def load_sequence_from_strings(self, instance: TDev, str_seq: list[str]) -> None:
         """Parse string sequence and load. Used by C++ bridge AfterLoadSequence."""
         typed = [self.property.type.parse_value(s) for s in str_seq]

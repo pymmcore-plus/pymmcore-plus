@@ -9,7 +9,6 @@ from pymmcore_plus import _pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType
 from pymmcore_plus.core._constants import DeviceInitializationState
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
-from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 
 from ._config import load_system_configuration, save_system_configuration
@@ -95,7 +94,7 @@ class UniMMCore(CMMCorePlus):
 
         # Register with C++ bridge — the bridge will call device.initialize()
         # later when initializeDevice() is called.
-        super().loadPyDevice(label, device, device.type())
+        super().loadPyDevice(label, device, device.type())  # type: ignore[misc]
         self._pydevices[label] = device
 
     load_py_device = loadPyDevice
@@ -174,15 +173,13 @@ class UniMMCore(CMMCorePlus):
 
     # -- getCurrentConfig: C++ string comparison fails for numeric format diffs --
 
-    def getCurrentConfig(self, groupName: str) -> str:
-        result = super().getCurrentConfig(groupName)
-        if result:
+    def getCurrentConfig(self, groupName: str) -> str:  # type: ignore[override]
+        if result := super().getCurrentConfig(groupName):
             return result
         return self._find_matching_preset(groupName)
 
-    def getCurrentConfigFromCache(self, groupName: str) -> str:
-        result = super().getCurrentConfigFromCache(groupName)
-        if result:
+    def getCurrentConfigFromCache(self, groupName: str) -> str:  # type: ignore[override]
+        if result := super().getCurrentConfigFromCache(groupName):
             return result
         return self._find_matching_preset(groupName)
 
@@ -207,33 +204,6 @@ class UniMMCore(CMMCorePlus):
             if all_match:
                 return preset_name
         return ""
-
-    # -- Hub peripherals --
-
-    def getInstalledDevices(
-        self, hubLabel: DeviceLabel | str
-    ) -> tuple[DeviceName, ...]:
-        if hubLabel not in self._pydevices:
-            return tuple(super().getInstalledDevices(hubLabel))
-        dev = self._pydevices[hubLabel]
-        if isinstance(dev, HubDevice):
-            peripherals = dev.get_installed_peripherals()
-            return tuple(p[0] for p in peripherals if p[0])  # type: ignore[misc]
-        return ()
-
-    def getInstalledDeviceDescription(
-        self, hubLabel: DeviceLabel | str, peripheralLabel: DeviceName | str
-    ) -> str:
-        if hubLabel not in self._pydevices:
-            return super().getInstalledDeviceDescription(hubLabel, peripheralLabel)
-        dev = self._pydevices[hubLabel]
-        if isinstance(dev, HubDevice):
-            for p in dev.get_installed_peripherals():
-                if p[0] == peripheralLabel:
-                    return p[1] or "N/A"
-        raise RuntimeError(
-            f"No peripheral with name {peripheralLabel!r} installed in hub {hubLabel!r}"
-        )
 
     def unloadDevice(self, label: DeviceLabel | str) -> None:
         self._pydevices.pop(label, None)

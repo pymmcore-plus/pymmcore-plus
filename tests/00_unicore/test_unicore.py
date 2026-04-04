@@ -948,21 +948,26 @@ Label,Filter,2,Cy5
 # ================== Hub Device Tests ==================
 
 
+class Peripheral1(GenericDevice):
+    """First peripheral device"""
+
+
+class Peripheral2(GenericDevice):
+    """Second peripheral device"""
+
+
+class Peripheral3(GenericDevice):
+    """Third peripheral device"""
+
+
 class MyHub(HubDevice):
     """Test hub device with peripheral devices."""
 
-    def get_installed_peripherals(
-        self,
-    ) -> Sequence[
-        tuple[
-            str,
-            str,
-        ]
-    ]:
+    def detect_installed_devices(self):
         return [
-            ("Peripheral1", "First peripheral device"),
-            ("Peripheral2", "Second peripheral device"),
-            ("Peripheral3", ""),  # No description
+            ("Peripheral1", Peripheral1(), DeviceType.GenericDevice),
+            ("Peripheral2", Peripheral2(), DeviceType.GenericDevice),
+            ("Peripheral3", Peripheral3(), DeviceType.GenericDevice),
         ]
 
 
@@ -1006,17 +1011,19 @@ def test_get_installed_device_description():
     core.loadPyDevice("hub", hub)
     core.initializeDevice("hub")
 
+    # Descriptions come from the device's description() method (docstring)
     assert core.getInstalledDeviceDescription("hub", "Peripheral1") == (
         "First peripheral device"
     )
     assert core.getInstalledDeviceDescription("hub", "Peripheral2") == (
         "Second peripheral device"
     )
-    # No description provided, returns "N/A"
-    assert core.getInstalledDeviceDescription("hub", "Peripheral3") == "N/A"
+    assert core.getInstalledDeviceDescription("hub", "Peripheral3") == (
+        "Third peripheral device"
+    )
 
     # Non-existent peripheral
-    with pytest.raises(RuntimeError, match="No peripheral with name"):
+    with pytest.raises(RuntimeError):
         core.getInstalledDeviceDescription("hub", "NonExistent")
 
 
@@ -1116,19 +1123,20 @@ def test_cross_language_parent_allowed():
 
 
 def test_hub_lazy_detection():
-    """Test that hub implementers can do lazy detection in get_installed_peripherals."""
+    """Test that hub implementers can do lazy detection in detect_installed_devices."""
 
     class LazyDetectingHub(HubDevice):
         """Hub that lazily detects peripherals on first access."""
 
-        _detected: list[tuple[str, str]] | None = None
+        _detected: list | None = None
         detect_count = 0
 
-        def get_installed_peripherals(self) -> Sequence[tuple[str, str]]:
-            # Implementers can cache detection results themselves
+        def detect_installed_devices(self):
             if self._detected is None:
                 self.detect_count += 1
-                self._detected = [("Device1", "Description")]
+                self._detected = [
+                    ("Dev1", GenericDevice(), DeviceType.GenericDevice),
+                ]
             return self._detected
 
     core = UniMMCore()
@@ -1140,11 +1148,9 @@ def test_hub_lazy_detection():
     _ = core.getInstalledDevices("hub")
     assert hub.detect_count == 1
 
-    # Subsequent calls use cached result (implementer's responsibility)
+    # C++ caches DetectInstalledDevices internally, so subsequent calls
+    # do not re-invoke detect_installed_devices
     _ = core.getInstalledDevices("hub")
-    assert hub.detect_count == 1
-
-    _ = core.getInstalledDeviceDescription("hub", "Device1")
     assert hub.detect_count == 1
 
 
@@ -1152,7 +1158,7 @@ def test_empty_hub():
     """Test hub with no installed devices."""
 
     class EmptyHub(HubDevice):
-        pass  # Uses default get_installed_peripherals returning ()
+        pass  # Uses default detect_installed_devices returning ()
 
     core = UniMMCore()
     hub = EmptyHub()
@@ -1160,7 +1166,7 @@ def test_empty_hub():
     core.initializeDevice("hub")
 
     installed = core.getInstalledDevices("hub")
-    assert installed == ()
+    assert len(installed) == 0
 
 
 def test_hub_device_parent_and_children_mixed():

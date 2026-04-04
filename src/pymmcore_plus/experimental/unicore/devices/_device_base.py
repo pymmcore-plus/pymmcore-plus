@@ -399,7 +399,7 @@ def _register_one_property(
         limits = (float(limits[0]), float(limits[1]))
 
     if (allowed := info.allowed_values) is not None:
-        allowed = [str(v) for v in info.allowed_values]
+        allowed = [str(v) for v in allowed]
 
     # The C++ bridge expects all property values as strings, so we use the prop_type's
     # parse_value method to convert from string to the appropriate Python type in the
