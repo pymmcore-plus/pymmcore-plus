@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 
-import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus.core import CMMCorePlus, DeviceType
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._constants import DeviceInitializationState
@@ -25,19 +24,6 @@ if TYPE_CHECKING:
     from collections.abc import Sequence
 
     from pymmcore import AdapterName, DeviceLabel, DeviceName
-
-
-# Map Device._TYPE to pymmcore DeviceType for loadPyDevice
-_DEVICE_TYPE_MAP: dict[DeviceType, int] = {
-    DeviceType.Camera: DeviceType.Camera,
-    DeviceType.ShutterDevice: DeviceType.ShutterDevice,
-    DeviceType.Stage: DeviceType.Stage,
-    DeviceType.XYStage: DeviceType.XYStage,
-    DeviceType.State: DeviceType.State,
-    DeviceType.SLM: DeviceType.SLM,
-    DeviceType.Hub: DeviceType.Hub,
-    DeviceType.GenericDevice: DeviceType.GenericDevice,
-}
 
 
 class UniMMCore(CMMCorePlus):
@@ -114,20 +100,14 @@ class UniMMCore(CMMCorePlus):
 
         device._label_ = label
 
-        # Determine MM device type
-        dev_type = _DEVICE_TYPE_MAP.get(device.type())
-        if dev_type is None:
-            raise TypeError(
-                f"Unsupported device type {device.type()} for device {label!r}"
-            )
-
         # Register with C++ bridge — the bridge will call device.initialize()
         # later when initializeDevice() is called.
-        pymmcore.CMMCore.loadPyDevice(self, label, device, dev_type)
+        super().loadPyDevice(label, device, device.type())
         self._pydevices[label] = device
 
     load_py_device = loadPyDevice
 
+    # TODO: this could be upstreamed to nano
     def isPyDevice(self, label: DeviceLabel | str) -> bool:
         """Returns True if the label corresponds to a Python device."""
         return label in self._pydevices
