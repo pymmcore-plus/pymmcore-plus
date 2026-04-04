@@ -36,17 +36,6 @@ def _mm_type(pt: PropertyType) -> int:
     return _PROP_TYPE_MAP.get(pt, 1)
 
 
-def _parse_string_value(val_str: str, prop_type: PropertyType) -> Any:
-    """Parse a string value from C++ back to a typed Python value."""
-    if prop_type == PropertyType.Float:
-        return float(val_str)
-    if prop_type == PropertyType.Integer:
-        return int(float(val_str))  # int(float(...)) handles "3.0"
-    if prop_type == PropertyType.Boolean:
-        return val_str.lower() not in ("0", "false", "")
-    return val_str
-
-
 def _register_bridge_properties(
     device: Device, create_property: Callable[..., Any]
 ) -> None:
@@ -88,12 +77,19 @@ def _register_one_property(
     # Build setter: (str) -> None
     setter = None
     if not ctrl.is_read_only:
+        if ctrl.fset is not None:
 
-        def _setter(val_str: str, _ctrl=ctrl, _pt=prop_type) -> None:
-            typed_val = _parse_string_value(val_str, _pt)
-            _ctrl.__set__(device, typed_val)
+            def _setter(val_str: str, _ctrl=ctrl, _pt=prop_type) -> None:
+                typed_val = _pt.parse_value(val_str)
+                _ctrl.__set__(device, typed_val)
 
-        setter = _setter
+            setter = _setter
+        else:
+            # Config property with no explicit setter — store in last_value
+            def _setter_lastval(val_str: str, _info=info, _pt=prop_type) -> None:
+                _info.last_value = _pt.parse_value(val_str)
+
+            setter = _setter_lastval
 
     # Limits
     limits = None
@@ -114,7 +110,7 @@ def _register_one_property(
         if ctrl.fseq_load is not None:
 
             def _seq_loader(str_seq: list[str], _ctrl=ctrl, _pt=prop_type) -> None:
-                typed_seq = [_parse_string_value(s, _pt) for s in str_seq]
+                typed_seq = [_pt.parse_value(s) for s in str_seq]
                 _ctrl.load_sequence(device, typed_seq)
 
             seq_loader = _seq_loader

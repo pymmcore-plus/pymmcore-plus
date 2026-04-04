@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import time
 import weakref
 from contextlib import suppress
 from pathlib import Path
@@ -28,23 +27,6 @@ if TYPE_CHECKING:
     from pymmcore import AdapterName, DeviceLabel, DeviceName
 
 
-class _PyDeviceRegistry(dict):
-    """Dict subclass with convenience methods for tracking Python devices."""
-
-    def wait_for_device_type(self, dev_type: int, timeout_ms: float = 5000) -> None:
-        """Wait for all Python devices of the given type to not be busy."""
-        deadline = time.perf_counter() + timeout_ms / 1000
-        for dev in self.values():
-            if dev_type != DeviceType.Any and dev.type() != dev_type:
-                continue
-            while dev.busy():
-                if time.perf_counter() > deadline:
-                    raise TimeoutError(
-                        f"Wait for device timed out after {timeout_ms} ms"
-                    )
-                time.sleep(0.01)
-
-
 # Map Device._TYPE to pymmcore DeviceType for loadPyDevice
 _DEVICE_TYPE_MAP: dict[DeviceType, int] = {
     DeviceType.Camera: DeviceType.Camera,
@@ -68,7 +50,7 @@ class UniMMCore(CMMCorePlus):
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         # Track which labels are Python devices and keep refs to Device objects
-        self._pydevices: _PyDeviceRegistry = _PyDeviceRegistry()
+        self._pydevices: dict[str, Device] = {}
         super().__init__(*args, **kwargs)
 
         weakref.finalize(
@@ -188,13 +170,16 @@ class UniMMCore(CMMCorePlus):
         self, label: str, propName: str, propValue: bool | float | int | str
     ) -> None:
         if label in self._pydevices:
+            # Validate and set via Python property controller rather than going
+            # through CMMCore's C++ property system. This is desireable because
+            # MM::FloatProperty::Set(const char*) uses atof() to parse strings,
+            # which silently converts invalid input to 0.0 (e.g. atof("bad") == 0).
+            # By the time the bridge's AfterSet action functor fires, the property
+            # already holds 0.0 — the original bad value is gone and unrecoverable.
+            # Validating here catches type errors, limit violations, and disallowed
+            # values with clear Python exceptions before C++ ever sees the value.
             dev = self._pydevices[label]
-            # Validate and set via Python property controller
-            dev.set_property_value(propName, propValue)
-            # Notify CMMCore (updates state cache, posts async notifications)
-            if dev._notify_ is not None:
-                dev._notify_.on_property_changed(propName, str(propValue))
-            return
+            propValue = _prepare_property_value_for_cpp(dev, propName, propValue)
         super().setProperty(label, propName, propValue)
 
     # -- Config groups: ensure typed values are converted to strings --
@@ -361,29 +346,6 @@ class UniMMCore(CMMCorePlus):
     ) -> None:
         """Save the current system configuration to a text file."""
         save_system_configuration(self, filename, prefix_py_devices=prefix_py_devices)
-
-    # -----------------------------------------------------------------------
-    # Wait/busy methods — C++ handles bridge devices, but we also poll Python
-    # -----------------------------------------------------------------------
-
-    def waitForSystem(self) -> None:
-        self.waitForDeviceType(DeviceType.AnyType)
-
-    def systemBusy(self) -> bool:
-        return self.deviceTypeBusy(DeviceType.AnyType)
-
-    def waitForDeviceType(self, devType: int) -> None:
-        super().waitForDeviceType(devType)
-        self._pydevices.wait_for_device_type(devType, self.getTimeoutMs())
-
-    def deviceTypeBusy(self, devType: int) -> bool:
-        if super().deviceTypeBusy(devType):
-            return True
-        for dev in self._pydevices.values():
-            if devType == DeviceType.Any or dev.type() == devType:
-                if dev.busy():
-                    return True
-        return False
 
     # -----------------------------------------------------------------------
     # Thin overrides for type conversion (C++ expects strings)
@@ -600,3 +562,17 @@ def _values_match(current: Any, expected: Any) -> bool:
         return float(current) == float(expected)
     except (ValueError, TypeError):
         return str(current) == str(expected)
+
+
+def _prepare_property_value_for_cpp(dev: Device, propName: str, propValue: Any) -> str:
+    ctrl = dev._get_prop_or_raise(propName)  # noqa: SLF001
+    if ctrl.is_read_only:
+        raise ValueError(f"Property {propName!r} is read-only.")
+    propValue = ctrl.validate(propValue)
+    if isinstance(propValue, bool):
+        propValue = int(propValue)  # MM properties expect bools as ints
+    # For config properties (no fset), update last_value directly
+    # since the C++ bridge setter may not fire for getter-less properties.
+    if ctrl.fset is None:
+        ctrl.property.last_value = propValue
+    return str(propValue)
