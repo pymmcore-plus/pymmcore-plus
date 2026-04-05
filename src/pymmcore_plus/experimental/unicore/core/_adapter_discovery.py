@@ -18,7 +18,28 @@ ENTRY_POINT_GROUP = "pymmcore-plus.adapters"
 
 
 def discover_entry_points() -> dict[str, str]:
-    """Return {adapter_name: module_path} from installed entry points."""
+    """Return {adapter_name: module_path} from installed entry points.
+
+    This is used by UniMMCore to find available Python adapters.  To make your package
+    discoverable, add this to your pyproject.toml:
+
+    ```toml
+    [project.entry-points."pymmcore-plus.adapters"]
+    MyAdapter = "my_package.my_module_with_device_adapters"
+    ```
+
+    "MyAdapter" will then appear in UniMMCore().getDeviceAdapterNames() ... and
+    any concrete Device subclasses in "my_package.my_module_with_device_adapters" will
+    be loadable via:
+
+    ```python
+    core = UniMMCore()
+    core.loadDevice("MyDevice", "MyAdapter", "MyDeviceName")
+    ```
+
+    ... where "MyDeviceName" is the name returned by MyDevice.name() (a class method
+    that defaults to the class name if not overridden).
+    """
     eps = importlib.metadata.entry_points(group=ENTRY_POINT_GROUP)
     return {ep.name: ep.value for ep in eps}
 
