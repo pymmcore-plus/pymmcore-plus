@@ -28,16 +28,36 @@ def discover_entry_points() -> dict[str, str]:
     MyAdapter = "my_package.my_module_with_device_adapters"
     ```
 
-    "MyAdapter" will then appear in UniMMCore().getDeviceAdapterNames() ... and
-    any concrete Device subclasses in "my_package.my_module_with_device_adapters" will
-    be loadable via:
+    "MyAdapter" will then appear in UniMMCore().getDeviceAdapterNames().
+
+    `my_package.my_module_with_device_adapters` should contain one or more concrete
+    Device subclasses:
+
+    ```python
+    # my_package/my_module_with_device_adapters.py
+    from pymmcore_plus.experimental.unicore.devices import GenericDevice
+
+    class SomeDevice(GenericDevice):
+        _prop_b = 10.0
+        @pymm_property(limits=(0.0, 100.0))
+        def propB(self) -> float:
+            '''An example property.'''
+            return self._prop_b
+
+        @propB.setter
+        def _set_prop_b(self, value: int) -> None:
+            self._prop_b = value
+    ```
+
+    The devices in that module will be registered under the adapter name, and available
+    for loading in the core:
 
     ```python
     core = UniMMCore()
-    core.loadDevice("MyDevice", "MyAdapter", "MyDeviceName")
+    core.loadDevice("MyDevice", "MyAdapter", "SomeDevice")
     ```
 
-    ... where "MyDeviceName" is the name returned by MyDevice.name() (a class method
+    ... where "SomeDevice" is the name returned by `SomeDevice.name()` (a class method
     that defaults to the class name if not overridden).
     """
     eps = importlib.metadata.entry_points(group=ENTRY_POINT_GROUP)
