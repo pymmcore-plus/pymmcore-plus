@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import importlib
 import weakref
 from contextlib import suppress
+from itertools import chain
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
@@ -10,10 +12,12 @@ from pymmcore_plus.core import CMMCorePlus
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 
+from ._adapter_discovery import create_adapter_from_module, discover_entry_points
 from ._config import load_system_configuration, save_system_configuration
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from types import ModuleType
 
     from pymmcore import AdapterName, DeviceLabel, DeviceName
 
@@ -35,6 +39,11 @@ class UniMMCore(CMMCorePlus):
 
         # Track which labels are Python devices and keep refs to Device objects
         self._pydevices: dict[str, Device] = {}
+
+        # Python adapter discovery: {adapter_name: module_path}
+        self._py_adapter_registry: dict[str, str] = discover_entry_points()
+        self._registered_py_adapters: set[str] = set()
+
         super().__init__(*args, **kwargs)
 
         weakref.finalize(self, UniMMCore._cleanup_python_state, self._pydevices)
@@ -51,6 +60,9 @@ class UniMMCore(CMMCorePlus):
         self, label: str, moduleName: AdapterName | str, deviceName: DeviceName | str
     ) -> None:
         """Load a device from a C++ plugin library or Python module."""
+        # Lazily register any discovered Python adapter before the C++ attempt
+        self._ensure_py_adapter_loaded(moduleName)
+
         try:
             CMMCorePlus.loadDevice(self, label, moduleName, deviceName)
         except RuntimeError as e:
@@ -102,6 +114,57 @@ class UniMMCore(CMMCorePlus):
     def isPyDevice(self, label: DeviceLabel | str) -> bool:
         """Returns True if the label corresponds to a Python device."""
         return label in self._pydevices
+
+    # -----------------------------------------------------------------------
+    # Python adapter discovery and registration
+    # -----------------------------------------------------------------------
+
+    def register_py_adapter(
+        self, adapter_name: str, module_or_path: str | ModuleType
+    ) -> None:
+        """Register a Python module as a device adapter.
+
+        After registration, all Device subclasses in the module are available
+        through the standard CMMCore API (getAvailableDevices, loadDevice, etc.).
+        """
+        if isinstance(module_or_path, str):
+            module = importlib.import_module(module_or_path)
+        else:
+            module = module_or_path
+        adapter = create_adapter_from_module(module)
+        super().loadPyDeviceAdapter(adapter_name, adapter)  # type: ignore[misc]
+        self._registered_py_adapters.add(adapter_name)
+
+    def _ensure_py_adapter_loaded(self, adapter_name: str) -> None:
+        """Lazily register a Python adapter if it was discovered via entry points."""
+        if adapter_name in self._registered_py_adapters:
+            return
+        if adapter_name not in self._py_adapter_registry:
+            return
+        module_path = self._py_adapter_registry.pop(adapter_name)
+        self.register_py_adapter(adapter_name, module_path)
+
+    def getDeviceAdapterNames(self) -> tuple[AdapterName, ...]:
+        """Return all adapter names, including discovered Python adapters."""
+        names = list(super().getDeviceAdapterNames())
+        seen: set[str] = set(names)
+        for name in chain(self._py_adapter_registry, self._registered_py_adapters):
+            if name not in seen:
+                seen.add(name)
+                names.append(cast("AdapterName", name))
+        return tuple(names)
+
+    def getAvailableDevices(self, library: str) -> tuple[DeviceName, ...]:
+        self._ensure_py_adapter_loaded(library)
+        return super().getAvailableDevices(library)
+
+    def getAvailableDeviceDescriptions(self, library: str) -> tuple[str, ...]:
+        self._ensure_py_adapter_loaded(library)
+        return super().getAvailableDeviceDescriptions(library)
+
+    def getAvailableDeviceTypes(self, library: str) -> tuple[int, ...]:
+        self._ensure_py_adapter_loaded(library)
+        return super().getAvailableDeviceTypes(library)
 
     # -- Device info overrides (C++ returns bridge adapter info, we want device info) --
 
