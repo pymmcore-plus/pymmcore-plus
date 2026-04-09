@@ -79,6 +79,8 @@ def configure_logging(
     - `PYMM_LOG_LEVEL` - The log level for `stderr` logging. By default `INFO`.
     - `PYMM_LOG_FILE` - The path to the log file.  If set to `0`, `false`, `no`,
         or `none`, logging to file will be disabled.
+    - `PYMM_LOG_RICH` - If set to `1`, `true`, or `yes`, use `rich` for stderr
+        logging (requires `rich` to be installed).
 
 
     !!! note
@@ -118,8 +120,20 @@ def configure_logging(
 
     # automatically log to stderr
     if log_to_stderr and sys.stderr:
-        stderr_handler = logging.StreamHandler(sys.stderr)
-        stderr_handler.setFormatter(CustomFormatter())
+        # use rich for stderr logging if PYMM_LOG_RICH is set and rich is installed
+        stderr_handler: logging.Handler | None = None
+        if os.getenv("PYMM_LOG_RICH", "").lower() in ("1", "true", "yes"):
+            try:
+                from rich.logging import RichHandler
+
+                stderr_handler = RichHandler()
+            except ImportError:
+                pass
+
+        if stderr_handler is None:
+            stderr_handler = logging.StreamHandler(sys.stderr)
+            stderr_handler.setFormatter(CustomFormatter())
+
         stderr_handler.setLevel(stderr_level)
         logger.addHandler(stderr_handler)
 

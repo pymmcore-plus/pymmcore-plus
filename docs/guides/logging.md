@@ -16,6 +16,7 @@ You may also configure logging using the following environment variables:
 | -------------- | ------------------------------------------------------ | --------------------- |
 | PYMM_LOG_LEVEL | INFO                                                   | The log level.        |
 | PYMM_LOG_FILE  | `pymmcore_plus.log` in the pymmcore-plus log directory | The logfile location. |
+| PYMM_LOG_RICH  | `0` (disabled)                                         | Use [rich](https://rich.readthedocs.io/) for stderr logging (requires `rich`). Set to `1`, `true`, or `yes` to enable. |
 
 !!! tip "pymmcore-plus log directory"
 
