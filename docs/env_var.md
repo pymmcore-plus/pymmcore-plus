@@ -13,6 +13,7 @@ The following environment variables may be used to configure pymmcore-plus globa
 | **`PYMM_PARALLEL_INIT`**  | Enable/disable parallel device initialization  |  Enabled    |
 | **`PYMM_LOG_LEVEL`**                       | pymmcore-plus [logging](./guides/logging.md) level.  | `'INFO'`    |
 | **`PYMM_LOG_FILE`**   | Logfile location. | `pymmcore_plus.log` in the pymmcore-plus [log directory](./guides/logging.md#customizing-logging) |
+| **`PYMM_LOG_RICH`**   | Use [rich](https://rich.readthedocs.io/) for stderr logging (requires `rich` to be installed). Adds some formatting overhead ([#449](https://github.com/pymmcore-plus/pymmcore-plus/issues/449)). | `"0"` (disabled) |
 | **`MICROMANAGER_PATH`**   | Override location of Micro-Manager directory (with device adapters) | User-directory, described [here](./install.md#set-the-active-micro-manager-installation)   |
 | **`PYMM_SIGNALS_BACKEND`** | The event backend to use. Must be one of `'qt'`, `'psygnal'`, or `'auto'`  | `auto` (Qt if `QApplication` exists, otherwise psygnal) |
 | **`PYMM_DISABLE_IPYTHON_COMPLETIONS`**  | Disable [Tab autocompletion for IPython](./guides/ipython_completion.md)  | `"0"`  (enabled) |
