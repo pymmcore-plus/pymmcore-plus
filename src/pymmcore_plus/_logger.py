@@ -80,7 +80,8 @@ def configure_logging(
     - `PYMM_LOG_FILE` - The path to the log file.  If set to `0`, `false`, `no`,
         or `none`, logging to file will be disabled.
     - `PYMM_LOG_RICH` - If set to `1`, `true`, or `yes`, use `rich` for stderr
-        logging (requires `rich` to be installed).
+        logging (requires `rich` to be installed). Note: rich formatting adds
+        some overhead; see https://github.com/pymmcore-plus/pymmcore-plus/issues/449.
 
 
     !!! note
