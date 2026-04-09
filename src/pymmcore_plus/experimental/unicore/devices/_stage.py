@@ -83,6 +83,43 @@ class StageDevice(_BaseStage[float]):
         """Return True if positions can be set while continuous focus runs."""
         return False
 
+    # -- Bridge protocol defaults --
+
+    def set_position_steps(self, steps: int) -> None:
+        """Default: 1:1 um-to-step mapping."""
+        self.set_position_um(float(steps))
+
+    def get_position_steps(self) -> int:
+        """Default: 1:1 um-to-step mapping."""
+        return int(self.get_position_um())
+
+    def get_limits(self) -> tuple[float, float]:
+        """Return stage travel limits (lower, upper). Override for real limits."""
+        return (0.0, 0.0)
+
+    def move(self, velocity: float) -> None:
+        """Move at the given velocity. Override for motorized stages."""
+
+    def is_stage_sequenceable(self) -> bool:
+        """Return True if the stage supports triggered sequences."""
+        return self.is_sequenceable()
+
+    def get_stage_sequence_max_length(self) -> int:
+        """Return maximum stage sequence length."""
+        return self.get_sequence_max_length()
+
+    def load_stage_sequence(self, positions: list[float]) -> None:
+        """Load a stage position sequence."""
+        self.send_sequence(tuple(positions))
+
+    def start_stage_sequence(self) -> None:
+        """Start the loaded stage sequence."""
+        self.start_sequence()
+
+    def stop_stage_sequence(self) -> None:
+        """Stop the running stage sequence."""
+        self.stop_sequence()
+
 
 # TODO: consider if we can just subclass StageDevice instead of _BaseStage
 class XYStageDevice(_BaseStage[tuple[float, float]]):
@@ -134,6 +171,71 @@ class XYStageDevice(_BaseStage[tuple[float, float]]):
         """
         self.set_origin_x()
         self.set_origin_y()
+
+    # -- Bridge protocol defaults --
+
+    def set_position_steps(self, x: int, y: int) -> None:
+        """Default: 1:1 um-to-step mapping."""
+        self.set_position_um(float(x), float(y))
+
+    def get_position_steps(self) -> tuple[int, int]:
+        """Default: 1:1 um-to-step mapping."""
+        ux, uy = self.get_position_um()
+        return (int(ux), int(uy))
+
+    def get_step_size_x_um(self) -> float:
+        """Default step size. Override for real hardware."""
+        return 1.0
+
+    def get_step_size_y_um(self) -> float:
+        """Default step size. Override for real hardware."""
+        return 1.0
+
+    def get_limits_um(self) -> tuple[float, float, float, float]:
+        """Return (xMin, xMax, yMin, yMax). Override for real limits."""
+        return (0.0, 0.0, 0.0, 0.0)
+
+    def get_step_limits(self) -> tuple[int, int, int, int]:
+        """Return (xMin, xMax, yMin, yMax) in steps. Override for real limits."""
+        return (0, 0, 0, 0)
+
+    def set_relative_position_steps(self, dx: int, dy: int) -> None:
+        """Default: convert steps to um."""
+        self.set_relative_position_um(
+            float(dx) * self.get_step_size_x_um(),
+            float(dy) * self.get_step_size_y_um(),
+        )
+
+    def move(self, vx: float, vy: float) -> None:
+        """Move at velocity. Override for motorized stages."""
+
+    def set_x_origin(self) -> None:
+        """Zero the X axis. Alias for set_origin_x."""
+        self.set_origin_x()
+
+    def set_y_origin(self) -> None:
+        """Zero the Y axis. Alias for set_origin_y."""
+        self.set_origin_y()
+
+    def is_xy_stage_sequenceable(self) -> bool:
+        """Return True if the XY stage supports triggered sequences."""
+        return self.is_sequenceable()
+
+    def get_xy_stage_sequence_max_length(self) -> int:
+        """Return maximum XY stage sequence length."""
+        return self.get_sequence_max_length()
+
+    def load_xy_stage_sequence(self, positions: list[tuple[float, float]]) -> None:
+        """Load an XY stage position sequence."""
+        self.send_sequence(tuple(positions))
+
+    def start_xy_stage_sequence(self) -> None:
+        """Start the loaded XY stage sequence."""
+        self.start_sequence()
+
+    def stop_xy_stage_sequence(self) -> None:
+        """Stop the running XY stage sequence."""
+        self.stop_sequence()
 
 
 class XYStepperStageDevice(XYStageDevice):
@@ -188,7 +290,8 @@ class XYStepperStageDevice(XYStageDevice):
         y_steps = self._origin_y_steps + steps_y
         self.set_position_steps(x_steps, y_steps)
 
-        self.core.events.XYStagePositionChanged.emit(self.get_label(), x, y)
+        if self._notify_ is not None:
+            self._notify_.on_xy_stage_position_changed(x, y)
 
     def get_position_um(self) -> tuple[float, float]:
         """Get the position of the XY stage in microns."""
@@ -231,7 +334,8 @@ class XYStepperStageDevice(XYStageDevice):
         self.set_relative_position_steps(steps_x, steps_y)
 
         x, y = self.get_position_um()
-        self.core.events.XYStagePositionChanged.emit(self.get_label(), x, y)
+        if self._notify_ is not None:
+            self._notify_.on_xy_stage_position_changed(x, y)
 
     def set_adapter_origin_um(self, x: float = 0.0, y: float = 0.0) -> None:
         """Alter the software coordinate translation between micrometers and steps.

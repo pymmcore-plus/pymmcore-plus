@@ -135,14 +135,13 @@ class StateDevice(Device):
         # internal method to set the state, called by the property setter
         # to keep the label and state property in sync
         self.set_state(state)  # call the device-specific method
-        self.core.events.propertyChanged.emit(
-            self.get_label(), Keyword.State.value, state
-        )
         label = self._state_to_label.get(state, "")
         self.set_property_value(Keyword.Label, label)
-        self.core.events.propertyChanged.emit(
-            self.get_label(), Keyword.Label.value, label
-        )
+        # Notify CMMCore of both State and Label changes.
+        # Mirrors CStateDeviceBase::OnStateChanged() in C++.
+        if self._notify_ is not None:
+            self._notify_.on_property_changed(Keyword.State.value, str(state))
+            self._notify_.on_property_changed(Keyword.Label.value, label)
 
     def _get_current_label(self) -> str:
         # internal method to get the current label, called by the property getter
@@ -156,3 +155,15 @@ class StateDevice(Device):
         pos = self._label_to_state.get(label)
         if pos != self.get_property_value(Keyword.State):
             self.set_property_value(Keyword.State, pos)  # will trigger set_state
+
+    # -- Bridge protocol --
+
+    def _post_bridge_initialize(self) -> None:
+        """Register position labels with C++ CStateDeviceBase."""
+        if self._notify_ is not None:
+            for pos, label in self._state_to_label.items():
+                self._notify_.set_position_label(pos, label)
+
+    def get_number_of_positions(self) -> int:
+        """Return the number of available positions."""
+        return len(self._state_to_label)

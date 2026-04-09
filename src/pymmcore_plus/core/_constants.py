@@ -180,6 +180,18 @@ class PropertyType(IntEnum):
     Boolean = auto()  # not supported in pymmcore
     Enum = auto()  # not supported in pymmcore
 
+    def parse_value(self, val_str: str) -> Any:
+        """Parse a string value from C++ back to a typed Python value."""
+        if self == PropertyType.Float:
+            return float(val_str)
+        if self == PropertyType.Integer:
+            return int(float(val_str))  # int(float(...)) handles "3.0"
+        if self == PropertyType.Boolean:
+            return val_str.lower() not in ("0", "false", "")
+        if self == PropertyType.String:
+            return str(val_str)
+        return val_str
+
     def to_python(self) -> type | None:
         return {0: None, 1: str, 2: float, 3: int}[self]
 

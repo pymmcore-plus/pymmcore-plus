@@ -235,6 +235,13 @@ class PropertyController(Generic[TDev, TProp]):
         if self.fseq_stop is not None:
             self.fseq_stop(instance)
 
+    # -- String-based entry points for C++ bridge callbacks --
+
+    def load_sequence_from_strings(self, instance: TDev, str_seq: list[str]) -> None:
+        """Parse string sequence and load. Used by C++ bridge AfterLoadSequence."""
+        typed = [self.property.type.parse_value(s) for s in str_seq]
+        self.load_sequence(instance, typed)
+
     # ------------------------- Decorators -------------------------
 
     def setter(self, fset: Callable[[TDev, TProp], None]) -> Self:
