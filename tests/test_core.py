@@ -118,6 +118,172 @@ def test_new_position_methods(core: CMMCorePlus) -> None:
     assert round(z2, 2) == z1 + 1
 
 
+def test_wait_for_device_default_path(core: CMMCorePlus) -> None:
+    """Without timeout_ms, delegates to base C++ waitForDevice (unchanged)."""
+    # Camera in the demo config is never busy — just make sure no kwarg works.
+    core.waitForDevice("Camera")
+
+
+def test_wait_for_device_custom_timeout_healthy(core: CMMCorePlus) -> None:
+    """Custom timeout on a not-busy device returns (near-)instantly."""
+    import time as _t
+
+    t0 = _t.monotonic()
+    core.waitForDevice("Camera", timeout_ms=1000)
+    # one Busy() check + return — well under one polling interval
+    assert _t.monotonic() - t0 < 0.05
+
+
+def test_wait_for_device_custom_timeout_busy_raises(
+    core: CMMCorePlus,
+) -> None:
+    """Stuck-busy device raises TimeoutError within [timeout_ms, +slack] ms."""
+    import time as _t
+
+    with patch.object(core, "deviceBusy", return_value=True):
+        t0 = _t.monotonic()
+        with pytest.raises(TimeoutError, match=r"timed out after 50"):
+            core.waitForDevice("Camera", timeout_ms=50)
+        elapsed = _t.monotonic() - t0
+
+    # Should be at least ~timeout_ms (minus one sleep granularity) and not
+    # wildly longer. Generous upper bound for CI jitter.
+    assert 0.030 <= elapsed <= 0.500, f"elapsed={elapsed:.3f}s"
+
+
+def test_wait_for_device_zero_timeout_healthy(core: CMMCorePlus) -> None:
+    """timeout_ms=0 on not-busy device: single Busy() check, returns."""
+    import time as _t
+
+    t0 = _t.monotonic()
+    core.waitForDevice("Camera", timeout_ms=0)
+    assert _t.monotonic() - t0 < 0.05
+
+
+def test_wait_for_device_zero_timeout_busy_fast_fails(
+    core: CMMCorePlus,
+) -> None:
+    """timeout_ms=0 on busy device: raises immediately without sleeping."""
+    import time as _t
+
+    with patch.object(core, "deviceBusy", return_value=True):
+        t0 = _t.monotonic()
+        with pytest.raises(TimeoutError):
+            core.waitForDevice("Camera", timeout_ms=0)
+        # A single deviceBusy() check + raise — no polling sleep.
+        assert _t.monotonic() - t0 < 0.05
+
+
+def test_wait_for_device_core_short_circuit(core: CMMCorePlus) -> None:
+    """The ``timeout_ms`` path short-circuits for the 'Core' pseudo-device,
+    matching C++ CMMCore::waitForDevice which returns immediately for
+    ``IsCoreDeviceLabel``."""
+    # Patch deviceBusy to explode if called — the short-circuit should
+    # mean we never reach it for 'Core'.
+    with patch.object(
+        core,
+        "deviceBusy",
+        side_effect=AssertionError("should not be called for Core"),
+    ):
+        core.waitForDevice("Core", timeout_ms=50)
+        core.waitForDevice("Core", timeout_ms=0)
+
+
+def test_wait_for_device_custom_timeout_becomes_free(
+    core: CMMCorePlus,
+) -> None:
+    """Device that clears Busy() mid-wait returns without raising."""
+    import time as _t
+
+    call_count = {"n": 0}
+    t0 = _t.monotonic()
+
+    def _busy(_label: str) -> bool:
+        call_count["n"] += 1
+        # Report busy for the first ~30 ms, then report free.
+        return (_t.monotonic() - t0) < 0.030
+
+    with patch.object(core, "deviceBusy", side_effect=_busy):
+        core.waitForDevice("Camera", timeout_ms=1000)
+
+    # We polled at least a couple of times, and it did eventually return.
+    assert call_count["n"] >= 2
+
+
+def test_device_timeout_registry(core: CMMCorePlus) -> None:
+    """setDeviceTimeoutMs / getDeviceTimeoutMs store per-device overrides
+    that are consulted by waitForDevice when no per-call kwarg is given."""
+    # Initially empty.
+    assert core.getDeviceTimeoutMs("Camera") is None
+
+    # Set and read back.
+    core.setDeviceTimeoutMs("Camera", 500)
+    assert core.getDeviceTimeoutMs("Camera") == 500
+
+    # waitForDevice uses the registry entry (Camera is not busy → returns).
+    core.waitForDevice("Camera")
+
+    # Clear with None.
+    core.setDeviceTimeoutMs("Camera", None)
+    assert core.getDeviceTimeoutMs("Camera") is None
+
+
+def test_device_timeout_registry_busy_raises(core: CMMCorePlus) -> None:
+    """A registry timeout triggers TimeoutError on a busy device even
+    without a per-call kwarg."""
+    import time as _t
+
+    core.setDeviceTimeoutMs("Camera", 50)
+    with patch.object(core, "deviceBusy", return_value=True):
+        t0 = _t.monotonic()
+        with pytest.raises(TimeoutError, match=r"timed out after 50"):
+            core.waitForDevice("Camera")  # no per-call kwarg
+        elapsed = _t.monotonic() - t0
+    assert 0.030 <= elapsed <= 0.500, f"elapsed={elapsed:.3f}s"
+
+
+def test_device_timeout_kwarg_overrides_registry(core: CMMCorePlus) -> None:
+    """Per-call kwarg takes precedence over the registry."""
+    core.setDeviceTimeoutMs("Camera", 0)  # registry says fast-fail
+    # Per-call gives 1 s — more than enough for a not-busy device.
+    core.waitForDevice("Camera", timeout_ms=1000)
+
+
+def test_set_timeout_ms_does_not_affect_registry(core: CMMCorePlus) -> None:
+    """Global setTimeoutMs is independent from per-device registry."""
+    core.setDeviceTimeoutMs("Camera", 123)
+    core.setTimeoutMs(9999)
+    assert core.getDeviceTimeoutMs("Camera") == 123
+    assert core.getTimeoutMs() == 9999
+
+
+def test_wait_for_system_uses_registry(core: CMMCorePlus) -> None:
+    """waitForSystem iterates devices Python-side so registry entries apply."""
+    # Track which labels go through the Python polling path.
+    python_path_labels: list[str] = []
+
+    def _spy_busy(label: str) -> bool:
+        python_path_labels.append(label)
+        return False  # not busy
+
+    # Set Camera to a registry override so it enters the Python polling path.
+    core.setDeviceTimeoutMs("Camera", 1000)
+    with patch.object(core, "deviceBusy", side_effect=_spy_busy):
+        core.waitForSystem()
+
+    # Camera went through the Python polling path (called deviceBusy).
+    assert "Camera" in python_path_labels
+
+
+def test_wait_for_system_propagates_timeout(core: CMMCorePlus) -> None:
+    """waitForSystem propagates TimeoutError if a device with a registry
+    entry exceeds its timeout."""
+    core.setDeviceTimeoutMs("Camera", 0)
+    with patch.object(core, "deviceBusy", return_value=True):
+        with pytest.raises(TimeoutError, match="Camera"):
+            core.waitForSystem()
+
+
 def test_mda(core: CMMCorePlus, anybot: Any) -> None:
     """Test signal emission during MDA"""
     mda = MDASequence(

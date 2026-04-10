@@ -294,11 +294,121 @@ def test_waiting():
     assert not core.deviceTypeBusy(DeviceType.Any)
     assert not core.systemBusy()
 
-    core.setTimeoutMs(500)
-    pydev_mock = MagicMock(wraps=core._pydevices)
-    core._pydevices = pydev_mock
-    core.waitForSystem()
-    pydev_mock.wait_for_device_type.assert_called_once_with(DeviceType.Any, 500)
+
+class _StuckBusyDevice(GenericDevice):
+    """Python device whose Busy() flag is perpetually True."""
+
+    def busy(self) -> bool:
+        return True
+
+
+def test_wait_for_device_timeout_pydevice():
+    """UniMMCore.waitForDevice forwards ``timeout_ms`` to the python-device
+    manager, overriding the global ``getTimeoutMs()`` for just this call."""
+    import time as _t
+
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, _StuckBusyDevice())
+    core.initializeDevice(PYDEV)
+
+    # Sanity: global timeout is high, but the per-call override should
+    # bound wall time well below it.
+    core.setTimeoutMs(10_000)
+
+    # timeout_ms=0 on a busy Python device raises almost immediately.
+    t0 = _t.monotonic()
+    with pytest.raises(TimeoutError):
+        core.waitForDevice(PYDEV, timeout_ms=0)
+    assert _t.monotonic() - t0 < 0.5
+
+    # Small but non-zero timeout still raises, but only after ~timeout_ms.
+    t0 = _t.monotonic()
+    with pytest.raises(TimeoutError):
+        core.waitForDevice(PYDEV, timeout_ms=50)
+    elapsed = _t.monotonic() - t0
+    assert 0.030 <= elapsed <= 1.0, f"elapsed={elapsed:.3f}s"
+    # And we did NOT wait the full global 10 s.
+    assert elapsed < 1.0
+
+
+def _spy_wait_for(core):
+    """Context manager that patches PyDeviceManager.wait_for to record calls.
+
+    Yields a list of ``(label, timeout_ms)`` tuples observed.
+    """
+    from contextlib import contextmanager
+    from unittest.mock import patch
+
+    @contextmanager
+    def _ctx():
+        mgr_cls = type(core._pydevices)
+        real = mgr_cls.wait_for
+        seen: list[tuple[str, float]] = []
+
+        def _spy(self, label, timeout_ms=5000, polling_interval=0.01):
+            seen.append((label, timeout_ms))
+            return real(self, label, timeout_ms, polling_interval=polling_interval)
+
+        with patch.object(mgr_cls, "wait_for", _spy):
+            yield seen
+
+    return _ctx()
+
+
+def test_wait_for_device_timeout_pydevice_forwarded_to_wait_for():
+    """The per-call ``timeout_ms`` is what's passed into
+    ``PyDeviceManager.wait_for`` — not the stale global ``getTimeoutMs()``."""
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeDevice(PYDEV)
+    core.setTimeoutMs(5_000)
+
+    with _spy_wait_for(core) as seen:
+        core.waitForDevice(PYDEV, timeout_ms=123)
+        assert seen == [(PYDEV, 123)]
+
+        seen.clear()
+        core.waitForDevice(PYDEV)
+        assert seen == [(PYDEV, 5_000)]
+
+
+def test_wait_for_device_registry_pydevice():
+    """Per-device timeout registry is consulted for Python devices in UniMMCore."""
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeDevice(PYDEV)
+    core.setTimeoutMs(5_000)
+    core.setDeviceTimeoutMs(PYDEV, 200)
+
+    with _spy_wait_for(core) as seen:
+        core.waitForDevice(PYDEV)
+        assert seen == [(PYDEV, 200)]
+
+        seen.clear()
+        core.waitForDevice(PYDEV, timeout_ms=42)
+        assert seen == [(PYDEV, 42)]
+
+        seen.clear()
+        core.setDeviceTimeoutMs(PYDEV, None)
+        core.waitForDevice(PYDEV)
+        assert seen == [(PYDEV, 5_000)]
+
+
+def test_wait_for_system_registry_unicore():
+    """UniMMCore.waitForSystem honours per-device registry for Python devices."""
+    import time as _t
+
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, _StuckBusyDevice())
+    core.initializeDevice(PYDEV)
+    core.setTimeoutMs(10_000)
+    core.setDeviceTimeoutMs(PYDEV, 50)
+
+    t0 = _t.monotonic()
+    with pytest.raises(TimeoutError):
+        core.waitForSystem()
+    elapsed = _t.monotonic() - t0
+    assert elapsed < 1.0, f"elapsed={elapsed:.3f}s"
 
 
 def test_define_config_groups():
