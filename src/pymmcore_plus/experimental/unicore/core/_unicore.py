@@ -673,10 +673,20 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices[label] as dev:
             return dev.busy()
 
-    def waitForDevice(self, label: DeviceLabel | str) -> None:
+    def waitForDevice(
+        self,
+        label: DeviceLabel | str,
+        *,
+        timeout_ms: float | None = None,
+    ) -> None:
         if label not in self._pydevices:  # pragma: no cover
-            return super().waitForDevice(label)
-        self._pydevices.wait_for(label, self.getTimeoutMs())
+            return super().waitForDevice(label, timeout_ms=timeout_ms)
+        if timeout_ms is None:
+            timeout_ms = self.getDeviceTimeoutMs(str(label))
+        effective_timeout = (
+            timeout_ms if timeout_ms is not None else self.getTimeoutMs()
+        )
+        self._pydevices.wait_for(label, effective_timeout)
 
     def waitForConfig(self, group: str, configName: str) -> None:
         # Get config data (merged from C++ and Python)
@@ -698,9 +708,21 @@ class UniMMCore(CMMCorePlus):
     def systemBusy(self) -> bool:
         return self.deviceTypeBusy(DeviceType.AnyType)
 
-    # probably only needed because C++ method is not virtual
     def waitForSystem(self) -> None:
-        self.waitForDeviceType(DeviceType.AnyType)
+        # C++ devices: serial, with per-device registry support.
+        for label in super().getLoadedDevices():
+            self.waitForDevice(label)
+        # Python devices: parallel, with per-device registry support.
+        py_labels = list(self._pydevices)
+        if py_labels:
+            from concurrent.futures import ThreadPoolExecutor, as_completed
+
+            with ThreadPoolExecutor() as executor:
+                futures = [
+                    executor.submit(self.waitForDevice, lbl) for lbl in py_labels
+                ]
+                for future in as_completed(futures):
+                    future.result()
 
     def waitForDeviceType(self, devType: int) -> None:
         super().waitForDeviceType(devType)

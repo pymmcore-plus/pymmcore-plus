@@ -261,6 +261,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         self._last_config: tuple[str, str] = ("", "")
         # last position set by setXYPosition, None means currentXYStageDevice
         self._last_xy_position: dict[str | None, tuple[float, float]] = {}
+        # per-device timeout overrides (label → ms).  Consulted by
+        # waitForDevice / waitForSystem when no per-call timeout_ms is given.
+        self._device_timeouts: dict[str, float] = {}
 
         self._mm_path = mm_path or find_micromanager()
         if not adapter_paths and self._mm_path:
@@ -529,6 +532,110 @@ class CMMCorePlus(pymmcore.CMMCore):
         enum is more interpretable than the raw `int` returned by `pymmcore`
         """
         return DeviceInitializationState(super().getDeviceInitializationState(label))
+
+    def setDeviceTimeoutMs(self, label: str, timeout_ms: float | None) -> None:
+        """Set or clear a per-device timeout override for :meth:`waitForDevice`.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        When set, :meth:`waitForDevice` and :meth:`waitForSystem` will use this
+        value instead of the global :meth:`getTimeoutMs` for the given device.
+        The global :meth:`setTimeoutMs` is unaffected and continues to apply to
+        all devices without a per-device override.
+
+        Parameters
+        ----------
+        label : str
+            Device label.
+        timeout_ms : float | None
+            Timeout in milliseconds, or ``None`` to clear the override and
+            fall back to the global :meth:`getTimeoutMs`.
+        """
+        if timeout_ms is None:
+            self._device_timeouts.pop(label, None)
+        else:
+            self._device_timeouts[label] = timeout_ms
+
+    def getDeviceTimeoutMs(self, label: str) -> float | None:
+        """Return the per-device timeout override, or ``None`` if not set.
+
+        :sparkles: *This method is new in `CMMCorePlus`.*
+
+        See :meth:`setDeviceTimeoutMs` for details.
+        """
+        return self._device_timeouts.get(label)
+
+    def waitForDevice(
+        self,
+        label: DeviceLabel | str,
+        *,
+        timeout_ms: float | None = None,
+    ) -> None:
+        """Block until ``label`` reports not-busy, or raise :class:`TimeoutError`.
+
+        **Why Override?** To allow a per-call timeout override without touching
+        the global :meth:`setTimeoutMs`. Devices with unreliable ``Busy()`` flags
+        (for example, DMD or XY-stage adapters that report busy forever) cause
+        :meth:`waitForSystem` to eat the full global timeout on every event. A
+        per-call override — and especially ``timeout_ms=0`` — lets callers
+        fast-fail on known-bad devices without a class-wide skip list.
+
+        The timeout resolution order is:
+        1. ``timeout_ms`` kwarg (if passed)
+        2. Per-device override from :meth:`setDeviceTimeoutMs` (if set)
+        3. Global :meth:`getTimeoutMs` (C++ fast path)
+
+        Parameters
+        ----------
+        label : str
+            Device label.
+        timeout_ms : float, optional
+            Per-call timeout override in milliseconds. ``None`` (default)
+            consults the per-device registry, then the global timeout.
+            ``0`` means "check :meth:`deviceBusy` once and raise
+            :class:`TimeoutError` immediately if still busy".
+
+        Raises
+        ------
+        TimeoutError
+            If a per-call or per-device timeout is active and the device is
+            still busy when the deadline expires. (When falling through to the
+            C++ path, the base class raises ``RuntimeError`` on timeout.)
+        """
+        if timeout_ms is None:
+            timeout_ms = self._device_timeouts.get(str(label))
+        if timeout_ms is None:
+            return super().waitForDevice(label)
+
+        # Core pseudo-device is never busy.
+        if str(label) == Keyword.CoreDevice:
+            return
+
+        # Python-side polling loop with 10 ms cadence (matches MMCore's
+        # pollingIntervalMs_).
+        poll_interval_s = 0.010
+        deadline = time.monotonic() + timeout_ms / 1000.0
+        while True:
+            if not self.deviceBusy(label):
+                return
+            if time.monotonic() >= deadline:
+                raise TimeoutError(
+                    f"waitForDevice({label!r}) timed out after {timeout_ms} ms"
+                )
+            time.sleep(poll_interval_s)
+
+    def waitForSystem(self) -> None:
+        """Wait for all loaded devices to become non-busy.
+
+        **Why Override?** The C++ ``waitForSystem`` applies the global
+        :meth:`getTimeoutMs` uniformly to every device. This override iterates
+        :meth:`getLoadedDevices` in Python and calls :meth:`waitForDevice` per
+        device, so per-device timeouts registered via :meth:`setDeviceTimeoutMs`
+        are honoured automatically. Devices without a per-device override still
+        use the global timeout via the C++ fast path.
+        """
+        for label in self.getLoadedDevices():
+            self.waitForDevice(label)
 
     # config overrides
 
