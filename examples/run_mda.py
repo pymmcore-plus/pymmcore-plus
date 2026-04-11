@@ -2,15 +2,21 @@ import itertools
 import sys
 
 import numpy as np
+import useq
 from useq import MDAEvent, MDASequence
 
 from pymmcore_plus import CMMCorePlus
 
 # see https://pymmcore-plus.github.io/useq-schema/api/ (1)
 sequence = MDASequence(
+    stage_positions=useq.WellPlatePlan(
+        plate="96-well",
+        a1_center_xy=(0, 0),
+        selected_wells=[(0, 0), (1, 0)],
+    ),
     channels=[{"config": "DAPI", "exposure": 10}, {"config": "FITC", "exposure": 50}],
-    time_plan={"interval": 1, "loops": 5},
-    z_plan={"range": 4, "step": 0.5},
+    time_plan={"interval": 0.1, "loops": 5},
+    # z_plan={"range": 4, "step": 0.5},
     axis_order="tpcz",
 )
 

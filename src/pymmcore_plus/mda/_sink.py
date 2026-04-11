@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-import json
 import warnings
-from typing import TYPE_CHECKING, Any, Protocol, cast
+from typing import TYPE_CHECKING, Any, Protocol
 
 from ome_writers import (
     AcquisitionSettings,
@@ -20,13 +19,14 @@ if TYPE_CHECKING:
     from pathlib import Path
 
     import numpy as np
-    import ome_types.model as ome
     from ome_writers import OMEStream
     from ome_writers._useq import AcquisitionSettingsDict
     from useq import MDAEvent, MDASequence
 
     from pymmcore_plus.mda._runner import DimensionOverride, SinkView
     from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
+
+SUMMARY_NAMESPACE = "pymmcore_plus"
 
 
 class SinkProtocol(Protocol):
@@ -141,7 +141,7 @@ class OmeWritersSink(SinkProtocol):
         self._settings = AcquisitionSettings.model_validate(new_settings)
         self._stream = create_stream(self._settings)
         self._summary_meta = meta
-        self._write_summary_metadata()
+        self._set_summary_metadata()
 
     def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None:
         self._stream.append(img, frame_metadata=_frame_meta_to_ome(meta))  # type: ignore[union-attr]
@@ -152,48 +152,28 @@ class OmeWritersSink(SinkProtocol):
     def close(self) -> None:
         if self._stream is not None:
             self._stream.close()
-            self._write_summary_metadata(after_close=True)
 
     def get_view(self) -> SinkView | None:
         if self._stream is None:
             return None
         return self._stream.view(dynamic_shape=True, strict=False)
 
-    def _write_summary_metadata(self, *, after_close: bool = False) -> None:
-        """Write summary metadata to the stream in a format-aware way.
+    def _set_summary_metadata(self) -> None:
+        """Attach acquisition-level summary metadata to the stream.
 
-        For OME-Zarr this is called immediately after stream creation.
-        For OME-TIFF this must be called after close (TIFF requires finalization
-        before metadata can be updated).
+        Delegates to `OMEStream.set_summary_metadata`. Where the payload
+        lands on disk is format-defined: parent root group for OME-Zarr,
+        canonical metadata file for single-file / master-tiff / companion-file
+        OME-TIFF, or every per-position file for OME-TIFF `redundant` mode.
         """
         if self._stream is None or self._summary_meta is None:
             return
 
-        fmt = self._settings.format.name
-        if fmt == "ome-zarr" and not after_close:
-            summary_dict = _serialize_summary_meta(self._summary_meta)
-            zarr_meta = cast("dict[str, dict]", self._stream.get_metadata())
-            try:
-                for _path, attrs in zarr_meta.items():
-                    attrs.setdefault("pymmcore_plus", {})["summary_metadata"] = (
-                        summary_dict
-                    )
-                self._stream.update_metadata(zarr_meta)
-            except Exception as e:
-                logger.warning(
-                    "Failed to add summary metadata to OME-Zarr: %s", e, exc_info=True
-                )
-
-        elif fmt == "ome-tiff" and after_close:
-            summary_dict = _serialize_summary_meta(self._summary_meta)
-            tiff_meta = cast("dict[int, ome.OME]", self._stream.get_metadata())
-            try:
-                _enrich_tiff_with_summary(tiff_meta, summary_dict)
-                self._stream.update_metadata(tiff_meta)
-            except Exception as e:
-                logger.warning(
-                    "Failed to add summary metadata to OME-TIFF: %s", e, exc_info=True
-                )
+        payload = {"summary_metadata": _serialize_summary_meta(self._summary_meta)}
+        try:
+            self._stream.set_summary_metadata(SUMMARY_NAMESPACE, payload)
+        except Exception as e:
+            logger.warning("Failed to attach summary metadata: %s", e, exc_info=True)
 
 
 def _unbounded_3d_settings(
@@ -245,64 +225,3 @@ def _serialize_summary_meta(meta: SummaryMetaV1) -> dict[str, Any]:
     if (seq := meta.get("mda_sequence")) and isinstance(seq, BaseModel):
         d["mda_sequence"] = seq.model_dump(mode="json", exclude_unset=True)
     return d
-
-
-def _enrich_tiff_with_summary(
-    metadata: Mapping[int, ome.OME], summary_dict: dict[str, Any]
-) -> None:
-    """Add summary metadata to OME-TIFF as MapAnnotations."""
-    import ome_types.model as ome
-
-    summary_json = json.dumps(summary_dict)
-
-    for _pos_idx, ome_model in metadata.items():
-        if not ome_model.structured_annotations:
-            ome_model.structured_annotations = ome.StructuredAnnotations()
-
-        annotation = ome.MapAnnotation(
-            namespace="pymmcore_plus",
-            value={"summary_metadata_json": summary_json},  # pyright: ignore
-        )
-        ome_model.structured_annotations.map_annotations.append(annotation)
-
-
-# # If we ever to output actual XML metadata instead of JSON blobs,
-# # it would look like this:
-#
-# summary_xml = _dict_to_xml({"pymmcore_plus": {"summary_metadata": summary_dict}})
-# for _pos_idx, ome_model in metadata.items():
-#     if not ome_model.structured_annotations:
-#         ome_model.structured_annotations = ome.StructuredAnnotations()
-#     annotation = ome.XMLAnnotation(value=summary_xml)  # type: ignore
-#     ome_model.structured_annotations.xml_annotations.append(annotation)
-#
-# def _dict_to_xml(d: dict, root_tag: str = "data") -> str:
-#     try:
-#         from lxml.etree import Element, tostring
-#     except ImportError:
-#         from xml.etree.ElementTree import Element, tostring
-
-#     _SINGULAR = {"properties": "property"}
-
-#     def _build(parent: Element, obj: object) -> None:
-#         if isinstance(obj, dict):
-#             for k, v in obj.items():
-#                 child = Element(k)
-#                 parent.append(child)
-#                 _build(child, v)
-#         elif isinstance(obj, (list, tuple)):
-#             # Use singular of parent tag as item wrapper, or "item"
-#             tag = _SINGULAR.get(
-#                 parent.tag,
-#                 parent.tag.rstrip("s") if parent.tag.endswith("s") else "item",
-#             )
-#             for item in obj:
-#                 child = Element(tag)
-#                 parent.append(child)
-#                 _build(child, item)
-#         else:
-#             parent.text = str(obj)
-
-#     root = Element(root_tag)
-#     _build(root, d)
-#     return tostring(root, encoding="unicode")
