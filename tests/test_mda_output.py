@@ -91,7 +91,7 @@ def test_run_with_zarr_output(core: CMMCorePlus, tmp_path: Path) -> None:
     assert view.shape[:-2] == (2,)
     assert out.exists()
 
-    # Summary metadata is written by ome-writers' set_summary_metadata under
+    # Summary metadata is written by ome-writers' set_global_metadata under
     # the "pymmcore_plus" namespace. For single-position the parent root
     # group IS the image group, so it lives in <root>/zarr.json directly.
     # The summary dict is wrapped under a "summary_metadata" sub-key so the
@@ -105,7 +105,7 @@ def test_run_with_zarr_output_multiposition(core: CMMCorePlus, tmp_path: Path) -
     """Multi-position writes summary metadata exactly once at the root group.
 
     Regression test: previously the sink looped over every per-position group
-    and stamped the same summary blob into each one. With set_summary_metadata
+    and stamped the same summary blob into each one. With set_global_metadata
     the payload lives in the parent root group's zarr.json only.
     """
     runner = core.mda
@@ -143,10 +143,11 @@ def test_run_with_tiff_output(core: CMMCorePlus, tmp_path: Path) -> None:
     runner.run(seq, output=out)
     assert out.exists()
 
-    # ome-writers set_summary_metadata writes a single MapAnnotation with the
-    # mapping JSON-encoded under the "data_json" key. Inside that JSON we
-    # wrap the summary under "summary_metadata" so the pymmcore_plus
-    # namespace stays available for other pymmcore-plus data.
+    # ome-writers set_global_metadata writes a single MapAnnotation for the
+    # namespace, with each top-level key of the payload mapping becoming a
+    # `Map` entry whose value is the JSON-encoded value. We wrap the summary
+    # under "summary_metadata" so the pymmcore_plus namespace stays available
+    # for other pymmcore-plus data.
     import ome_types
 
     ome = ome_types.from_tiff(str(out))
@@ -155,9 +156,8 @@ def test_run_with_tiff_output(core: CMMCorePlus, tmp_path: Path) -> None:
     pmc = [m for m in sa.map_annotations if m.namespace == "pymmcore_plus"]
     assert len(pmc) == 1
     entries = {e.k: e.value for e in pmc[0].value.ms}
-    assert "data_json" in entries
-    payload = json.loads(entries["data_json"])
-    summary = payload["summary_metadata"]
+    assert "summary_metadata" in entries
+    summary = json.loads(entries["summary_metadata"])
     assert SUMMARY_META_KEYS <= set(summary)
 
     # The summary annotation must not be referenced by any plane: it lives at
@@ -207,8 +207,8 @@ def test_run_with_tiff_output_multiposition(core: CMMCorePlus, tmp_path: Path) -
         pmc = [m for m in sa.map_annotations if m.namespace == "pymmcore_plus"]
         assert len(pmc) == 1, f"expected one summary annotation in {tiff_path.name}"
         entries = {e.k: e.value for e in pmc[0].value.ms}
-        payload = json.loads(entries["data_json"])
-        summary = payload["summary_metadata"]
+        assert "summary_metadata" in entries
+        summary = json.loads(entries["summary_metadata"])
         assert SUMMARY_META_KEYS <= set(summary)
 
 

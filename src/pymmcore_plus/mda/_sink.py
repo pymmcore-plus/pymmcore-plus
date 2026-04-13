@@ -161,7 +161,7 @@ class OmeWritersSink(SinkProtocol):
     def _set_summary_metadata(self) -> None:
         """Attach acquisition-level summary metadata to the stream.
 
-        Delegates to `OMEStream.set_summary_metadata`. Where the payload
+        Delegates to `OMEStream.set_global_metadata`. Where the payload
         lands on disk is format-defined: parent root group for OME-Zarr,
         canonical metadata file for single-file / master-tiff / companion-file
         OME-TIFF, or every per-position file for OME-TIFF `redundant` mode.
@@ -171,7 +171,7 @@ class OmeWritersSink(SinkProtocol):
 
         payload = {"summary_metadata": _serialize_summary_meta(self._summary_meta)}
         try:
-            self._stream.set_summary_metadata(SUMMARY_NAMESPACE, payload)
+            self._stream.set_global_metadata(SUMMARY_NAMESPACE, payload)
         except Exception as e:
             logger.warning("Failed to attach summary metadata: %s", e, exc_info=True)
 
