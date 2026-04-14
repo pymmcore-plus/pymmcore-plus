@@ -26,8 +26,6 @@ if TYPE_CHECKING:
     from pymmcore_plus.mda._runner import DimensionOverride, SinkView
     from pymmcore_plus.metadata.schema import FrameMetaV1, SummaryMetaV1
 
-SUMMARY_NAMESPACE = "pymmcore_plus"
-
 
 class SinkProtocol(Protocol):
     def setup(self, sequence: MDASequence, meta: SummaryMetaV1 | None) -> None: ...
@@ -171,7 +169,7 @@ class OmeWritersSink(SinkProtocol):
 
         payload = {"summary_metadata": _serialize_summary_meta(self._summary_meta)}
         try:
-            self._stream.set_global_metadata(SUMMARY_NAMESPACE, payload)
+            self._stream.set_global_metadata("pymmcore_plus", payload)
         except Exception as e:
             logger.warning("Failed to attach summary metadata: %s", e, exc_info=True)
 
