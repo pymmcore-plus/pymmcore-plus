@@ -816,8 +816,10 @@ class MDAEngine(PMDAEngine):
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError(
-                "Circular buffer overflowed. Set PYMM_BUFFER_SIZE_MB to increase, "
-                f"currently at {core.getCircularBufferMemoryFootprint()} MB."
+                f"Circular buffer overflowed (currently "
+                f"{core.getCircularBufferMemoryFootprint()} MB). Increase the size "
+                "using core.setCircularBufferMemoryFootprint() or the "
+                "PYMM_BUFFER_SIZE_MB env variable."
             )
 
         # Yield None for each missing frame so the runner can tell the sink
@@ -878,8 +880,10 @@ class MDAEngine(PMDAEngine):
 
         if core.isBufferOverflowed():  # pragma: no cover
             raise MemoryError(
-                "Circular buffer overflowed. Set PYMM_BUFFER_SIZE_MB to increase, "
-                f"currently at {core.getCircularBufferMemoryFootprint()} MB."
+                f"Circular buffer overflowed (currently "
+                f"{core.getCircularBufferMemoryFootprint()} MB). Increase the size "
+                "using core.setCircularBufferMemoryFootprint() or the "
+                "PYMM_BUFFER_SIZE_MB env variable."
             )
 
         # Flush buffered frames and validate count
