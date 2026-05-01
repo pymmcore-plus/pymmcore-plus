@@ -815,7 +815,12 @@ class MDAEngine(PMDAEngine):
             self._handle_timeout(timeout)
 
         if core.isBufferOverflowed():  # pragma: no cover
-            raise MemoryError("Buffer overflowed")
+            raise MemoryError(
+                f"Circular buffer overflowed (currently "
+                f"{core.getCircularBufferMemoryFootprint()} MB). Increase the size "
+                "using core.setCircularBufferMemoryFootprint() or the "
+                "PYMM_BUFFER_SIZE_MB env variable."
+            )
 
         # Yield None for each missing frame so the runner can tell the sink
         n_expected = len(event.events)
@@ -874,7 +879,12 @@ class MDAEngine(PMDAEngine):
             self._handle_timeout(timeout)
 
         if core.isBufferOverflowed():  # pragma: no cover
-            raise MemoryError("Buffer overflowed")
+            raise MemoryError(
+                f"Circular buffer overflowed (currently "
+                f"{core.getCircularBufferMemoryFootprint()} MB). Increase the size "
+                "using core.setCircularBufferMemoryFootprint() or the "
+                "PYMM_BUFFER_SIZE_MB env variable."
+            )
 
         # Flush buffered frames and validate count
         for payload in coordinator.flush_remaining():
