@@ -412,8 +412,9 @@ class MDARunner:
                 with self._lock:
                     if self._finish_reason is None:
                         self._finish_reason = FinishReason.ERRORED
-            with exceptions_logged():
-                self._finish_run(sequence)
+            finally:
+                with exceptions_logged():
+                    self._finish_run(sequence)
         if error is not None:
             raise error
 
