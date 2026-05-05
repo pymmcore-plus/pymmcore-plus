@@ -312,6 +312,8 @@ def _spy_wait_for(core):
 
     @contextmanager
     def _ctx():
+        # Patch the class — PyDeviceManager uses __slots__ so instance patching
+        # raises "attribute is read-only".
         mgr_cls = type(core._pydevices)
         real = mgr_cls.wait_for
         seen: list[tuple[str, float]] = []
@@ -352,6 +354,22 @@ def test_wait_for_device_registry_pydevice():
     core.unsetDeviceTimeout(PYDEV)
     assert core.hasDeviceTimeout(PYDEV) is False
     assert core.getDeviceTimeoutMs(PYDEV) == 5_000
+
+
+def test_pydevice_timeout_cleared_on_unload():
+    """Override is dropped when the device is unloaded, not silently inherited."""
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeDevice(PYDEV)
+
+    core.setDeviceTimeoutMs(PYDEV, 250)
+    assert core.hasDeviceTimeout(PYDEV) is True
+
+    core.unloadDevice(PYDEV)
+    # Reload under the same label; override must not survive.
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeDevice(PYDEV)
+    assert core.hasDeviceTimeout(PYDEV) is False
 
 
 def test_pydevice_timeout_must_be_positive():
