@@ -383,6 +383,24 @@ def test_pydevice_timeout_must_be_positive():
         core.setDeviceTimeoutMs(PYDEV, -10)
 
 
+def test_wait_for_device_type_registry_unicore():
+    """UniMMCore.waitForDeviceType honours per-device registry for Python devices."""
+    import time as _t
+
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, _StuckBusyDevice())
+    core.initializeDevice(PYDEV)
+    core.setTimeoutMs(10_000)
+    core.setDeviceTimeoutMs(PYDEV, 50)
+
+    pydev_type = core.getDeviceType(PYDEV)
+    t0 = _t.monotonic()
+    with pytest.raises(TimeoutError):
+        core.waitForDeviceType(pydev_type)
+    elapsed = _t.monotonic() - t0
+    assert elapsed < 1.0, f"elapsed={elapsed:.3f}s"
+
+
 def test_wait_for_system_registry_unicore():
     """UniMMCore.waitForSystem honours per-device registry for Python devices."""
     import time as _t

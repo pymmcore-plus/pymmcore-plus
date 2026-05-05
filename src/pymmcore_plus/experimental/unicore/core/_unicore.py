@@ -711,10 +711,7 @@ class UniMMCore(CMMCorePlus):
         if label not in self._pydevices:
             super().waitForDevice(label)
             return
-        timeout_ms = self._pydevice_timeouts.get(label)
-        if timeout_ms is None:
-            timeout_ms = self.getTimeoutMs()
-        self._pydevices.wait_for(label, timeout_ms)
+        self._pydevices.wait_for(label, self._pydevice_timeout(label))
 
     def waitForConfig(self, group: str, configName: str) -> None:
         # Get config data (merged from C++ and Python)
@@ -736,24 +733,21 @@ class UniMMCore(CMMCorePlus):
     def systemBusy(self) -> bool:
         return self.deviceTypeBusy(DeviceType.AnyType)
 
+    def _pydevice_timeout(self, label: str) -> int:
+        timeout_ms = self._pydevice_timeouts.get(label)
+        return timeout_ms if timeout_ms is not None else self.getTimeoutMs()
+
     def waitForSystem(self) -> None:
         # C++ devices: per-device registry honoured by C++ itself.
         super().waitForSystem()
-        # Python devices: parallel, with per-device registry support.
-        py_labels = list(self._pydevices)
-        if py_labels:
-            from concurrent.futures import ThreadPoolExecutor, as_completed
-
-            with ThreadPoolExecutor() as executor:
-                futures = [
-                    executor.submit(self.waitForDevice, lbl) for lbl in py_labels
-                ]
-                for future in as_completed(futures):
-                    future.result()
+        # Python devices: parallel, per-device timeout from registry/global.
+        self._pydevices.wait_for_each(self._pydevices, self._pydevice_timeout)
 
     def waitForDeviceType(self, devType: int) -> None:
         super().waitForDeviceType(devType)
-        self._pydevices.wait_for_device_type(devType, self.getTimeoutMs())
+        self._pydevices.wait_for_each(
+            self._pydevices.get_labels_of_type(devType), self._pydevice_timeout
+        )
 
     def deviceTypeBusy(self, devType: int) -> bool:
         if super().deviceTypeBusy(devType):
