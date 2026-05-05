@@ -676,20 +676,21 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices[label] as dev:
             return dev.busy()
 
-    def setDeviceTimeoutMs(self, label: str, timeout_ms: float | None) -> None:
+    def setDeviceTimeoutMs(self, label: str, timeout_ms: int) -> None:
         if label not in self._pydevices:
-            return super().setDeviceTimeoutMs(label, timeout_ms)
-        if timeout_ms is None:
-            self._pydevice_timeouts.pop(str(label), None)
-        elif timeout_ms <= 0:
+            # TODO: drop type: ignore once pymmcore stubs ship #914.
+            super().setDeviceTimeoutMs(label, timeout_ms)  # type: ignore[misc]
+            return
+        if timeout_ms <= 0:
             raise RuntimeError("Device timeout must be positive")
-        else:
-            self._pydevice_timeouts[str(label)] = float(timeout_ms)
+        self._pydevice_timeouts[str(label)] = float(timeout_ms)
 
-    def getDeviceTimeoutMs(self, label: str) -> float | None:
+    def getDeviceTimeoutMs(self, label: str) -> int:
+        """Return the effective timeout for ``label`` (override or global)."""
         if label not in self._pydevices:
-            return super().getDeviceTimeoutMs(label)
-        return self._pydevice_timeouts.get(str(label))
+            # TODO: drop type: ignore once pymmcore stubs ship #914.
+            return cast("int", super().getDeviceTimeoutMs(label))  # type: ignore[misc]
+        return int(self._pydevice_timeouts.get(str(label), self.getTimeoutMs()))
 
     def hasDeviceTimeout(self, label: str) -> bool:
         if label not in self._pydevices:

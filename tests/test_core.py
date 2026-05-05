@@ -124,21 +124,23 @@ def test_wait_for_device_default_path(core: CMMCorePlus) -> None:
 
 
 def test_device_timeout_registry(core: CMMCorePlus) -> None:
-    """setDeviceTimeoutMs / getDeviceTimeoutMs / hasDeviceTimeout / unset.
+    """C++ per-device timeout API: set / get / has / unset.
 
-    Override returns ``None`` when not set, exposes the override when set,
-    and ``setDeviceTimeoutMs(label, None)`` clears it.
+    ``getDeviceTimeoutMs`` returns the *effective* timeout (override or
+    global). ``hasDeviceTimeout`` answers whether an override is registered.
     """
-    assert core.getDeviceTimeoutMs("Camera") is None
+    core.setTimeoutMs(5000)
     assert core.hasDeviceTimeout("Camera") is False
+    # No override → effective timeout is the global.
+    assert core.getDeviceTimeoutMs("Camera") == 5000
 
     core.setDeviceTimeoutMs("Camera", 500)
-    assert core.getDeviceTimeoutMs("Camera") == 500
     assert core.hasDeviceTimeout("Camera") is True
+    assert core.getDeviceTimeoutMs("Camera") == 500
 
-    core.setDeviceTimeoutMs("Camera", None)
-    assert core.getDeviceTimeoutMs("Camera") is None
+    core.unsetDeviceTimeout("Camera")
     assert core.hasDeviceTimeout("Camera") is False
+    assert core.getDeviceTimeoutMs("Camera") == 5000
 
 
 def test_device_timeout_must_be_positive(core: CMMCorePlus) -> None:
@@ -158,10 +160,11 @@ def test_device_timeout_unknown_device_raises(core: CMMCorePlus) -> None:
 
 
 def test_set_timeout_ms_does_not_affect_registry(core: CMMCorePlus) -> None:
-    """Global setTimeoutMs is independent from per-device registry."""
+    """Global setTimeoutMs is independent from per-device override."""
     core.setDeviceTimeoutMs("Camera", 123)
     core.setTimeoutMs(9999)
-    assert core.getDeviceTimeoutMs("Camera") == 123
+    assert core.hasDeviceTimeout("Camera") is True
+    assert core.getDeviceTimeoutMs("Camera") == 123  # override wins
     assert core.getTimeoutMs() == 9999
 
 

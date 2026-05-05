@@ -333,30 +333,25 @@ def test_wait_for_device_registry_pydevice():
     core.initializeDevice(PYDEV)
     core.setTimeoutMs(5_000)
 
-    # No override yet → falls back to global timeout.
-    assert core.getDeviceTimeoutMs(PYDEV) is None
+    # No override yet → effective timeout is the global.
     assert core.hasDeviceTimeout(PYDEV) is False
+    assert core.getDeviceTimeoutMs(PYDEV) == 5_000
     with _spy_wait_for(core) as seen:
         core.waitForDevice(PYDEV)
         assert seen == [(PYDEV, 5_000)]
 
     # With override registered.
     core.setDeviceTimeoutMs(PYDEV, 200)
-    assert core.getDeviceTimeoutMs(PYDEV) == 200
     assert core.hasDeviceTimeout(PYDEV) is True
+    assert core.getDeviceTimeoutMs(PYDEV) == 200
     with _spy_wait_for(core) as seen:
         core.waitForDevice(PYDEV)
         assert seen == [(PYDEV, 200)]
 
-    # Clearing via setDeviceTimeoutMs(label, None).
-    core.setDeviceTimeoutMs(PYDEV, None)
-    assert core.getDeviceTimeoutMs(PYDEV) is None
-    assert core.hasDeviceTimeout(PYDEV) is False
-
     # Clearing via unsetDeviceTimeout.
-    core.setDeviceTimeoutMs(PYDEV, 200)
     core.unsetDeviceTimeout(PYDEV)
     assert core.hasDeviceTimeout(PYDEV) is False
+    assert core.getDeviceTimeoutMs(PYDEV) == 5_000
 
 
 def test_pydevice_timeout_must_be_positive():

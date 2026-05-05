@@ -530,41 +530,6 @@ class CMMCorePlus(pymmcore.CMMCore):
         """
         return DeviceInitializationState(super().getDeviceInitializationState(label))
 
-    def setDeviceTimeoutMs(self, label: str, timeout_ms: float | None) -> None:
-        """Set or clear a per-device timeout override for :meth:`waitForDevice`.
-
-        **Why Override?** Adds a ``None``-clears convenience over the C++
-        ``setDeviceTimeoutMs`` / ``unsetDeviceTimeout`` pair, so callers can
-        toggle a per-device override with a single method.
-
-        Parameters
-        ----------
-        label : str
-            Device label.
-        timeout_ms : float | None
-            Timeout in milliseconds (must be positive), or ``None`` to clear
-            the override and fall back to the global :meth:`getTimeoutMs`.
-        """
-        # TODO: drop type: ignores once pymmcore stubs ship #914.
-        if timeout_ms is None:
-            super().unsetDeviceTimeout(label)  # type: ignore[misc]
-        else:
-            super().setDeviceTimeoutMs(label, int(timeout_ms))  # type: ignore[misc]
-
-    def getDeviceTimeoutMs(self, label: str) -> float | None:
-        """Return the per-device timeout override, or ``None`` if not set.
-
-        **Why Override?** The C++ ``getDeviceTimeoutMs`` always returns the
-        *effective* timeout (override if set, else the global timeout). This
-        override returns ``None`` when no per-device override is registered,
-        making "is there an override?" answerable from a single call.
-
-        See :meth:`setDeviceTimeoutMs` for details.
-        """
-        if not super().hasDeviceTimeout(label):  # type: ignore[misc]
-            return None
-        return cast("float", super().getDeviceTimeoutMs(label))  # type: ignore[misc]
-
     # config overrides
 
     @overload
