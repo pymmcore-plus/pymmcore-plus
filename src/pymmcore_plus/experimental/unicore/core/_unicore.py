@@ -151,6 +151,9 @@ class UniMMCore(CMMCorePlus):
         # Groups and presets are ALWAYS also created in C++ (via super() calls).
         # This dict only stores (device, property) -> value for Python devices.
         self._py_config_groups: ConfigGroups = {}
+        # Per-device timeout overrides for Python devices. C++ devices use the
+        # C++ registry (CMMCore::setDeviceTimeoutMs) directly via super().
+        self._pydevice_timeouts: dict[str, float] = {}
 
         super().__init__(*args, **kwargs)
 
@@ -673,20 +676,39 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices[label] as dev:
             return dev.busy()
 
-    def waitForDevice(
-        self,
-        label: DeviceLabel | str,
-        *,
-        timeout_ms: float | None = None,
-    ) -> None:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().waitForDevice(label, timeout_ms=timeout_ms)
+    def setDeviceTimeoutMs(self, label: str, timeout_ms: float | None) -> None:
+        if label not in self._pydevices:
+            return super().setDeviceTimeoutMs(label, timeout_ms)
         if timeout_ms is None:
-            timeout_ms = self.getDeviceTimeoutMs(str(label))
-        effective_timeout = (
-            timeout_ms if timeout_ms is not None else self.getTimeoutMs()
-        )
-        self._pydevices.wait_for(label, effective_timeout)
+            self._pydevice_timeouts.pop(str(label), None)
+        elif timeout_ms <= 0:
+            raise RuntimeError("Device timeout must be positive")
+        else:
+            self._pydevice_timeouts[str(label)] = float(timeout_ms)
+
+    def getDeviceTimeoutMs(self, label: str) -> float | None:
+        if label not in self._pydevices:
+            return super().getDeviceTimeoutMs(label)
+        return self._pydevice_timeouts.get(str(label))
+
+    def hasDeviceTimeout(self, label: str) -> bool:
+        if label not in self._pydevices:
+            # TODO: drop type: ignore once pymmcore stubs ship #914.
+            return cast("bool", super().hasDeviceTimeout(label))  # type: ignore[misc]
+        return str(label) in self._pydevice_timeouts
+
+    def unsetDeviceTimeout(self, label: str) -> None:
+        if label not in self._pydevices:
+            # TODO: drop type: ignore once pymmcore stubs ship #914.
+            super().unsetDeviceTimeout(label)  # type: ignore[misc]
+            return
+        self._pydevice_timeouts.pop(str(label), None)
+
+    def waitForDevice(self, label: DeviceLabel | str) -> None:
+        if label not in self._pydevices:
+            return super().waitForDevice(label)
+        timeout_ms = self._pydevice_timeouts.get(str(label), self.getTimeoutMs())
+        self._pydevices.wait_for(label, timeout_ms)
 
     def waitForConfig(self, group: str, configName: str) -> None:
         # Get config data (merged from C++ and Python)
@@ -709,9 +731,8 @@ class UniMMCore(CMMCorePlus):
         return self.deviceTypeBusy(DeviceType.AnyType)
 
     def waitForSystem(self) -> None:
-        # C++ devices: serial, with per-device registry support.
-        for label in super().getLoadedDevices():
-            self.waitForDevice(label)
+        # C++ devices: per-device registry honoured by C++ itself.
+        super().waitForSystem()
         # Python devices: parallel, with per-device registry support.
         py_labels = list(self._pydevices)
         if py_labels:
