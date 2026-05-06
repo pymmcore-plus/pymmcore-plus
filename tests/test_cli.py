@@ -297,19 +297,16 @@ def _background_tail(q: Queue, runner: Any, logfile: Path) -> None:
 
 
 # make this test run last
-# this test is a bit of a mess, but it's the best I can do for now
-# the problem is that it leaves things in a state such that file descriptors are leaked
-# by pretty much every test that creates a core after it.
-@pytest.mark.skipif(bool(not os.getenv("CI")), reason="this is a crappy test")
+# the subprocess-based --tail check is flaky locally due to signal/timing issues,
+# so it's skipped outside CI.
+@pytest.mark.skipif(bool(not os.getenv("CI")), reason="flaky outside CI")
 @pytest.mark.run_last
-@pytest.mark.filterwarnings("ignore:unclosed file:ResourceWarning")
 def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     # create mock log file
     TEST_LOG = tmp_path / "test.log"
     monkeypatch.setattr(_logger, "LOG_FILE", TEST_LOG)
     _logger.configure_logging(file=TEST_LOG)
-    assert _logger.current_logfile(_logger.logger) == TEST_LOG
-    assert TEST_LOG.exists()
+    assert _logger.current_logfile() == TEST_LOG
 
     # instantiate core
     core = CMMCorePlus()
@@ -317,14 +314,11 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     core.loadSystemConfiguration()
     # it may take a moment for the log file to be written
     time.sleep(0.2)
+    assert TEST_LOG.exists()
     # run mmcore logs
     result = runner.invoke(app, ["logs", "-n", "60"])
     assert result.exit_code == 0
     assert "IFO,Core" in result.output  # this will come from CMMCore
-
-    # this one line depends critically on proper monkeypatching, and I can't get
-    # the monkeypatch to work without causing lots of leaked file handle problems.
-    # assert "Initialized" in result.output  # this will come from CMMCorePlus
 
     # run mmcore logs --tail
     # not sure how to kill the subprocess correctly on windows yet
@@ -347,11 +341,8 @@ def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         # in-use file?
         assert not TEST_LOG.exists()
 
-    # cleanup all logging handlers
+    # restore default config
     _logger.configure_logging(file=None)
-    for handler in _logger.logger.handlers:
-        handler.close()
-        _logger.logger.removeHandler(handler)
 
 
 def test_cli_info() -> None:
