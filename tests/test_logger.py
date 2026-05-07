@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 import pytest
 
 import pymmcore_plus._pymmcore as pymmcore
-from pymmcore_plus import CMMCorePlus, _logger
+from pymmcore_plus import CMMCorePlus
 from pymmcore_plus._logger import (
     MMCoreHandler,
     _to_mmcore_level,
@@ -17,24 +17,7 @@ from pymmcore_plus._logger import (
 )
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
     from pathlib import Path
-
-
-@pytest.fixture(autouse=True)
-def _restore_logger_state() -> Iterator[None]:
-    """Reset logger handlers, level, and ``_logger._config`` after each test."""
-    saved_level = logger.level
-    saved_config = _logger._config
-    saved_handlers = list(logger.handlers)
-    try:
-        yield
-    finally:
-        for h in list(logger.handlers):
-            if h not in saved_handlers and isinstance(h, MMCoreHandler):
-                logger.removeHandler(h)
-        _logger._config = saved_config
-        logger.setLevel(saved_level)
 
 
 def test_to_mmcore_level() -> None:
