@@ -204,6 +204,35 @@ def test_set_mda_fov(core: CMMCorePlus) -> None:
     assert sub_grid.fov_width == sub_grid.fov_height == 256
 
 
+def test_mda_fov_preserves_user_values(core: CMMCorePlus) -> None:
+    """User-provided fov_width/fov_height must not be overwritten by the engine.
+
+    This matters when pixel size is uncalibrated, or when the physical FOV
+    differs from camera_size * pixel_size (e.g. oblique-plane geometry).
+    """
+    mda = MDASequence(
+        channels=["FITC"],
+        stage_positions=(
+            {"sequence": {"grid_plan": {"rows": 1, "columns": 1, "fov_width": 180}}},
+        ),
+        grid_plan={"rows": 1, "columns": 1, "fov_width": 180, "fov_height": 180},
+    )
+
+    global_grid = mda.grid_plan
+    sub_grid = mda.stage_positions[0].sequence.grid_plan  # type: ignore
+    assert global_grid and sub_grid
+
+    core.setProperty("Objective", "Label", "Nikon 20X Plan Fluor ELWD")
+    core.mda.engine.setup_sequence(mda)  # type: ignore
+
+    # user-provided values are preserved
+    assert global_grid.fov_width == 180
+    assert global_grid.fov_height == 180
+    assert sub_grid.fov_width == 180
+    # unset values are still filled in from camera ROI * pixel size
+    assert sub_grid.fov_height == 256
+
+
 def event_generator() -> Iterator[MDAEvent]:
     yield MDAEvent()
     yield MDAEvent()

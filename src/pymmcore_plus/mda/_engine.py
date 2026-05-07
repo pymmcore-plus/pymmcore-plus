@@ -278,15 +278,19 @@ class MDAEngine(PMDAEngine):
         fov_width = x_size * px_size
         fov_height = y_size * px_size
 
-        if sequence.grid_plan:
-            sequence.grid_plan.fov_width = fov_width
-            sequence.grid_plan.fov_height = fov_height
+        if gp := sequence.grid_plan:
+            if gp.fov_width is None:
+                gp.fov_width = fov_width
+            if gp.fov_height is None:
+                gp.fov_height = fov_height
 
         # set fov to any stage positions sequences
         for p in sequence.stage_positions:
-            if p.sequence and p.sequence.grid_plan:
-                p.sequence.grid_plan.fov_height = fov_height
-                p.sequence.grid_plan.fov_width = fov_width
+            if p.sequence and (gp := p.sequence.grid_plan):
+                if gp.fov_width is None:
+                    gp.fov_width = fov_width
+                if gp.fov_height is None:
+                    gp.fov_height = fov_height
 
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
