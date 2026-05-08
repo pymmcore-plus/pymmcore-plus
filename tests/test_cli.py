@@ -327,35 +327,47 @@ def test_logs_clear_removes_all_log_files(
 
 
 def test_tail_file_streams_initial_and_appended_lines(
-    tmp_path: Path, capfd: pytest.CaptureFixture[str]
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from threading import Event, Thread
+    from threading import Event, Lock, Thread
 
     from pymmcore_plus._cli import _tail_file
 
     log_file = tmp_path / "live.log"
     log_file.write_text("first\nsecond\n")
 
+    # capfd loses output written from non-main threads on macOS; collect via
+    # the print symbol _tail_file actually calls instead.
+    chunks: list[str] = []
+    lock = Lock()
+
+    def collector(*args: Any, **kwargs: Any) -> None:
+        with lock:
+            chunks.append("".join(str(a) for a in args))
+
+    monkeypatch.setattr(_cli, "print", collector)
+
+    def captured() -> str:
+        with lock:
+            return "".join(chunks)
+
     stop = Event()
     thread = Thread(target=_tail_file, args=(log_file, 0.02, stop))
     thread.start()
     try:
-        captured = ""
         deadline = time.monotonic() + 2.0
-        while time.monotonic() < deadline and "second" not in captured:
+        while time.monotonic() < deadline and "second" not in captured():
             time.sleep(0.02)
-            captured += capfd.readouterr().out
-        assert "first" in captured
-        assert "second" in captured
+        assert "first" in captured()
+        assert "second" in captured()
 
         with log_file.open("a") as fh:
             fh.write("third\n")
 
         deadline = time.monotonic() + 2.0
-        while time.monotonic() < deadline and "third" not in captured:
+        while time.monotonic() < deadline and "third" not in captured():
             time.sleep(0.02)
-            captured += capfd.readouterr().out
-        assert "third" in captured
+        assert "third" in captured()
     finally:
         stop.set()
         thread.join(timeout=2.0)
