@@ -627,8 +627,11 @@ class MDAEngine(PMDAEngine):
 
         # restore ROI
         if "roi" in self._initial_state:
-            core.clearROI()
-            core.setROI(*self._initial_state["roi"])
+            try:
+                core.clearROI()
+                core.setROI(*self._initial_state["roi"])
+            except Exception as e:
+                logger.warning("Failed to restore ROI: %s", e)
 
         core.waitForSystem()
         # clear the state after restoration

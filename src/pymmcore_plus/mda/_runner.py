@@ -746,7 +746,13 @@ class MDARunner:
                 logger.error("Error closing data sink: %s", e)
 
         if hasattr(self._engine, "teardown_sequence"):
-            self._engine.teardown_sequence(sequence)  # type: ignore
+            # Guarded like _sink.close() above: a failing teardown must not
+            # prevent sequenceFinished from being emitted or the runner from
+            # returning to IDLE.
+            try:
+                self._engine.teardown_sequence(sequence)  # type: ignore
+            except Exception as e:
+                logger.error("Error tearing down sequence: %s", e)
 
         if finish_reason == FinishReason.CANCELED:
             logger.warning("MDA Canceled: %s", sequence)
