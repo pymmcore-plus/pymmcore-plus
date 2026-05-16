@@ -459,6 +459,43 @@ def test_runner_pause(core: CMMCorePlus, anybot: Any) -> None:
     engine.teardown_sequence.assert_called_once()
 
 
+def test_teardown_failure_still_finishes(core: CMMCorePlus) -> None:
+    """A failing teardown must not strand sequenceFinished or wedge the runner."""
+    engine = MagicMock(wraps=core.mda.engine)
+    engine.teardown_sequence.side_effect = RuntimeError("teardown boom")
+    core.mda.set_engine(engine)
+
+    finished = Mock()
+    core.mda.events.sequenceFinished.connect(finished)
+
+    # synchronous run -- must not raise despite the failing teardown
+    core.mda.run([MDAEvent()])
+
+    engine.teardown_sequence.assert_called_once()
+    finished.assert_called_once()  # signal emitted, not stranded
+    assert core.mda._state == RunState.IDLE  # reset, not stuck in FINISHING
+
+    # the runner is not wedged: a second run still completes
+    finished.reset_mock()
+    core.mda.run([MDAEvent()])
+    finished.assert_called_once()
+
+
+def test_roi_restore_failure_does_not_break_teardown(core: CMMCorePlus) -> None:
+    """A camera that cannot restore its ROI must not abort engine teardown."""
+    engine = core.mda.engine
+    assert engine is not None
+    engine.restore_initial_state = True
+
+    seq = MDASequence(time_plan={"interval": 0, "loops": 1}, channels=["DAPI"])
+    engine.setup_sequence(seq)  # captures _initial_state, including "roi"
+    assert "roi" in engine._initial_state
+
+    with patch.object(core, "setROI", side_effect=RuntimeError("no ROI support")):
+        # must not raise despite setROI failing during restore
+        engine.teardown_sequence(seq)
+
+
 def test_reset_event_timer(core: CMMCorePlus) -> None:
     seq = [
         MDAEvent(min_start_time=0),
