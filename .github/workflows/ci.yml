@@ -55,7 +55,7 @@ jobs:
     env:
       UV_NO_SYNC: "1"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       - uses: astral-sh/setup-uv@v7
         with:
@@ -104,11 +104,11 @@ jobs:
             qt: PyQt6
             nano: "nano"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: pymmcore-plus/pymmcore-widgets
           fetch-depth: 0
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: pymmcore-plus
           fetch-depth: 0
@@ -143,11 +143,11 @@ jobs:
       matrix:
         qt: [PySide6, PyQt6]
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           repository: pymmcore-plus/pymmcore-gui
           fetch-depth: 0
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           path: pymmcore-plus
           fetch-depth: 0
@@ -179,7 +179,7 @@ jobs:
     env:
       UV_NO_SYNC: "1"
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v7
         with:
           python-version: "3.12"
@@ -204,7 +204,7 @@ jobs:
       id-token: write
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -214,7 +214,7 @@ jobs:
       - name: 🚢 Publish to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
 
-      - uses: softprops/action-gh-release@v2
+      - uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           files: "./dist/*"
