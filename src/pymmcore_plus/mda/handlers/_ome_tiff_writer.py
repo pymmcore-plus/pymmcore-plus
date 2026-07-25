@@ -134,9 +134,8 @@ class OMETiffWriter(_5DWriterBase[np.memmap]):
         )
 
         # memory-mapped NumPy array of image data stored in TIFF file.
-        mmap = memmap(fname, dtype=dtype)
-        # This line is important, as tifffile.memmap appears to lose singleton dims
-        mmap.shape = shape
+        # tifffile.memmap omits singleton dimensions. Restore them with a view.
+        mmap = memmap(fname, dtype=dtype).reshape(shape)
 
         return mmap  # type: ignore
 
