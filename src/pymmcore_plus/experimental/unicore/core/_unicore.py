@@ -151,6 +151,9 @@ class UniMMCore(CMMCorePlus):
         # Groups and presets are ALWAYS also created in C++ (via super() calls).
         # This dict only stores (device, property) -> value for Python devices.
         self._py_config_groups: ConfigGroups = {}
+        # Per-device timeout overrides for Python devices. C++ devices use the
+        # C++ registry (CMMCore::setDeviceTimeoutMs) directly via super().
+        self._pydevice_timeouts: dict[str, int] = {}
 
         super().__init__(*args, **kwargs)
 
@@ -369,6 +372,7 @@ class UniMMCore(CMMCorePlus):
                 self._pycore.set_current(keyword, None)
 
         self._state_cache.clear_device(label)
+        self._pydevice_timeouts.pop(label, None)
 
         for group_name, group in list(self._py_config_groups.items()):
             for preset_name, config in list(group.items()):
@@ -392,6 +396,7 @@ class UniMMCore(CMMCorePlus):
         self._pydevices.unload_all()
         self._pycore.reset_current()
         self._py_config_groups.clear()
+        self._pydevice_timeouts.clear()
         self._state_cache.clear()
 
     def unloadAllDevices(self) -> None:
@@ -673,10 +678,40 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices[label] as dev:
             return dev.busy()
 
+    # Per-device timeout dispatch: Python labels use the unicore-local dict,
+    # C++ labels delegate to super(). The `type: ignore[misc]` markers can be
+    # dropped once pymmcore stubs ship #914.
+    def setDeviceTimeoutMs(self, label: str, timeout_ms: int) -> None:
+        if label not in self._pydevices:
+            super().setDeviceTimeoutMs(label, timeout_ms)  # type: ignore[misc]
+            return
+        if timeout_ms <= 0:
+            raise RuntimeError("Device timeout must be positive")
+        self._pydevice_timeouts[label] = timeout_ms
+
+    def getDeviceTimeoutMs(self, label: str) -> int:
+        """Return the effective timeout for ``label`` (override or global)."""
+        if label not in self._pydevices:
+            return cast("int", super().getDeviceTimeoutMs(label))  # type: ignore[misc]
+        timeout_ms = self._pydevice_timeouts.get(label)
+        return timeout_ms if timeout_ms is not None else self.getTimeoutMs()
+
+    def hasDeviceTimeout(self, label: str) -> bool:
+        if label not in self._pydevices:
+            return cast("bool", super().hasDeviceTimeout(label))  # type: ignore[misc]
+        return label in self._pydevice_timeouts
+
+    def unsetDeviceTimeout(self, label: str) -> None:
+        if label not in self._pydevices:
+            super().unsetDeviceTimeout(label)  # type: ignore[misc]
+            return
+        self._pydevice_timeouts.pop(label, None)
+
     def waitForDevice(self, label: DeviceLabel | str) -> None:
-        if label not in self._pydevices:  # pragma: no cover
-            return super().waitForDevice(label)
-        self._pydevices.wait_for(label, self.getTimeoutMs())
+        if label not in self._pydevices:
+            super().waitForDevice(label)
+            return
+        self._pydevices.wait_for(label, self._pydevice_timeout(label))
 
     def waitForConfig(self, group: str, configName: str) -> None:
         # Get config data (merged from C++ and Python)
@@ -698,13 +733,21 @@ class UniMMCore(CMMCorePlus):
     def systemBusy(self) -> bool:
         return self.deviceTypeBusy(DeviceType.AnyType)
 
-    # probably only needed because C++ method is not virtual
+    def _pydevice_timeout(self, label: str) -> int:
+        timeout_ms = self._pydevice_timeouts.get(label)
+        return timeout_ms if timeout_ms is not None else self.getTimeoutMs()
+
     def waitForSystem(self) -> None:
-        self.waitForDeviceType(DeviceType.AnyType)
+        # C++ devices: per-device registry honoured by C++ itself.
+        super().waitForSystem()
+        # Python devices: parallel, per-device timeout from registry/global.
+        self._pydevices.wait_for_each(self._pydevices, self._pydevice_timeout)
 
     def waitForDeviceType(self, devType: int) -> None:
         super().waitForDeviceType(devType)
-        self._pydevices.wait_for_device_type(devType, self.getTimeoutMs())
+        self._pydevices.wait_for_each(
+            self._pydevices.get_labels_of_type(devType), self._pydevice_timeout
+        )
 
     def deviceTypeBusy(self, devType: int) -> bool:
         if super().deviceTypeBusy(devType):
