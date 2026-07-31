@@ -551,6 +551,7 @@ class UniMMCore(CMMCorePlus):
                 KW.CoreXYStage: self.setXYStageDevice,
                 KW.CoreShutter: self.setShutterDevice,
                 KW.CoreSLM: self.setSLMDevice,
+                KW.CoreAutoShutter: lambda v: self.setAutoShutter(v in ("1", "True")),
             }
             setter = _core_device_setters.get(propName)
             if setter is not None:
@@ -1166,29 +1167,40 @@ class UniMMCore(CMMCorePlus):
     _current_image_buffer: np.ndarray | None = None
 
     def _do_snap_image(self) -> None:
-        if (cam := self._py_camera()) is None:
-            return pymmcore.CMMCore.snapImage(self)
+        cam = self._py_camera()
 
-        buf = None
+        # autoShutter: open shutter before snap, close after.
+        # We handle this for any combo where camera or shutter is a python
+        # device. For C++ cam + C++ shutter, C++ handles it internally.
+        shutter_label = self._auto_shutter_label(py_camera=cam is not None)
+        if shutter_label:
+            self._do_shutter_open(shutter_label, True)
+        try:
+            if cam is None:
+                return pymmcore.CMMCore.snapImage(self)
 
-        def _get_buffer(shape: Sequence[int], dtype: DTypeLike) -> np.ndarray:
-            """Get a buffer for the camera image."""
-            nonlocal buf
-            buf = np.empty(shape, dtype=dtype)
-            return buf
+            buf = None
 
-        # synchronous call - consume one item from the generator
-        with cam:
-            for _ in cam.start_sequence(1, get_buffer=_get_buffer):
-                if buf is not None:
-                    self._current_image_buffer = buf
-                else:  # pragma: no cover  #  bad camera implementation
-                    warnings.warn(
-                        "Camera device did not provide an image buffer.",
-                        RuntimeWarning,
-                        stacklevel=2,
-                    )
-                return
+            def _get_buffer(shape: Sequence[int], dtype: DTypeLike) -> np.ndarray:
+                nonlocal buf
+                buf = np.empty(shape, dtype=dtype)
+                return buf
+
+            # synchronous call - consume one item from the generator
+            with cam:
+                for _ in cam.start_sequence(1, get_buffer=_get_buffer):
+                    if buf is not None:
+                        self._current_image_buffer = buf
+                    else:  # pragma: no cover  #  bad camera implementation
+                        warnings.warn(
+                            "Camera device did not provide an image buffer.",
+                            RuntimeWarning,
+                            stacklevel=2,
+                        )
+                    return
+        finally:
+            if shutter_label:
+                self._do_shutter_open(shutter_label, False)
 
         # --------------------------------------------------------------------- getImage
 
@@ -1301,7 +1313,10 @@ class UniMMCore(CMMCorePlus):
     def _do_start_sequence_acquisition(
         self, cameraLabel: str, numImages: int, intervalMs: float, stopOnOverflow: bool
     ) -> None:
-        if (cam := self._py_camera(cameraLabel)) is None:  # pragma: no cover
+        cam = self._py_camera(cameraLabel)
+        if shutter_label := self._auto_shutter_label(py_camera=cam is not None):
+            self._do_shutter_open(shutter_label, True)
+        if cam is None:  # pragma: no cover
             return pymmcore.CMMCore.startSequenceAcquisition(
                 self, cameraLabel, numImages, intervalMs, stopOnOverflow
             )
@@ -1312,7 +1327,10 @@ class UniMMCore(CMMCorePlus):
 
     # startContinuousSequenceAcquisition
     def _do_start_continuous_sequence_acquisition(self, intervalMs: float = 0) -> None:
-        if (cam := self._py_camera()) is None:  # pragma: no cover
+        cam = self._py_camera()
+        if shutter_label := self._auto_shutter_label(py_camera=cam is not None):
+            self._do_shutter_open(shutter_label, True)
+        if cam is None:  # pragma: no cover
             return pymmcore.CMMCore.startContinuousSequenceAcquisition(self, intervalMs)
         with cam:
             self._start_sequence(cam, None, False)
@@ -1320,9 +1338,12 @@ class UniMMCore(CMMCorePlus):
     # ---------------------------------------------------------------- stopSequence
 
     def _do_stop_sequence_acquisition(self, cameraLabel: str) -> None:
-        if self._py_camera(cameraLabel) is None:  # pragma: no cover
+        py_cam = self._py_camera(cameraLabel) is not None
+        if not py_cam:  # pragma: no cover
             pymmcore.CMMCore.stopSequenceAcquisition(self, cameraLabel)
         self._stop_acquisition_thread()
+        if shutter_label := self._auto_shutter_label(py_camera=py_cam):
+            self._do_shutter_open(shutter_label, False)
 
     # ------------------------------------------------------------------ queries
     @overload
@@ -2095,6 +2116,20 @@ class UniMMCore(CMMCorePlus):
         if label in self._pydevices:
             return self._pydevices.get_device_of_type(label, ShutterDevice)
         return None
+
+    def _auto_shutter_label(self, *, py_camera: bool) -> str:
+        """Return shutter label we must manage for autoShutter, or "".
+
+        We must handle autoShutter ourselves whenever the camera or shutter is
+        a python device. The only case where C++ handles it internally is
+        C++ camera + C++ shutter.
+        """
+        if not self.getAutoShutter() or not (label := self.getShutterDevice()):
+            return ""
+        # C++ camera + C++ shutter: C++ handles it internally
+        if not py_camera and self._py_shutter(label) is None:
+            return ""
+        return label
 
     def setShutterDevice(self, shutterLabel: DeviceLabel | str) -> None:
         label = self._set_current_if_pydevice(KW.CoreShutter, shutterLabel)
