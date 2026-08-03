@@ -181,7 +181,7 @@ class StateBenchmark(Benchmark):
 
 def benchmark_core_and_devices(
     core: CMMCorePlus, number: int = 100
-) -> Iterable[Device | None | tuple[str, float | str]]:
+) -> Iterable[Device | tuple[str, float | str] | None]:
     """Take an initialized core with devices and benchmark various methods.
 
     Yields
