@@ -9,7 +9,6 @@ __all__ = [
     "Configuration",
     "CoreDevice",
     "Device",
-    "Device",
     "DeviceAdapter",
     "DeviceDetectionStatus",
     "DeviceInitializationState",
