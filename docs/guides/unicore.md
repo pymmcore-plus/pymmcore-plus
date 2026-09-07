@@ -81,31 +81,32 @@ of the following methods:
 ```python
 from pymmcore_plus.experimental.unicore import Device
 
+
 class MyDevice(Device):
     def initialize(self) -> None:
         """Initialize the device.
-        
+
         Note: Communication with and initialization of the device should be
         done here, *not* in `__init__`.
         """
-    
+
     def shutdown(self) -> None:
         """Called when device is unloaded."""
-    
+
     def busy(self) -> bool:
         """Return `True` if the device is busy. (Returns False by default)."""
 
     @classmethod
     def name(cls) -> str:
         """Return the name of the device.
-        
+
         By default, the class name is used.  (This is *not* the same as
         the user-defined label)
         """
-    
+
     def description(self) -> str:
         """Return a description of the device.
-        
+
         By default, the class docstring is used.
         """
 ```
@@ -117,6 +118,7 @@ For image acquisition devices. Implement the following abstract methods:
 ```python
 from pymmcore_plus.experimental.unicore import CameraDevice
 import numpy as np
+
 
 class MyCamera(CameraDevice):
     def get_exposure(self) -> float:
@@ -150,6 +152,7 @@ requires `sensor_shape()` and `snap()`, and provides automatic software ROI:
 ```python
 from pymmcore_plus.experimental.unicore import SimpleCameraDevice
 
+
 class MySimpleCamera(SimpleCameraDevice):
     def get_exposure(self) -> float: ...
     def set_exposure(self, exposure: float) -> None: ...
@@ -174,27 +177,28 @@ For controlling 2-axis positioning stages:
     ```python
     from pymmcore_plus.experimental.unicore import XYStageDevice
 
+
     class MyStage(XYStageDevice):
         def set_position_um(self, x: float, y: float) -> None:
             """Set stage position in micrometers."""
             pass
-        
+
         def get_position_um(self) -> tuple[float, float]:
             """Get current stage position in micrometers."""
             pass
-        
+
         def set_origin_x(self) -> None:
             """Set current X position as origin."""
             pass
-        
+
         def set_origin_y(self) -> None:
             """Set current Y position as origin."""
             pass
-        
+
         def stop(self) -> None:
             """Stop stage movement."""
             pass
-        
+
         def home(self) -> None:
             """Move stage to home position."""
             pass
@@ -207,28 +211,29 @@ For controlling 2-axis positioning stages:
     ```python
     from pymmcore_plus.experimental.unicore import XYStepperStageDevice
 
+
     class MyStepperStage(XYStepperStageDevice):
         def get_position_steps(self) -> tuple[int, int]:
             """Get position in motor steps."""
             pass
-        
+
         def set_position_steps(self, x: int, y: int) -> None:
             """Set position in motor steps."""
             pass
-        
+
         def get_step_size_x_um(self) -> float:
             """Get X-axis step size in micrometers."""
             pass
-        
+
         def get_step_size_y_um(self) -> float:
             """Get Y-axis step size in micrometers."""
             pass
-        
+
         # Additional methods for sequence support
         def get_sequence_max_length(self) -> int:
             """Maximum length of position sequences."""
             pass
-        
+
         def send_sequence(self, sequence: tuple[tuple[float, float], ...]) -> None:
             """Load sequence of (x, y) positions."""
             pass
@@ -241,11 +246,12 @@ For devices with discrete states (filter wheels, objective turrets, etc.):
 ```python
 from pymmcore_plus.experimental.unicore import StateDevice
 
+
 class MyFilterWheel(StateDevice):
     def set_state(self, pos: int) -> None:
         """Set device to specified state/position."""
         pass
-    
+
     def get_state(self) -> int:
         """Get current state/position."""
         pass
@@ -258,11 +264,12 @@ For controlling shutters or any binary open/close devices:
 ```python
 from pymmcore_plus.experimental.unicore import ShutterDevice
 
+
 class MyShutter(ShutterDevice):
     def get_open(self) -> bool:
         """Return True if shutter is open."""
         pass
-    
+
     def set_open(self, open: bool) -> None:
         """Open (True) or close (False) the shutter."""
         pass
@@ -276,35 +283,36 @@ For Spatial Light Modulators:
 from pymmcore_plus.experimental.unicore import SLMDevice
 import numpy as np
 
+
 class MySLM(SLMDevice):
     def get_width(self) -> int:
         """Return SLM width in pixels."""
         pass
-    
+
     def get_height(self) -> int:
         """Return SLM height in pixels."""
         pass
-    
+
     def get_number_of_components(self) -> int:
         """Return 1 for grayscale, 3 for RGB."""
         pass
-    
+
     def get_bytes_per_pixel(self) -> int:
         """Return bytes per pixel."""
         pass
-    
+
     def set_image(self, pixels: np.ndarray) -> None:
         """Set the image to display."""
         pass
-    
+
     def display_image(self) -> None:
         """Display the currently loaded image."""
         pass
-    
+
     def get_exposure(self) -> float:
         """Get exposure time in milliseconds."""
         pass
-    
+
     def set_exposure(self, exposure_ms: float) -> None:
         """Set exposure time in milliseconds."""
         pass
@@ -316,6 +324,7 @@ For devices that don't fit other categories but need property control:
 
 ```python
 from pymmcore_plus.experimental.unicore import GenericDevice
+
 
 class MyGenericDevice(GenericDevice):
     # Only basic Device methods needed - mainly for property-only devices
@@ -340,9 +349,10 @@ These two methods may be freely mixed, and accept largely the same arguments.
     ```python
     from pymmcore_plus.experimental.unicore import GenericDevice, pymm_property
 
+
     class MyDevice(GenericDevice):
         _my_prop = 42
-        
+
         @pymm_property(name="MyProp", default_value=42, limits=(0, 100))
         def my_prop(self) -> int:
             """MyProp property with limits 0-100 and default 42."""
@@ -362,6 +372,7 @@ These two methods may be freely mixed, and accept largely the same arguments.
     ```python
     from pymmcore_plus.experimental.unicore import GenericDevice
 
+
     class MyDevice(GenericDevice):
         def initialize(self) -> None:
             cls = type(self)
@@ -373,12 +384,9 @@ These two methods may be freely mixed, and accept largely the same arguments.
                 limits=(0, 100),
             )
 
-        def _set_my_prop(self, value: int) -> None:
-            ...
+        def _set_my_prop(self, value: int) -> None: ...
 
-        def _get_my_prop(self) -> int:
-            ...
-
+        def _get_my_prop(self) -> int: ...
     ```
 
 ### Properties with Constraints
@@ -415,19 +423,19 @@ parameter changes), you must:
         @pymm_property(sequence_max_length=100)
         def someprop(self) -> float:
             return self._someprop
-        
+
         @someprop.setter
         def set_someprop(self, value: float) -> None:
             self._someprop = value
-        
+
         @someprop.sequence_loader
         def load_someprop_sequence(self, sequence: list[float]) -> None:
             """Load a sequence of someprop values into hardware."""
 
-        @someprop.sequence_starter  
+        @someprop.sequence_starter
         def start_someprop_sequence(self) -> None:
             """Tell hardware to start the sequence."""
-        
+
         @someprop.sequence_stopper  # optional
         def stop_someprop_sequence(self) -> None:
             """Tell hardware to stop the sequence."""
@@ -521,7 +529,7 @@ Once loaded and initialized, use the device through the standard CMMCore API:
 
 ```python
 # Set as current device
-core.setCameraDevice("Camera1") 
+core.setCameraDevice("Camera1")
 
 # Use standard API
 core.setExposure(50)
@@ -534,7 +542,7 @@ image = core.snapImage()
 # Shutdown specific device
 core.unloadDevice("Camera1")
 
-# Or shutdown all devices  
+# Or shutdown all devices
 core.unloadAllDevices()
 ```
 
@@ -573,6 +581,7 @@ Python devices work seamlessly with the event system:
 @core.events.propertyChanged.connect
 def on_property_changed(device, prop, value):
     print(f"{device}.{prop} = {value}")
+
 
 # This will emit the event
 core.setProperty("Camera1", "Exposure", 100)

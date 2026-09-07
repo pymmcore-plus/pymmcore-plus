@@ -43,6 +43,7 @@ The key thing to observe here is the signature of the
 from typing import Iterable
 import useq
 
+
 class MDARunner:
     def run(self, events: Iterable[useq.MDAEvent]) -> None: ...
 ```
@@ -83,10 +84,12 @@ can be used to iterate over the values yielded by the generator function.
     ```python
     from typing import Iterator
 
+
     # a generator function, which contains "yield" statements
     def my_generator_func() -> Iterator[int]:
         yield 1
         yield 2
+
 
     # calling the function returns an iterator
     gen_iterator = my_generator_func()
@@ -106,11 +109,13 @@ from typing import Iterator
 
 import useq
 
+
 def some_condition_is_met() -> bool:
     # Return True 20% of the time ...
     # Just an example of some probabilistic condition
     # This could be anything, the results of analysis, etc.
     return random.random() < 0.2
+
 
 # generator function that yields events
 def my_events() -> Iterator[useq.MDAEvent]:
@@ -119,7 +124,7 @@ def my_events() -> Iterator[useq.MDAEvent]:
         if some_condition_is_met():
             # yield a burst of events
             for _ in range(5):
-                yield useq.MDAEvent(metadata={'bursting': True})
+                yield useq.MDAEvent(metadata={"bursting": True})
         elif i > 5:
             # stop after 5 events
             # (just an example of some stop condition)
@@ -152,15 +157,15 @@ def my_events() -> Iterator[useq.MDAEvent]:
     ```python
     [
         MDAEvent(),
-        MDAEvent(metadata={'bursting': True}),  # (1)!
-        MDAEvent(metadata={'bursting': True}),
-        MDAEvent(metadata={'bursting': True}),
-        MDAEvent(metadata={'bursting': True}),
-        MDAEvent(metadata={'bursting': True}),
+        MDAEvent(metadata={"bursting": True}),  # (1)!
+        MDAEvent(metadata={"bursting": True}),
+        MDAEvent(metadata={"bursting": True}),
+        MDAEvent(metadata={"bursting": True}),
+        MDAEvent(metadata={"bursting": True}),
         MDAEvent(),
         MDAEvent(),
         MDAEvent(),
-        MDAEvent() # (2)!
+        MDAEvent(),  # (2)!
     ]
     ```
 
@@ -236,22 +241,24 @@ from useq import MDAEvent
 core = CMMCorePlus()
 core.loadSystemConfiguration()
 
-q = Queue()                    # create the queue
-STOP = object()                # any object can serve as the sentinel
-q_iterator = iter(q.get, STOP) # create the queue-backed iterable
+q = Queue()  # create the queue
+STOP = object()  # any object can serve as the sentinel
+q_iterator = iter(q.get, STOP)  # create the queue-backed iterable
 
 # start the acquisition in a separate thread
 core.run_mda(q_iterator)
 
+
 # (optional) connect some callback to the imageReady signal
 @core.mda.events.frameReady.connect
 def on_frame(img, event):
-    print(f'Frame {event.index} received: {img.shape}')
+    print(f"Frame {event.index} received: {img.shape}")
+
 
 # now we can put events into the queue
 # according to whatever logic we want:
-q.put(MDAEvent(index={'t': 0}, exposure=20))
-q.put(MDAEvent(index={'t': 1}, exposure=40))
+q.put(MDAEvent(index={"t": 0}, exposure=20))
+q.put(MDAEvent(index={"t": 1}, exposure=40))
 
 # ... and eventually stop the acquisition
 q.put(STOP)
@@ -269,7 +276,7 @@ q.put(STOP)
     (by placing the `STOP_EVENT` sentinel in the queue).
 
     ```python linenums="1" title="event_driven_acquisition.py"
-    --8<-- "examples/event_driven_acquisition.py"
+    --8 < --"examples/event_driven_acquisition.py"
     ```
 
 ### MDASequence
@@ -286,8 +293,7 @@ Take this simple sequence as an example:
 
 ```python
 my_sequence = useq.MDASequence(
-    time_plan={'loops': 5, 'interval': 0.1},
-    channels=["DAPI", "FITC"]
+    time_plan={"loops": 5, "interval": 0.1}, channels=["DAPI", "FITC"]
 )
 ```
 
