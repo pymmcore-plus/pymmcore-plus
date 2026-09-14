@@ -2366,6 +2366,13 @@ class CMMCorePlus(pymmcore.CMMCore):
             and self.getDeviceType(device) is DeviceType.StateDevice
         ):
             properties = STATE_PROPS
+        if any(p in STATE_PROPS for p in properties):
+            # "State" and "Label" are conventional for state devices, but not
+            # mandatory: some adapters implement only one of them (e.g. the
+            # TriggerScopeMM TTL switches have no "Label" property).  Reading a
+            # property the device doesn't have raises, and logs an error in MMCore,
+            # so only monitor the ones that are actually there.
+            properties = tuple(p for p in properties if self.hasProperty(device, p))
         try:
             before = [self.getProperty(device, p) for p in properties]
         except Exception as e:
