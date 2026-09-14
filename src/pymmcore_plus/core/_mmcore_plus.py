@@ -26,7 +26,7 @@ from typing_extensions import deprecated
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus._discovery import find_micromanager
-from pymmcore_plus._logger import current_logfile, logger
+from pymmcore_plus._logger import follow_logfile, logger
 from pymmcore_plus._util import print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from pymmcore_plus.metadata.functions import summary_metadata
@@ -250,9 +250,9 @@ class CMMCorePlus(pymmcore.CMMCore):
                     parallel = False
             self.enableFeature("ParallelDeviceInitialization", parallel)
 
-        # TODO: test this on windows ... writing to the same file may be an issue there
-        if logfile := current_logfile(logger):
-            self.setPrimaryLogFile(str(logfile))
+        # Route the MMCore log into the pymmcore-plus log file, and keep it there
+        # when that file rotates (see pymmcore_plus._logger._RotatingFileHandler).
+        if follow_logfile(self):
             logger.debug("Initialized core %s", self)
 
         # some internal state, remembering the last arguments passed to various
