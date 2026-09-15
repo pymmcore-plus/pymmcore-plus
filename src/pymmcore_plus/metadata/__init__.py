@@ -18,7 +18,6 @@ from .serialize import json_dumps, to_builtins
 __all__ = [
     "ConfigGroup",
     "ConfigPreset",
-    "ConfigPreset",
     "DeviceInfo",
     "FrameMetaV1",
     "ImageInfo",

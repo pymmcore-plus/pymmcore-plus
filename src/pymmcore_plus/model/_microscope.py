@@ -272,7 +272,7 @@ class Microscope:
     def initialize(
         self,
         core: CMMCorePlus,
-        on_fail: Callable[[Device | Property, BaseException], None | bool] = _noop,
+        on_fail: Callable[[Device | Property, BaseException], bool | None] = _noop,
     ) -> None:
         """Attempt to initialize all devices in the model.
 

@@ -32,7 +32,7 @@ mmc = CMMCorePlus.instance()  # (1)!
 mmc.loadSystemConfiguration()  # (2)!
 
 # Create a super-simple sequence, with one event
-mda_sequence = [MDAEvent()] # (3)!
+mda_sequence = [MDAEvent()]  # (3)!
 
 # Run it!
 mmc.run_mda(mda_sequence)
@@ -114,10 +114,10 @@ mmc.loadSystemConfiguration()
 
 # Snap two channels at two positions
 mda_sequence = [
-    MDAEvent(channel={'config': "DAPI"}, x_pos=1100, y_pos=1240),
-    MDAEvent(channel={'config': "FITC"}, x_pos=1100, y_pos=1240),
-    MDAEvent(channel={'config': "DAPI"}, x_pos=1442, y_pos=1099),
-    MDAEvent(channel={'config': "FITC"}, x_pos=1442, y_pos=1099),
+    MDAEvent(channel={"config": "DAPI"}, x_pos=1100, y_pos=1240),
+    MDAEvent(channel={"config": "FITC"}, x_pos=1100, y_pos=1240),
+    MDAEvent(channel={"config": "DAPI"}, x_pos=1442, y_pos=1099),
+    MDAEvent(channel={"config": "FITC"}, x_pos=1442, y_pos=1099),
 ]
 
 # Run it!
@@ -161,11 +161,11 @@ create a few common experiments.
 from useq import MDASequence
 
 mda_sequence = MDASequence(
-    time_plan={"interval": 2, "loops": 6}, # (1)!
+    time_plan={"interval": 2, "loops": 6},  # (1)!
     channels=[
         {"config": "DAPI", "exposure": 50},
         {"config": "FITC", "exposure": 80},
-    ]
+    ],
 )
 ```
 
@@ -176,18 +176,78 @@ mda_sequence = MDASequence(
 
     ```python
     [
-        MDAEvent(index={'t': 0, 'c': 0}, channel=Channel(config='DAPI'), exposure=50.0, min_start_time=0.0),
-        MDAEvent(index={'t': 0, 'c': 1}, channel=Channel(config='FITC'), exposure=80.0, min_start_time=0.0),
-        MDAEvent(index={'t': 1, 'c': 0}, channel=Channel(config='DAPI'), exposure=50.0, min_start_time=2.0),
-        MDAEvent(index={'t': 1, 'c': 1}, channel=Channel(config='FITC'), exposure=80.0, min_start_time=2.0),
-        MDAEvent(index={'t': 2, 'c': 0}, channel=Channel(config='DAPI'), exposure=50.0, min_start_time=4.0),
-        MDAEvent(index={'t': 2, 'c': 1}, channel=Channel(config='FITC'), exposure=80.0, min_start_time=4.0),
-        MDAEvent(index={'t': 3, 'c': 0}, channel=Channel(config='DAPI'), exposure=50.0, min_start_time=6.0),
-        MDAEvent(index={'t': 3, 'c': 1}, channel=Channel(config='FITC'), exposure=80.0, min_start_time=6.0),
-        MDAEvent(index={'t': 4, 'c': 0}, channel=Channel(config='DAPI'), exposure=50.0, min_start_time=8.0),
-        MDAEvent(index={'t': 4, 'c': 1}, channel=Channel(config='FITC'), exposure=80.0, min_start_time=8.0),
-        MDAEvent(index={'t': 5, 'c': 0}, channel=Channel(config='DAPI'), exposure=50.0, min_start_time=10.0),
-        MDAEvent(index={'t': 5, 'c': 1}, channel=Channel(config='FITC'), exposure=80.0, min_start_time=10.0),
+        MDAEvent(
+            index={"t": 0, "c": 0},
+            channel=Channel(config="DAPI"),
+            exposure=50.0,
+            min_start_time=0.0,
+        ),
+        MDAEvent(
+            index={"t": 0, "c": 1},
+            channel=Channel(config="FITC"),
+            exposure=80.0,
+            min_start_time=0.0,
+        ),
+        MDAEvent(
+            index={"t": 1, "c": 0},
+            channel=Channel(config="DAPI"),
+            exposure=50.0,
+            min_start_time=2.0,
+        ),
+        MDAEvent(
+            index={"t": 1, "c": 1},
+            channel=Channel(config="FITC"),
+            exposure=80.0,
+            min_start_time=2.0,
+        ),
+        MDAEvent(
+            index={"t": 2, "c": 0},
+            channel=Channel(config="DAPI"),
+            exposure=50.0,
+            min_start_time=4.0,
+        ),
+        MDAEvent(
+            index={"t": 2, "c": 1},
+            channel=Channel(config="FITC"),
+            exposure=80.0,
+            min_start_time=4.0,
+        ),
+        MDAEvent(
+            index={"t": 3, "c": 0},
+            channel=Channel(config="DAPI"),
+            exposure=50.0,
+            min_start_time=6.0,
+        ),
+        MDAEvent(
+            index={"t": 3, "c": 1},
+            channel=Channel(config="FITC"),
+            exposure=80.0,
+            min_start_time=6.0,
+        ),
+        MDAEvent(
+            index={"t": 4, "c": 0},
+            channel=Channel(config="DAPI"),
+            exposure=50.0,
+            min_start_time=8.0,
+        ),
+        MDAEvent(
+            index={"t": 4, "c": 1},
+            channel=Channel(config="FITC"),
+            exposure=80.0,
+            min_start_time=8.0,
+        ),
+        MDAEvent(
+            index={"t": 5, "c": 0},
+            channel=Channel(config="DAPI"),
+            exposure=50.0,
+            min_start_time=10.0,
+        ),
+        MDAEvent(
+            index={"t": 5, "c": 1},
+            channel=Channel(config="FITC"),
+            exposure=80.0,
+            min_start_time=10.0,
+        ),
     ]
     ```
 
@@ -200,9 +260,9 @@ mda_sequence = MDASequence(
     z_plan={"range": 4, "step": 0.5},  # (1)!
     stage_positions=[  # (2)!
         (10, 10, 20),
-        {'x': 30, 'y': 40, 'z': 50},
+        {"x": 30, "y": 40, "z": 50},
         Position(x=60, y=70, z=80),
-    ]
+    ],
 )
 ```
 
@@ -217,33 +277,33 @@ mda_sequence = MDASequence(
 
     ```python
     [
-        MDAEvent(index={'p': 0, 'z': 0}, x_pos=10.0, y_pos=10.0, z_pos=18.0),
-        MDAEvent(index={'p': 0, 'z': 1}, x_pos=10.0, y_pos=10.0, z_pos=18.5),
-        MDAEvent(index={'p': 0, 'z': 2}, x_pos=10.0, y_pos=10.0, z_pos=19.0),
-        MDAEvent(index={'p': 0, 'z': 3}, x_pos=10.0, y_pos=10.0, z_pos=19.5),
-        MDAEvent(index={'p': 0, 'z': 4}, x_pos=10.0, y_pos=10.0, z_pos=20.0),
-        MDAEvent(index={'p': 0, 'z': 5}, x_pos=10.0, y_pos=10.0, z_pos=20.5),
-        MDAEvent(index={'p': 0, 'z': 6}, x_pos=10.0, y_pos=10.0, z_pos=21.0),
-        MDAEvent(index={'p': 0, 'z': 7}, x_pos=10.0, y_pos=10.0, z_pos=21.5),
-        MDAEvent(index={'p': 0, 'z': 8}, x_pos=10.0, y_pos=10.0, z_pos=22.0),
-        MDAEvent(index={'p': 1, 'z': 0}, x_pos=30.0, y_pos=40.0, z_pos=48.0),
-        MDAEvent(index={'p': 1, 'z': 1}, x_pos=30.0, y_pos=40.0, z_pos=48.5),
-        MDAEvent(index={'p': 1, 'z': 2}, x_pos=30.0, y_pos=40.0, z_pos=49.0),
-        MDAEvent(index={'p': 1, 'z': 3}, x_pos=30.0, y_pos=40.0, z_pos=49.5),
-        MDAEvent(index={'p': 1, 'z': 4}, x_pos=30.0, y_pos=40.0, z_pos=50.0),
-        MDAEvent(index={'p': 1, 'z': 5}, x_pos=30.0, y_pos=40.0, z_pos=50.5),
-        MDAEvent(index={'p': 1, 'z': 6}, x_pos=30.0, y_pos=40.0, z_pos=51.0),
-        MDAEvent(index={'p': 1, 'z': 7}, x_pos=30.0, y_pos=40.0, z_pos=51.5),
-        MDAEvent(index={'p': 1, 'z': 8}, x_pos=30.0, y_pos=40.0, z_pos=52.0),
-        MDAEvent(index={'p': 2, 'z': 0}, x_pos=60.0, y_pos=70.0, z_pos=78.0),
-        MDAEvent(index={'p': 2, 'z': 1}, x_pos=60.0, y_pos=70.0, z_pos=78.5),
-        MDAEvent(index={'p': 2, 'z': 2}, x_pos=60.0, y_pos=70.0, z_pos=79.0),
-        MDAEvent(index={'p': 2, 'z': 3}, x_pos=60.0, y_pos=70.0, z_pos=79.5),
-        MDAEvent(index={'p': 2, 'z': 4}, x_pos=60.0, y_pos=70.0, z_pos=80.0),
-        MDAEvent(index={'p': 2, 'z': 5}, x_pos=60.0, y_pos=70.0, z_pos=80.5),
-        MDAEvent(index={'p': 2, 'z': 6}, x_pos=60.0, y_pos=70.0, z_pos=81.0),
-        MDAEvent(index={'p': 2, 'z': 7}, x_pos=60.0, y_pos=70.0, z_pos=81.5),
-        MDAEvent(index={'p': 2, 'z': 8}, x_pos=60.0, y_pos=70.0, z_pos=82.0)
+        MDAEvent(index={"p": 0, "z": 0}, x_pos=10.0, y_pos=10.0, z_pos=18.0),
+        MDAEvent(index={"p": 0, "z": 1}, x_pos=10.0, y_pos=10.0, z_pos=18.5),
+        MDAEvent(index={"p": 0, "z": 2}, x_pos=10.0, y_pos=10.0, z_pos=19.0),
+        MDAEvent(index={"p": 0, "z": 3}, x_pos=10.0, y_pos=10.0, z_pos=19.5),
+        MDAEvent(index={"p": 0, "z": 4}, x_pos=10.0, y_pos=10.0, z_pos=20.0),
+        MDAEvent(index={"p": 0, "z": 5}, x_pos=10.0, y_pos=10.0, z_pos=20.5),
+        MDAEvent(index={"p": 0, "z": 6}, x_pos=10.0, y_pos=10.0, z_pos=21.0),
+        MDAEvent(index={"p": 0, "z": 7}, x_pos=10.0, y_pos=10.0, z_pos=21.5),
+        MDAEvent(index={"p": 0, "z": 8}, x_pos=10.0, y_pos=10.0, z_pos=22.0),
+        MDAEvent(index={"p": 1, "z": 0}, x_pos=30.0, y_pos=40.0, z_pos=48.0),
+        MDAEvent(index={"p": 1, "z": 1}, x_pos=30.0, y_pos=40.0, z_pos=48.5),
+        MDAEvent(index={"p": 1, "z": 2}, x_pos=30.0, y_pos=40.0, z_pos=49.0),
+        MDAEvent(index={"p": 1, "z": 3}, x_pos=30.0, y_pos=40.0, z_pos=49.5),
+        MDAEvent(index={"p": 1, "z": 4}, x_pos=30.0, y_pos=40.0, z_pos=50.0),
+        MDAEvent(index={"p": 1, "z": 5}, x_pos=30.0, y_pos=40.0, z_pos=50.5),
+        MDAEvent(index={"p": 1, "z": 6}, x_pos=30.0, y_pos=40.0, z_pos=51.0),
+        MDAEvent(index={"p": 1, "z": 7}, x_pos=30.0, y_pos=40.0, z_pos=51.5),
+        MDAEvent(index={"p": 1, "z": 8}, x_pos=30.0, y_pos=40.0, z_pos=52.0),
+        MDAEvent(index={"p": 2, "z": 0}, x_pos=60.0, y_pos=70.0, z_pos=78.0),
+        MDAEvent(index={"p": 2, "z": 1}, x_pos=60.0, y_pos=70.0, z_pos=78.5),
+        MDAEvent(index={"p": 2, "z": 2}, x_pos=60.0, y_pos=70.0, z_pos=79.0),
+        MDAEvent(index={"p": 2, "z": 3}, x_pos=60.0, y_pos=70.0, z_pos=79.5),
+        MDAEvent(index={"p": 2, "z": 4}, x_pos=60.0, y_pos=70.0, z_pos=80.0),
+        MDAEvent(index={"p": 2, "z": 5}, x_pos=60.0, y_pos=70.0, z_pos=80.5),
+        MDAEvent(index={"p": 2, "z": 6}, x_pos=60.0, y_pos=70.0, z_pos=81.0),
+        MDAEvent(index={"p": 2, "z": 7}, x_pos=60.0, y_pos=70.0, z_pos=81.5),
+        MDAEvent(index={"p": 2, "z": 8}, x_pos=60.0, y_pos=70.0, z_pos=82.0),
     ]
     ```
 
@@ -257,10 +317,10 @@ position in the grid.
 from useq import MDASequence
 
 mda_sequence = MDASequence(
-    stage_positions=[{'x': 100, 'y': 200, 'z': 300}],
+    stage_positions=[{"x": 100, "y": 200, "z": 300}],
     grid_plan={"fov_width": 20, "fov_height": 10, "rows": 2, "columns": 2},
     z_plan={"range": 10, "step": 2.5},
-    axis_order="pgz"  # (1)!
+    axis_order="pgz",  # (1)!
 )
 ```
 
@@ -271,26 +331,26 @@ mda_sequence = MDASequence(
 
     ```python
     [
-        MDAEvent(index={'p': 0, 'g': 0, 'z': 0}, x_pos=90.0, y_pos=205.0, z_pos=295.0),
-        MDAEvent(index={'p': 0, 'g': 0, 'z': 1}, x_pos=90.0, y_pos=205.0, z_pos=297.5),
-        MDAEvent(index={'p': 0, 'g': 0, 'z': 2}, x_pos=90.0, y_pos=205.0, z_pos=300.0),
-        MDAEvent(index={'p': 0, 'g': 0, 'z': 3}, x_pos=90.0, y_pos=205.0, z_pos=302.5),
-        MDAEvent(index={'p': 0, 'g': 0, 'z': 4}, x_pos=90.0, y_pos=205.0, z_pos=305.0),
-        MDAEvent(index={'p': 0, 'g': 1, 'z': 0}, x_pos=110.0, y_pos=205.0, z_pos=295.0),
-        MDAEvent(index={'p': 0, 'g': 1, 'z': 1}, x_pos=110.0, y_pos=205.0, z_pos=297.5),
-        MDAEvent(index={'p': 0, 'g': 1, 'z': 2}, x_pos=110.0, y_pos=205.0, z_pos=300.0),
-        MDAEvent(index={'p': 0, 'g': 1, 'z': 3}, x_pos=110.0, y_pos=205.0, z_pos=302.5),
-        MDAEvent(index={'p': 0, 'g': 1, 'z': 4}, x_pos=110.0, y_pos=205.0, z_pos=305.0),
-        MDAEvent(index={'p': 0, 'g': 2, 'z': 0}, x_pos=110.0, y_pos=195.0, z_pos=295.0),
-        MDAEvent(index={'p': 0, 'g': 2, 'z': 1}, x_pos=110.0, y_pos=195.0, z_pos=297.5),
-        MDAEvent(index={'p': 0, 'g': 2, 'z': 2}, x_pos=110.0, y_pos=195.0, z_pos=300.0),
-        MDAEvent(index={'p': 0, 'g': 2, 'z': 3}, x_pos=110.0, y_pos=195.0, z_pos=302.5),
-        MDAEvent(index={'p': 0, 'g': 2, 'z': 4}, x_pos=110.0, y_pos=195.0, z_pos=305.0),
-        MDAEvent(index={'p': 0, 'g': 3, 'z': 0}, x_pos=90.0, y_pos=195.0, z_pos=295.0),
-        MDAEvent(index={'p': 0, 'g': 3, 'z': 1}, x_pos=90.0, y_pos=195.0, z_pos=297.5),
-        MDAEvent(index={'p': 0, 'g': 3, 'z': 2}, x_pos=90.0, y_pos=195.0, z_pos=300.0),
-        MDAEvent(index={'p': 0, 'g': 3, 'z': 3}, x_pos=90.0, y_pos=195.0, z_pos=302.5),
-        MDAEvent(index={'p': 0, 'g': 3, 'z': 4}, x_pos=90.0, y_pos=195.0, z_pos=305.0)
+        MDAEvent(index={"p": 0, "g": 0, "z": 0}, x_pos=90.0, y_pos=205.0, z_pos=295.0),
+        MDAEvent(index={"p": 0, "g": 0, "z": 1}, x_pos=90.0, y_pos=205.0, z_pos=297.5),
+        MDAEvent(index={"p": 0, "g": 0, "z": 2}, x_pos=90.0, y_pos=205.0, z_pos=300.0),
+        MDAEvent(index={"p": 0, "g": 0, "z": 3}, x_pos=90.0, y_pos=205.0, z_pos=302.5),
+        MDAEvent(index={"p": 0, "g": 0, "z": 4}, x_pos=90.0, y_pos=205.0, z_pos=305.0),
+        MDAEvent(index={"p": 0, "g": 1, "z": 0}, x_pos=110.0, y_pos=205.0, z_pos=295.0),
+        MDAEvent(index={"p": 0, "g": 1, "z": 1}, x_pos=110.0, y_pos=205.0, z_pos=297.5),
+        MDAEvent(index={"p": 0, "g": 1, "z": 2}, x_pos=110.0, y_pos=205.0, z_pos=300.0),
+        MDAEvent(index={"p": 0, "g": 1, "z": 3}, x_pos=110.0, y_pos=205.0, z_pos=302.5),
+        MDAEvent(index={"p": 0, "g": 1, "z": 4}, x_pos=110.0, y_pos=205.0, z_pos=305.0),
+        MDAEvent(index={"p": 0, "g": 2, "z": 0}, x_pos=110.0, y_pos=195.0, z_pos=295.0),
+        MDAEvent(index={"p": 0, "g": 2, "z": 1}, x_pos=110.0, y_pos=195.0, z_pos=297.5),
+        MDAEvent(index={"p": 0, "g": 2, "z": 2}, x_pos=110.0, y_pos=195.0, z_pos=300.0),
+        MDAEvent(index={"p": 0, "g": 2, "z": 3}, x_pos=110.0, y_pos=195.0, z_pos=302.5),
+        MDAEvent(index={"p": 0, "g": 2, "z": 4}, x_pos=110.0, y_pos=195.0, z_pos=305.0),
+        MDAEvent(index={"p": 0, "g": 3, "z": 0}, x_pos=90.0, y_pos=195.0, z_pos=295.0),
+        MDAEvent(index={"p": 0, "g": 3, "z": 1}, x_pos=90.0, y_pos=195.0, z_pos=297.5),
+        MDAEvent(index={"p": 0, "g": 3, "z": 2}, x_pos=90.0, y_pos=195.0, z_pos=300.0),
+        MDAEvent(index={"p": 0, "g": 3, "z": 3}, x_pos=90.0, y_pos=195.0, z_pos=302.5),
+        MDAEvent(index={"p": 0, "g": 3, "z": 4}, x_pos=90.0, y_pos=195.0, z_pos=305.0),
     ]
     ```
 
@@ -311,7 +371,7 @@ mda_sequence = MDASequence(
         "FITC",
         {"config": "DIC", "acquire_every": 3, "do_stack": False},
     ],
-    keep_shutter_open_across=['z'],
+    keep_shutter_open_across=["z"],
 )
 ```
 
@@ -319,38 +379,198 @@ mda_sequence = MDASequence(
 
     ```python
     [
-        MDAEvent(index={'t': 0, 'c': 0, 'z': 0}, channel='FITC', min_start_time=0.0, z_pos=-5.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 0, 'c': 0, 'z': 1}, channel='FITC', min_start_time=0.0, z_pos=-2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 0, 'c': 0, 'z': 2}, channel='FITC', min_start_time=0.0, z_pos=0.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 0, 'c': 0, 'z': 3}, channel='FITC', min_start_time=0.0, z_pos=2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 0, 'c': 0, 'z': 4}, channel='FITC', min_start_time=0.0, z_pos=5.0),
-        MDAEvent(index={'t': 0, 'c': 1, 'z': 2}, channel='DIC', min_start_time=0.0, z_pos=0.0),
-        MDAEvent(index={'t': 1, 'c': 0, 'z': 0}, channel='FITC', min_start_time=2.0, z_pos=-5.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 1, 'c': 0, 'z': 1}, channel='FITC', min_start_time=2.0, z_pos=-2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 1, 'c': 0, 'z': 2}, channel='FITC', min_start_time=2.0, z_pos=0.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 1, 'c': 0, 'z': 3}, channel='FITC', min_start_time=2.0, z_pos=2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 1, 'c': 0, 'z': 4}, channel='FITC', min_start_time=2.0, z_pos=5.0),
-        MDAEvent(index={'t': 2, 'c': 0, 'z': 0}, channel='FITC', min_start_time=4.0, z_pos=-5.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 2, 'c': 0, 'z': 1}, channel='FITC', min_start_time=4.0, z_pos=-2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 2, 'c': 0, 'z': 2}, channel='FITC', min_start_time=4.0, z_pos=0.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 2, 'c': 0, 'z': 3}, channel='FITC', min_start_time=4.0, z_pos=2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 2, 'c': 0, 'z': 4}, channel='FITC', min_start_time=4.0, z_pos=5.0),
-        MDAEvent(index={'t': 3, 'c': 0, 'z': 0}, channel='FITC', min_start_time=6.0, z_pos=-5.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 3, 'c': 0, 'z': 1}, channel='FITC', min_start_time=6.0, z_pos=-2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 3, 'c': 0, 'z': 2}, channel='FITC', min_start_time=6.0, z_pos=0.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 3, 'c': 0, 'z': 3}, channel='FITC', min_start_time=6.0, z_pos=2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 3, 'c': 0, 'z': 4}, channel='FITC', min_start_time=6.0, z_pos=5.0),
-        MDAEvent(index={'t': 3, 'c': 1, 'z': 2}, channel='DIC', min_start_time=6.0, z_pos=0.0),
-        MDAEvent(index={'t': 4, 'c': 0, 'z': 0}, channel='FITC', min_start_time=8.0, z_pos=-5.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 4, 'c': 0, 'z': 1}, channel='FITC', min_start_time=8.0, z_pos=-2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 4, 'c': 0, 'z': 2}, channel='FITC', min_start_time=8.0, z_pos=0.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 4, 'c': 0, 'z': 3}, channel='FITC', min_start_time=8.0, z_pos=2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 4, 'c': 0, 'z': 4}, channel='FITC', min_start_time=8.0, z_pos=5.0),
-        MDAEvent(index={'t': 5, 'c': 0, 'z': 0}, channel='FITC', min_start_time=10.0, z_pos=-5.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 5, 'c': 0, 'z': 1}, channel='FITC', min_start_time=10.0, z_pos=-2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 5, 'c': 0, 'z': 2}, channel='FITC', min_start_time=10.0, z_pos=0.0, keep_shutter_open=True),
-        MDAEvent(index={'t': 5, 'c': 0, 'z': 3}, channel='FITC', min_start_time=10.0, z_pos=2.5, keep_shutter_open=True),
-        MDAEvent(index={'t': 5, 'c': 0, 'z': 4}, channel='FITC', min_start_time=10.0, z_pos=5.0)
+        MDAEvent(
+            index={"t": 0, "c": 0, "z": 0},
+            channel="FITC",
+            min_start_time=0.0,
+            z_pos=-5.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 0, "c": 0, "z": 1},
+            channel="FITC",
+            min_start_time=0.0,
+            z_pos=-2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 0, "c": 0, "z": 2},
+            channel="FITC",
+            min_start_time=0.0,
+            z_pos=0.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 0, "c": 0, "z": 3},
+            channel="FITC",
+            min_start_time=0.0,
+            z_pos=2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 0, "c": 0, "z": 4}, channel="FITC", min_start_time=0.0, z_pos=5.0
+        ),
+        MDAEvent(
+            index={"t": 0, "c": 1, "z": 2}, channel="DIC", min_start_time=0.0, z_pos=0.0
+        ),
+        MDAEvent(
+            index={"t": 1, "c": 0, "z": 0},
+            channel="FITC",
+            min_start_time=2.0,
+            z_pos=-5.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 1, "c": 0, "z": 1},
+            channel="FITC",
+            min_start_time=2.0,
+            z_pos=-2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 1, "c": 0, "z": 2},
+            channel="FITC",
+            min_start_time=2.0,
+            z_pos=0.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 1, "c": 0, "z": 3},
+            channel="FITC",
+            min_start_time=2.0,
+            z_pos=2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 1, "c": 0, "z": 4}, channel="FITC", min_start_time=2.0, z_pos=5.0
+        ),
+        MDAEvent(
+            index={"t": 2, "c": 0, "z": 0},
+            channel="FITC",
+            min_start_time=4.0,
+            z_pos=-5.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 2, "c": 0, "z": 1},
+            channel="FITC",
+            min_start_time=4.0,
+            z_pos=-2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 2, "c": 0, "z": 2},
+            channel="FITC",
+            min_start_time=4.0,
+            z_pos=0.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 2, "c": 0, "z": 3},
+            channel="FITC",
+            min_start_time=4.0,
+            z_pos=2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 2, "c": 0, "z": 4}, channel="FITC", min_start_time=4.0, z_pos=5.0
+        ),
+        MDAEvent(
+            index={"t": 3, "c": 0, "z": 0},
+            channel="FITC",
+            min_start_time=6.0,
+            z_pos=-5.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 3, "c": 0, "z": 1},
+            channel="FITC",
+            min_start_time=6.0,
+            z_pos=-2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 3, "c": 0, "z": 2},
+            channel="FITC",
+            min_start_time=6.0,
+            z_pos=0.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 3, "c": 0, "z": 3},
+            channel="FITC",
+            min_start_time=6.0,
+            z_pos=2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 3, "c": 0, "z": 4}, channel="FITC", min_start_time=6.0, z_pos=5.0
+        ),
+        MDAEvent(
+            index={"t": 3, "c": 1, "z": 2}, channel="DIC", min_start_time=6.0, z_pos=0.0
+        ),
+        MDAEvent(
+            index={"t": 4, "c": 0, "z": 0},
+            channel="FITC",
+            min_start_time=8.0,
+            z_pos=-5.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 4, "c": 0, "z": 1},
+            channel="FITC",
+            min_start_time=8.0,
+            z_pos=-2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 4, "c": 0, "z": 2},
+            channel="FITC",
+            min_start_time=8.0,
+            z_pos=0.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 4, "c": 0, "z": 3},
+            channel="FITC",
+            min_start_time=8.0,
+            z_pos=2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 4, "c": 0, "z": 4}, channel="FITC", min_start_time=8.0, z_pos=5.0
+        ),
+        MDAEvent(
+            index={"t": 5, "c": 0, "z": 0},
+            channel="FITC",
+            min_start_time=10.0,
+            z_pos=-5.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 5, "c": 0, "z": 1},
+            channel="FITC",
+            min_start_time=10.0,
+            z_pos=-2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 5, "c": 0, "z": 2},
+            channel="FITC",
+            min_start_time=10.0,
+            z_pos=0.0,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 5, "c": 0, "z": 3},
+            channel="FITC",
+            min_start_time=10.0,
+            z_pos=2.5,
+            keep_shutter_open=True,
+        ),
+        MDAEvent(
+            index={"t": 5, "c": 0, "z": 4}, channel="FITC", min_start_time=10.0, z_pos=5.0
+        ),
     ]
     ```
 
@@ -373,7 +593,7 @@ type-checking and auto-completion in your IDE.
         channels=[
             {"config": "DAPI", "exposure": 50},
             {"config": "FITC", "exposure": 80},
-        ]
+        ],
     )
 
     mda_sequence2 = useq.MDASequence(
@@ -382,7 +602,7 @@ type-checking and auto-completion in your IDE.
         channels=[
             useq.Channel(config="DAPI", exposure=50),
             useq.Channel(config="FITC", exposure=80),
-        ]
+        ],
     )
 
     assert mda_sequence1 == mda_sequence2
@@ -412,7 +632,7 @@ mda_sequence = useq.MDASequence(
     channels=[
         {"config": "DAPI", "exposure": 50},
         {"config": "FITC", "exposure": 20},
-    ]
+    ],
 )
 
 # Run it!
@@ -448,13 +668,15 @@ import useq
 mmc = CMMCorePlus.instance()
 mmc.loadSystemConfiguration()
 
-@mmc.mda.events.frameReady.connect # (1)!
+
+@mmc.mda.events.frameReady.connect  # (1)!
 def on_frame(image: np.ndarray, event: useq.MDAEvent):
     # do what you want with the data
     print(
         f"received frame: {image.shape}, {image.dtype} "
         f"@ index {event.index}, z={event.z_pos}"
     )
+
 
 mda_sequence = useq.MDASequence(
     time_plan={"interval": 0.5, "loops": 10},
@@ -501,7 +723,7 @@ mda_sequence = useq.MDASequence(
         {"config": "DAPI", "exposure": 50, "do_stack": False},
         {"config": "FITC", "exposure": 20},
     ],
-    axis_order="tcz"
+    axis_order="tcz",
 )
 
 Path("mda_sequence.yaml").write_text(mda_sequence.yaml())
@@ -593,10 +815,11 @@ mmc.mda.engine.use_hardware_sequencing = True
 
     mmc.loadSystemConfiguration()
     print(mmc.canSequenceEvents(useq.MDAEvent(), useq.MDAEvent()))  # True
-    print(mmc.canSequenceEvents(
-        useq.MDAEvent(exposure=50, x_pos=54),
-        useq.MDAEvent(exposure=10, x_pos=40)
-    ))  # False, unless you have stage and exposure hardware triggering
+    print(
+        mmc.canSequenceEvents(
+            useq.MDAEvent(exposure=50, x_pos=54), useq.MDAEvent(exposure=10, x_pos=40)
+        )
+    )  # False, unless you have stage and exposure hardware triggering
     ```
 
 ## Next steps
