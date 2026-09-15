@@ -397,3 +397,34 @@ def test_emission_of_state_and_property() -> None:
     assert core.getState(dev) == 2
     assert prop_changed.call_count == 2
     prop_changed.assert_has_calls([call(dev, "State", 2), call(dev, "Label", "Blue")])
+
+
+def test_cached_state_and_label_follow_the_device(unicore: UniMMCore) -> None:
+    """getPropertyFromCache sees State/Label after every way of moving the device.
+
+    CMMCore refreshes its state cache for both keywords on setState and
+    setStateLabel. Cached config lookups (e.g. getCurrentPixelSizeConfig(True),
+    which MDA summary metadata uses) read the cache, so a stale entry makes
+    them resolve the previous position.
+    """
+    core = unicore
+    core.defineStateLabel(DEV, 1, "one")
+    core.defineStateLabel(DEV, 2, "two")
+    core.defineStateLabel(DEV, 3, "three")
+    core.setState(DEV, 0)
+
+    core.setState(DEV, 1)
+    assert str(core.getPropertyFromCache(DEV, Keyword.State)) == "1"
+    assert str(core.getPropertyFromCache(DEV, Keyword.Label)) == "one"
+
+    core.setStateLabel(DEV, "two")
+    assert str(core.getPropertyFromCache(DEV, Keyword.State)) == "2"
+    assert str(core.getPropertyFromCache(DEV, Keyword.Label)) == "two"
+
+    core.setProperty(DEV, Keyword.State, 3)
+    assert str(core.getPropertyFromCache(DEV, Keyword.State)) == "3"
+    assert str(core.getPropertyFromCache(DEV, Keyword.Label)) == "three"
+
+    core.setProperty(DEV, Keyword.Label, "one")
+    assert str(core.getPropertyFromCache(DEV, Keyword.State)) == "1"
+    assert str(core.getPropertyFromCache(DEV, Keyword.Label)) == "one"
