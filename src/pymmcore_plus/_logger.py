@@ -116,8 +116,9 @@ def configure_logging(
     root_logger = logging.getLogger()
     root_logger.setLevel(logging.DEBUG)
 
-    for handler in logger.handlers:
+    for handler in list(logger.handlers):
         logger.removeHandler(handler)
+        handler.close()
 
     # automatically log to stderr
     if log_to_stderr and sys.stderr:

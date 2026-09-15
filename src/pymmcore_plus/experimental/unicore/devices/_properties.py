@@ -197,7 +197,7 @@ class PropertyController(Generic[TDev, TProp]):
         We consider a property read-only either if the device has explicitly set it as
         such, or if the property has a getter but no setter.
         If it has *neither* a getter nor a setter, and is not explicitly marked as
-        read-only, it is considered writeable: this is assumed to be a "configuration"
+        read-only, it is considered writable: this is assumed to be a "configuration"
         property that the device adapter cares about, but which is likely never sent
         to the device itself.
         """

@@ -278,15 +278,19 @@ class MDAEngine(PMDAEngine):
         fov_width = x_size * px_size
         fov_height = y_size * px_size
 
-        if sequence.grid_plan:
-            sequence.grid_plan.fov_width = fov_width
-            sequence.grid_plan.fov_height = fov_height
+        if gp := sequence.grid_plan:
+            if gp.fov_width is None:
+                gp.fov_width = fov_width
+            if gp.fov_height is None:
+                gp.fov_height = fov_height
 
         # set fov to any stage positions sequences
         for p in sequence.stage_positions:
-            if p.sequence and p.sequence.grid_plan:
-                p.sequence.grid_plan.fov_height = fov_height
-                p.sequence.grid_plan.fov_width = fov_width
+            if p.sequence and (gp := p.sequence.grid_plan):
+                if gp.fov_width is None:
+                    gp.fov_width = fov_width
+                if gp.fov_height is None:
+                    gp.fov_height = fov_height
 
     def setup_event(self, event: MDAEvent) -> None:
         """Set the system hardware (XY, Z, channel, exposure) as defined in the event.
@@ -623,8 +627,11 @@ class MDAEngine(PMDAEngine):
 
         # restore ROI
         if "roi" in self._initial_state:
-            core.clearROI()
-            core.setROI(*self._initial_state["roi"])
+            try:
+                core.clearROI()
+                core.setROI(*self._initial_state["roi"])
+            except Exception as e:
+                logger.warning("Failed to restore ROI: %s", e)
 
         core.waitForSystem()
         # clear the state after restoration
@@ -815,7 +822,12 @@ class MDAEngine(PMDAEngine):
             self._handle_timeout(timeout)
 
         if core.isBufferOverflowed():  # pragma: no cover
-            raise MemoryError("Buffer overflowed")
+            raise MemoryError(
+                f"Circular buffer overflowed (currently "
+                f"{core.getCircularBufferMemoryFootprint()} MB). Increase the size "
+                "using core.setCircularBufferMemoryFootprint() or the "
+                "PYMM_BUFFER_SIZE_MB env variable."
+            )
 
         # Yield None for each missing frame so the runner can tell the sink
         n_expected = len(event.events)
@@ -874,7 +886,12 @@ class MDAEngine(PMDAEngine):
             self._handle_timeout(timeout)
 
         if core.isBufferOverflowed():  # pragma: no cover
-            raise MemoryError("Buffer overflowed")
+            raise MemoryError(
+                f"Circular buffer overflowed (currently "
+                f"{core.getCircularBufferMemoryFootprint()} MB). Increase the size "
+                "using core.setCircularBufferMemoryFootprint() or the "
+                "PYMM_BUFFER_SIZE_MB env variable."
+            )
 
         # Flush buffered frames and validate count
         for payload in coordinator.flush_remaining():
