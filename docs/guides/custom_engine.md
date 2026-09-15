@@ -54,8 +54,8 @@ from pymmcore_plus import CMMCorePlus
 
 core = CMMCorePlus()
 
-core.mda          # <- The MDARunner instance
-core.mda.engine   # <- The MDAEngine instance
+core.mda  # <- The MDARunner instance
+core.mda.engine  # <- The MDAEngine instance
 ```
 
 ## The `MDAEngine` Protocol
@@ -92,7 +92,9 @@ methods here.
             without any additional preparation.
             """
 
-        def exec_event(self, event: MDAEvent) -> Iterable[tuple[NDArray, MDAEvent, FrameMetaV1]]:
+        def exec_event(
+            self, event: MDAEvent
+        ) -> Iterable[tuple[NDArray, MDAEvent, FrameMetaV1]]:
             """Execute `event`.
 
             This method is called after `setup_event` and is responsible for
@@ -134,7 +136,8 @@ from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import MDAEngine
 import useq
 
-class MyEngine(MDAEngine): # (1)!
+
+class MyEngine(MDAEngine):  # (1)!
     def setup_event(self, event: useq.MDAEvent) -> None:
         """Prepare state of system (hardware, etc.) for `event`."""
         # do some custom pre-setup
@@ -146,7 +149,8 @@ class MyEngine(MDAEngine): # (1)!
         # do some custom pre-execution
         result = super().exec_event(event)  # (3)!
         # do some custom post-execution
-        return result # (4)!
+        return result  # (4)!
+
 
 core = CMMCorePlus.instance()
 core.loadSystemConfiguration()
@@ -191,9 +195,10 @@ from pymmcore_plus import CMMCorePlus
 from pymmcore_plus.mda import MDAEngine
 import useq
 
+
 class MyEngine(MDAEngine):
     def setup_event(self, event: useq.MDAEvent) -> None:
-        if 'my_key' in event.metadata:  # (1)!
+        if "my_key" in event.metadata:  # (1)!
             self._my_custom_setup(event.metadata)
         else:
             super().setup_event(event)
@@ -202,13 +207,14 @@ class MyEngine(MDAEngine):
         print(f"Setting up my custom device with {metadata}")
 
     def exec_event(self, event: useq.MDAEvent) -> object:
-        if 'my_key' in event.metadata:
+        if "my_key" in event.metadata:
             return self._my_custom_exec(event.metadata)  # (2)!
         else:
             return super().exec_event(event)
 
     def _my_custom_exec(self, metadata: dict) -> object:
         print(f"Executing my custom stuff with {metadata}")
+
 
 core = CMMCorePlus.instance()
 core.loadSystemConfiguration()
@@ -217,9 +223,9 @@ core.mda.set_engine(MyEngine(core))
 
 experiment = [
     useq.MDAEvent(),
-    useq.MDAEvent(metadata={'my_key': {'param1': 'val1'}}),  # (3)!
+    useq.MDAEvent(metadata={"my_key": {"param1": "val1"}}),  # (3)!
     useq.MDAEvent(),
-    useq.MDAEvent(metadata={'my_key': {'param1': 'val2'}}),
+    useq.MDAEvent(metadata={"my_key": {"param1": "val2"}}),
 ]
 
 core.run_mda(experiment)

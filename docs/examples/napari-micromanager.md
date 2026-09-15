@@ -12,7 +12,7 @@ For complex scripting you likely will want to launch napari from a script or a
 jupyter notebook.
 
 ```python linenums="1" title="napari.py"
---8<-- "examples/napari.py"
+--8 < --"examples/napari.py"
 ```
 
 ## Using the integrated napari terminal
