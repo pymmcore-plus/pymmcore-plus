@@ -562,6 +562,9 @@ class UniMMCore(CMMCorePlus):
         with self._pydevices[label] as dev:
             dev.set_property_value(propName, propValue)
             self._state_cache[(label, propName)] = propValue
+            # a state device's State and Label change together
+            if propName in (KW.State, KW.Label) and isinstance(dev, StateDevice):
+                self._cache_state_props(label, dev)
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         if label not in self._pydevices:  # pragma: no cover
@@ -1993,6 +1996,20 @@ class UniMMCore(CMMCorePlus):
 
     # ------------------------------------------------------------------- setState
 
+    def _cache_state_props(
+        self, label: DeviceLabel | str, state_dev: StateDevice
+    ) -> None:
+        """Refresh the cached State and Label of a Python state device.
+
+        Must be called while holding the device (inside ``with state_dev:``).
+        CMMCore updates its state cache for both keywords whenever a state
+        device moves, so that ``getPropertyFromCache`` and cached config
+        lookups (e.g. ``getCurrentPixelSizeConfig(True)``) see the new position.
+        """
+        for kw in (KW.State, KW.Label):
+            with suppress(Exception):
+                self._state_cache[(label, kw)] = state_dev.get_property_value(kw)
+
     def setState(self, stateDeviceLabel: DeviceLabel | str, state: int) -> None:
         """Set state (position) on the specific device."""
         if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
@@ -2000,6 +2017,7 @@ class UniMMCore(CMMCorePlus):
 
         with state_dev:
             state_dev.set_position_or_label(state)
+            self._cache_state_props(stateDeviceLabel, state_dev)
 
     # ------------------------------------------------------------------- getState
 
@@ -2035,6 +2053,7 @@ class UniMMCore(CMMCorePlus):
                 state_dev.set_position_or_label(stateLabel)
             except KeyError as e:
                 raise RuntimeError(str(e)) from e  # convert to RuntimeError
+            self._cache_state_props(stateDeviceLabel, state_dev)
 
     # ----------------------------------------------------------------- getStateLabel
 
