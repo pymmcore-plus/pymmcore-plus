@@ -294,11 +294,128 @@ def test_waiting():
     assert not core.deviceTypeBusy(DeviceType.Any)
     assert not core.systemBusy()
 
-    core.setTimeoutMs(500)
-    pydev_mock = MagicMock(wraps=core._pydevices)
-    core._pydevices = pydev_mock
-    core.waitForSystem()
-    pydev_mock.wait_for_device_type.assert_called_once_with(DeviceType.Any, 500)
+
+class _StuckBusyDevice(GenericDevice):
+    """Python device whose Busy() flag is perpetually True."""
+
+    def busy(self) -> bool:
+        return True
+
+
+def _spy_wait_for(core):
+    """Context manager that patches PyDeviceManager.wait_for to record calls.
+
+    Yields a list of ``(label, timeout_ms)`` tuples observed.
+    """
+    from contextlib import contextmanager
+    from unittest.mock import patch
+
+    @contextmanager
+    def _ctx():
+        # Patch the class — PyDeviceManager uses __slots__ so instance patching
+        # raises "attribute is read-only".
+        mgr_cls = type(core._pydevices)
+        real = mgr_cls.wait_for
+        seen: list[tuple[str, float]] = []
+
+        def _spy(self, label, timeout_ms=5000, polling_interval=0.01):
+            seen.append((label, timeout_ms))
+            return real(self, label, timeout_ms, polling_interval=polling_interval)
+
+        with patch.object(mgr_cls, "wait_for", _spy):
+            yield seen
+
+    return _ctx()
+
+
+def test_wait_for_device_registry_pydevice():
+    """Per-device timeout registry is consulted for Python devices in UniMMCore."""
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeDevice(PYDEV)
+    core.setTimeoutMs(5_000)
+
+    # No override yet → effective timeout is the global.
+    assert core.hasDeviceTimeout(PYDEV) is False
+    assert core.getDeviceTimeoutMs(PYDEV) == 5_000
+    with _spy_wait_for(core) as seen:
+        core.waitForDevice(PYDEV)
+        assert seen == [(PYDEV, 5_000)]
+
+    # With override registered.
+    core.setDeviceTimeoutMs(PYDEV, 200)
+    assert core.hasDeviceTimeout(PYDEV) is True
+    assert core.getDeviceTimeoutMs(PYDEV) == 200
+    with _spy_wait_for(core) as seen:
+        core.waitForDevice(PYDEV)
+        assert seen == [(PYDEV, 200)]
+
+    # Clearing via unsetDeviceTimeout.
+    core.unsetDeviceTimeout(PYDEV)
+    assert core.hasDeviceTimeout(PYDEV) is False
+    assert core.getDeviceTimeoutMs(PYDEV) == 5_000
+
+
+def test_pydevice_timeout_cleared_on_unload():
+    """Override is dropped when the device is unloaded, not silently inherited."""
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeDevice(PYDEV)
+
+    core.setDeviceTimeoutMs(PYDEV, 250)
+    assert core.hasDeviceTimeout(PYDEV) is True
+
+    core.unloadDevice(PYDEV)
+    # Reload under the same label; override must not survive.
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeDevice(PYDEV)
+    assert core.hasDeviceTimeout(PYDEV) is False
+
+
+def test_pydevice_timeout_must_be_positive():
+    """Match C++ behaviour: 0 and negative timeouts are rejected for pydevices."""
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, MyDevice())
+    core.initializeDevice(PYDEV)
+    with pytest.raises(RuntimeError, match="positive"):
+        core.setDeviceTimeoutMs(PYDEV, 0)
+    with pytest.raises(RuntimeError, match="positive"):
+        core.setDeviceTimeoutMs(PYDEV, -10)
+
+
+def test_wait_for_device_type_registry_unicore():
+    """UniMMCore.waitForDeviceType honours per-device registry for Python devices."""
+    import time as _t
+
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, _StuckBusyDevice())
+    core.initializeDevice(PYDEV)
+    core.setTimeoutMs(10_000)
+    core.setDeviceTimeoutMs(PYDEV, 50)
+
+    pydev_type = core.getDeviceType(PYDEV)
+    t0 = _t.monotonic()
+    with pytest.raises(TimeoutError):
+        core.waitForDeviceType(pydev_type)
+    elapsed = _t.monotonic() - t0
+    assert elapsed < 1.0, f"elapsed={elapsed:.3f}s"
+
+
+def test_wait_for_system_registry_unicore():
+    """UniMMCore.waitForSystem honours per-device registry for Python devices."""
+    import time as _t
+
+    core = UniMMCore()
+    core.loadPyDevice(PYDEV, _StuckBusyDevice())
+    core.initializeDevice(PYDEV)
+    core.setTimeoutMs(10_000)
+    core.setDeviceTimeoutMs(PYDEV, 50)
+
+    t0 = _t.monotonic()
+    with pytest.raises(TimeoutError):
+        core.waitForSystem()
+    elapsed = _t.monotonic() - t0
+    assert elapsed < 1.0, f"elapsed={elapsed:.3f}s"
 
 
 def test_define_config_groups():
