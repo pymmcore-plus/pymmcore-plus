@@ -14,7 +14,7 @@ import pytest
 
 import pymmcore_plus
 from pymmcore_plus import _logger
-from pymmcore_plus._logger import MMCoreHandler, logger
+from pymmcore_plus._logger import logger
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler
 
@@ -45,12 +45,16 @@ def _restore_logger_state() -> Iterator[None]:
     saved_level = logger.level
     saved_config = _logger._config
     saved_handlers = list(logger.handlers)
+    saved_cores = list(_logger._handler._cores)
     try:
         yield
     finally:
+        # the module-level MMCoreHandler stays installed once a core was created
+        # (as at runtime); only drop stray handlers a test may have added.
         for h in list(logger.handlers):
-            if h not in saved_handlers and isinstance(h, MMCoreHandler):
+            if h not in saved_handlers and h is not _logger._handler:
                 logger.removeHandler(h)
+        _logger._handler._cores = saved_cores
         _logger._config = saved_config
         logger.setLevel(saved_level)
 

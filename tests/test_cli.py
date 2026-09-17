@@ -313,7 +313,7 @@ def test_logs_clear_removes_all_log_files(
 ) -> None:
     log_file = tmp_path / "primary.log"
     log_file.write_text("primary\n")
-    other = tmp_path / "rotated.1.log"
+    other = tmp_path / "primary_20260101T000000.log"  # MMCore rotation naming
     other.write_text("rotated\n")
     not_a_log = tmp_path / "keep.txt"
     not_a_log.write_text("keep\n")
@@ -324,6 +324,19 @@ def test_logs_clear_removes_all_log_files(
     assert not log_file.exists()
     assert not other.exists()
     assert not_a_log.exists()
+
+
+def test_logs_tail_uses_tail_file(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_file = tmp_path / "test.log"
+    log_file.write_text("alpha\n")
+    monkeypatch.setattr(_logger, "LOG_FILE", log_file)
+    tail = Mock()
+    monkeypatch.setattr(_cli, "_tail_file", tail)
+    result = runner.invoke(app, ["logs", "--tail"])
+    assert result.exit_code == 0
+    tail.assert_called_once_with(log_file)
 
 
 def test_tail_file_streams_initial_and_appended_lines(
