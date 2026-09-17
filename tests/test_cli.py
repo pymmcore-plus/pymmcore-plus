@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import json
-import os
 import platform
 import shutil
 import subprocess
 import time
-from multiprocessing import Process, Queue
 from pathlib import Path
-from time import sleep
 from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, Mock, patch
 
@@ -24,7 +21,6 @@ except ImportError:
 
 
 from pymmcore_plus import (
-    CMMCorePlus,
     __version__,
     _cli,
     _discovery,
@@ -281,77 +277,101 @@ def test_run_mda_channels() -> None:
     # SIGINT, results passed back via channel/queue
 
 
-# background process to test `logs --tail`
-def _background_tail(q: Queue, runner: Any, logfile: Path) -> None:
-    from os import getpid, kill
-    from signal import SIGINT
-    from threading import Timer
-
-    from pymmcore_plus import _logger
-
-    _logger.LOG_FILE = logfile
-
-    Timer(0.2, lambda: kill(getpid(), SIGINT)).start()
-    result = runner.invoke(app, ["logs", "--tail"], input="ctrl-c")
-    q.put(result.output)
-
-
-# make this test run last
-# this test is a bit of a mess, but it's the best I can do for now
-# the problem is that it leaves things in a state such that file descriptors are leaked
-# by pretty much every test that creates a core after it.
-@pytest.mark.skipif(bool(not os.getenv("CI")), reason="this is a crappy test")
-@pytest.mark.run_last
-@pytest.mark.filterwarnings("ignore:unclosed file:ResourceWarning")
-def test_cli_logs(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-    # create mock log file
-    TEST_LOG = tmp_path / "test.log"
-    monkeypatch.setattr(_logger, "LOG_FILE", TEST_LOG)
-    _logger.configure_logging(file=TEST_LOG)
-    assert _logger.current_logfile(_logger.logger) == TEST_LOG
-    assert TEST_LOG.exists()
-
-    # instantiate core
-    core = CMMCorePlus()
-    assert core.getPrimaryLogFile() == str(TEST_LOG)
-    core.loadSystemConfiguration()
-    # it may take a moment for the log file to be written
-    time.sleep(0.2)
-    # run mmcore logs
-    result = runner.invoke(app, ["logs", "-n", "60"])
+def test_logs_no_log_file_when_none(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(_logger, "LOG_FILE", None)
+    result = runner.invoke(app, ["logs"])
     assert result.exit_code == 0
-    assert "IFO,Core" in result.output  # this will come from CMMCore
+    assert "No log file" in result.stdout
 
-    # this one line depends critically on proper monkeypatching, and I can't get
-    # the monkeypatch to work without causing lots of leaked file handle problems.
-    # assert "Initialized" in result.output  # this will come from CMMCorePlus
 
-    # run mmcore logs --tail
-    # not sure how to kill the subprocess correctly on windows yet
-    if os.name != "nt":
-        q: Queue = Queue()
-        p = Process(target=_background_tail, args=(q, runner, TEST_LOG))
-        p.start()
-        try:
-            while p.is_alive():
-                sleep(0.1)
-            output = q.get()
-            assert "IFO,Core" in output
-        finally:
-            p.terminate()
-            p.join()  # Ensure the process is fully cleaned up
+def test_logs_no_log_file_when_missing(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(_logger, "LOG_FILE", tmp_path / "missing.log")
+    result = runner.invoke(app, ["logs"])
+    assert result.exit_code == 0
+    assert "No log file" in result.stdout
 
-    runner.invoke(app, ["logs", "--clear"])
-    if os.name != "nt":
-        # this is also not clearing the file on windows... perhaps due to
-        # in-use file?
-        assert not TEST_LOG.exists()
 
-    # cleanup all logging handlers
-    _logger.configure_logging(file=None)
-    for handler in _logger.logger.handlers:
-        handler.close()
-        _logger.logger.removeHandler(handler)
+def test_logs_n_returns_last_n_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_file = tmp_path / "test.log"
+    log_file.write_text("alpha\nbeta\ngamma\ndelta\n")
+    monkeypatch.setattr(_logger, "LOG_FILE", log_file)
+
+    result = runner.invoke(app, ["logs", "-n", "2"])
+    assert result.exit_code == 0
+    assert "gamma" in result.stdout
+    assert "delta" in result.stdout
+    assert "alpha" not in result.stdout
+    assert "beta" not in result.stdout
+
+
+def test_logs_clear_removes_all_log_files(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    log_file = tmp_path / "primary.log"
+    log_file.write_text("primary\n")
+    other = tmp_path / "rotated.1.log"
+    other.write_text("rotated\n")
+    not_a_log = tmp_path / "keep.txt"
+    not_a_log.write_text("keep\n")
+    monkeypatch.setattr(_logger, "LOG_FILE", log_file)
+
+    result = runner.invoke(app, ["logs", "--clear"])
+    assert result.exit_code == 0
+    assert not log_file.exists()
+    assert not other.exists()
+    assert not_a_log.exists()
+
+
+def test_tail_file_streams_initial_and_appended_lines(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from threading import Event, Lock, Thread
+
+    from pymmcore_plus._cli import _tail_file
+
+    log_file = tmp_path / "live.log"
+    log_file.write_text("first\nsecond\n")
+
+    # capfd loses output written from non-main threads on macOS; collect via
+    # the print symbol _tail_file actually calls instead.
+    chunks: list[str] = []
+    lock = Lock()
+
+    def collector(*args: Any, **kwargs: Any) -> None:
+        with lock:
+            chunks.append("".join(str(a) for a in args))
+
+    monkeypatch.setattr(_cli, "print", collector)
+
+    def captured() -> str:
+        with lock:
+            return "".join(chunks)
+
+    stop = Event()
+    thread = Thread(target=_tail_file, args=(log_file, 0.02, stop))
+    thread.start()
+    try:
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and "second" not in captured():
+            time.sleep(0.02)
+        assert "first" in captured()
+        assert "second" in captured()
+
+        with log_file.open("a") as fh:
+            fh.write("third\n")
+
+        deadline = time.monotonic() + 2.0
+        while time.monotonic() < deadline and "third" not in captured():
+            time.sleep(0.02)
+        assert "third" in captured()
+    finally:
+        stop.set()
+        thread.join(timeout=2.0)
+    assert not thread.is_alive(), "_tail_file did not stop on event"
 
 
 def test_cli_info() -> None:
