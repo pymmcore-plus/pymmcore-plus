@@ -3,7 +3,7 @@ import platform
 from collections.abc import Iterator
 from contextlib import suppress
 from math import prod
-from typing import cast
+from typing import Any, cast
 from unittest.mock import MagicMock, call, patch
 
 import numpy as np
@@ -382,3 +382,84 @@ def test_sequenced_multicam_events(multicam_tester: CMMCorePlus) -> None:
     # Verify frames arrive in perfect sequential order
     expected = [(t, c, f"TCamera{c + 1}") for t in range(5) for c in range(2)]
     assert frames == expected
+
+
+def _deliver_frames_during_stop_check(
+    core: CMMCorePlus, monkeypatch: pytest.MonkeyPatch, n_late: int
+) -> None:
+    """Make the last `n_late` frames of each sequence land as it is seen to stop.
+
+    The frames are hidden from `getRemainingImageCount()` until
+    `isSequenceRunning()` has returned False, as if the camera inserted them
+    between the engine's two checks. Real adapters do this when `IsCapturing()`
+    blocks while the final frame is inserted and the acquisition stopped (e.g.
+    PVCAM since its 2026 acquisition-loop refactor).
+    """
+    real_start = core.startSequenceAcquisition
+    real_remaining = core.getRemainingImageCount
+    real_pop = core.popNextImageAndMD
+    real_running = core.isSequenceRunning
+    state = {"total": 0, "popped": 0, "hidden": False}
+
+    def start(n_images: int, *args: Any) -> None:
+        n_total = n_images * core.getNumberOfCameraChannels()
+        state.update(total=n_total, popped=0, hidden=True)
+        real_start(n_images, *args)
+
+    def remaining() -> int:
+        n = real_remaining()
+        if state["hidden"]:
+            n = min(n, state["total"] - n_late - state["popped"])
+        return n
+
+    def pop(*args: Any, **kwargs: Any) -> Any:
+        state["popped"] += 1
+        return real_pop(*args, **kwargs)
+
+    def running(*args: Any) -> bool:
+        if not (is_running := real_running(*args)):
+            state["hidden"] = False
+        return is_running
+
+    monkeypatch.setattr(core, "startSequenceAcquisition", start)
+    monkeypatch.setattr(core, "getRemainingImageCount", remaining)
+    monkeypatch.setattr(core, "popNextImageAndMD", pop)
+    monkeypatch.setattr(core, "isSequenceRunning", running)
+
+
+@pytest.mark.parametrize("n_late", [1, 3])
+def test_sequence_frames_inserted_during_stop_check(
+    core: CMMCorePlus, monkeypatch: pytest.MonkeyPatch, n_late: int
+) -> None:
+    """Frames that land as the sequence stops must not be dropped."""
+    _deliver_frames_during_stop_check(core, monkeypatch, n_late)
+    core.mda.engine.use_hardware_sequencing = True
+    frames: list[useq.MDAEvent] = []
+
+    @core.mda.events.frameReady.connect
+    def on_frame(img: np.ndarray, event: useq.MDAEvent) -> None:
+        frames.append(event)
+
+    core.mda.run(useq.MDASequence(time_plan={"interval": 0, "loops": 5}))
+
+    assert [e.index["t"] for e in frames] == list(range(5))
+    assert core.getRemainingImageCount() == 0
+
+
+@pytest.mark.parametrize("n_late", [1, 3])
+def test_multicam_sequence_frames_inserted_during_stop_check(
+    multicam_tester: CMMCorePlus, monkeypatch: pytest.MonkeyPatch, n_late: int
+) -> None:
+    """Multi-camera variant: frames that land as the sequence stops are kept."""
+    core = multicam_tester
+    _deliver_frames_during_stop_check(core, monkeypatch, n_late)
+    frames: list[tuple[int, int]] = []  # (timepoint, camera index)
+
+    @core.mda.events.frameReady.connect
+    def on_frame(img: np.ndarray, event: useq.MDAEvent) -> None:
+        frames.append((event.index["t"], event.index["cam"]))
+
+    core.mda.run(useq.MDASequence(time_plan={"interval": 0, "loops": 5}))
+
+    assert frames == [(t, c) for t in range(5) for c in range(2)]
+    assert core.getRemainingImageCount() == 0
