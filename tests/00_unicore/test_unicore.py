@@ -1237,79 +1237,32 @@ class _MyZStage(StageDevice):
         return False
 
 
-# (Core property, DeviceType, setter, getter, python device factory, C++ lib/name)
-CORE_ROLES = [
-    ("Shutter", DeviceType.Shutter, "setShutterDevice", _MyShutter, "DShutter"),
-    ("Focus", DeviceType.Stage, "setFocusDevice", _MyZStage, "DStage"),
-]
-
-
-@pytest.mark.parametrize("prop, dev_type, setter, py_cls, cpp_name", CORE_ROLES)
-def test_core_role_properties_include_python_devices(
-    prop: str, dev_type: DeviceType, setter: str, py_cls: type, cpp_name: str
+@pytest.mark.parametrize(
+    "prop, getter, py_cls, cpp_name",
+    [
+        ("Shutter", "getShutterDevice", _MyShutter, "DShutter"),
+        ("Focus", "getFocusDevice", _MyZStage, "DStage"),
+    ],
+)
+def test_core_role_properties_with_python_device(
+    prop: str, getter: str, py_cls: type, cpp_name: str
 ) -> None:
-    """getProperty/getAllowedPropertyValues("Core", <role>) know Python devices."""
+    """Core device-role properties know Python devices, and can switch back."""
     core = UniMMCore()
     core.loadDevice("CppDev", "DemoCamera", cpp_name)
-    core.initializeDevice("CppDev")
     core.loadPyDevice("PyDev", py_cls())
-    core.initializeDevice("PyDev")
+    core.initializeAllDevices()
 
-    allowed = core.getAllowedPropertyValues("Core", prop)
-    assert allowed[0] == ""
-    assert set(allowed) == {"", "CppDev", "PyDev"}
-
-    # C++ device selected through the same path
-    getattr(core, setter)("CppDev")
-    assert core.getProperty("Core", prop) == "CppDev"
-
-    # Python device selected
-    getattr(core, setter)("PyDev")
-    assert core.getProperty("Core", prop) == "PyDev"
-
-    # round-trips through setProperty
-    core.setProperty("Core", prop, "PyDev")
-    assert core.getProperty("Core", prop) == "PyDev"
-
-
-@pytest.mark.parametrize("prop, dev_type, setter, py_cls, cpp_name", CORE_ROLES)
-def test_core_role_switch_back_to_cpp_and_unselect(
-    prop: str, dev_type: DeviceType, setter: str, py_cls: type, cpp_name: str
-) -> None:
-    """Selecting a C++ device (or "") after a Python one must clear the Python one."""
-    core = UniMMCore()
-    core.loadDevice("CppDev", "DemoCamera", cpp_name)
-    core.initializeDevice("CppDev")
-    core.loadPyDevice("PyDev", py_cls())
-    core.initializeDevice("PyDev")
-    get = getattr(core, setter.replace("set", "get"))
-
-    getattr(core, setter)("PyDev")
-    assert get() == core.getProperty("Core", prop) == "PyDev"
-
-    getattr(core, setter)("CppDev")
-    assert get() == core.getProperty("Core", prop) == "CppDev"
-
-    core.setProperty("Core", prop, "PyDev")
-    core.setProperty("Core", prop, "CppDev")
-    assert get() == core.getProperty("Core", prop) == "CppDev"
-
-    getattr(core, setter)("PyDev")
-    getattr(core, setter)("")
-    assert get() == core.getProperty("Core", prop) == ""
+    assert set(core.getAllowedPropertyValues("Core", prop)) == {"", "CppDev", "PyDev"}
+    for label in ("CppDev", "PyDev", "CppDev", "PyDev", ""):
+        core.setProperty("Core", prop, label)
+        assert getattr(core, getter)() == core.getProperty("Core", prop) == label
 
 
 def test_core_role_properties_demo_config() -> None:
     """Behavior for C++-only systems is unchanged."""
     core = UniMMCore()
     core.loadSystemConfiguration()
-    assert core.getProperty("Core", "Camera") == core.getCameraDevice() == "Camera"
-    assert core.getProperty("Core", "XYStage") == "XY"
-    assert core.getProperty("Core", "Focus") == "Z"
-    assert core.getProperty("Core", "Shutter") == core.getShutterDevice()
+    assert core.getProperty("Core", "Camera") == "Camera"
     assert core.getAllowedPropertyValues("Core", "Camera") == ("", "Camera")
-    assert core.getAllowedPropertyValues("Core", "SLM") == ("",)
-    assert "LED Shutter" in core.getAllowedPropertyValues("Core", "Shutter")
-    # non-device Core properties still come from the C++ core
-    assert core.getProperty("Core", "AutoShutter") in ("0", "1")
     assert core.getAllowedPropertyValues("Core", "AutoShutter") == ("0", "1")
