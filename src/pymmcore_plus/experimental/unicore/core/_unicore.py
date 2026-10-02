@@ -559,12 +559,18 @@ class UniMMCore(CMMCorePlus):
 
         if label not in self._pydevices:  # pragma: no cover
             return super().setProperty(label, propName, propValue)
+        events: list[tuple[str, Any]] = []
         with self._pydevices[label] as dev:
-            dev.set_property_value(propName, propValue)
-            self._state_cache[(label, propName)] = propValue
-            # a state device's State and Label change together
-            if propName in (KW.State, KW.Label) and isinstance(dev, StateDevice):
-                self._cache_state_props(label, dev)
+            try:
+                dev.set_property_value(propName, propValue)
+                self._state_cache[(label, propName)] = propValue
+                # a state device's State and Label change together
+                if propName in (KW.State, KW.Label) and isinstance(dev, StateDevice):
+                    self._cache_state_props(label, dev)
+            finally:
+                if isinstance(dev, StateDevice):
+                    events = dev.take_pending_events()
+        self._emit_state_events(label, events)
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         if label not in self._pydevices:  # pragma: no cover
@@ -2010,14 +2016,29 @@ class UniMMCore(CMMCorePlus):
             with suppress(Exception):
                 self._state_cache[(label, kw)] = state_dev.get_property_value(kw)
 
+    def _emit_state_events(
+        self, label: DeviceLabel | str, events: list[tuple[str, Any]]
+    ) -> None:
+        """Emit propertyChanged for a state device's State/Label changes.
+
+        Called *after* the device lock is released and `_cache_state_props` has run,
+        so listeners see up-to-date cached values and may call back into the device.
+        """
+        for prop, value in events:
+            self.events.propertyChanged.emit(label, prop, value)
+
     def setState(self, stateDeviceLabel: DeviceLabel | str, state: int) -> None:
         """Set state (position) on the specific device."""
         if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
             return super().setState(stateDeviceLabel, state)
 
         with state_dev:
-            state_dev.set_position_or_label(state)
-            self._cache_state_props(stateDeviceLabel, state_dev)
+            try:
+                state_dev.set_position_or_label(state)
+                self._cache_state_props(stateDeviceLabel, state_dev)
+            finally:
+                events = state_dev.take_pending_events()
+        self._emit_state_events(stateDeviceLabel, events)
 
     # ------------------------------------------------------------------- getState
 
@@ -2051,9 +2072,12 @@ class UniMMCore(CMMCorePlus):
         with state_dev:
             try:
                 state_dev.set_position_or_label(stateLabel)
+                self._cache_state_props(stateDeviceLabel, state_dev)
             except KeyError as e:
                 raise RuntimeError(str(e)) from e  # convert to RuntimeError
-            self._cache_state_props(stateDeviceLabel, state_dev)
+            finally:
+                events = state_dev.take_pending_events()
+        self._emit_state_events(stateDeviceLabel, events)
 
     # ----------------------------------------------------------------- getStateLabel
 
