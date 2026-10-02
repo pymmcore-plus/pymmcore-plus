@@ -550,6 +550,8 @@ class UniMMCore(CMMCorePlus):
     def getPropertyFromCache(
         self, deviceLabel: DeviceLabel | str, propName: PropertyName | str
     ) -> Any:
+        if deviceLabel == KW.CoreDevice:  # virtual device: no real cache to go stale
+            return self.getProperty(deviceLabel, propName)
         if deviceLabel not in self._pydevices:  # pragma: no cover
             return super().getPropertyFromCache(deviceLabel, propName)
         return self._state_cache[(deviceLabel, propName)]

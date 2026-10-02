@@ -1257,6 +1257,7 @@ def test_core_role_properties_with_python_device(
     for label in ("CppDev", "PyDev", "CppDev", "PyDev", ""):
         core.setProperty("Core", prop, label)
         assert getattr(core, getter)() == core.getProperty("Core", prop) == label
+        assert core.getPropertyFromCache("Core", prop) == label
 
 
 def test_core_role_properties_demo_config() -> None:
