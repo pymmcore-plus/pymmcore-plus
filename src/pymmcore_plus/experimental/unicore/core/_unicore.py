@@ -524,6 +524,21 @@ class UniMMCore(CMMCorePlus):
     def getProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> Any:  # broadening to Any, because pydevices can return non-string values?
+        # Core device-role properties must reflect Python devices too, which the C++
+        # core knows nothing about.
+        if label == KW.CoreDevice:
+            _core_device_getters: dict[str, Callable[[], str]] = {
+                KW.CoreChannelGroup: self.getChannelGroup,
+                KW.CoreFocus: self.getFocusDevice,
+                KW.CoreCamera: self.getCameraDevice,
+                KW.CoreXYStage: self.getXYStageDevice,
+                KW.CoreShutter: self.getShutterDevice,
+                KW.CoreSLM: self.getSLMDevice,
+            }
+            getter = _core_device_getters.get(propName)
+            if getter is not None:
+                return getter()
+
         if label not in self._pydevices:  # pragma: no cover
             return super().getProperty(label, propName)
         with self._pydevices[label] as dev:
@@ -602,6 +617,18 @@ class UniMMCore(CMMCorePlus):
     def getAllowedPropertyValues(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> tuple[str, ...]:
+        # Python devices must be offered as choices for the Core device roles.
+        if label == KW.CoreDevice:
+            _core_device_types: dict[str, DeviceType] = {
+                KW.CoreFocus: DeviceType.Stage,
+                KW.CoreCamera: DeviceType.Camera,
+                KW.CoreXYStage: DeviceType.XYStage,
+                KW.CoreShutter: DeviceType.Shutter,
+                KW.CoreSLM: DeviceType.SLM,
+            }
+            if (dev_type := _core_device_types.get(propName)) is not None:
+                return ("", *self.getLoadedDevicesOfType(dev_type))
+
         if label not in self._pydevices:  # pragma: no cover
             return super().getAllowedPropertyValues(label, propName)
         with self._pydevices[label] as dev:

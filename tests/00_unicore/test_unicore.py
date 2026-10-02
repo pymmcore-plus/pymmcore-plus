@@ -7,10 +7,18 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pymmcore_plus import DeviceInitializationState, DeviceType, PropertyType, _pymmcore
+from pymmcore_plus import (
+    DeviceInitializationState,
+    DeviceType,
+    FocusDirection,
+    PropertyType,
+    _pymmcore,
+)
 from pymmcore_plus.experimental.unicore import (
     GenericDevice,
     HubDevice,
+    ShutterDevice,
+    StageDevice,
     UniMMCore,
     pymm_property,
 )
@@ -1193,3 +1201,88 @@ def test_hub_device_parent_and_children_mixed():
     peripherals = core.getLoadedPeripheralDevices("hub")
     assert "child" in peripherals
     assert "CDev" not in peripherals
+
+
+class _MyShutter(ShutterDevice):
+    _open = False
+
+    def get_open(self) -> bool:
+        return self._open
+
+    def set_open(self, open: bool) -> None:
+        self._open = open
+
+
+class _MyZStage(StageDevice):
+    _pos = 0.0
+
+    def get_position_um(self) -> float:
+        return self._pos
+
+    def set_position_um(self, val: float) -> None:
+        self._pos = val
+
+    def home(self) -> None: ...
+
+    def stop(self) -> None: ...
+
+    def set_origin(self) -> None: ...
+
+    def get_focus_direction(self) -> FocusDirection:
+        return FocusDirection.Unknown
+
+    def set_focus_direction(self, sign: int) -> None: ...
+
+    def is_continuous_focus_drive(self) -> bool:
+        return False
+
+
+# (Core property, DeviceType, setter, getter, python device factory, C++ lib/name)
+CORE_ROLES = [
+    ("Shutter", DeviceType.Shutter, "setShutterDevice", _MyShutter, "DShutter"),
+    ("Focus", DeviceType.Stage, "setFocusDevice", _MyZStage, "DStage"),
+]
+
+
+@pytest.mark.parametrize("prop, dev_type, setter, py_cls, cpp_name", CORE_ROLES)
+def test_core_role_properties_include_python_devices(
+    prop: str, dev_type: DeviceType, setter: str, py_cls: type, cpp_name: str
+) -> None:
+    """getProperty/getAllowedPropertyValues("Core", <role>) know Python devices."""
+    core = UniMMCore()
+    core.loadDevice("CppDev", "DemoCamera", cpp_name)
+    core.initializeDevice("CppDev")
+    core.loadPyDevice("PyDev", py_cls())
+    core.initializeDevice("PyDev")
+
+    allowed = core.getAllowedPropertyValues("Core", prop)
+    assert allowed[0] == ""
+    assert set(allowed) == {"", "CppDev", "PyDev"}
+
+    # C++ device selected through the same path
+    getattr(core, setter)("CppDev")
+    assert core.getProperty("Core", prop) == "CppDev"
+
+    # Python device selected
+    getattr(core, setter)("PyDev")
+    assert core.getProperty("Core", prop) == "PyDev"
+
+    # round-trips through setProperty
+    core.setProperty("Core", prop, "PyDev")
+    assert core.getProperty("Core", prop) == "PyDev"
+
+
+def test_core_role_properties_demo_config() -> None:
+    """Behavior for C++-only systems is unchanged."""
+    core = UniMMCore()
+    core.loadSystemConfiguration()
+    assert core.getProperty("Core", "Camera") == core.getCameraDevice() == "Camera"
+    assert core.getProperty("Core", "XYStage") == "XY"
+    assert core.getProperty("Core", "Focus") == "Z"
+    assert core.getProperty("Core", "Shutter") == core.getShutterDevice()
+    assert core.getAllowedPropertyValues("Core", "Camera") == ("", "Camera")
+    assert core.getAllowedPropertyValues("Core", "SLM") == ("",)
+    assert "LED Shutter" in core.getAllowedPropertyValues("Core", "Shutter")
+    # non-device Core properties still come from the C++ core
+    assert core.getProperty("Core", "AutoShutter") in ("0", "1")
+    assert core.getAllowedPropertyValues("Core", "AutoShutter") == ("0", "1")
