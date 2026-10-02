@@ -1272,6 +1272,33 @@ def test_core_role_properties_include_python_devices(
     assert core.getProperty("Core", prop) == "PyDev"
 
 
+@pytest.mark.parametrize("prop, dev_type, setter, py_cls, cpp_name", CORE_ROLES)
+def test_core_role_switch_back_to_cpp_and_unselect(
+    prop: str, dev_type: DeviceType, setter: str, py_cls: type, cpp_name: str
+) -> None:
+    """Selecting a C++ device (or "") after a Python one must clear the Python one."""
+    core = UniMMCore()
+    core.loadDevice("CppDev", "DemoCamera", cpp_name)
+    core.initializeDevice("CppDev")
+    core.loadPyDevice("PyDev", py_cls())
+    core.initializeDevice("PyDev")
+    get = getattr(core, setter.replace("set", "get"))
+
+    getattr(core, setter)("PyDev")
+    assert get() == core.getProperty("Core", prop) == "PyDev"
+
+    getattr(core, setter)("CppDev")
+    assert get() == core.getProperty("Core", prop) == "CppDev"
+
+    core.setProperty("Core", prop, "PyDev")
+    core.setProperty("Core", prop, "CppDev")
+    assert get() == core.getProperty("Core", prop) == "CppDev"
+
+    getattr(core, setter)("PyDev")
+    getattr(core, setter)("")
+    assert get() == core.getProperty("Core", prop) == ""
+
+
 def test_core_role_properties_demo_config() -> None:
     """Behavior for C++-only systems is unchanged."""
     core = UniMMCore()

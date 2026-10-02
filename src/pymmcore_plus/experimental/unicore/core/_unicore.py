@@ -182,13 +182,14 @@ class UniMMCore(CMMCorePlus):
         """Helper function to set the current core device if it is a python device.
 
         If the label is a python device, the current device is set and the label is
-        cleared (in preparation for calling `super().setDevice()`), otherwise the
-        label is returned unchanged.
+        cleared (in preparation for calling `super().setDevice()`). Otherwise any
+        python device currently selected for this role is deselected, and the label
+        is returned unchanged.
         """
         if label in self._pydevices:
             self._pycore.set_current(keyword, label)
             label = ""
-        elif not label:
+        else:
             self._pycore.set_current(keyword, None)
         return label
 
@@ -970,16 +971,18 @@ class UniMMCore(CMMCorePlus):
 
     def setFocusDevice(self, focusLabel: str) -> None:
         """Set new current Focus Device."""
+        if focusLabel in self._pydevices:
+            if self.getDeviceType(focusLabel) == DeviceType.StageDevice:
+                # assign focus device
+                label = self._set_current_if_pydevice(KW.CoreFocus, focusLabel)
+                super().setFocusDevice(label)
+            return
         try:
             super().setFocusDevice(focusLabel)
         except Exception:
-            # python device
-            if focusLabel in self._pydevices:
-                if self.getDeviceType(focusLabel) == DeviceType.StageDevice:
-                    # assign focus device
-                    label = self._set_current_if_pydevice(KW.CoreFocus, focusLabel)
-                    super().setFocusDevice(label)
-        # otherwise do nothing
+            return  # otherwise do nothing
+        # a C++ device (or "") was selected: deselect any python focus device
+        self._pycore.set_current(KW.CoreFocus, None)
 
     @overload
     def getPosition(self) -> float: ...
