@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from unittest.mock import Mock, call
 
 import pytest
@@ -397,6 +398,39 @@ def test_emission_of_state_and_property() -> None:
     assert core.getState(dev) == 2
     assert prop_changed.call_count == 2
     prop_changed.assert_has_calls([call(dev, "State", 2), call(dev, "Label", "Blue")])
+
+
+def test_property_changed_is_emitted_after_cache_update_and_unlock() -> None:
+    """Listeners see the new cached State/Label and may call back into the device.
+
+    e.g. a widget re-matching config presets from the cache in response to the
+    signal must see the new values, and calling `setConfig` from the listener must not
+    deadlock on the (non-reentrant) device lock.
+    """
+    core = UniMMCore()
+    wheels = {
+        "LED": MyStateDevice({0: "CYAN", 1: "UV"}),
+        "Filter": MyStateDevice({0: "em450", 1: "em520"}),
+    }
+    for name, wheel in wheels.items():
+        core.loadPyDevice(name, wheel)
+        core.initializeDevice(name)
+    for preset, led, flt in (("brightfield", "CYAN", "em450"), ("DAPI", "UV", "em520")):
+        core.defineConfig("Channel", preset, "LED", "Label", led)
+        core.defineConfig("Channel", preset, "Filter", "Label", flt)
+    core.setConfig("Channel", "brightfield")
+
+    problems: list[tuple[str, str, str]] = []
+
+    def _check(dev: str, prop: str, value: Any) -> None:
+        if str(core.getPropertyFromCache(dev, prop)) != str(value):
+            problems.append(("stale cache", dev, prop))
+        if wheels[dev].locked():
+            problems.append(("device lock held", dev, prop))
+
+    core.events.propertyChanged.connect(_check)
+    core.setConfig("Channel", "DAPI")
+    assert problems == []
 
 
 def test_cached_state_and_label_follow_the_device(unicore: UniMMCore) -> None:
