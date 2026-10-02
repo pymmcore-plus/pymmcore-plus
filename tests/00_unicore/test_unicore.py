@@ -1265,5 +1265,6 @@ def test_core_role_properties_demo_config() -> None:
     core = UniMMCore()
     core.loadSystemConfiguration()
     assert core.getProperty("Core", "Camera") == "Camera"
-    assert core.getAllowedPropertyValues("Core", "Camera") == ("", "Camera")
-    assert core.getAllowedPropertyValues("Core", "AutoShutter") == ("0", "1")
+    assert tuple(core.getAllowedPropertyValues("Core", "Camera")) == ("", "Camera")
+    # (pymmcore-nano returns a list here, pymmcore a tuple)
+    assert tuple(core.getAllowedPropertyValues("Core", "AutoShutter")) == ("0", "1")
