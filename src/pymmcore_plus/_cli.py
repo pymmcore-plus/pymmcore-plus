@@ -8,7 +8,7 @@ import time
 from contextlib import suppress
 from pathlib import Path
 from platform import system
-from typing import cast
+from typing import TYPE_CHECKING, cast
 
 from pymmcore_plus.core._device import Device
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
@@ -26,6 +26,9 @@ import pymmcore_plus
 from pymmcore_plus._build import DEFAULT_PACKAGES, build
 from pymmcore_plus._logger import configure_logging
 from pymmcore_plus._util import USER_DATA_MM_PATH
+
+if TYPE_CHECKING:
+    import threading
 
 app = typer.Typer(name="mmcore", no_args_is_help=True)
 PLATFORM = system()
@@ -446,18 +449,21 @@ def use(
     typer.secho(f"using {result}", fg=typer.colors.BRIGHT_GREEN)
 
 
-def _tail_file(file_path: str | Path, interval: float = 0.1) -> None:
+def _tail_file(
+    file_path: "str | Path",
+    interval: float = 1.0,
+    stop_event: "threading.Event | None" = None,
+) -> None:
     with open(file_path) as file:
-        # Move the file pointer to the end
         while True:
-            # Read new lines
             new_lines = file.readlines()
             if new_lines:
-                # Display the last 'num_lines' lines
                 print("".join(new_lines), end="")
-
-            # Sleep for a short interval before checking again
-            time.sleep(1)
+            if stop_event is not None:  # for testing
+                if stop_event.wait(interval):
+                    return
+            else:
+                time.sleep(interval)
 
 
 @app.command()

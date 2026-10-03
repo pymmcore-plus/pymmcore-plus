@@ -1,22 +1,46 @@
 # Logging
 
-By default, pymmcore-plus logs to the console at the `INFO` level and to a
-logfile in the pymmcore-plus application data directory at the `DEBUG` level.
-The logfile is named `pymmcore_plus.log` and is rotated at 40MB, with a maximum
-retention of 20 logfiles.
+pymmcore-plus routes Python log messages from the `pymmcore-plus` logger to the
+underlying CMMCore object via `CMMCore.log()`. CMMCore is the single sink: it
+writes records to the primary log file and (optionally) to stderr, applying
+its own level thresholds for each.
+
+By default, CMMCore writes log records to a logfile in the pymmcore-plus
+application data directory (`pymmcore_plus.log`), rotated at 40 MB with
+20-file retention, and to stderr at the `WARNING` threshold. Records emitted
+through Python's `pymmcore-plus` logger are forwarded to the same sink, so
+Python and C++ log lines share one chronological stream.
+
+These settings are applied to the underlying core every time a `CMMCorePlus`
+is instantiated. Note that compared to earlier pymmcore-plus versions, stderr
+now also receives MMCore's own C++ WARNING+ messages (previously only Python
+`pymmcore-plus.*` log records reached stderr). To silence stderr, call
+`configure_logging(log_to_stderr=False)` or `core.enableStderrLog(False)`.
+`PYMM_STDERR_LOG=1` forces stderr on.
+
+Python `pymmcore-plus` log records emitted before any `CMMCorePlus` exists
+are not captured -- they fall through to Python's standard `lastResort`
+handler. To capture pre-core records, attach your own handler to
+`logging.getLogger('pymmcore-plus')`.
+
+The `PYMM_LOG_LEVEL` and `PYMM_LOG_FILE` environment variables are read once
+when `pymmcore_plus` is imported; setting them after import has no effect.
+Use `configure_logging()` to change settings programmatically at any time.
 
 ## Customizing logging
 
-The [`pymmcore_plus.configure_logging`][] function allows you to customize the
-log level, logfile name, and logfile rotation settings.
+The [`pymmcore_plus.configure_logging`][] function lets you change the logfile
+path, level thresholds, stderr toggle, and rotation settings. Calls take
+effect immediately on the active core (if any) and on any core created later.
+Pass `log_to_stderr=False` to silence MMCore's stderr output (or
+`core.enableStderrLog(False)` after creation).
 
 You may also configure logging using the following environment variables:
 
 | Variable       | Default                                                | Description           |
 | -------------- | ------------------------------------------------------ | --------------------- |
-| PYMM_LOG_LEVEL | INFO                                                   | The log level.        |
+| PYMM_LOG_LEVEL | WARNING                                                | The **stderr** log level threshold. |
 | PYMM_LOG_FILE  | `pymmcore_plus.log` in the pymmcore-plus log directory | The logfile location. |
-| PYMM_LOG_RICH  | `0` (disabled)                                         | Use [rich](https://rich.readthedocs.io/) for stderr logging (requires `rich`). Set to `1`, `true`, or `yes` to enable. Note: adds some formatting overhead ([#449](https://github.com/pymmcore-plus/pymmcore-plus/issues/449)). |
 
 !!! tip "pymmcore-plus log directory"
 
@@ -31,10 +55,6 @@ You may also configure logging using the following environment variables:
 
     You can also use `mmcore logs --reveal` to open the log directory in your
     file manager.
-
-Note that both pymmcore-plus and the underlying CMMCore object will write to the log
-file. By default, [CMMCorePlus](../api/cmmcoreplus.md) will call `setPrimaryLogFile()`
-with the location of the pymmcore-plus logfile upon instantiation.
 
 ## Managing logs with the CLI
 
