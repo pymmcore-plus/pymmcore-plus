@@ -21,13 +21,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
         include:
           - os: macos-15-intel
             python-version: "3.12"
             add-group: "PySide6"
           - os: macos-latest
-            python-version: "3.11"
+            python-version: "3.12"
             add-group: "PyQt6"
           - os: windows-latest
             python-version: "3.13"
@@ -37,7 +37,7 @@ jobs:
 
           # test pymmcore-nano
           - os: windows-latest
-            python-version: "3.10"
+            python-version: "3.11"
             nano: "nano"
           - os: macos-15-intel
             python-version: "3.12"
@@ -48,7 +48,7 @@ jobs:
             resolution: "lowest-direct"
             add-group: "PySide6"
           - os: macos-latest
-            python-version: "3.10"
+            python-version: "3.11"
             resolution: "lowest-direct"
             add-group: "PyQt6"
 
