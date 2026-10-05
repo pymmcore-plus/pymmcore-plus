@@ -197,8 +197,11 @@ class UniMMCore(CMMCorePlus):
             # already holds 0.0 — the original bad value is gone and unrecoverable.
             # Validating here catches type errors, limit violations, and disallowed
             # values with clear Python exceptions before C++ ever sees the value.
+            # Properties provided by the C++ bridge itself (e.g. a State device's
+            # Label) have no Python controller, and are validated by C++.
             dev = self._pydevices[label]
-            propValue = _prepare_property_value_for_cpp(dev, propName, propValue)
+            if dev.has_property(propName):
+                propValue = _prepare_property_value_for_cpp(dev, propName, propValue)
         super().setProperty(label, propName, propValue)
 
     # -- Config groups: ensure typed values are converted to strings --

@@ -443,3 +443,22 @@ def test_cached_state_and_label_follow_the_device(unicore: UniMMCore) -> None:
     core.setProperty(DEV, Keyword.Label, "one")
     assert str(core.getPropertyFromCache(DEV, Keyword.State)) == "1"
     assert str(core.getPropertyFromCache(DEV, Keyword.Label)) == "one"
+
+
+def test_notify_state_changed() -> None:
+    """A device-initiated move reaches the core as both State and Label."""
+    core = UniMMCore()
+    prop_changed = Mock()
+    core.events.propertyChanged.connect(prop_changed)
+
+    wheel = MyStateDevice({0: "Red", 1: "Green", 2: "Blue"})
+    core.loadPyDevice(DEV, wheel)
+    core.initializeDevice(DEV)
+
+    wheel._current_position = 2  # e.g. the wheel was turned by hand
+    wheel.notify_state_changed(2)
+
+    _wait_for_calls(prop_changed, 2)
+    prop_changed.assert_any_call(DEV, "State", "2")
+    prop_changed.assert_any_call(DEV, "Label", "Blue")
+    assert str(core.getPropertyFromCache(DEV, Keyword.Label)) == "Blue"
