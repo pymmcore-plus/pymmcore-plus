@@ -206,7 +206,10 @@ For controlling 2-axis positioning stages:
 
 === "Stepper Motor"
 
-    For stepper motor stages with sequence support, use `XYStepperStageDevice`:
+    For stepper motor stages, use `XYStepperStageDevice`. You only work in
+    steps: as with C++ stepper adapters, the core converts microns to the nearest
+    step, applying the `TransposeMirrorX`/`TransposeMirrorY` properties and the
+    adapter origin (`setOriginXY` zeroes it).
 
     ```python
     from pymmcore_plus.experimental.unicore import XYStepperStageDevice

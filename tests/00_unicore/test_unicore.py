@@ -623,6 +623,28 @@ def test_delete_python_device_property_from_config():
         core.deleteConfig("testGroup", "preset1", "PyDev", "propA")
 
 
+def test_setter_less_property_follows_config_group() -> None:
+    """A property set inside C++ (here: by a config group) reaches the device."""
+
+    class ModeDevice(GenericDevice):
+        def __init__(self) -> None:
+            super().__init__()
+            self.register_property(
+                name="Mode", default_value="a", allowed_values=["a", "b"]
+            )
+
+    core = UniMMCore()
+    dev = ModeDevice()
+    core.loadPyDevice("Dev", dev)
+    core.initializeDevice("Dev")
+
+    core.defineConfig("Grp", "B", "Dev", "Mode", "b")
+    core.setConfig("Grp", "B")
+
+    assert core.getProperty("Dev", "Mode") == "b"
+    assert dev.get_property_value("Mode") == "b"
+
+
 def test_config_with_only_python_devices():
     """Test getCurrentConfig works when config only has Python device settings."""
     core = UniMMCore()

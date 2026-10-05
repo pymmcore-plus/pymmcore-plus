@@ -349,8 +349,4 @@ def _prepare_property_value_for_cpp(dev: Device, propName: str, propValue: Any) 
     propValue = ctrl.validate(propValue)
     if isinstance(propValue, bool):
         propValue = int(propValue)  # MM properties expect bools as ints
-    # For config properties (no fset), update last_value directly
-    # since the C++ bridge setter may not fire for getter-less properties.
-    if ctrl.fset is None:
-        ctrl.property.last_value = propValue
     return str(propValue)

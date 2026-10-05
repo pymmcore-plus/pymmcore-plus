@@ -180,10 +180,42 @@ def test_unicore_xy_stepper_stage():
 
     core.setOriginXY()
     assert core.getXYPosition() == (0, 0)
-    assert (stage._origin_x_steps, stage._origin_y_steps) == steps
+    assert stage.position_steps == steps  # the origin is a software (adapter) origin
 
     core.setAdapterOriginXY(500, 600)
     assert core.getXYPosition() == (500, 600)
+
+
+def test_xy_stepper_mirror_set_by_config_group() -> None:
+    """Mirroring applied by a config group is used when converting um to steps.
+
+    Same expectations as the setProperty path in test_unicore_xy_stepper_stage.
+    """
+    core = UniMMCore()
+    stage = MyStepperStage()
+    core.loadPyDevice(XYDEV, stage)
+    core.initializeDevice(XYDEV)
+    core.setXYStageDevice(XYDEV)
+
+    core.defineConfig("Orientation", "Mirrored", XYDEV, Keyword.Transpose_MirrorX, "1")
+    core.defineConfig("Orientation", "Mirrored", XYDEV, Keyword.Transpose_MirrorY, "1")
+    core.setConfig("Orientation", "Mirrored")
+
+    core.setXYPosition(105.5, 205.5)
+    assert stage.position_steps == (-1055, -2055)
+    assert core.getXYPosition() == (105.5, 205.5)
+
+
+def test_xy_stepper_rounds_to_nearest_step() -> None:
+    """Like CXYStageBase, um are converted to the *nearest* step (step size 0.1)."""
+    core = UniMMCore()
+    stage = MyStepperStage()
+    core.loadPyDevice(XYDEV, stage)
+    core.initializeDevice(XYDEV)
+    core.setXYStageDevice(XYDEV)
+
+    core.setXYPosition(0.19, -0.19)
+    assert stage.position_steps == (2, -2)
 
 
 def test_unicore_xy_stepper_stage_sequenceable():

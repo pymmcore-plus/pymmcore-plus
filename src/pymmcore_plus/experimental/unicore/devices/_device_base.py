@@ -369,7 +369,16 @@ def _register_one_property(
     # setter and sequence loader.
     _parse = prop_type.parse_value
     fset = ctrl.fset
-    setter = (lambda s: fset(device, _parse(s))) if fset else None
+    getter: Callable[[], Any] | None
+    setter: Callable[[str], None] | None
+    if ctrl.fget is None and fset is None:
+        # A config property (neither getter nor setter): its value lives only in
+        # `last_value`, so C++ must read and write it there rather than keep a copy.
+        getter = lambda: info.last_value  # noqa: E731
+        setter = lambda s: setattr(info, "last_value", _parse(s))  # noqa: E731
+    else:
+        getter = ctrl.fget.__get__(device) if ctrl.fget else None
+        setter = (lambda s: fset(device, _parse(s))) if fset else None
     seq_loader = (
         (lambda seq: ctrl.load_sequence(device, [_parse(s) for s in seq]))
         if ctrl.fseq_load
@@ -381,7 +390,7 @@ def _register_one_property(
         default_str,
         _PROP_TYPE_MAP.get(prop_type, 1),
         ctrl.is_read_only,
-        getter=ctrl.fget.__get__(device) if ctrl.fget else None,
+        getter=getter,
         setter=setter,
         pre_init=info.is_pre_init,
         limits=limits,
