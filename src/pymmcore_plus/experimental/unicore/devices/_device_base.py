@@ -70,6 +70,9 @@ class Device(_Lockable, ABC):
         self._property_handles_: dict[str, Any] = {}
         # DeviceCallbacks for notifying CMMCore (set during initialize)
         self._notify_: DeviceCallbacks | None = None
+        # Called with the device once the bridge has told it its label (set by
+        # UniMMCore for devices it did not instantiate itself).
+        self._on_bridge_label_: Callable[[Device], None] | None = None
 
     def __init_subclass__(cls) -> None:
         """Collect property controllers from class hierarchy."""
@@ -152,6 +155,12 @@ class Device(_Lockable, ABC):
         then registers all properties with C++.
         """
         self._notify_ = notify
+        # A device instantiated by the bridge (loadPyDeviceAdapter) only learns
+        # its label here.
+        if label := getattr(notify, "label", ""):
+            self._label_ = label
+        if self._on_bridge_label_ is not None:
+            self._on_bridge_label_(self)
         self.initialize()
         self._register_bridge_properties(create_property)
         self._post_bridge_initialize()

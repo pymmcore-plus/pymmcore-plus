@@ -250,7 +250,13 @@ class CameraDevice(Device):
         return self.shape()[0]
 
     def get_bytes_per_pixel(self) -> int:
-        return int(np.dtype(self.dtype()).itemsize)
+        """Total bytes per pixel, as in MM::Camera::GetImageBytesPerPixel().
+
+        CMMCore sizes every image copy with width * height * bytes-per-pixel, so for
+        a color camera this is the item size times the number of components (a
+        `(h, w, 3)` uint8 camera reports 3; an RGB32/BGRA `(h, w, 4)` camera 4).
+        """
+        return int(np.dtype(self.dtype()).itemsize) * self.get_number_of_components()
 
     def get_bit_depth(self) -> int:
         return int(np.dtype(self.dtype()).itemsize * 8)
@@ -263,6 +269,12 @@ class CameraDevice(Device):
         )
 
     def get_number_of_components(self) -> int:
+        """Number of components per pixel: 1 for grayscale, else `shape()[2]`.
+
+        A 3-component camera is returned by the core as an `(h, w, 3)` array in the
+        device's own channel order. A 4-component camera is treated as MM's RGB32
+        format, which expects BGRA byte order (the core returns it as RGB).
+        """
         s = self.shape()
         return 1 if len(s) == 2 else s[2]
 
@@ -402,6 +414,16 @@ class CameraDevice(Device):
         self._capturing = False
         if self._notify_ is not None:
             self._notify_.acq_finished()
+
+    def shutdown(self) -> None:
+        """Shutdown the device.
+
+        Like C++ camera adapters, stops a running sequence acquisition so that no
+        acquisition thread outlives the device. Subclasses that override this
+        should call `super().shutdown()`.
+        """
+        if self._bridge_acq_thread is not None:
+            self.stop_sequence_acquisition()
 
 
 class SimpleCameraDevice(CameraDevice):

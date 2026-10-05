@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from types import ModuleType
 
     from pymmcore_nano import DeviceAdapter
@@ -87,12 +88,26 @@ def scan_module_for_devices(module: ModuleType) -> list[type[Device]]:
     return results
 
 
-def create_adapter_from_module(module: ModuleType) -> DeviceAdapter:
-    """Create a DeviceAdapter from all Device subclasses in a module."""
+def create_adapter_from_module(
+    module: ModuleType, on_create: Callable[[Device], None] | None = None
+) -> DeviceAdapter:
+    """Create a DeviceAdapter from all Device subclasses in a module.
+
+    `on_create`, if given, is called with every device instance the adapter
+    creates (the bridge instantiates devices itself in `core.loadDevice()`).
+    """
     from pymmcore_nano import DeviceAdapter
 
     device_classes = scan_module_for_devices(module)
     adapter = DeviceAdapter()
     for cls in device_classes:
-        adapter.add_device_class(cls.name(), cls, cls.type(), cls.__doc__ or "")
+        factory: Callable[[], Device] = cls
+        if on_create is not None:
+
+            def factory(cls: type[Device] = cls) -> Device:
+                dev = cls()
+                on_create(dev)
+                return dev
+
+        adapter.add_device_class(cls.name(), factory, cls.type(), cls.__doc__ or "")
     return adapter

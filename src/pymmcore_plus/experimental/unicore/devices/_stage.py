@@ -137,6 +137,18 @@ class _BaseXYStage(_BaseStage[tuple[float, float]]):
     def move(self, vx: float, vy: float) -> None:
         """Move at velocity. Override for motorized stages."""
 
+    def set_x_origin(self) -> None:
+        """Zero the X axis at the current position. Override to support it."""
+        raise NotImplementedError(  # pragma: no cover
+            f"{type(self).__name__} does not support setting the X origin."
+        )
+
+    def set_y_origin(self) -> None:
+        """Zero the Y axis at the current position. Override to support it."""
+        raise NotImplementedError(  # pragma: no cover
+            f"{type(self).__name__} does not support setting the Y origin."
+        )
+
     def is_xy_stage_sequenceable(self) -> bool:
         """Return True if the XY stage supports triggered sequences."""
         return self.is_sequenceable()

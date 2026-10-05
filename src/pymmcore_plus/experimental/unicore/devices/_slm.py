@@ -114,7 +114,13 @@ class SLMDevice(SequenceableDevice[np.ndarray]):
         return 1 if len(s) == 2 else s[2]
 
     def get_bytes_per_pixel(self) -> int:
-        return int(np.dtype(self.dtype()).itemsize)
+        """Total bytes per pixel, as in MM::SLM::GetBytesPerPixel().
+
+        The core validates SLM images against width * height * bytes-per-pixel, so
+        for a color SLM this is the item size times the number of components
+        (GenericSLM, MM's RGB SLM, reports 4 bytes per pixel with 3 components).
+        """
+        return int(np.dtype(self.dtype()).itemsize) * self.get_number_of_components()
 
     def set_pixels_to(self, intensity: int) -> None:
         """Set all pixels to a uniform intensity."""

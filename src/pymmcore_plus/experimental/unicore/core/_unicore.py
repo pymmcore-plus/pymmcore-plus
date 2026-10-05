@@ -39,6 +39,9 @@ class UniMMCore(CMMCorePlus):
 
         # Track which labels are Python devices and keep refs to Device objects
         self._pydevices: dict[str, Device] = {}
+        # Devices instantiated by the bridge (from a registered Python adapter)
+        # that have not been initialized yet, so are not known by label.
+        self._pending_pydevices: list[Device] = []
 
         # Python adapter discovery: {adapter_name: module_path}
         self._py_adapter_registry: dict[str, str] = discover_entry_points()
@@ -63,6 +66,7 @@ class UniMMCore(CMMCorePlus):
         # Lazily register any discovered Python adapter before the C++ attempt
         self._ensure_py_adapter_loaded(moduleName)
 
+        self._pending_pydevices.clear()
         try:
             CMMCorePlus.loadDevice(self, label, moduleName, deviceName)
         except RuntimeError as e:
@@ -72,6 +76,23 @@ class UniMMCore(CMMCorePlus):
                 return
             if exc := self._load_error_with_info(label, moduleName, deviceName, str(e)):
                 raise exc from e
+        else:
+            # A device created by the bridge for this label (none for C++ devices).
+            for dev in self._pending_pydevices:
+                self._adopt_py_device(label, dev)
+            self._pending_pydevices.clear()
+
+    def _adopt_py_device(self, label: str, device: Device) -> None:
+        """Track a Device instance the bridge created for `label`."""
+        device._label_ = label
+        self._pydevices[label] = device
+        # the bridge may hand the device a different label (e.g. hub peripherals
+        # created for getInstalledDevices() are never loaded under one).
+        device._on_bridge_label_ = self._on_bridge_label
+
+    def _on_bridge_label(self, device: Device) -> None:
+        if (label := device.get_label()) and self._pydevices.get(label) is not device:
+            self._pydevices[label] = device
 
     def _get_py_device_instance(self, module_name: str, cls_name: str) -> Device:
         """Import and instantiate a python device from `module_name.cls_name`."""
@@ -131,7 +152,9 @@ class UniMMCore(CMMCorePlus):
             module = importlib.import_module(module_or_path)
         else:
             module = module_or_path
-        adapter = create_adapter_from_module(module)
+        adapter = create_adapter_from_module(
+            module, on_create=self._pending_pydevices.append
+        )
         super().loadPyDeviceAdapter(adapter_name, adapter)  # type: ignore[misc]
         self._registered_py_adapters.add(adapter_name)
 
@@ -169,9 +192,13 @@ class UniMMCore(CMMCorePlus):
     # -- Device info overrides (C++ returns bridge adapter info, we want device info) --
 
     def getDeviceLibrary(self, label: DeviceLabel | str) -> AdapterName:
-        if label not in self._pydevices:
-            return super().getDeviceLibrary(label)
-        return cast("AdapterName", self._pydevices[label].__module__)
+        lib = super().getDeviceLibrary(label)
+        # A device loaded with loadPyDevice() sits behind a one-off bridge adapter
+        # ("_PyBridge_N"); report its module instead. Devices from a registered
+        # Python adapter report that adapter's name, like C++ devices.
+        if label in self._pydevices and lib.startswith("_PyBridge_"):
+            return cast("AdapterName", self._pydevices[label].__module__)
+        return lib
 
     def getDeviceName(self, label: DeviceLabel | str) -> DeviceName:
         if label not in self._pydevices:
