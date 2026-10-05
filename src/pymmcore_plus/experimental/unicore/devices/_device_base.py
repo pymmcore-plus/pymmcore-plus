@@ -18,10 +18,10 @@ logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from collections.abc import Callable, KeysView, Sequence
+    from typing import Any, Self
 
     from pymmcore_nano import DeviceCallbacks
     from pymmcore_nano.protocols import CreatePropertyFn
-    from typing_extensions import Any, Self
 
     from ._properties import PropArg, TDev, TProp
 

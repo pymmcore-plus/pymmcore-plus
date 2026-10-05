@@ -15,9 +15,7 @@ from pymmcore_plus.core._constants import PropertyType
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Sequence
-    from typing import TypeAlias
-
-    from typing_extensions import Self
+    from typing import Self, TypeAlias
 
     from ._device_base import Device
 

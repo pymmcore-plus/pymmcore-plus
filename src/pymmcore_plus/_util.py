@@ -433,14 +433,8 @@ def system_info() -> dict[str, str]:
     return info
 
 
-if sys.version_info < (3, 11):
-
-    def _utcnow() -> datetime.datetime:
-        return datetime.datetime.utcnow()
-else:
-
-    def _utcnow() -> datetime.datetime:
-        return datetime.datetime.now(datetime.UTC)
+def _utcnow() -> datetime.datetime:
+    return datetime.datetime.now(datetime.UTC)
 
 
 def timestamp() -> str:

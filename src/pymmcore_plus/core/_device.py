@@ -11,9 +11,9 @@ from .events._device_signal_view import _DevicePropValueSignal
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
+    from typing import Self
 
     from pymmcore import StateLabel
-    from typing_extensions import Self
 
     from pymmcore_plus._accumulator import (
         PositionChangeAccumulator,

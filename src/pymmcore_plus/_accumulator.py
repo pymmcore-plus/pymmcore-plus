@@ -14,7 +14,7 @@ from pymmcore_plus.core._constants import DeviceType
 from pymmcore_plus.core._mmcore_plus import CMMCorePlus
 
 if TYPE_CHECKING:
-    from typing_extensions import Self
+    from typing import Self
 T = TypeVar("T")
 DT = TypeVar("DT", bound=DeviceType)
 
