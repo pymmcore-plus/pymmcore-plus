@@ -11,7 +11,7 @@ experimental sequences defined using
 [useq-schema](https://github.com/pymmcore-plus/useq-schema).
 
 ```python linenums="1" title="run_mda.py"
---8<-- "examples/run_mda.py"
+--8 < --"examples/run_mda.py"
 ```
 
 <!-- These comments correspond to the (1), (2) annotations in run_mda.py. -->

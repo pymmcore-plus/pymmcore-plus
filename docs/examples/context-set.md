@@ -6,7 +6,7 @@ use the convenience method
 [`CMMCorePlus.setContext`][pymmcore_plus.CMMCorePlus.setContext].
 
 ```python linenums="1" title="set_as_context.py"
---8<-- "examples/set_as_context.py"
+--8 < --"examples/set_as_context.py"
 ```
 
 This will work for the `set` methods on the core such as

@@ -368,7 +368,8 @@ def _register_one_property(
     # parse_value method to convert from string to the appropriate Python type in the
     # setter and sequence loader.
     _parse = prop_type.parse_value
-    setter = (lambda s: ctrl.fset(device, _parse(s))) if ctrl.fset else None
+    fset = ctrl.fset
+    setter = (lambda s: fset(device, _parse(s))) if fset else None
     seq_loader = (
         (lambda seq: ctrl.load_sequence(device, [_parse(s) for s in seq]))
         if ctrl.fseq_load

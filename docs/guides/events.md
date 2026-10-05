@@ -46,6 +46,7 @@ setting the `PYMM_SIGNALS_BACKEND` environment variable to `qt`,
     ```python
     # before instantiating CMMCorePlus
     import os
+
     os.environ["PYMM_SIGNALS_BACKEND"] = "psygnal"
     ```
 
@@ -72,7 +73,6 @@ support the same connection/disconnection API.)
     Register a callback to listen to property changes on the `CMMCorePlus`:
 
     ```python
-
     @core.events.propertyChanged.connect
     def on_property_changed(dev: str, prop: str, value: str):
         print(f"Property {prop!r} on device {dev!r} changed to {value}")

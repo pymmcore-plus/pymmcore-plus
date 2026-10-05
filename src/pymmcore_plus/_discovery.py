@@ -168,7 +168,7 @@ def discover_mm() -> Iterator[DiscoveredMM]:
 def find_micromanager(return_first: Literal[True] = ...) -> str | None: ...
 @overload
 def find_micromanager(return_first: Literal[False]) -> list[str]: ...
-def find_micromanager(return_first: bool = True) -> str | None | list[str]:
+def find_micromanager(return_first: bool = True) -> str | list[str] | None:
     r"""Locate a Micro-Manager folder (for device adapters).
 
     In order, this will look for:

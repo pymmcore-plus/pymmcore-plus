@@ -12,5 +12,5 @@ API would look like implemented on the pymmcore-plus engine.
     `pymmcore` and `pymmcore-plus` APIs directly.
 
 ```python title="pycro-api.py"
---8<-- "examples/pycro-api.py"
+--8 < --"examples/pycro-api.py"
 ```

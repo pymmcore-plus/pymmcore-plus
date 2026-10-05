@@ -8,6 +8,7 @@
 [![docs](https://github.com/pymmcore-plus/pymmcore-plus/actions/workflows/docs.yml/badge.svg)](https://pymmcore-plus.github.io/pymmcore-plus/)
 [![codecov](https://codecov.io/gh/pymmcore-plus/pymmcore-plus/branch/main/graph/badge.svg)](https://codecov.io/gh/pymmcore-plus/pymmcore-plus)
 [![Benchmarks](https://img.shields.io/endpoint?url=https://codspeed.io/badge.json)](https://codspeed.io/pymmcore-plus/pymmcore-plus)
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.14812446.svg)](https://doi.org/10.5281/zenodo.14812446)
 
 `pymmcore-plus` extends [pymmcore](https://github.com/micro-manager/pymmcore)
 (python bindings for the C++ [micro-manager

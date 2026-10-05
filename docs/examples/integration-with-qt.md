@@ -93,7 +93,6 @@ class MainWindow(QMainWindow):
         self.mmc.snapImage()
 
 
-
 app = QApplication(sys.argv)
 window = MainWindow()
 app.exec_()

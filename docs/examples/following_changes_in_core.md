@@ -8,5 +8,5 @@ See the [Events API documentation](../api/events.md) for complete details on wha
 and how to connect to them.
 
 ```python linenums="1" title="on_prop_changed.py"
---8<-- "examples/properties_and_state_events.py"
+--8 < --"examples/properties_and_state_events.py"
 ```
