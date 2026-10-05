@@ -48,7 +48,14 @@ def core(
         assert isinstance(core.mda._signals, QMDASignaler)
     if not core.getDeviceAdapterSearchPaths():
         pytest.fail("To run tests, please install MM with `mmcore install`")
-    core.loadSystemConfiguration()
+    # MMCore delivers callbacks from a background queue: wait for the last one posted
+    # by loadSystemConfiguration, so stale events (e.g. pixelSizeChanged) can't leak
+    # into the test after it connects its own listeners.
+    bot = (
+        PsygnalBot() if request.param == "psygnal" else request.getfixturevalue("qtbot")
+    )
+    with bot.waitSignal(core.events.systemConfigurationLoaded):
+        core.loadSystemConfiguration()
     yield core
 
 

@@ -11,7 +11,9 @@ from pymmcore_plus import CMMCorePlus
 
 
 @pytest.fixture
-def core() -> CMMCorePlus:
+def core(monkeypatch: pytest.MonkeyPatch) -> CMMCorePlus:
+    # these tests wait with time.sleep, which can't deliver queued Qt signals
+    monkeypatch.setenv("PYMM_SIGNALS_BACKEND", "psygnal")
     core = CMMCorePlus()
     core.loadSystemConfiguration()
     return core
