@@ -5,11 +5,10 @@ from typing import (
     Any,
     ClassVar,
     Protocol,
+    Self,
     overload,
     runtime_checkable,
 )
-
-from typing_extensions import Self
 
 if TYPE_CHECKING:
     from collections.abc import Callable
