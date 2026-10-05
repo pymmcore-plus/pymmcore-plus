@@ -116,7 +116,7 @@ jobs:
         with:
           python-version: "3.13"
           enable-cache: true
-      - uses: pyvista/setup-headless-display-action@v4
+      - uses: pyvista/setup-headless-display-action@v5
         with:
           qt: true
 
@@ -155,7 +155,7 @@ jobs:
         with:
           python-version: "3.12"
           enable-cache: true
-      - uses: pyvista/setup-headless-display-action@v4
+      - uses: pyvista/setup-headless-display-action@v5
         with:
           qt: true
 
@@ -191,7 +191,7 @@ jobs:
       - uses: pymmcore-plus/setup-mm-test-adapters@main
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5
         with:
           mode: simulation
           run: uv run pytest -W ignore --codspeed -v --color=yes
