@@ -145,7 +145,20 @@ class StateDevice(Device):
     def notify_state_changed(self, state: int) -> None:
         """Notify the core that the device moved on its own (e.g. by hand).
 
-        The core is notified of both the State and Label properties.
+        The core updates its cached State and Label and emits `propertyChanged` for
+        both. Moves made through the core (`setState`, `setProperty`, ...) are
+        reported automatically and don't need this.
+
+        Listeners run immediately, on the thread that calls this method, and may call
+        back into the device. If you hold the device lock while reading the hardware
+        (`with self:`), call this after releasing it:
+
+            with self:  # holds the device lock
+                pos = self._read_position_from_hardware()
+            self.notify_state_changed(pos)  # lock released
+
+        Calling it while still holding the lock can hang: a listener that calls back
+        into the device waits for the lock that this thread is still holding.
         """
         if self._on_state_changed_ is not None:
             self._on_state_changed_(state, self._state_to_label.get(state, ""))
