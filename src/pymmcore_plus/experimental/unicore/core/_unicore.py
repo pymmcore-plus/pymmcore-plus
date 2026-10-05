@@ -178,19 +178,25 @@ class UniMMCore(CMMCorePlus):
         pydevices.unload_all()
         pycore.reset_current()
 
-    def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
-        """Helper function to set the current core device if it is a python device.
+    def _set_current_device(
+        self, keyword: Keyword, label: str, cpp_setter: Callable[[str], None]
+    ) -> None:
+        """Select `label` as the current device for `keyword` (Python or C++).
 
-        If the label is a python device, the current device is set and the label is
-        cleared (in preparation for calling `super().setDevice()`), otherwise the
-        label is returned unchanged.
+        For a python device, the C++ selection is cleared. Otherwise any python
+        device is deselected, unless `cpp_setter` rejects the label.
         """
         if label in self._pydevices:
             self._pycore.set_current(keyword, label)
-            label = ""
-        elif not label:
-            self._pycore.set_current(keyword, None)
-        return label
+            cpp_setter("")
+            return
+        prev = self._pycore.current(keyword)
+        self._pycore.set_current(keyword, None)
+        try:
+            cpp_setter(label)
+        except Exception:
+            self._pycore.set_current(keyword, prev)
+            raise
 
     # -----------------------------------------------------------------------
     # ------------------------ General Core methods  ------------------------
@@ -524,6 +530,21 @@ class UniMMCore(CMMCorePlus):
     def getProperty(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> Any:  # broadening to Any, because pydevices can return non-string values?
+        # Core device-role properties must reflect Python devices too, which the C++
+        # core knows nothing about.
+        if label == KW.CoreDevice:
+            _core_device_getters: dict[str, Callable[[], str]] = {
+                KW.CoreChannelGroup: self.getChannelGroup,
+                KW.CoreFocus: self.getFocusDevice,
+                KW.CoreCamera: self.getCameraDevice,
+                KW.CoreXYStage: self.getXYStageDevice,
+                KW.CoreShutter: self.getShutterDevice,
+                KW.CoreSLM: self.getSLMDevice,
+            }
+            getter = _core_device_getters.get(propName)
+            if getter is not None:
+                return getter()
+
         if label not in self._pydevices:  # pragma: no cover
             return super().getProperty(label, propName)
         with self._pydevices[label] as dev:
@@ -534,6 +555,8 @@ class UniMMCore(CMMCorePlus):
     def getPropertyFromCache(
         self, deviceLabel: DeviceLabel | str, propName: PropertyName | str
     ) -> Any:
+        if deviceLabel == KW.CoreDevice:  # virtual device: no real cache to go stale
+            return self.getProperty(deviceLabel, propName)
         if deviceLabel not in self._pydevices:  # pragma: no cover
             return super().getPropertyFromCache(deviceLabel, propName)
         return self._state_cache[(deviceLabel, propName)]
@@ -602,6 +625,18 @@ class UniMMCore(CMMCorePlus):
     def getAllowedPropertyValues(
         self, label: DeviceLabel | str, propName: PropertyName | str
     ) -> tuple[str, ...]:
+        # Python devices must be offered as choices for the Core device roles.
+        if label == KW.CoreDevice:
+            _core_device_types: dict[str, DeviceType] = {
+                KW.CoreFocus: DeviceType.Stage,
+                KW.CoreCamera: DeviceType.Camera,
+                KW.CoreXYStage: DeviceType.XYStage,
+                KW.CoreShutter: DeviceType.Shutter,
+                KW.CoreSLM: DeviceType.SLM,
+            }
+            if (dev_type := _core_device_types.get(propName)) is not None:
+                return ("", *self.getLoadedDevicesOfType(dev_type))
+
         if label not in self._pydevices:  # pragma: no cover
             return super().getAllowedPropertyValues(label, propName)
         with self._pydevices[label] as dev:
@@ -740,8 +775,7 @@ class UniMMCore(CMMCorePlus):
     # ########################################################################
 
     def setXYStageDevice(self, xyStageLabel: DeviceLabel | str) -> None:
-        label = self._set_current_if_pydevice(KW.CoreXYStage, xyStageLabel)
-        super().setXYStageDevice(label)
+        self._set_current_device(KW.CoreXYStage, xyStageLabel, super().setXYStageDevice)
 
     def getXYStageDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected XYStage device.
@@ -943,16 +977,13 @@ class UniMMCore(CMMCorePlus):
 
     def setFocusDevice(self, focusLabel: str) -> None:
         """Set new current Focus Device."""
-        try:
-            super().setFocusDevice(focusLabel)
-        except Exception:
-            # python device
-            if focusLabel in self._pydevices:
-                if self.getDeviceType(focusLabel) == DeviceType.StageDevice:
-                    # assign focus device
-                    label = self._set_current_if_pydevice(KW.CoreFocus, focusLabel)
-                    super().setFocusDevice(label)
-        # otherwise do nothing
+        if (
+            focusLabel in self._pydevices
+            and self.getDeviceType(focusLabel) != DeviceType.StageDevice
+        ):
+            return
+        with suppress(Exception):  # invalid labels are ignored
+            self._set_current_device(KW.CoreFocus, focusLabel, super().setFocusDevice)
 
     @overload
     def getPosition(self) -> float: ...
@@ -1154,8 +1185,7 @@ class UniMMCore(CMMCorePlus):
 
     def setCameraDevice(self, cameraLabel: DeviceLabel | str) -> None:
         """Set the camera device."""
-        label = self._set_current_if_pydevice(KW.CoreCamera, cameraLabel)
-        super().setCameraDevice(label)
+        self._set_current_device(KW.CoreCamera, cameraLabel, super().setCameraDevice)
 
     def getCameraDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected camera device.
@@ -1732,8 +1762,7 @@ class UniMMCore(CMMCorePlus):
 
     def setSLMDevice(self, slmLabel: DeviceLabel | str) -> None:
         """Set the SLM device."""
-        label = self._set_current_if_pydevice(KW.CoreSLM, slmLabel)
-        super().setSLMDevice(label)
+        self._set_current_device(KW.CoreSLM, slmLabel, super().setSLMDevice)
 
     def getSLMDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected SLM device.
@@ -2116,8 +2145,7 @@ class UniMMCore(CMMCorePlus):
         return None
 
     def setShutterDevice(self, shutterLabel: DeviceLabel | str) -> None:
-        label = self._set_current_if_pydevice(KW.CoreShutter, shutterLabel)
-        super().setShutterDevice(label)
+        self._set_current_device(KW.CoreShutter, shutterLabel, super().setShutterDevice)
 
     def getShutterDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected Shutter device.
