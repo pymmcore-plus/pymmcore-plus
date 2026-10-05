@@ -178,20 +178,25 @@ class UniMMCore(CMMCorePlus):
         pydevices.unload_all()
         pycore.reset_current()
 
-    def _set_current_if_pydevice(self, keyword: Keyword, label: str) -> str:
-        """Helper function to set the current core device if it is a python device.
+    def _set_current_device(
+        self, keyword: Keyword, label: str, cpp_setter: Callable[[str], None]
+    ) -> None:
+        """Select `label` as the current device for `keyword` (Python or C++).
 
-        If the label is a python device, the current device is set and the label is
-        cleared (in preparation for calling `super().setDevice()`). Otherwise any
-        python device currently selected for this role is deselected, and the label
-        is returned unchanged.
+        For a python device, the C++ selection is cleared. Otherwise any python
+        device is deselected, unless `cpp_setter` rejects the label.
         """
         if label in self._pydevices:
             self._pycore.set_current(keyword, label)
-            label = ""
-        else:
-            self._pycore.set_current(keyword, None)
-        return label
+            cpp_setter("")
+            return
+        prev = self._pycore.current(keyword)
+        self._pycore.set_current(keyword, None)
+        try:
+            cpp_setter(label)
+        except Exception:
+            self._pycore.set_current(keyword, prev)
+            raise
 
     # -----------------------------------------------------------------------
     # ------------------------ General Core methods  ------------------------
@@ -770,8 +775,7 @@ class UniMMCore(CMMCorePlus):
     # ########################################################################
 
     def setXYStageDevice(self, xyStageLabel: DeviceLabel | str) -> None:
-        label = self._set_current_if_pydevice(KW.CoreXYStage, xyStageLabel)
-        super().setXYStageDevice(label)
+        self._set_current_device(KW.CoreXYStage, xyStageLabel, super().setXYStageDevice)
 
     def getXYStageDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected XYStage device.
@@ -973,18 +977,13 @@ class UniMMCore(CMMCorePlus):
 
     def setFocusDevice(self, focusLabel: str) -> None:
         """Set new current Focus Device."""
-        if focusLabel in self._pydevices:
-            if self.getDeviceType(focusLabel) == DeviceType.StageDevice:
-                # assign focus device
-                label = self._set_current_if_pydevice(KW.CoreFocus, focusLabel)
-                super().setFocusDevice(label)
+        if (
+            focusLabel in self._pydevices
+            and self.getDeviceType(focusLabel) != DeviceType.StageDevice
+        ):
             return
-        try:
-            super().setFocusDevice(focusLabel)
-        except Exception:
-            return  # otherwise do nothing
-        # a C++ device (or "") was selected: deselect any python focus device
-        self._pycore.set_current(KW.CoreFocus, None)
+        with suppress(Exception):  # invalid labels are ignored
+            self._set_current_device(KW.CoreFocus, focusLabel, super().setFocusDevice)
 
     @overload
     def getPosition(self) -> float: ...
@@ -1186,8 +1185,7 @@ class UniMMCore(CMMCorePlus):
 
     def setCameraDevice(self, cameraLabel: DeviceLabel | str) -> None:
         """Set the camera device."""
-        label = self._set_current_if_pydevice(KW.CoreCamera, cameraLabel)
-        super().setCameraDevice(label)
+        self._set_current_device(KW.CoreCamera, cameraLabel, super().setCameraDevice)
 
     def getCameraDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected camera device.
@@ -1764,8 +1762,7 @@ class UniMMCore(CMMCorePlus):
 
     def setSLMDevice(self, slmLabel: DeviceLabel | str) -> None:
         """Set the SLM device."""
-        label = self._set_current_if_pydevice(KW.CoreSLM, slmLabel)
-        super().setSLMDevice(label)
+        self._set_current_device(KW.CoreSLM, slmLabel, super().setSLMDevice)
 
     def getSLMDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected SLM device.
@@ -2148,8 +2145,7 @@ class UniMMCore(CMMCorePlus):
         return None
 
     def setShutterDevice(self, shutterLabel: DeviceLabel | str) -> None:
-        label = self._set_current_if_pydevice(KW.CoreShutter, shutterLabel)
-        super().setShutterDevice(label)
+        self._set_current_device(KW.CoreShutter, shutterLabel, super().setShutterDevice)
 
     def getShutterDevice(self) -> DeviceLabel | Literal[""]:
         """Returns the label of the currently selected Shutter device.

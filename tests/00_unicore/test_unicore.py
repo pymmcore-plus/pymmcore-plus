@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import weakref
+from contextlib import suppress
 from types import ModuleType
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
@@ -1258,6 +1259,12 @@ def test_core_role_properties_with_python_device(
         core.setProperty("Core", prop, label)
         assert getattr(core, getter)() == core.getProperty("Core", prop) == label
         assert core.getPropertyFromCache("Core", prop) == label
+
+    # a rejected label leaves the python selection in place
+    core.setProperty("Core", prop, "PyDev")
+    with suppress(Exception):  # setFocusDevice ignores invalid labels
+        core.setProperty("Core", prop, "NotADevice")
+    assert getattr(core, getter)() == "PyDev"
 
 
 def test_core_role_properties_demo_config() -> None:
