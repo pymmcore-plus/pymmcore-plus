@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, cast
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
 
 from ._device_base import Device
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
     from typing import ClassVar, Literal
 
     from pymmcore import StateLabel
@@ -68,9 +68,8 @@ class StateDevice(Device):
         # reverse mapping for O(1) lookup
         self._label_to_state: dict[str, int] = {lbl: p for p, lbl in states.items()}
 
-        # property changes recorded by `_set_state`, emitted by the core once the
-        # device lock is released and its property cache is up to date
-        self._pending_events: list[tuple[str, Any]] = []
+        # set by UniMMCore when the device is loaded; see `notify_state_changed`
+        self._on_state_changed_: Callable[[int, str], None] | None = None
 
         self.register_standard_properties()
 
@@ -138,20 +137,19 @@ class StateDevice(Device):
     def _set_state(self, state: int) -> None:
         # internal method to set the state, called by the property setter
         # to keep the label and state property in sync
+        # A core-initiated move needs no notification: the core emits State and Label
+        # once the call has finished (like C++ CStateDeviceBase).
         self.set_state(state)  # call the device-specific method
-        self._pending_events.append((Keyword.State.value, state))
         label = self._state_to_label.get(state, "")
         self.set_property_value(Keyword.Label, label)
-        self._pending_events.append((Keyword.Label.value, label))
 
-    def take_pending_events(self) -> list[tuple[str, Any]]:
-        """Return and clear the property changes recorded since the last call.
+    def notify_state_changed(self, state: int) -> None:
+        """Notify the core that the device moved on its own (e.g. by hand).
 
-        The core calls this while holding the device, and emits `propertyChanged`
-        for each item after releasing it (see `UniMMCore._emit_state_events`).
+        The core is notified of both the State and Label properties.
         """
-        events, self._pending_events = self._pending_events, []
-        return events
+        if self._on_state_changed_ is not None:
+            self._on_state_changed_(state, self._state_to_label.get(state, ""))
 
     def _get_current_label(self) -> str:
         # internal method to get the current label, called by the property getter
