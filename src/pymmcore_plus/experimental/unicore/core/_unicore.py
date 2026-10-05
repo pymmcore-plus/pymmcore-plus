@@ -5,8 +5,9 @@ import threading
 import warnings
 import weakref
 from collections.abc import Callable, Iterator, MutableMapping, Sequence
-from contextlib import suppress
+from contextlib import contextmanager, suppress
 from datetime import datetime
+from functools import partial
 from itertools import count
 from pathlib import Path
 from time import perf_counter_ns
@@ -27,6 +28,7 @@ from pymmcore_plus.core import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._config import Configuration
 from pymmcore_plus.core._constants import PixelType
+from pymmcore_plus.core._mmcore_plus import STATE_PROPS
 from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
@@ -144,6 +146,8 @@ class UniMMCore(CMMCorePlus):
         self._pydevices = PyDeviceManager()  # manager for python devices
         self._state_cache = ThreadSafeConfig()  # threadsafe cache for property states
         self._pycore = _CoreDevice(self._state_cache)  # virtual core for python
+        # per-thread list of deferred State/Label events (see _deferred_state_events)
+        self._state_events = threading.local()
         self._stop_event: threading.Event = threading.Event()
         self._acquisition_thread: AcquisitionThread | None = None  # TODO: implement
         self._seq_buffer = SequenceBuffer(size_mb=_DEFAULT_BUFFER_SIZE_MB)
@@ -343,6 +347,8 @@ class UniMMCore(CMMCorePlus):
         if label in self.getLoadedDevices():
             raise ValueError(f"The specified device label {label!r} is already in use")
         self._pydevices.load(label, device, create_core_proxy(self))
+        if isinstance(device, StateDevice):
+            device._on_state_changed_ = partial(self._on_py_state_changed, label)
 
     load_py_device = loadPyDevice
 
@@ -582,18 +588,12 @@ class UniMMCore(CMMCorePlus):
 
         if label not in self._pydevices:  # pragma: no cover
             return super().setProperty(label, propName, propValue)
-        events: list[tuple[str, Any]] = []
-        with self._pydevices[label] as dev:
-            try:
-                dev.set_property_value(propName, propValue)
-                self._state_cache[(label, propName)] = propValue
-                # a state device's State and Label change together
-                if propName in (KW.State, KW.Label) and isinstance(dev, StateDevice):
-                    self._cache_state_props(label, dev)
-            finally:
-                if isinstance(dev, StateDevice):
-                    events = dev.take_pending_events()
-        self._emit_state_events(label, events)
+        with self._state_change_emission(label), self._pydevices[label] as dev:
+            dev.set_property_value(propName, propValue)
+            self._state_cache[(label, propName)] = propValue
+            # a state device's State and Label change together
+            if propName in (KW.State, KW.Label) and isinstance(dev, StateDevice):
+                self._cache_state_props(label, dev)
 
     def getPropertyType(self, label: str, propName: str) -> PropertyType:
         if label not in self._pydevices:  # pragma: no cover
@@ -2045,29 +2045,71 @@ class UniMMCore(CMMCorePlus):
             with suppress(Exception):
                 self._state_cache[(label, kw)] = state_dev.get_property_value(kw)
 
-    def _emit_state_events(
-        self, label: DeviceLabel | str, events: list[tuple[str, Any]]
-    ) -> None:
-        """Emit propertyChanged for a state device's State/Label changes.
+    def _on_py_state_changed(self, label: str, state: int, state_label: str) -> None:
+        """Called when a python StateDevice reports that it moved on its own.
 
-        Called *after* the device lock is released and `_cache_state_props` has run,
-        so listeners see up-to-date cached values and may call back into the device.
+        See `StateDevice.notify_state_changed`. Like CMMCore, the property cache is
+        updated before listeners are told. Normally this emits right away; if it
+        happens during a core call on this thread (e.g. a device that moves another
+        device), it is deferred until that call has released the device lock.
         """
-        for prop, value in events:
-            self.events.propertyChanged.emit(label, prop, value)
+        if isinstance(dev := self._pydevices[label], StateDevice):
+            self._cache_state_props(label, dev)
+        events = [(label, KW.State.value, state), (label, KW.Label.value, state_label)]
+        pending: list[tuple[str, str, Any]] | None = getattr(
+            self._state_events, "pending", None
+        )
+        if pending is not None:
+            pending.extend(events)
+        else:
+            for event in events:
+                self.events.propertyChanged.emit(*event)
+
+    @contextmanager
+    def _state_change_emission(self, label: str) -> Iterator[None]:
+        """Emit State/Label of a python state device after a core call moved it.
+
+        Like CMMCorePlus for C++ devices, compare before and after and emit once the
+        call has finished, i.e. after the device lock is released and the cache is up
+        to date, so listeners may call back into the device.
+        """
+        if not isinstance(self._pydevices[label], StateDevice):
+            with self._deferred_state_events():
+                yield
+            return
+        with (
+            self._property_change_emission_ensured(label, STATE_PROPS),
+            self._deferred_state_events(),
+        ):
+            yield
+
+    @contextmanager
+    def _deferred_state_events(self) -> Iterator[None]:
+        """Defer `notify_state_changed` events made on this thread during a core call.
+
+        They are emitted when the outermost block exits (after the device lock is
+        released), including when the block raises.
+        """
+        if getattr(self._state_events, "pending", None) is not None:
+            yield  # nested: the outermost block emits
+            return
+        pending: list[tuple[str, str, Any]] = []
+        self._state_events.pending = pending
+        try:
+            yield
+        finally:
+            self._state_events.pending = None
+            for event in pending:
+                self.events.propertyChanged.emit(*event)
 
     def setState(self, stateDeviceLabel: DeviceLabel | str, state: int) -> None:
         """Set state (position) on the specific device."""
         if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
             return super().setState(stateDeviceLabel, state)
 
-        with state_dev:
-            try:
-                state_dev.set_position_or_label(state)
-                self._cache_state_props(stateDeviceLabel, state_dev)
-            finally:
-                events = state_dev.take_pending_events()
-        self._emit_state_events(stateDeviceLabel, events)
+        with self._state_change_emission(stateDeviceLabel), state_dev:
+            state_dev.set_position_or_label(state)
+            self._cache_state_props(stateDeviceLabel, state_dev)
 
     # ------------------------------------------------------------------- getState
 
@@ -2098,15 +2140,12 @@ class UniMMCore(CMMCorePlus):
         if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
             return super().setStateLabel(stateDeviceLabel, stateLabel)
 
-        with state_dev:
+        with self._state_change_emission(stateDeviceLabel), state_dev:
             try:
                 state_dev.set_position_or_label(stateLabel)
-                self._cache_state_props(stateDeviceLabel, state_dev)
             except KeyError as e:
                 raise RuntimeError(str(e)) from e  # convert to RuntimeError
-            finally:
-                events = state_dev.take_pending_events()
-        self._emit_state_events(stateDeviceLabel, events)
+            self._cache_state_props(stateDeviceLabel, state_dev)
 
     # ----------------------------------------------------------------- getStateLabel
 
