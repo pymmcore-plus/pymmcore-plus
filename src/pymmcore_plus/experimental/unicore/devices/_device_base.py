@@ -15,8 +15,7 @@ from pymmcore_plus.experimental.unicore.devices._properties import (
 
 if TYPE_CHECKING:
     from collections.abc import Callable, KeysView, Sequence
-
-    from typing_extensions import Any, Self
+    from typing import Any, Self
 
     from pymmcore_plus.experimental.unicore._proxy import CMMCoreProxy
 

@@ -14,11 +14,7 @@ from ._property import Property
 
 if TYPE_CHECKING:
     from collections.abc import Callable, Container, Iterable
-    from typing import Any, TypeAlias
-
-    from typing_extensions import (
-        Self,  # py310
-    )
+    from typing import Any, Self, TypeAlias
 
     from pymmcore_plus.metadata.schema import DeviceInfo
 
