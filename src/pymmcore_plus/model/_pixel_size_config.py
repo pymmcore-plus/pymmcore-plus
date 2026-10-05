@@ -7,11 +7,7 @@ from ._config_group import ConfigGroup, ConfigPreset, Setting
 
 if TYPE_CHECKING:
     from collections.abc import Container, Iterable, MutableMapping
-    from typing import Any, Final
-
-    from typing_extensions import (
-        Self,  # py310
-    )
+    from typing import Any, Final, Self
 
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.metadata.schema import AffineTuple, PixelSizeConfigPreset
