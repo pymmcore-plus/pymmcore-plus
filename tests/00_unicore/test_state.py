@@ -572,6 +572,46 @@ def test_core_call_that_moves_a_second_device() -> None:
     ]
 
 
+def test_notify_state_changed_does_not_read_the_device() -> None:
+    """The reported state is cached as is; the device is not read off its lock."""
+
+    class _CountingDevice(MyStateDevice):
+        reads = 0
+
+        def get_state(self) -> int:
+            self.reads += 1
+            return super().get_state()
+
+    core = UniMMCore()
+    wheel = _CountingDevice({0: "Red", 1: "Green", 2: "Blue"})
+    dev = "MyStateDevice"
+    core.loadPyDevice(dev, wheel)
+    core.initializeDevice(dev)
+
+    wheel.reads = 0
+    wheel._current_position = 2  # moved by hand
+    wheel.notify_state_changed(2)
+    assert wheel.reads == 0
+    assert core.getPropertyFromCache(dev, "State") == 2
+    assert core.getPropertyFromCache(dev, "Label") == "Blue"
+
+
+def test_notify_state_changed_after_unload_is_ignored() -> None:
+    """A device thread outliving its device's unload doesn't raise or emit."""
+    core = UniMMCore()
+    wheel = MyStateDevice({0: "Red", 1: "Green"})
+    dev = "MyStateDevice"
+    core.loadPyDevice(dev, wheel)
+    core.initializeDevice(dev)
+    core.unloadDevice(dev)
+
+    prop_changed = Mock()
+    core.events.propertyChanged.connect(prop_changed)
+    wheel._current_position = 1
+    wheel.notify_state_changed(1)  # must not raise
+    prop_changed.assert_not_called()
+
+
 def test_cached_state_and_label_follow_the_device(unicore: UniMMCore) -> None:
     """getPropertyFromCache sees State/Label after every way of moving the device.
 
