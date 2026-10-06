@@ -136,6 +136,9 @@ line-length = 88
 target-version = "py311"
 fix = true
 unsafe-fixes = true
+# ruff formats python code blocks in markdown, which mangles
+# pymdownx.snippets directives like `--8<-- "examples/run_mda.py"`
+extend-exclude = ["*.md"]
 
 [tool.ruff.lint]
 pydocstyle = { convention = "numpy" }
