@@ -104,8 +104,9 @@ C++ separates two questions, and so does this policy:
      ```python
      peripherals: ClassVar[Mapping[str, Callable[[], Device]]]   # name -> factory
      ```
-     A factory is a `Device` class or any zero-argument callable returning a new
-     device (e.g. `functools.partial(Motor, axis="x")`). For names known only at
+     A factory is a `Device` subclass or a `functools.partial` of one (e.g.
+     `partial(Motor, axis="x")`), so that the device type and description
+     (`RegisterDevice` needs both) are known without creating a device. For names known only at
      runtime, the hub may override
      ```python
      @classmethod
