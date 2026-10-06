@@ -90,17 +90,72 @@ CHANGED (with the replacement text) or REJECTED.
   guarantees I1 for any number of failing devices.
 
 ### D2. Hub peripherals — DECISION
-- **(a) Recommended.** A Python hub class declares its peripherals statically:
-  `peripherals: ClassVar[dict[str, type[Device]]]`, registered with the adapter
-  up front (the analogue of `InitializeModuleData`).
-  `detect_installed_devices()` runs only after `initialize()` and returns the
-  subset of those names that are present. Prototypes for
-  `getInstalledDevices()` are C++ name/description stubs that never wrap a
-  Python object. Peripheral instances are always created by the bridge from the
-  class; a hub cannot hand over a pre-built instance.
-  Deletes: on-demand detection in `CreateDevice`, `registerDiscovered`,
-  `isDeviceFactory`, Python prototypes, `_HubPeripheralTracker`.
-- (b) Keep on-demand detection and instance peripherals (current).
+
+C++ separates two questions, and so does this policy:
+
+| Question | C++ | Python (this policy) |
+|---|---|---|
+| Which names can this adapter create? Needs no hub instance. | `InitializeModuleData()` registers fixed names (DemoCamera); `CreateDevice(name)` may also accept names it parses (ASITiger, `"ZStage:Z:32"`) | `peripherals` class attribute; optional `create_peripheral` classmethod |
+| Which peripherals are attached now? Needs an initialized hub. | `hub->DetectInstalledDevices()` adds prototype devices; read by `getInstalledDevices()` | `detect_installed_devices()` returns names |
+| How does a peripheral talk to its hub? | `GetParentHub()` / `AssignToHub<T>()` in `Initialize()` | `self.get_parent_hub()` in `initialize()` |
+
+- **(a) Recommended.**
+  1. **Catalogue (class level, stateless).** A `HubDevice` subclass declares
+     ```python
+     peripherals: ClassVar[Mapping[str, Callable[[], Device]]]   # name -> factory
+     ```
+     A factory is a `Device` class or any zero-argument callable returning a new
+     device (e.g. `functools.partial(Motor, axis="x")`). For names known only at
+     runtime, the hub may override
+     ```python
+     @classmethod
+     def create_peripheral(cls, name: str) -> Device | None: ...
+     ```
+     whose default looks `name` up in `peripherals`. Both must be pure: no hub
+     instance, no I/O, a new device on every call. The names in `peripherals`
+     are registered with the adapter when it is registered, so they appear in
+     `getAvailableDevices()` and load by name at any time (as DemoCamera's do);
+     the adapter's `CreateDevice(name)` asks each of its hub classes'
+     `create_peripheral(name)` for any other name (as ASITiger's does), so those
+     load but are not listed.
+  2. **Detection (instance level, after `initialize()`).**
+     ```python
+     def detect_installed_devices(self) -> Iterable[str]: ...
+     ```
+     returns the names of the peripherals present; the default returns every
+     key of `peripherals`. It is called only on an initialized hub. Each name
+     must resolve through `create_peripheral`, otherwise `getInstalledDevices()`
+     raises. Prototypes for `getInstalledDevices()` are C++ stubs holding a name
+     and a description (the factory's docstring); no Python device is created.
+  3. **Reaching the hub.**
+     ```python
+     def get_parent_hub(self) -> HubDevice | None: ...   # on Device
+     ```
+     returns the Python hub object behind `CDeviceBase::GetParentHub()`. As in
+     C++, it is valid from `initialize()` on and only finds a hub loaded from the
+     same adapter (`DeviceManager::GetParentDevice`); with no parent label set,
+     MMCore picks the adapter's last loaded hub. A peripheral keeps the hub it
+     gets in `initialize()` and sends all hardware communication through it.
+  4. **Loading and order.** Peripherals are loaded by name from the hub's
+     adapter (`loadDevice(label, core.getDeviceLibrary(hub_label), name)`), after
+     the hub, so that the hub is initialized first: devices of one adapter
+     initialize in load order (`initializeAllDevicesParallel`, one thread per
+     adapter). They share the adapter's lock with the hub. A hub cannot hand over
+     a pre-built device instance; peripherals are always created by the bridge.
+  5. **Errors.** A Python error in `create_peripheral` or a factory makes
+     `loadDevice` raise a `CMMError` with the Python message; one in
+     `detect_installed_devices` makes `getInstalledDevices` raise likewise (I3).
+
+  Deletes: the `(name, object, type)` tuple format, on-demand detection in
+  `CreateDevice`, `registerDiscovered`, `isDeviceFactory`, Python-backed
+  prototypes, `_HubPeripheralTracker`, `_load_hub_peripheral`, and the hub
+  branch of `getDeviceLibrary`. Adds: `get_parent_hub` (bridge + `Device`), the
+  C++ prototype stub, and `create_peripheral` lookup in `CreateDevice`.
+  Breaking: the instance-returning pattern in the current `HubDevice`
+  docstring (acceptable under D5a).
+- (b) Keep the current pattern: `detect_installed_devices()` returns
+  `(name, instance | class | factory, type)` and is run on demand, also before
+  the hub is initialized.
 
 ### D3. Property value semantics — DECISION
 - **(a) Recommended.** MM semantics. Values cross the bridge as MM strings; Float
