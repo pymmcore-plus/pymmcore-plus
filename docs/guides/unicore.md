@@ -146,6 +146,15 @@ class MyCamera(CameraDevice):
 
     `SimpleCameraDevice` is **not** recommended for real hardware cameras: a per-frame `snap()` prevents SDK-level optimizations like ring buffers and DMA transfers. Use `CameraDevice` with `start_sequence()` instead.
 
+!!! note "The acquisition thread"
+
+    `start_sequence()` runs in a background thread. Each buffer you fill must
+    have exactly the shape and dtype the camera reports (`shape()` and
+    `dtype()`); the core rejects a frame of any other size. Do not call core
+    methods on the camera from inside `start_sequence()`: the core holds the
+    camera's lock while it stops the acquisition and waits for the thread, so
+    such a call blocks until that wait times out. Use the device's own methods.
+
 For simple or simulated cameras, use `SimpleCameraDevice` instead — it only
 requires `sensor_shape()` and `snap()`, and provides automatic software ROI:
 
@@ -564,6 +573,11 @@ class MyCamera(CameraDevice):
         self.disconnect_from_hardware()
         super().shutdown()
 ```
+
+`shutdown()` is called once per loaded device. As with a C++ device whose
+`Shutdown()` fails, an exception raised in it makes `unloadDevice()` raise and
+leaves the device loaded; the next `unloadDevice()` then succeeds without
+calling `shutdown()` again.
 
 ## Thread Safety
 

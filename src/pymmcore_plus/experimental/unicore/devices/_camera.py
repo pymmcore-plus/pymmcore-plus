@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import threading
 import traceback
 from abc import abstractmethod
@@ -17,6 +18,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
 
     from numpy.typing import DTypeLike
+
+
+logger = logging.getLogger(__name__)
 
 
 class CameraDevice(Device):
@@ -63,6 +67,12 @@ class CameraDevice(Device):
         metadata for that image.
 
         The core will handle threading and synchronization.  This function may block.
+
+        The generator runs in a background thread. Do not call core methods
+        (e.g. `core.getExposure()`) from it: the core holds this camera's lock
+        while it stops the acquisition and waits for this thread, so such a
+        call would block until that wait times out. Use the device's own
+        methods instead, as C++ adapters do.
 
         Parameters
         ----------
@@ -417,8 +427,14 @@ class CameraDevice(Device):
         """Stop sequence acquisition."""
         if self._bridge_stop_event is not None:
             self._bridge_stop_event.set()
-        if self._bridge_acq_thread is not None:
-            self._bridge_acq_thread.join(timeout=5)
+        if (thread := self._bridge_acq_thread) is not None:
+            thread.join(timeout=5)
+            if thread.is_alive():  # pragma: no cover
+                logger.warning(
+                    "%s: acquisition thread did not stop within 5 s; "
+                    "is start_sequence() blocking, or calling into the core?",
+                    self.get_label(),
+                )
             self._bridge_acq_thread = None
         self._capturing = False
 

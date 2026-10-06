@@ -18,7 +18,7 @@ from ._adapter_discovery import create_adapter_from_module, discover_entry_point
 from ._config import load_system_configuration, save_system_configuration
 
 if TYPE_CHECKING:
-    from collections.abc import Sequence
+    from collections.abc import Callable, Sequence
     from types import ModuleType
 
     from pymmcore import AdapterName, DeviceLabel, DeviceName
@@ -447,8 +447,9 @@ class _HubPeripheralTracker:
     """Wraps a Python hub's `detect_installed_devices()` for a UniMMCore.
 
     Instances reported by the hub are recorded by name, so the core can track
-    them once loaded. Classes are replaced by subclasses that hand every new
-    instance to the core (`_pending_pydevices`), like a registered adapter does.
+    them once loaded. Classes are replaced by factories (which the bridge calls
+    on each load, like a class) that hand every new instance to the core
+    (`_pending_pydevices`), as a registered adapter does.
     """
 
     def __init__(self, core: UniMMCore, hub: HubDevice, library: str) -> None:
@@ -457,39 +458,31 @@ class _HubPeripheralTracker:
         self._detect = type(hub).detect_installed_devices
         self.library = library  # the bridge adapter the hub was loaded from
         self.instances: dict[str, Device] = {}
-        self._classes: dict[type[Device], type[Device]] = {}
+        self._factories: dict[type[Device], Callable[[], Device]] = {}
 
-    def __call__(self) -> list[tuple[str, Device | type[Device], DeviceType]]:
-        out: list[tuple[str, Device | type[Device], DeviceType]] = []
+    def __call__(self) -> list[tuple[str, Any, DeviceType]]:
+        out: list[tuple[str, Any, DeviceType]] = []
         items: Sequence[tuple[str, Any, DeviceType]] = self._detect(self._hub)
         for name, obj, dev_type in items:
             if isinstance(obj, type):
-                obj = self._tracking_class(obj)
+                obj = self._tracking_factory(obj)
             else:
                 self.instances[name] = obj
             out.append((name, obj, dev_type))
         return out
 
-    def _tracking_class(self, cls: type[Device]) -> type[Device]:
-        if cls not in self._classes:
+    def _tracking_factory(self, cls: type[Device]) -> Callable[[], Device]:
+        if cls not in self._factories:
             core_ref = self._core
 
-            def __init__(dev: Device, *args: Any, **kwargs: Any) -> None:
-                cls.__init__(dev, *args, **kwargs)
+            def factory() -> Device:
+                dev = cls()
                 if (core := core_ref()) is not None:
                     core._pending_pydevices.append(dev)  # noqa: SLF001
+                return dev
 
-            self._classes[cls] = type(
-                cls.__name__,
-                (cls,),
-                {
-                    "__init__": __init__,
-                    "__module__": cls.__module__,
-                    "__qualname__": cls.__qualname__,
-                    "__doc__": cls.__doc__,
-                },
-            )
-        return self._classes[cls]
+            self._factories[cls] = factory
+        return self._factories[cls]
 
 
 def _values_match(current: Any, expected: Any) -> bool:

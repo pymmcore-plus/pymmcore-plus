@@ -235,6 +235,32 @@ def test_unload_camera_after_sequence(how: str, running: bool) -> None:
     del core
 
 
+class FailingShutdownCam(SeqCam):
+    calls = 0
+
+    def shutdown(self) -> None:
+        self.calls += 1
+        raise RuntimeError("controller unreachable")
+
+
+def test_error_in_shutdown_is_reported_once() -> None:
+    """As for a C++ device whose Shutdown() fails: the unload raises and the
+    device stays loaded (and tracked); the next unload succeeds without
+    calling shutdown() again, and destroying the core does not abort."""
+    core = UniMMCore()
+    cam = FailingShutdownCam()
+    core.loadPyDevice("Cam", cam)
+    core.initializeDevice("Cam")
+    with pytest.raises(RuntimeError, match="controller unreachable"):
+        core.unloadDevice("Cam")
+    assert core.isPyDevice("Cam") and "Cam" in core.getLoadedDevices()
+    core.unloadDevice("Cam")
+    assert not core.isPyDevice("Cam") and cam.calls == 1
+    core.loadPyDevice("Cam2", FailingShutdownCam())
+    core.initializeDevice("Cam2")
+    del core
+
+
 # ---------------------------------------------------------------------------
 # 5. stop_sequence_acquisition() reported AcqFinished a second time (the
 #    acquisition thread already reports it when it ends), so CMMCore emitted
@@ -474,7 +500,8 @@ def test_hub_peripherals_and_config(tmp_path: Path) -> None:
     # the instance reported by the hub is the one loaded, under its label
     assert core._pydevices["X"] is hub.motor_x
     assert hub.motor_x.get_label() == "X"
-    assert isinstance(core._pydevices["C"], Motor)
+    # a reported class is instantiated as-is (not through a tracking subclass)
+    assert type(core._pydevices["C"]) is Motor
     assert core.getDeviceLibrary("X") == lib
     # as in C++: the name the peripheral is loadable under, not the class name
     assert core.getDeviceName("C") == "MotorCls"
