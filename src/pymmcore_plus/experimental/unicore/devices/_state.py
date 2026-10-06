@@ -8,7 +8,7 @@ from pymmcore_plus.core._constants import DeviceType, Keyword
 from ._device_base import Device
 
 if TYPE_CHECKING:
-    from collections.abc import Iterable, Mapping
+    from collections.abc import Callable, Iterable, Mapping
     from typing import ClassVar, Literal, Self
 
     from pymmcore import StateLabel
@@ -66,6 +66,9 @@ class StateDevice(Device):
         self._state_to_label: dict[int, StateLabel] = states  # type: ignore[assignment]
         # reverse mapping for O(1) lookup
         self._label_to_state: dict[str, int] = {lbl: p for p, lbl in states.items()}
+
+        # set by UniMMCore when the device is loaded; see `notify_state_changed`
+        self._on_state_changed_: Callable[[int, str], None] | None = None
 
         self.register_standard_properties()
 
@@ -133,15 +136,32 @@ class StateDevice(Device):
     def _set_state(self, state: int) -> None:
         # internal method to set the state, called by the property setter
         # to keep the label and state property in sync
+        # A core-initiated move needs no notification: the core emits State and Label
+        # once the call has finished (like C++ CStateDeviceBase).
         self.set_state(state)  # call the device-specific method
-        self.core.events.propertyChanged.emit(
-            self.get_label(), Keyword.State.value, state
-        )
         label = self._state_to_label.get(state, "")
         self.set_property_value(Keyword.Label, label)
-        self.core.events.propertyChanged.emit(
-            self.get_label(), Keyword.Label.value, label
-        )
+
+    def notify_state_changed(self, state: int) -> None:
+        """Notify the core that the device moved on its own (e.g. by hand).
+
+        The core updates its cached State and Label and emits `propertyChanged` for
+        both. Moves made through the core (`setState`, `setProperty`, ...) are
+        reported automatically and don't need this.
+
+        Listeners run immediately, on the thread that calls this method, and may call
+        back into the device. If you hold the device lock while reading the hardware
+        (`with self:`), call this after releasing it:
+
+            with self:  # holds the device lock
+                pos = self._read_position_from_hardware()
+            self.notify_state_changed(pos)  # lock released
+
+        Calling it while still holding the lock can hang: a listener that calls back
+        into the device waits for the lock that this thread is still holding.
+        """
+        if self._on_state_changed_ is not None:
+            self._on_state_changed_(state, self._state_to_label.get(state, ""))
 
     def _get_current_label(self) -> str:
         # internal method to get the current label, called by the property getter
