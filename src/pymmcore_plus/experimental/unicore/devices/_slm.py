@@ -25,8 +25,8 @@ class SLMDevice(SequenceableDevice[np.ndarray]):
         """Return the shape of the SLM image buffer.
 
         This is used when querying Width, Height, *and* number of components.
-        If the SLM is grayscale, it should return (width, height).
-        If the SLM is color, it should return (width, height, n_channels).
+        If the SLM is grayscale, it should return (height, width).
+        If the SLM is color, it should return (height, width, n_channels).
         """
         ...
 

@@ -108,7 +108,9 @@ class UniMMCore(CMMCorePlus):
 
     def _adopt_bridge_created(self, label: str, device_name: str) -> None:
         """Track the Device the bridge created (if any) for a loaded label."""
-        pending, self._pending_pydevices = self._pending_pydevices, []
+        # (copy and clear: the adapter factories hold a reference to this list)
+        pending = list(self._pending_pydevices)
+        self._pending_pydevices.clear()
         # a peripheral *instance* reported by a hub's detect_installed_devices()
         library = super().getDeviceLibrary(label)
         for tracker in self._hub_trackers.values():
@@ -176,11 +178,10 @@ class UniMMCore(CMMCorePlus):
         if label in self.getLoadedDevices():
             raise ValueError(f"The specified device label {label!r} is already in use")
 
-        device._label_ = label
-
         # Register with C++ bridge — the bridge will call device.initialize()
         # later when initializeDevice() is called.
         super().loadPyDevice(label, device, device.type())  # type: ignore[misc]
+        device._label_ = label
         self._pydevices[label] = device
         self._direct_pydevices.add(label)
         if isinstance(device, HubDevice):
@@ -287,9 +288,11 @@ class UniMMCore(CMMCorePlus):
             # By the time the bridge's AfterSet action functor fires, the property
             # already holds 0.0 — the original bad value is gone and unrecoverable.
             # Validating here catches type errors, limit violations, and disallowed
-            # values with clear Python exceptions before C++ ever sees the value.
-            # Properties provided by the C++ bridge itself (e.g. a State device's
-            # Label) have no Python controller, and are validated by C++.
+            # values with clear Python exceptions before C++ ever sees the value
+            # (string values, as CMMCore passes them, are parsed to the property's
+            # type first). Properties provided by the C++ bridge itself (e.g. a
+            # State device's Label) have no Python controller, and are validated
+            # by C++.
             dev = self._pydevices[label]
             if dev.has_property(propName):
                 propValue = _prepare_property_value_for_cpp(dev, propName, propValue)
@@ -322,10 +325,14 @@ class UniMMCore(CMMCorePlus):
     def getCurrentConfigFromCache(self, groupName: str) -> str:  # type: ignore[override]
         if result := super().getCurrentConfigFromCache(groupName):
             return result
-        return self._find_matching_preset(groupName)
+        return self._find_matching_preset(groupName, from_cache=True)
 
-    def _find_matching_preset(self, groupName: str) -> str:
-        """Check presets with numeric-aware comparison."""
+    def _find_matching_preset(self, groupName: str, *, from_cache: bool = False) -> str:
+        """Check presets with numeric-aware comparison.
+
+        With `from_cache`, only the core's state cache is consulted (no device
+        access), as `getCurrentConfigFromCache` promises.
+        """
         for preset_name in self.getAvailableConfigs(groupName):
             cfg = super().getConfigData(groupName, preset_name, native=True)
             all_match = True
@@ -335,7 +342,10 @@ class UniMMCore(CMMCorePlus):
                 prop = s.getPropertyName()
                 stored = s.getPropertyValue()
                 try:
-                    current = super().getProperty(dev, prop)
+                    if from_cache:
+                        current = super().getPropertyFromCache(dev, prop)
+                    else:
+                        current = super().getProperty(dev, prop)
                 except Exception:
                     all_match = False
                     break
@@ -447,9 +457,10 @@ class _HubPeripheralTracker:
     """Wraps a Python hub's `detect_installed_devices()` for a UniMMCore.
 
     Instances reported by the hub are recorded by name, so the core can track
-    them once loaded. Classes are replaced by factories (which the bridge calls
-    on each load, like a class) that hand every new instance to the core
-    (`_pending_pydevices`), as a registered adapter does.
+    them once loaded. Classes, and other zero-argument factories (which the
+    bridge calls on each load, like a class), are wrapped in factories that
+    hand every new instance to the core (`_pending_pydevices`), as a registered
+    adapter does.
     """
 
     def __init__(self, core: UniMMCore, hub: HubDevice, library: str) -> None:
@@ -458,20 +469,22 @@ class _HubPeripheralTracker:
         self._detect = type(hub).detect_installed_devices
         self.library = library  # the bridge adapter the hub was loaded from
         self.instances: dict[str, Device] = {}
-        self._factories: dict[type[Device], Callable[[], Device]] = {}
+        self._factories: dict[Callable[[], Device], Callable[[], Device]] = {}
 
     def __call__(self) -> list[tuple[str, Any, DeviceType]]:
         out: list[tuple[str, Any, DeviceType]] = []
         items: Sequence[tuple[str, Any, DeviceType]] = self._detect(self._hub)
         for name, obj, dev_type in items:
-            if isinstance(obj, type):
+            if isinstance(obj, type) or (
+                callable(obj) and not hasattr(obj, "initialize_bridge")
+            ):
                 obj = self._tracking_factory(obj)
             else:
                 self.instances[name] = obj
             out.append((name, obj, dev_type))
         return out
 
-    def _tracking_factory(self, cls: type[Device]) -> Callable[[], Device]:
+    def _tracking_factory(self, cls: Callable[[], Device]) -> Callable[[], Device]:
         if cls not in self._factories:
             core_ref = self._core
 

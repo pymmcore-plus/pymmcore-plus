@@ -7,6 +7,7 @@ C++ MMCore/MMDevice semantics during review, and failed before the fixes.
 from __future__ import annotations
 
 import enum
+import sys
 import time
 import types
 from typing import TYPE_CHECKING
@@ -21,6 +22,8 @@ from pymmcore_plus.experimental.unicore import (
     GenericDevice,
     HubDevice,
     SimpleCameraDevice,
+    StageDevice,
+    StateDevice,
     UniMMCore,
     XYStepperStageDevice,
 )
@@ -524,3 +527,298 @@ def test_hub_peripherals_and_config(tmp_path: Path) -> None:
     assert "Hub" in core.getLoadedDevices()
     core.unloadDevice("Hub")
     assert "C" in core.getLoadedDevices()
+
+
+# ---------------------------------------------------------------------------
+# 11. setProperty() rejected string values for numeric properties with allowed
+#     values, and passed non-numeric strings for Float properties through.
+#
+#     PropertyController.validate() compared the raw value against
+#     allowed_values without coercing it to the property type.  StateDevice
+#     registers "State" as an Integer property with allowed values (0, 1, ...),
+#     so setProperty(dev, "State", "2") -- the form pymmcore's API takes, that
+#     configuration files produce and that property widgets send -- raised
+#     ValueError while the int 2 worked.  For a Float property without limits,
+#     "abc" went to C++, where MM::FloatProperty::Set() turns it into 0.0.
+# ---------------------------------------------------------------------------
+
+
+class _Wheel(StateDevice):
+    _pos = 0
+
+    def __init__(self) -> None:
+        super().__init__({0: "a", 1: "b", 2: "c"})
+
+    def get_state(self) -> int:
+        return self._pos
+
+    def set_state(self, p: int) -> None:
+        self._pos = p
+
+
+class _ZStage(StageDevice):
+    """A Z stage."""
+
+    _p = 0.0
+
+    def set_position_um(self, v: float) -> None:
+        self._p = v
+
+    def get_position_um(self) -> float:
+        return self._p
+
+    def home(self) -> None:
+        pass
+
+    def stop(self) -> None:
+        pass
+
+    def set_origin(self) -> None:
+        pass
+
+
+@pytest.fixture
+def fake_module() -> types.ModuleType:
+    """An importable module providing _Wheel and _ZStage (for config files)."""
+    mod = types.ModuleType("_audit_fake_adapter")
+    mod._Wheel = _Wheel  # type: ignore[attr-defined]
+    mod._ZStage = _ZStage  # type: ignore[attr-defined]
+    mod.__pymmcore_devices__ = [_Wheel, _ZStage]  # type: ignore[attr-defined]
+    sys.modules[mod.__name__] = mod
+    try:
+        yield mod
+    finally:
+        sys.modules.pop(mod.__name__, None)
+
+
+def test_set_property_accepts_strings_for_numeric_properties() -> None:
+    core = UniMMCore()
+    core.loadPyDevice("W", _Wheel())
+    core.initializeDevice("W")
+    core.setProperty("W", "State", "2")
+    assert core.getState("W") == 2
+    core.setProperty("W", "State", 1)
+    assert core.getState("W") == 1
+    with pytest.raises(ValueError, match="not allowed"):
+        core.setProperty("W", "State", "7")
+    with pytest.raises(ValueError, match="not a valid Integer"):
+        core.setProperty("W", "State", "two")
+
+
+def test_config_file_can_set_state_property(
+    tmp_path: Path, fake_module: types.ModuleType
+) -> None:
+    cfg = tmp_path / "wheel.cfg"
+    cfg.write_text(
+        f"#py Device,W,{fake_module.__name__},_Wheel\n"
+        "Property,Core,Initialize,1\n"
+        "Property,W,State,2\n"
+    )
+    core = UniMMCore()
+    core.loadSystemConfiguration(cfg)
+    assert core.getState("W") == 2
+
+
+class _Gain(GenericDevice):
+    _g = 1.0
+
+    @pymm_property
+    def gain(self) -> float:
+        return self._g
+
+    @gain.setter
+    def gain(self, v: float) -> None:
+        self._g = v
+
+
+def test_non_numeric_value_for_float_property_is_rejected() -> None:
+    core = UniMMCore()
+    dev = _Gain()
+    core.loadPyDevice("G", dev)
+    core.initializeDevice("G")
+    with pytest.raises(ValueError, match="not a valid Float"):
+        core.setProperty("G", "gain", "abc")
+    assert dev._g == 1.0
+    core.setProperty("G", "gain", "2.5")
+    assert dev._g == 2.5
+
+
+# ---------------------------------------------------------------------------
+# 12. Only the first device loaded from a registered Python adapter was
+#     tracked.  register_py_adapter() handed the adapter factories
+#     `self._pending_pydevices.append`, and _adopt_bridge_created() replaced
+#     that list with a new one, so later factory calls appended to an orphaned
+#     list and the devices were never adopted (isPyDevice() False).
+# ---------------------------------------------------------------------------
+
+
+def test_every_device_from_a_registered_adapter_is_tracked(
+    fake_module: types.ModuleType,
+) -> None:
+    core = UniMMCore()
+    core.register_py_adapter("AuditAdapter", fake_module)
+    for label in ("Z1", "Z2", "Z3"):
+        core.loadDevice(label, "AuditAdapter", "_ZStage")
+    core.initializeAllDevices()
+    assert all(core.isPyDevice(lbl) for lbl in ("Z1", "Z2", "Z3"))
+    assert len({id(core._pydevices[lbl]) for lbl in ("Z1", "Z2", "Z3")}) == 3
+    assert core.getDeviceDescription("Z2") == "A Z stage."
+
+
+# ---------------------------------------------------------------------------
+# 13. getCurrentConfigFromCache() queried the hardware.  When CMMCore's string
+#     comparison found no preset (cache "3.0000" vs preset "3.0"), the fallback
+#     read every setting with getProperty(), a device call.  The FromCache
+#     variant exists so that GUIs and the MDA engine can poll it without
+#     touching devices.
+# ---------------------------------------------------------------------------
+
+
+class _Polled(GenericDevice):
+    reads = 0
+    _v = 3.0
+
+    @pymm_property
+    def polled(self) -> float:
+        type(self).reads += 1
+        return self._v
+
+    @polled.setter
+    def polled(self, v: float) -> None:
+        self._v = v
+
+
+def test_get_current_config_from_cache_does_not_query_the_device() -> None:
+    core = UniMMCore()
+    core.loadPyDevice("P", _Polled())
+    core.initializeDevice("P")
+    core.defineConfig("grp", "p1", "P", "polled", "3.0")
+    core.defineConfig("grp", "p2", "P", "polled", "4.0")
+    core.setProperty("P", "polled", 3)  # the cache holds "3.0000"
+    assert super(UniMMCore, core).getCurrentConfigFromCache("grp") == ""
+    reads = _Polled.reads
+    assert core.getCurrentConfigFromCache("grp") == "p1"
+    assert _Polled.reads == reads, "getCurrentConfigFromCache read the device"
+    assert core.getCurrentConfig("grp") == "p1"  # this one may read the device
+
+
+# ---------------------------------------------------------------------------
+# 14. A hub peripheral reported as a zero-argument *function* (allowed by the
+#     pymmcore-nano PyHub protocol) was tracked as the function: the tracker
+#     only special-cased classes, so the function ended up in _pydevices and
+#     getDeviceDescription() raised AttributeError.
+# ---------------------------------------------------------------------------
+
+
+def test_hub_function_factory_peripheral_is_tracked_as_a_device() -> None:
+    class Hub(HubDevice):
+        def detect_installed_devices(self):
+            return [("Z", lambda: _ZStage(), DeviceType.Stage)]
+
+    core = UniMMCore()
+    core.loadPyDevice("H", Hub())
+    core.initializeDevice("H")
+    core.loadDevice("Z", core.getDeviceLibrary("H"), "Z")
+    core.initializeDevice("Z")
+    assert core.isPyDevice("Z")
+    assert isinstance(core._pydevices["Z"], _ZStage)
+    assert core.getDeviceDescription("Z") == "A Z stage."
+
+
+# ---------------------------------------------------------------------------
+# 15. Decorated (@pymm_property) properties shared one PropertyInfo between
+#     all instances of a class: set_property_limits() on one device changed
+#     get_property_info().limits and the Python-side validation of every other
+#     device of that class, while CMMCore's limits stayed per device.
+# ---------------------------------------------------------------------------
+
+
+class _Limited(GenericDevice):
+    _v = 1.0
+
+    @pymm_property(limits=(0, 10))
+    def lim(self) -> float:
+        return self._v
+
+    @lim.setter
+    def lim(self, v: float) -> None:
+        self._v = v
+
+
+def test_property_info_is_per_instance() -> None:
+    core = UniMMCore()
+    d1, d2 = _Limited(), _Limited()
+    core.loadPyDevice("D1", d1)
+    core.loadPyDevice("D2", d2)
+    core.initializeAllDevices()
+    d1.set_property_limits("lim", (0, 100))
+    assert d1.get_property_info("lim").limits == (0, 100)
+    assert d2.get_property_info("lim").limits == (0, 10)
+    assert core.getPropertyUpperLimit("D1", "lim") == 100
+    assert core.getPropertyUpperLimit("D2", "lim") == 10
+    core.setProperty("D1", "lim", 50)
+    with pytest.raises(ValueError, match="not within"):
+        core.setProperty("D2", "lim", 50)
+    # attribute access goes through the instance's own controller too
+    d1.lim = 60
+    with pytest.raises(ValueError, match="not within"):
+        d2.lim = 60
+    assert (d1.lim, d2.lim) == (60, 1.0)
+    assert d1.get_property_info("lim").last_value == 60
+    assert d2.get_property_info("lim").last_value == 1.0
+
+
+# ---------------------------------------------------------------------------
+# 16. A subclass redefining a @pymm_property got the base class's controller:
+#     __init_subclass__ walked the MRO from the most derived class to the base,
+#     so the base's definition overwrote the subclass's.
+# ---------------------------------------------------------------------------
+
+
+def test_subclass_property_overrides_base_property() -> None:
+    class Base(GenericDevice):
+        @pymm_property
+        def gain(self) -> float:
+            return 1.0
+
+    class Derived(Base):
+        @pymm_property(limits=(0, 5))
+        def gain(self) -> float:
+            return 2.0
+
+    dev = Derived()
+    assert dev.get_property_value("gain") == 2.0
+    assert dev.get_property_info("gain").limits == (0, 5)
+    core = UniMMCore()
+    core.loadPyDevice("D", dev)
+    core.initializeDevice("D")
+    assert core.getProperty("D", "gain") == "2.0000"
+    assert core.getPropertyUpperLimit("D", "gain") == 5
+
+
+# ---------------------------------------------------------------------------
+# 17. set_property_limits() updated the Python-side info before asking the
+#     core, which (since pymmcore-nano reports CDeviceBase's error codes)
+#     rejects limits on a String property: the device would then believe in a
+#     constraint the core does not enforce.
+# ---------------------------------------------------------------------------
+
+
+def test_rejected_limits_leave_python_info_unchanged() -> None:
+    class Dev(GenericDevice):
+        @pymm_property
+        def mode(self) -> str:
+            return "a"
+
+        @mode.setter
+        def mode(self, v: str) -> None:
+            pass
+
+    core = UniMMCore()
+    dev = Dev()
+    core.loadPyDevice("D", dev)
+    core.initializeDevice("D")
+    with pytest.raises(RuntimeError, match="Cannot set limits"):
+        dev.set_property_limits("mode", (0, 5))
+    assert dev.get_property_info("mode").limits is None
+    assert not core.hasPropertyLimits("D", "mode")

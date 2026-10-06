@@ -581,18 +581,25 @@ calling `shutdown()` again.
 
 ## Thread Safety
 
-Python devices are automatically made thread-safe using locks. All device
-methods are called with the device locked to prevent concurrent access.
+Python devices are real CMMCore devices, so they get the same serialization
+as C++ device adapters: the core holds the device adapter's lock around every
+call it makes into a device (a property read or write, a move, a snap, ...).
+Two core calls never run concurrently on the same device, and devices loaded
+from the same Python adapter (`register_py_adapter`, or a hub and its
+peripherals) share one lock, like devices from one C++ adapter library.
 
-If you need manual locking:
+That lock only covers calls made *through the core*. Code that reaches the
+device object directly, or threads the device starts itself (a camera's
+`start_sequence()` runs in a background thread), must synchronize with the
+device's own methods. Every `Device` is a context manager with its own lock
+for that purpose:
 
 ```python
 device = MyCamera()
 core.loadPyDevice("Camera", device)
 
-# Manual locking
 with device:
-    # Device is locked for this block
+    # not interleaved with other code that also takes `device`'s lock
     device.some_internal_method()
 ```
 

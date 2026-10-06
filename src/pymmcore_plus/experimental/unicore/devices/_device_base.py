@@ -64,8 +64,15 @@ class Device(_Lockable, ABC):
         # NOTE: The following attributes are here for the core to manipulate.
         # Device Adapter subclasses should not touch these attributes.
         self._label_: str = ""
+        # Decorated (class-level) properties get a per-instance controller, so
+        # that limits, allowed values, sequence length and the cached value of
+        # one device do not leak into another device of the same class.
         self._prop_controllers_ = ChainMap[str, PropertyController](
-            {}, self._cls_prop_controllers
+            {},
+            {
+                name: ctrl._instance_copy()  # noqa: SLF001
+                for name, ctrl in self._cls_prop_controllers.items()
+            },
         )
         self._parent_label_: str = ""  # label of the parent hub device
         # PropertyHandle refs for dynamic property updates via C++ bridge
@@ -79,7 +86,8 @@ class Device(_Lockable, ABC):
     def __init_subclass__(cls) -> None:
         """Collect property controllers from class hierarchy."""
         cls._cls_prop_controllers = {}
-        for base in cls.__mro__:
+        # base classes first, so that a subclass redefining a property wins
+        for base in reversed(cls.__mro__):
             for p in base.__dict__.values():
                 if isinstance(p, PropertyController):
                     cls._cls_prop_controllers[p.property.name] = p
@@ -259,27 +267,31 @@ class Device(_Lockable, ABC):
         self, prop_name: str, allowed_values: Sequence[Any]
     ) -> None:
         """Set the allowed values of a property."""
-        self._get_prop_or_raise(prop_name).property.allowed_values = allowed_values
+        ctrl = self._get_prop_or_raise(prop_name)
+        # the core first: it may reject the change, and then nothing changes
         if prop_name in self._property_handles_:
             self._property_handles_[prop_name].set_allowed_values(
-                [str(v) for v in allowed_values]
+                [to_cpp_string(v) for v in allowed_values]
             )
+        ctrl.property.allowed_values = allowed_values
 
     def set_property_limits(
         self, prop_name: str, limits: tuple[float, float] | None
     ) -> None:
         """Set the limits of a property."""
-        self._get_prop_or_raise(prop_name).property.limits = limits
+        ctrl = self._get_prop_or_raise(prop_name)
         if limits is not None and prop_name in self._property_handles_:
             self._property_handles_[prop_name].set_limits(
                 float(limits[0]), float(limits[1])
             )
+        ctrl.property.limits = limits
 
     def set_property_sequence_max_length(self, prop_name: str, max_length: int) -> None:
         """Set the sequence max length of a property."""
-        self._get_prop_or_raise(prop_name).property.sequence_max_length = max_length
+        ctrl = self._get_prop_or_raise(prop_name)
         if prop_name in self._property_handles_:
             self._property_handles_[prop_name].set_sequence_max_length(max_length)
+        ctrl.property.sequence_max_length = max_length
 
     def load_property_sequence(self, prop_name: str, sequence: Sequence[Any]) -> None:
         """Load a sequence into a property."""
@@ -407,8 +419,17 @@ def _register_one_property(
         # `last_value`, so C++ must read and write it there rather than keep a copy.
         getter = lambda: to_cpp_string(info.last_value)  # noqa: E731
         setter = lambda s: setattr(info, "last_value", _parse(s))  # noqa: E731
+    elif fget is None:
+        # A setter-only property: C++ keeps the value; mirror it in last_value so
+        # that Device.get_property_value() sees what the core last set.
+        getter = None
+
+        def setter(s: str) -> None:
+            value = _parse(s)
+            fset(device, value)  # type: ignore[misc]
+            info.last_value = value
     else:
-        getter = (lambda: to_cpp_string(fget(device))) if fget else None
+        getter = lambda: to_cpp_string(fget(device))  # noqa: E731
         setter = (lambda s: fset(device, _parse(s))) if fset else None
     seq_loader = (
         (lambda seq: ctrl.load_sequence(device, [_parse(s) for s in seq]))

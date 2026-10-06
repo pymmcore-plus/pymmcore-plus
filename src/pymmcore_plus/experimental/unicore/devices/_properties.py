@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from enum import Enum, EnumMeta
 from typing import (
     TYPE_CHECKING,
@@ -29,6 +29,11 @@ if TYPE_CHECKING:
 TDev = TypeVar("TDev", bound="Device")
 TProp = TypeVar("TProp")
 TLim = TypeVar("TLim", bound=int | float)
+
+# property types whose string form (as CMMCore passes it) is parsed in validate()
+_TYPED_PARSE = frozenset(
+    {PropertyType.Float, PropertyType.Integer, PropertyType.Boolean}
+)
 
 
 def to_cpp_string(value: Any) -> str:
@@ -199,22 +204,66 @@ class PropertyController(Generic[TDev, TProp]):
             return self
         if self.fget is None:  # pragma: no cover
             raise AttributeError("Unreadable property")
-        val = self.fget(instance)  # cache the value
-        object.__setattr__(self.property, "last_value", val)
+        ctrl = self._for_instance(instance)
+        val = ctrl.fget(instance)  # type: ignore[misc]  # cache the value
+        object.__setattr__(ctrl.property, "last_value", val)
         return val
+
+    def _for_instance(self, instance: TDev) -> PropertyController[TDev, TProp]:
+        """The controller that holds `instance`'s own PropertyInfo.
+
+        Decorated properties live on the class; each Device instance gets a copy
+        (see `Device.__init__`) so that limits, allowed values, sequence length
+        and the cached value are per device, as they are in CMMCore.
+        """
+        ctrls = getattr(instance, "_prop_controllers_", None)
+        if ctrls is None:  # pragma: no cover - Device.__init__ not run yet
+            return self
+        return cast(
+            "PropertyController[TDev, TProp]", ctrls.get(self.property.name, self)
+        )
+
+    def _instance_copy(self) -> PropertyController[TDev, TProp]:
+        """A controller with its own copy of the PropertyInfo."""
+        return PropertyController(
+            property=replace(self.property),
+            fget=self.fget,
+            fset=self.fset,
+            fseq_load=self.fseq_load,
+            fseq_start=self.fseq_start,
+            fseq_stop=self.fseq_stop,
+            doc=self.doc,
+        )
 
     # same as "Property::Apply" in CMMCore
     def __set__(self, instance: TDev, value: TProp) -> None:
         """Update the property value by calling the setter on the Device instance."""
         if self.fset is None:  # pragma: no cover
             raise AttributeError("Unsettable property")
-        value = self.validate(value)
-        self.fset(instance, value)
+        ctrl = self._for_instance(instance)
+        value = ctrl.validate(value)
+        ctrl.fset(instance, value)  # type: ignore[misc]
 
     def validate(self, value: Any) -> TProp:
-        """Validate a property value."""
+        """Validate a property value, coercing strings to the property's type.
+
+        CMMCore passes every value as a string (so do configuration files and
+        property widgets); a numeric property must accept "2" like it accepts 2,
+        and must reject "abc" rather than let MM::FloatProperty's atof() turn it
+        into 0.0.
+        """
         if self.property.enum_type is not None:
             value = coerce_enum(self.property.enum_type, value)
+        elif isinstance(value, str) and self.property.type in _TYPED_PARSE:
+            try:
+                value = self.property.type.parse_value(value)
+            except ValueError as e:
+                raise ValueError(
+                    f"Value {value!r} is not a valid {self.property.type.name} for "
+                    f"property {self.property.name!r}."
+                ) from e
+        elif self.property.type is PropertyType.String and not isinstance(value, str):
+            value = to_cpp_string(value)  # CMMCore stores strings; compare as one
         if self.property.allowed_values and value not in self.property.allowed_values:
             raise ValueError(
                 f"Value '{value}' is not allowed for property '{self.property.name}'. "
