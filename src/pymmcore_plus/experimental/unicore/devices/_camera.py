@@ -326,20 +326,22 @@ class CameraDevice(Device):
             next(gen)
         except StopIteration:
             pass
+        finally:
+            _close(gen)
         if buf is not None:
             self._snap_buffer = buf
         else:
             self._snap_buffer = np.empty(self.shape(), dtype=self.dtype())
 
-    def get_image_buffer(self) -> np.ndarray:
-        """Return the last snapped image."""
+    def get_image_buffer(self, channel: int = 0) -> np.ndarray:
+        """Return the last snapped image (single-channel: `channel` is ignored)."""
         if self._snap_buffer is None:
             raise RuntimeError("No image. Call snap_image() first.")
         return self._snap_buffer
 
     def start_sequence_acquisition(
         self,
-        num_images: int,
+        num_images: int | None,
         interval_ms: float,
         insert_image: Callable[[np.ndarray, dict | None], bool],
     ) -> None:
@@ -347,7 +349,8 @@ class CameraDevice(Device):
 
         Runs the camera's start_sequence() generator in a background thread,
         calling insert_image per frame to push into CMMCore's circular buffer.
-        insert_image returns False on buffer overflow.
+        insert_image returns False on buffer overflow. `num_images` is None for
+        an unbounded acquisition.
         """
         stop_event = threading.Event()
         self._bridge_stop_event = stop_event
@@ -359,7 +362,9 @@ class CameraDevice(Device):
             buf_holder[0] = buf
             return buf
 
-        n = num_images if num_images < 2**62 else None
+        # the bridge passes None for an unbounded acquisition; older versions
+        # passed LONG_MAX
+        n = None if num_images is None or num_images >= 2**62 else num_images
         gen = self.start_sequence(n, get_buffer)
 
         self._capturing = True
@@ -396,7 +401,11 @@ class CameraDevice(Device):
             except Exception:
                 traceback.print_exc()
             finally:
+                _close(gen)
                 self._capturing = False
+                # Like a C++ camera's acquisition thread, report AcqFinished
+                # once, when the acquisition ends (stop_sequence_acquisition
+                # waits for this thread, so it does not report it again).
                 if self._notify_ is not None:
                     self._notify_.acq_finished()
 
@@ -412,8 +421,6 @@ class CameraDevice(Device):
             self._bridge_acq_thread.join(timeout=5)
             self._bridge_acq_thread = None
         self._capturing = False
-        if self._notify_ is not None:
-            self._notify_.acq_finished()
 
     def shutdown(self) -> None:
         """Shutdown the device.
@@ -424,6 +431,12 @@ class CameraDevice(Device):
         """
         if self._bridge_acq_thread is not None:
             self.stop_sequence_acquisition()
+
+
+def _close(gen: Iterator) -> None:
+    """Close a generator (run its teardown now); plain iterators have no close()."""
+    if (close := getattr(gen, "close", None)) is not None:
+        close()
 
 
 class SimpleCameraDevice(CameraDevice):

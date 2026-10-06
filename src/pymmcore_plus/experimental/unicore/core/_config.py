@@ -530,9 +530,6 @@ def _iter_hub_refs(core: UniMMCore) -> Iterable[str]:
         if label == Keyword.CoreDevice:  # type: ignore[comparison-overlap]
             continue
         is_py = core.isPyDevice(label)
-        # Python devices don't have parent labels (yet)
-        if is_py:
-            continue
         try:
             parent = core.getParentLabel(label)
         except RuntimeError:

@@ -10,6 +10,8 @@ from typing import TYPE_CHECKING, Any, cast
 from pymmcore_plus import _pymmcore
 from pymmcore_plus.core import CMMCorePlus
 from pymmcore_plus.experimental.unicore.devices._device_base import Device
+from pymmcore_plus.experimental.unicore.devices._hub import HubDevice
+from pymmcore_plus.experimental.unicore.devices._properties import to_cpp_string
 from pymmcore_plus.experimental.unicore.devices._slm import SLMDevice
 
 from ._adapter_discovery import create_adapter_from_module, discover_entry_points
@@ -20,6 +22,8 @@ if TYPE_CHECKING:
     from types import ModuleType
 
     from pymmcore import AdapterName, DeviceLabel, DeviceName
+
+    from pymmcore_plus.core import DeviceType
 
 
 class UniMMCore(CMMCorePlus):
@@ -39,9 +43,15 @@ class UniMMCore(CMMCorePlus):
 
         # Track which labels are Python devices and keep refs to Device objects
         self._pydevices: dict[str, Device] = {}
-        # Devices instantiated by the bridge (from a registered Python adapter)
-        # that have not been initialized yet, so are not known by label.
+        # Labels of devices loaded with loadPyDevice() (their one-off bridge
+        # adapter is named after neither their module nor the device class).
+        self._direct_pydevices: set[str] = set()
+        # Devices instantiated by the bridge (from a registered Python adapter
+        # or a hub's peripheral class) that have not been initialized yet, so
+        # are not known by label.
         self._pending_pydevices: list[Device] = []
+        # Peripheral tracking for loaded Python hubs: {hub label: tracker}
+        self._hub_trackers: dict[str, _HubPeripheralTracker] = {}
 
         # Python adapter discovery: {adapter_name: module_path}
         self._py_adapter_registry: dict[str, str] = discover_entry_points()
@@ -71,16 +81,46 @@ class UniMMCore(CMMCorePlus):
             CMMCorePlus.loadDevice(self, label, moduleName, deviceName)
         except RuntimeError as e:
             if moduleName not in super().getDeviceAdapterNames():
+                # a peripheral of a loaded Python hub, reported by its
+                # detect_installed_devices()? (the hub's library is its module)
+                if self._load_hub_peripheral(label, moduleName, deviceName):
+                    return
                 pydev = self._get_py_device_instance(moduleName, deviceName)
                 self.loadPyDevice(label, pydev)
                 return
             if exc := self._load_error_with_info(label, moduleName, deviceName, str(e)):
                 raise exc from e
         else:
-            # A device created by the bridge for this label (none for C++ devices).
-            for dev in self._pending_pydevices:
-                self._adopt_py_device(label, dev)
-            self._pending_pydevices.clear()
+            self._adopt_bridge_created(label, deviceName)
+
+    def _load_hub_peripheral(self, label: str, module: str, name: str) -> bool:
+        """Load `name` from a loaded Python hub whose library is `module`."""
+        for hub_label, tracker in list(self._hub_trackers.items()):
+            if self.getDeviceLibrary(hub_label) != module:
+                continue
+            try:
+                CMMCorePlus.loadDevice(self, label, tracker.library, name)
+            except RuntimeError:
+                continue
+            self._adopt_bridge_created(label, name)
+            return True
+        return False
+
+    def _adopt_bridge_created(self, label: str, device_name: str) -> None:
+        """Track the Device the bridge created (if any) for a loaded label."""
+        pending, self._pending_pydevices = self._pending_pydevices, []
+        # a peripheral *instance* reported by a hub's detect_installed_devices()
+        library = super().getDeviceLibrary(label)
+        for tracker in self._hub_trackers.values():
+            if tracker.library == library and device_name in tracker.instances:
+                self._adopt_py_device(label, tracker.instances[device_name])
+                return
+        # A device instantiated by the bridge for this label (none for C++
+        # devices): a registered adapter's class, or a hub's peripheral class.
+        # The bridge instantiates it last; the hub's peripheral detection that
+        # may precede it only creates prototypes (for getInstalledDevices()).
+        if pending:
+            self._adopt_py_device(label, pending[-1])
 
     def _adopt_py_device(self, label: str, device: Device) -> None:
         """Track a Device instance the bridge created for `label`."""
@@ -89,6 +129,20 @@ class UniMMCore(CMMCorePlus):
         # the bridge may hand the device a different label (e.g. hub peripherals
         # created for getInstalledDevices() are never loaded under one).
         device._on_bridge_label_ = self._on_bridge_label
+        if isinstance(device, HubDevice):
+            self._track_hub(label, device)
+
+    def _track_hub(self, label: str, hub: HubDevice) -> None:
+        """Make the hub's detect_installed_devices() report its peripherals here.
+
+        The bridge loads the peripherals a hub reports: instances as they are,
+        classes by instantiating them. The tracker records the instances and
+        wraps the classes, so that both end up in `_pydevices` when loaded.
+        """
+        tracker = _HubPeripheralTracker(self, hub, super().getDeviceLibrary(label))
+        # (an instance attribute, so that the bridge finds it on the hub object)
+        hub.__dict__["detect_installed_devices"] = tracker
+        self._hub_trackers[label] = tracker
 
     def _on_bridge_label(self, device: Device) -> None:
         if (label := device.get_label()) and self._pydevices.get(label) is not device:
@@ -128,6 +182,9 @@ class UniMMCore(CMMCorePlus):
         # later when initializeDevice() is called.
         super().loadPyDevice(label, device, device.type())  # type: ignore[misc]
         self._pydevices[label] = device
+        self._direct_pydevices.add(label)
+        if isinstance(device, HubDevice):
+            self._track_hub(label, device)
 
     load_py_device = loadPyDevice
 
@@ -194,14 +251,21 @@ class UniMMCore(CMMCorePlus):
     def getDeviceLibrary(self, label: DeviceLabel | str) -> AdapterName:
         lib = super().getDeviceLibrary(label)
         # A device loaded with loadPyDevice() sits behind a one-off bridge adapter
-        # ("_PyBridge_N"); report its module instead. Devices from a registered
-        # Python adapter report that adapter's name, like C++ devices.
+        # ("_PyBridge_N"); report its module instead. A peripheral loaded from
+        # such a hub reports the hub's library. Devices from a registered Python
+        # adapter report that adapter's name, like C++ devices.
         if label in self._pydevices and lib.startswith("_PyBridge_"):
+            if label not in self._direct_pydevices:
+                for hub_label, tracker in self._hub_trackers.items():
+                    if tracker.library == lib and hub_label != label:
+                        return self.getDeviceLibrary(hub_label)
             return cast("AdapterName", self._pydevices[label].__module__)
         return lib
 
     def getDeviceName(self, label: DeviceLabel | str) -> DeviceName:
-        if label not in self._pydevices:
+        # loadPyDevice() registers the device under its label; devices created
+        # by the bridge (adapter classes, hub peripherals) have a real name.
+        if label not in self._direct_pydevices:
             return super().getDeviceName(label)
         return cast("DeviceName", self._pydevices[label].name())
 
@@ -243,7 +307,7 @@ class UniMMCore(CMMCorePlus):
     ) -> None:
         if deviceLabel is not None and propName is not None and value is not None:
             super().defineConfig(
-                groupName, configName, deviceLabel, propName, str(value)
+                groupName, configName, deviceLabel, propName, to_cpp_string(value)
             )
         else:
             super().defineConfig(groupName, configName)
@@ -284,18 +348,36 @@ class UniMMCore(CMMCorePlus):
 
     def unloadDevice(self, label: DeviceLabel | str) -> None:
         super().unloadDevice(label)
-        self._pydevices.pop(label, None)
+        self._prune_py_devices()
 
-    def unloadAllDevices(self) -> None:
+    def _prune_py_devices(self) -> None:
+        """Forget the Python devices that are no longer loaded."""
+        loaded = set(super().getLoadedDevices())
+        for label in list(self._pydevices):
+            if label not in loaded:
+                self._pydevices.pop(label, None)
+                self._direct_pydevices.discard(label)
+                self._hub_trackers.pop(label, None)
+
+    def _stop_running_sequence(self) -> None:
+        # CMMCore refuses to drop the camera role while it is acquiring
         with suppress(Exception):
             if self.isSequenceRunning():
                 self.stopSequenceAcquisition()
-        self._pydevices.clear()
-        super().unloadAllDevices()
+
+    def unloadAllDevices(self) -> None:
+        self._stop_running_sequence()
+        try:
+            super().unloadAllDevices()
+        finally:
+            self._prune_py_devices()
 
     def reset(self) -> None:
-        self._pydevices.clear()
-        super().reset()
+        self._stop_running_sequence()
+        try:
+            super().reset()
+        finally:
+            self._prune_py_devices()
 
     # -----------------------------------------------------------------------
     # System configuration files
@@ -343,7 +425,9 @@ class UniMMCore(CMMCorePlus):
         eventSequence: Sequence[Any],
     ) -> None:
         # C++ expects Sequence[str]
-        super().loadPropertySequence(label, propName, [str(v) for v in eventSequence])
+        super().loadPropertySequence(
+            label, propName, [to_cpp_string(v) for v in eventSequence]
+        )
 
     # -- SLM overrides --
 
@@ -357,6 +441,55 @@ class UniMMCore(CMMCorePlus):
         if isinstance(dev, SLMDevice):
             return dev.get_image()
         raise RuntimeError(f"Device {slmLabel!r} is not an SLM device")
+
+
+class _HubPeripheralTracker:
+    """Wraps a Python hub's `detect_installed_devices()` for a UniMMCore.
+
+    Instances reported by the hub are recorded by name, so the core can track
+    them once loaded. Classes are replaced by subclasses that hand every new
+    instance to the core (`_pending_pydevices`), like a registered adapter does.
+    """
+
+    def __init__(self, core: UniMMCore, hub: HubDevice, library: str) -> None:
+        self._core = weakref.ref(core)
+        self._hub = hub
+        self._detect = type(hub).detect_installed_devices
+        self.library = library  # the bridge adapter the hub was loaded from
+        self.instances: dict[str, Device] = {}
+        self._classes: dict[type[Device], type[Device]] = {}
+
+    def __call__(self) -> list[tuple[str, Device | type[Device], DeviceType]]:
+        out: list[tuple[str, Device | type[Device], DeviceType]] = []
+        items: Sequence[tuple[str, Any, DeviceType]] = self._detect(self._hub)
+        for name, obj, dev_type in items:
+            if isinstance(obj, type):
+                obj = self._tracking_class(obj)
+            else:
+                self.instances[name] = obj
+            out.append((name, obj, dev_type))
+        return out
+
+    def _tracking_class(self, cls: type[Device]) -> type[Device]:
+        if cls not in self._classes:
+            core_ref = self._core
+
+            def __init__(dev: Device, *args: Any, **kwargs: Any) -> None:
+                cls.__init__(dev, *args, **kwargs)
+                if (core := core_ref()) is not None:
+                    core._pending_pydevices.append(dev)  # noqa: SLF001
+
+            self._classes[cls] = type(
+                cls.__name__,
+                (cls,),
+                {
+                    "__init__": __init__,
+                    "__module__": cls.__module__,
+                    "__qualname__": cls.__qualname__,
+                    "__doc__": cls.__doc__,
+                },
+            )
+        return self._classes[cls]
 
 
 def _values_match(current: Any, expected: Any) -> bool:
@@ -373,7 +506,4 @@ def _prepare_property_value_for_cpp(dev: Device, propName: str, propValue: Any) 
     ctrl = dev._get_prop_or_raise(propName)  # noqa: SLF001
     if ctrl.is_read_only:
         raise ValueError(f"Property {propName!r} is read-only.")
-    propValue = ctrl.validate(propValue)
-    if isinstance(propValue, bool):
-        propValue = int(propValue)  # MM properties expect bools as ints
-    return str(propValue)
+    return to_cpp_string(ctrl.validate(propValue))

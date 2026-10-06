@@ -4,7 +4,6 @@ import logging
 import threading
 from abc import ABC
 from collections import ChainMap
-from enum import EnumMeta
 from typing import TYPE_CHECKING, Any, ClassVar, Generic, TypeVar, final
 
 from pymmcore_plus.core import DeviceType
@@ -12,6 +11,9 @@ from pymmcore_plus.core._constants import PropertyType
 from pymmcore_plus.experimental.unicore.devices._properties import (
     PropertyController,
     PropertyInfo,
+    _enum_type_of,
+    coerce_enum,
+    to_cpp_string,
 )
 
 logger = logging.getLogger(__name__)
@@ -85,7 +87,19 @@ class Device(_Lockable, ABC):
 
     def _register_bridge_properties(self, create_property: CreatePropertyFn) -> None:
         for ctrl in self._prop_controllers_.values():
-            _register_one_property(self, ctrl, create_property)
+            if ctrl.property.name not in self._property_handles_:
+                _register_one_property(self, ctrl, create_property)
+
+    def create_pre_init_properties(self, create_property: CreatePropertyFn) -> None:
+        """Called by the C++ bridge when CMMCore creates the device.
+
+        Registers the properties marked `is_pre_init`, so that they exist (and can
+        be set, e.g. from a configuration file) before `initializeDevice()`, like
+        the pre-init properties a C++ adapter creates in its constructor.
+        """
+        for ctrl in self._prop_controllers_.values():
+            if ctrl.property.is_pre_init:
+                _register_one_property(self, ctrl, create_property)
 
     def register_property(
         self,
@@ -118,8 +132,9 @@ class Device(_Lockable, ABC):
         if property_type is None and default_value is not None:
             property_type = type(default_value)
 
-        if isinstance(property_type, EnumMeta) and allowed_values is None:
-            allowed_values = tuple(property_type)
+        enum_type = _enum_type_of(property_type, default_value, *(allowed_values or ()))
+        if enum_type is not None and allowed_values is None:
+            allowed_values = tuple(enum_type)
 
         prop_info = PropertyInfo(
             name=name,
@@ -132,6 +147,7 @@ class Device(_Lockable, ABC):
             is_read_only=is_read_only,
             is_pre_init=is_pre_init,
             type=PropertyType.create(property_type),
+            enum_type=enum_type,
         )
         controller = PropertyController(
             property=prop_info,
@@ -365,28 +381,34 @@ def _register_one_property(
 ) -> None:
     info = ctrl.property
     prop_type = info.type
-    default_str = str(info.default_value) if info.default_value is not None else ""
+    default_str = (
+        to_cpp_string(info.default_value) if info.default_value is not None else ""
+    )
 
     if (limits := info.limits) is not None:
         limits = (float(limits[0]), float(limits[1]))
 
     if (allowed := info.allowed_values) is not None:
-        allowed = [str(v) for v in allowed]
+        allowed = [to_cpp_string(v) for v in allowed]
 
     # The C++ bridge expects all property values as strings, so we use the prop_type's
     # parse_value method to convert from string to the appropriate Python type in the
-    # setter and sequence loader.
-    _parse = prop_type.parse_value
+    # setter and sequence loader (Enum members are represented by their value).
+    if (enum_type := info.enum_type) is not None:
+        _parse: Callable[[str], Any] = lambda s: coerce_enum(enum_type, s)  # noqa: E731
+    else:
+        _parse = prop_type.parse_value
     fset = ctrl.fset
+    fget = ctrl.fget
     getter: Callable[[], Any] | None
     setter: Callable[[str], None] | None
-    if ctrl.fget is None and fset is None:
+    if fget is None and fset is None:
         # A config property (neither getter nor setter): its value lives only in
         # `last_value`, so C++ must read and write it there rather than keep a copy.
-        getter = lambda: info.last_value  # noqa: E731
+        getter = lambda: to_cpp_string(info.last_value)  # noqa: E731
         setter = lambda s: setattr(info, "last_value", _parse(s))  # noqa: E731
     else:
-        getter = ctrl.fget.__get__(device) if ctrl.fget else None
+        getter = (lambda: to_cpp_string(fget(device))) if fget else None
         setter = (lambda s: fset(device, _parse(s))) if fset else None
     seq_loader = (
         (lambda seq: ctrl.load_sequence(device, [_parse(s) for s in seq]))

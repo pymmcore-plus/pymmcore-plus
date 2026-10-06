@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from enum import Enum, EnumMeta
 from typing import (
     TYPE_CHECKING,
     Any,
@@ -8,12 +9,14 @@ from typing import (
     Literal,
     TypeVar,
     cast,
+    get_type_hints,
     overload,
 )
 
 from pymmcore_plus.core._constants import PropertyType
 
 if TYPE_CHECKING:
+    import builtins
     from collections.abc import Callable, Sequence
     from typing import Self, TypeAlias
 
@@ -26,6 +29,55 @@ if TYPE_CHECKING:
 TDev = TypeVar("TDev", bound="Device")
 TProp = TypeVar("TProp")
 TLim = TypeVar("TLim", bound=int | float)
+
+
+def to_cpp_string(value: Any) -> str:
+    """Represent a property value as the string CMMCore stores.
+
+    Enum members are represented by their value (what a configuration file holds),
+    booleans as "1"/"0" as in MM device properties, everything else with `str()`.
+    """
+    if isinstance(value, Enum):
+        value = value.value
+    if isinstance(value, bool):
+        return str(int(value))
+    return str(value)
+
+
+def coerce_enum(enum_type: type[Enum], value: Any) -> Enum:
+    """Return the member of `enum_type` for `value` (a member, a value or a name)."""
+    if isinstance(value, enum_type):
+        return value
+    for member in enum_type:
+        if value == member.value or str(value) == to_cpp_string(member):
+            return member
+    if isinstance(value, str) and value in enum_type.__members__:
+        return enum_type.__members__[value]
+    raise ValueError(
+        f"{value!r} is not a valid {enum_type.__name__}: "
+        f"{[to_cpp_string(m) for m in enum_type]}"
+    )
+
+
+def _enum_type_of(*candidates: Any) -> type[Enum] | None:
+    """Return the first Enum class among the candidates (classes or members)."""
+    for c in candidates:
+        if isinstance(c, EnumMeta):
+            return cast("type[Enum]", c)
+        if isinstance(c, Enum):
+            return type(c)
+    return None
+
+
+def _return_annotation(fget: Callable[..., Any]) -> Any:
+    """Return annotation of `fget`, resolved when it is a string.
+
+    (`from __future__ import annotations` turns an Enum annotation into its name.)
+    """
+    try:
+        return get_type_hints(fget).get("return")
+    except Exception:  # pragma: no cover - unresolvable forward reference
+        return fget.__annotations__.get("return")
 
 
 @dataclass(kw_only=True, slots=True)
@@ -67,6 +119,9 @@ class PropertyInfo(Generic[TProp]):
     allowed_values: Sequence[TProp] | None = None
     is_read_only: bool | None = None
     is_pre_init: bool = False
+    # for Enum-typed properties: the Enum class (values cross C++ as strings)
+    # (`builtins.type`: the `type` field above shadows the builtin here)
+    enum_type: builtins.type[Enum] | None = None
 
     @property
     def number_of_allowed_values(self) -> int:
@@ -158,6 +213,8 @@ class PropertyController(Generic[TDev, TProp]):
 
     def validate(self, value: Any) -> TProp:
         """Validate a property value."""
+        if self.property.enum_type is not None:
+            value = coerce_enum(self.property.enum_type, value)
         if self.property.allowed_values and value not in self.property.allowed_values:
             raise ValueError(
                 f"Value '{value}' is not allowed for property '{self.property.name}'. "
@@ -386,19 +443,26 @@ def pymm_property(
     def _inner(
         fget: Callable[[TDev], TProp], _pt: PropArg = property_type
     ) -> PropertyController[TDev, TProp]:
+        if _pt is None:
+            _pt = _return_annotation(fget)
+        enum_type = _enum_type_of(_pt, *(allowed_values or ()))
+        _allowed = allowed_values
+        if enum_type is not None and _allowed is None:
+            _allowed = tuple(enum_type)
         prop = PropertyInfo(
             name=name or fget.__name__,
             description=fget.__doc__,
             limits=limits,
             sequence_max_length=sequence_max_length,
-            allowed_values=allowed_values,
+            allowed_values=_allowed,
             # all @pymm_property properties are read-only by default
             # until they are decorated with a setter
             # this does not apply to properties that are manually registered
             # with Device.register_property.
             is_read_only=is_read_only,
             is_pre_init=is_pre_init,
-            type=PropertyType.create(_pt or fget.__annotations__.get("return", None)),
+            type=PropertyType.create(_pt),
+            enum_type=enum_type,
         )
 
         return PropertyController(property=prop, fget=fget)
