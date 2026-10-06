@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from abc import abstractmethod
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
 
@@ -10,8 +10,6 @@ from ._device_base import Device
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
     from typing import ClassVar, Literal, Self
-
-    from pymmcore import StateLabel
 
 
 class StateDevice(Device):
@@ -22,14 +20,16 @@ class StateDevice(Device):
     interface contains functions to get and set the state, to give states human readable
     labels, and functions to make it possible to treat the state device as a shutter.
 
-    In terms of implementation, this base class provides the basic functionality by
-    presenting state and label as properties, which it keeps in sync with the
-    underlying device.
+    In terms of implementation, this base class presents the device's state as the
+    "State" property. As with C++ state device adapters, position labels (and the
+    "Label" property) are owned by the core: the labels given here are only the
+    defaults, and are changed with `CMMCore.defineStateLabel()`.
 
     Parameters
     ----------
     state_labels: Mapping[int, str] | Iterable[tuple[int, str]]
-        A mapping (or iterable of 2-tuples) of integer state indices to string labels.
+        A mapping (or iterable of 2-tuples) of integer state indices to default string
+        labels.
     """
 
     # Mandatory methods for state devices
@@ -63,15 +63,12 @@ class StateDevice(Device):
         if not (states := dict(state_labels)):  # pragma: no cover
             raise ValueError("State device must have at least one state.")
 
-        self._state_to_label: dict[int, StateLabel] = states  # type: ignore[assignment]
-        # reverse mapping for O(1) lookup
-        self._label_to_state: dict[str, int] = {lbl: p for p, lbl in states.items()}
-
+        self._default_labels: dict[int, str] = {p: str(lb) for p, lb in states.items()}
         self.register_standard_properties()
 
     def register_standard_properties(self) -> None:
-        """Inspect the class for standard properties and register them."""
-        states, labels = zip(*self._state_to_label.items(), strict=False)
+        """Register the State property."""
+        states = tuple(self._default_labels)
         cls = type(self)
         self.register_property(
             name=Keyword.State,
@@ -80,78 +77,30 @@ class StateDevice(Device):
             getter=cls.get_state,
             setter=cls._set_state,
         )
-        self.register_property(
-            name=Keyword.Label.value,
-            default_value=labels[0],
-            allowed_values=labels,
-            getter=cls._get_current_label,
-            setter=cls._set_current_label,
-        )
 
-    def set_position_or_label(self, pos_or_label: int | str) -> None:
-        """Set the position of the device by index or label."""
-        if isinstance(pos_or_label, str):
-            label = pos_or_label
-            pos = self.get_position_for_label(pos_or_label)
-        else:
-            pos = int(pos_or_label)
-            label = self._state_to_label.get(pos, "")
-        if pos not in self._state_to_label:
-            raise ValueError(
-                f"Position {pos} is not a valid state. "
-                f"Available states: {self._state_to_label.keys()}"
-            )
-        self.set_property_value(Keyword.State, pos)  # will trigger set_state
-        self.set_property_value(Keyword.Label.value, label)
+    def notify_state_changed(self, state: int) -> None:
+        """Notify the core that the device moved on its own (e.g. by hand).
 
-    def assign_label_to_position(self, pos: int, label: str) -> None:
-        """Assign a User-defined label to a position."""
-        if not isinstance(pos, int):
-            raise TypeError(f"Position must be an integer, got {type(pos).__name__}.")
+        The core is notified of both the State and Label properties.
+        """
+        if self._notify_ is not None:
+            self._notify_.on_state_changed(state)
 
-        # update internal state
-        self._state_to_label[pos] = label = cast("StateLabel", str(label))
-        self._label_to_state[label] = pos
-        self._update_allowed_labels()
-
-    def get_position_for_label(self, label: str) -> int:
-        """Return the position corresponding to the provided label."""
-        if label not in self._label_to_state:
-            raise KeyError(
-                f"Label not defined: {label!r}. "
-                f"Available labels: {self._state_to_label.values()}"
-            )
-        return self._label_to_state[label]
+    def get_number_of_positions(self) -> int:
+        """Return the number of available positions."""
+        return len(self._default_labels)
 
     # ------------------ private methods for internal use ------------------
 
-    def _update_allowed_labels(self) -> None:
-        """Update the allowed values for the label property."""
-        label_prop_info = self.get_property_info(Keyword.Label)
-        label_prop_info.allowed_values = list(self._state_to_label.values())
-
     def _set_state(self, state: int) -> None:
-        # internal method to set the state, called by the property setter
-        # to keep the label and state property in sync
-        self.set_state(state)  # call the device-specific method
-        self.core.events.propertyChanged.emit(
-            self.get_label(), Keyword.State.value, state
-        )
-        label = self._state_to_label.get(state, "")
-        self.set_property_value(Keyword.Label, label)
-        self.core.events.propertyChanged.emit(
-            self.get_label(), Keyword.Label.value, label
-        )
+        # State property setter. Like C++ CStateDeviceBase, a core-initiated move
+        # needs no notification: CMMCore updates its own state cache.
+        self.set_state(state)
 
-    def _get_current_label(self) -> str:
-        # internal method to get the current label, called by the property getter
-        # to keep the label and state property in sync
-        pos = self.get_property_value(Keyword.State)
-        return self._state_to_label.get(pos, "")
+    # -- Bridge protocol --
 
-    def _set_current_label(self, label: str) -> None:
-        # internal method to set the label, called by the property setter
-        # to keep the label and state property in sync
-        pos = self._label_to_state.get(label)
-        if pos != self.get_property_value(Keyword.State):
-            self.set_property_value(Keyword.State, pos)  # will trigger set_state
+    def _post_bridge_initialize(self) -> None:
+        """Register the default position labels with C++ CStateDeviceBase."""
+        if self._notify_ is not None:
+            for pos, label in self._default_labels.items():
+                self._notify_.set_position_label(pos, label)

@@ -17,34 +17,31 @@ class HubDevice(Device):
     multiple peripheral devices attached to it. Examples include multi-channel
     controllers, or devices that manage multiple sub-devices.
 
-    To implement a Hub device, simply override `get_installed_peripherals()`:
+    Override `detect_installed_devices()` to return peripheral devices:
 
     ```python
     class MyHub(HubDevice):
-        def get_installed_peripherals(self) -> Sequence[tuple[str, str]]:
+        def detect_installed_devices(
+            self,
+        ) -> Sequence[tuple[str, Device, DeviceType]]:
             return [
-                ("Motor1", "First motor controller"),
-                ("Motor2", "Second motor controller"),
+                ("Motor1", Motor1Device(), DeviceType.Stage),
+                ("Motor2", Motor2Device(), DeviceType.Stage),
             ]
     ```
-
-    If your hub needs to perform expensive detection (e.g., scanning a bus),
-    implement caching inside your `get_installed_peripherals()` method.
     """
 
     _TYPE: ClassVar[Literal[DeviceType.Hub]] = DeviceType.Hub
 
-    def get_installed_peripherals(self) -> Sequence[tuple[str, str]]:
-        """Return information about installed peripheral devices.
-
-        Override this method to return a sequence of `tuple[str, str]` objects
-        describing all devices that can be loaded as peripherals of this hub.
+    def detect_installed_devices(
+        self,
+    ) -> Sequence[tuple[str, Device, DeviceType]]:
+        """Return peripheral devices installed on this hub.
 
         Returns
         -------
-        Sequence[tuple[str, str]]
-            A sequence of (name, description) tuples for each available peripheral.
-            The name MUST be the name of a class, importable from the same module as
-            this hub.
+        Sequence[tuple[str, Device, DeviceType]]
+            A sequence of (name, device_instance, device_type) tuples.
+            The C++ bridge uses these to register real devices.
         """
         return ()

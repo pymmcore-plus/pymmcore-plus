@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from abc import abstractmethod
 
 from pymmcore_plus.core._constants import DeviceType
@@ -28,3 +29,11 @@ class ShutterDevice(Device):
         open : bool
             True to open the shutter, False to close it.
         """
+
+    # -- Bridge protocol --
+
+    def fire(self, delta_t: float) -> None:
+        """Open shutter for delta_t milliseconds, then close."""
+        self.set_open(True)
+        time.sleep(delta_t / 1000.0)
+        self.set_open(False)
