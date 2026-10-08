@@ -10,7 +10,7 @@ from pymmcore_plus.core._constants import DeviceInitializationState, DeviceType
 from .devices._device_base import Device
 
 if TYPE_CHECKING:
-    from collections.abc import Iterator
+    from collections.abc import Callable, Iterable, Iterator
 
     from pymmcore import DeviceLabel
 
@@ -74,25 +74,27 @@ class PyDeviceManager:
                 )
             time.sleep(polling_interval)
 
-    def wait_for_device_type(
-        self, dev_type: int, timeout_ms: float = 5000, *, parallel: bool = True
+    def wait_for_each(
+        self,
+        labels: Iterable[str],
+        get_timeout: Callable[[str], float],
     ) -> None:
-        if not (labels := self.get_labels_of_type(dev_type)):
-            return  # pragma: no cover
-        if not parallel:
-            for lbl in labels:
-                self.wait_for(lbl, timeout_ms)
-        else:
-            # Wait for all python devices of the given type in parallel
-            # it's critical that this be a list comprehension,
-            # not a generator expression, otherwise the executor may be shut down
-            # before any tasks are actually submitted
-            with ThreadPoolExecutor() as executor:
-                futures = [
-                    executor.submit(self.wait_for, lbl, timeout_ms) for lbl in labels
-                ]
-                for future in as_completed(futures):
-                    future.result()  # Raises any exceptions from wait_for_device
+        """Wait for each label in parallel; ``get_timeout(label)`` per device.
+
+        Raises any exception (including :class:`TimeoutError`) raised by
+        :meth:`wait_for` for any label.
+        """
+        # Materialise labels — list comp matters: a generator expression can
+        # outlive the executor scope and submit nothing.
+        labels = list(labels)
+        if not labels:
+            return
+        with ThreadPoolExecutor() as executor:
+            futures = [
+                executor.submit(self.wait_for, lbl, get_timeout(lbl)) for lbl in labels
+            ]
+            for future in as_completed(futures):
+                future.result()
 
     def get_initialization_state(self, label: str) -> DeviceInitializationState:
         """Return the initialization state of the device with the given label."""
