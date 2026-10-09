@@ -13,7 +13,8 @@ from typing import TYPE_CHECKING, Any
 import pytest
 
 import pymmcore_plus
-from pymmcore_plus._logger import logger
+from pymmcore_plus import _logger
+from pymmcore_plus._logger import MMCoreHandler, logger
 from pymmcore_plus.core.events import CMMCoreSignaler
 from pymmcore_plus.mda.events import MDASignaler
 
@@ -31,6 +32,27 @@ except ImportError:
     PARAMS = ["psygnal"]
 
 logger.setLevel("CRITICAL")
+
+
+@pytest.fixture(autouse=True)
+def _restore_logger_state() -> Iterator[None]:
+    """Snapshot and restore pymmcore-plus logging state around every test.
+
+    Tests that invoke the CLI in-process (via ``CliRunner``) or call
+    ``configure_logging`` would otherwise leak ``_logger._config`` mutations
+    into later tests.
+    """
+    saved_level = logger.level
+    saved_config = _logger._config
+    saved_handlers = list(logger.handlers)
+    try:
+        yield
+    finally:
+        for h in list(logger.handlers):
+            if h not in saved_handlers and isinstance(h, MMCoreHandler):
+                logger.removeHandler(h)
+        _logger._config = saved_config
+        logger.setLevel(saved_level)
 
 
 @pytest.fixture(params=PARAMS, scope="function")

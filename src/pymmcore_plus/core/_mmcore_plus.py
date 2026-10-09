@@ -26,7 +26,7 @@ from typing_extensions import deprecated
 
 import pymmcore_plus._pymmcore as pymmcore
 from pymmcore_plus._discovery import find_micromanager
-from pymmcore_plus._logger import current_logfile, logger
+from pymmcore_plus._logger import _attach_core, logger
 from pymmcore_plus._util import print_tabular_data
 from pymmcore_plus.mda import MDAEngine, MDARunner, PMDAEngine
 from pymmcore_plus.metadata.functions import summary_metadata
@@ -216,6 +216,7 @@ class CMMCorePlus(pymmcore.CMMCore):
 
     def __init__(self, mm_path: str | None = None, adapter_paths: Sequence[str] = ()):
         super().__init__()
+        _attach_core(self)
         if os.getenv("PYMM_DEBUG_LOG", "0").lower() in ("1", "true"):
             self.enableDebugLog(True)
         if os.getenv("PYMM_STDERR_LOG", "0").lower() in ("1", "true"):
@@ -250,10 +251,7 @@ class CMMCorePlus(pymmcore.CMMCore):
                     parallel = False
             self.enableFeature("ParallelDeviceInitialization", parallel)
 
-        # TODO: test this on windows ... writing to the same file may be an issue there
-        if logfile := current_logfile(logger):
-            self.setPrimaryLogFile(str(logfile))
-            logger.debug("Initialized core %s", self)
+        logger.debug("Initialized core %s", repr(self))
 
         # some internal state, remembering the last arguments passed to various
         # functions.  These are subject to change: do not depend on externally

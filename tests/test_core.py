@@ -604,6 +604,22 @@ def test_snap_rgb(core: CMMCorePlus) -> None:
 
 
 def test_env_vars(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    import logging
+
+    from pymmcore_plus import _logger
+
+    monkeypatch.setattr(
+        _logger,
+        "_config",
+        _logger._LogConfig(
+            file=None,
+            stderr_level=_logger.DEFAULT_LOG_LEVEL,
+            file_level=logging.DEBUG,
+            log_to_stderr=False,
+            file_rotation=40,
+            file_retention=20,
+        ),
+    )
     core = CMMCorePlus()
     assert not core.debugLogEnabled()
     assert not core.stderrLogEnabled()
