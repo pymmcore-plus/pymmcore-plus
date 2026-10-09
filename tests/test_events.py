@@ -1,8 +1,9 @@
 from __future__ import annotations
 
+import logging
 from contextlib import nullcontext
 from typing import Any
-from unittest.mock import Mock, call
+from unittest.mock import Mock, call, patch
 
 import pytest
 
@@ -117,6 +118,49 @@ def test_set_state_events(core: CMMCorePlus) -> None:
         ]
     )
     assert core.getState("Dichroic") == 1
+
+
+def test_set_state_events_without_label_property(
+    core: CMMCorePlus, caplog: pytest.LogCaptureFixture
+) -> None:
+    """State devices need not implement "Label"; don't ask for it if it's missing.
+
+    Some adapters (e.g. the TriggerScopeMM TTL switches) implement only "State".
+    Asking MMCore for a property the device doesn't have raises and logs an error
+    on every call, which is very noisy during hardware-sequenced acquisitions.
+    """
+    real_has_property = core.hasProperty
+    real_get_property = core.getProperty
+
+    def no_label_has_property(device: str, prop: str) -> bool:
+        if (device, prop) == ("Objective", Keyword.Label.value):
+            return False
+        return real_has_property(device, prop)
+
+    def no_label_get_property(device: str, prop: str, *args: Any) -> Any:
+        if (device, prop) == ("Objective", Keyword.Label.value):
+            raise RuntimeError("Invalid property name encountered: Label")
+        return real_get_property(device, prop, *args)
+
+    get_property = Mock(side_effect=no_label_get_property)
+    mock = Mock()
+    core.events.propertyChanged.connect(mock)
+    with (
+        patch.object(core, "hasProperty", no_label_has_property),
+        patch.object(core, "getProperty", get_property),
+        caplog.at_level(logging.WARNING, logger="pymmcore-plus"),
+    ):
+        core.setState("Objective", 3)
+
+    # the missing property was never requested ...
+    assert ("Objective", Keyword.Label.value) not in [
+        c.args[:2] for c in get_property.call_args_list
+    ]
+    # ... nothing was logged about it ...
+    assert not caplog.records
+    # ... and the State change is still reported
+    mock.assert_any_call("Objective", Keyword.State.value, "3")
+    assert core.getState("Objective") == 3
 
 
 def test_set_statedevice_property_emits_events(core: CMMCorePlus) -> None:
