@@ -3,17 +3,21 @@
 from __future__ import annotations
 
 import time
+from typing import TYPE_CHECKING
 from unittest.mock import Mock
 
 import pytest
 
 from pymmcore_plus import CMMCorePlus
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 @pytest.fixture
-def core() -> CMMCorePlus:
+def core(load_config_and_wait: Callable[[CMMCorePlus], None]) -> CMMCorePlus:
     core = CMMCorePlus()
-    core.loadSystemConfiguration()
+    load_config_and_wait(core)
     return core
 
 

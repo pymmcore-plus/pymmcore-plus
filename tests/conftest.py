@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 import time
 from contextlib import contextmanager
 from unittest.mock import patch
@@ -33,9 +34,41 @@ except ImportError:
 logger.setLevel("CRITICAL")
 
 
+@pytest.fixture
+def load_config_and_wait() -> Callable[[pymmcore_plus.CMMCorePlus], None]:
+    # MMCore v12 delivers callbacks asynchronously, in order; waiting for
+    # SystemConfigurationLoaded (posted last) ensures no stale callbacks
+    # from the config load arrive later during the test.
+    def _load(core: pymmcore_plus.CMMCorePlus, timeout: float = 5) -> None:
+        loaded = threading.Event()
+
+        def _on_loaded() -> None:
+            loaded.set()
+
+        sig = core.events.systemConfigurationLoaded
+        if isinstance(core._events, CMMCoreSignaler):
+            sig.connect(_on_loaded)
+        else:
+            from qtpy.QtCore import Qt
+
+            sig.connect(_on_loaded, Qt.ConnectionType.DirectConnection)
+        try:
+            core.loadSystemConfiguration()
+            if not loaded.wait(timeout):
+                pytest.fail(
+                    "systemConfigurationLoaded not received after loading config"
+                )
+        finally:
+            sig.disconnect(_on_loaded)
+
+    return _load
+
+
 @pytest.fixture(params=PARAMS, scope="function")
 def core(
-    request: Any, monkeypatch: pytest.MonkeyPatch
+    request: Any,
+    monkeypatch: pytest.MonkeyPatch,
+    load_config_and_wait: Callable[[pymmcore_plus.CMMCorePlus], None],
 ) -> Iterator[pymmcore_plus.CMMCorePlus]:
     monkeypatch.setenv("PYMM_SIGNALS_BACKEND", request.param)
     core = pymmcore_plus.CMMCorePlus()
@@ -48,7 +81,7 @@ def core(
         assert isinstance(core.mda._signals, QMDASignaler)
     if not core.getDeviceAdapterSearchPaths():
         pytest.fail("To run tests, please install MM with `mmcore install`")
-    core.loadSystemConfiguration()
+    load_config_and_wait(core)
     yield core
 
 
