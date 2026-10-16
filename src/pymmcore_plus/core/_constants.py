@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from enum import Enum, IntEnum, auto
+from enum import Enum, IntEnum, StrEnum, auto
 from typing import Any, Literal
 
 from typing_extensions import deprecated
@@ -12,7 +12,7 @@ import pymmcore_plus._pymmcore as pymmcore
 # we could do this dynamically, but then we lose IDE type hints
 
 
-class Keyword(str, Enum):
+class Keyword(StrEnum):
     Name = pymmcore.g_Keyword_Name
     Description = pymmcore.g_Keyword_Description
 
@@ -87,7 +87,7 @@ class Keyword(str, Enum):
         return str(self.value)
 
 
-class CFGCommand(str, Enum):
+class CFGCommand(StrEnum):
     Device = pymmcore.g_CFGCommand_Device
     Label = pymmcore.g_CFGCommand_Label
     Property = pymmcore.g_CFGCommand_Property
@@ -116,7 +116,7 @@ class CFGCommand(str, Enum):
         return str(self.value)
 
 
-class CFGGroup(str, Enum):
+class CFGGroup(StrEnum):
     System = pymmcore.g_CFGGroup_System
     System_Startup = pymmcore.g_CFGGroup_System_Startup
     System_Shutdown = pymmcore.g_CFGGroup_System_Shutdown
@@ -284,7 +284,7 @@ class DeviceInitializationState(IntEnum):
     InitializationFailed = pymmcore.InitializationFailed
 
 
-class PixelType(str, Enum):
+class PixelType(StrEnum):
     """These are pixel types, as used in MMStudio and MMCoreJ wrapper.
 
     They are only here for supporting the legacy (and probably to-be-deprecated)
@@ -319,7 +319,7 @@ class PixelType(str, Enum):
         }[self]
 
 
-class PixelFormat(str, Enum):
+class PixelFormat(StrEnum):
     """Subset of GeniCam Pixel Format names used by pymmcore-plus.
 
     (This is similar to PixelType, but follows GeniCam standards.)

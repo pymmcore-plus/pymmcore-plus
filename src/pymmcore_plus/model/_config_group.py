@@ -5,9 +5,10 @@ from typing import TYPE_CHECKING, NamedTuple
 
 if TYPE_CHECKING:
     from collections.abc import Container, MutableMapping
-    from typing import Final
-
-    from typing_extensions import Self  # py311
+    from typing import (
+        Final,
+        Self,  # py311
+    )
 
     from pymmcore_plus import CMMCorePlus
     from pymmcore_plus.metadata.schema import ConfigGroup as ConfigGroupMeta

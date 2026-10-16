@@ -1,7 +1,6 @@
-from typing import Any, Literal, TypedDict
+from typing import Any, Literal, NotRequired, TypedDict
 
 import useq
-from typing_extensions import NotRequired
 
 __all__ = [
     "ConfigGroup",

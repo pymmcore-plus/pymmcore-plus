@@ -17,11 +17,14 @@ from ._util import position_sizes
 
 if TYPE_CHECKING:
     from collections.abc import Mapping, Sequence
-    from typing import Literal, TypeAlias
+    from typing import (
+        Literal,
+        Self,  # py311
+        TypeAlias,
+    )
 
     import tensorstore as ts
     import useq
-    from typing_extensions import Self  # py311
 
     from pymmcore_plus.metadata import FrameMetaV1, SummaryMetaV1
 

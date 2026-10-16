@@ -276,7 +276,7 @@ q.put(STOP)
     (by placing the `STOP_EVENT` sentinel in the queue).
 
     ```python linenums="1" title="event_driven_acquisition.py"
-    --8 < --"examples/event_driven_acquisition.py"
+    --8<-- "examples/event_driven_acquisition.py"
     ```
 
 ### MDASequence

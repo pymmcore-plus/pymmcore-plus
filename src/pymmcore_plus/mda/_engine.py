@@ -814,8 +814,11 @@ class MDAEngine(PMDAEngine):
             elif core.isSequenceRunning():
                 # Still acquiring, buffer temporarily empty - wait
                 time.sleep(0.001)
-            else:
-                # Done acquiring and buffer empty - exit
+            elif not core.getRemainingImageCount():
+                # Done acquiring and buffer empty - exit. The buffer must be
+                # re-checked *after* the sequence is seen to stop: the camera can
+                # insert its last frame(s) between the getRemainingImageCount()
+                # call above and isSequenceRunning().
                 break
         else:
             # Deadline exceeded
@@ -879,7 +882,8 @@ class MDAEngine(PMDAEngine):
                         )
             elif core.isSequenceRunning():
                 time.sleep(0.001)
-            else:
+            elif not core.getRemainingImageCount():
+                # Re-check after the stop, see _exec_single_camera_sequence
                 break
         else:
             # Deadline exceeded

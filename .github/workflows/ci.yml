@@ -21,13 +21,13 @@ jobs:
       fail-fast: false
       matrix:
         os: [windows-latest, macos-latest]
-        python-version: ["3.10", "3.11", "3.13", "3.14"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
         include:
           - os: macos-15-intel
             python-version: "3.12"
             add-group: "PySide6"
           - os: macos-latest
-            python-version: "3.11"
+            python-version: "3.12"
             add-group: "PyQt6"
           - os: windows-latest
             python-version: "3.13"
@@ -37,7 +37,7 @@ jobs:
 
           # test pymmcore-nano
           - os: windows-latest
-            python-version: "3.10"
+            python-version: "3.11"
             nano: "nano"
           - os: macos-15-intel
             python-version: "3.12"
@@ -48,7 +48,7 @@ jobs:
             resolution: "lowest-direct"
             add-group: "PySide6"
           - os: macos-latest
-            python-version: "3.10"
+            python-version: "3.11"
             resolution: "lowest-direct"
             add-group: "PyQt6"
 
@@ -57,7 +57,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: ${{ matrix.python-version }}
           enable-cache: true
@@ -112,11 +112,11 @@ jobs:
         with:
           path: pymmcore-plus
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.13"
           enable-cache: true
-      - uses: pyvista/setup-headless-display-action@v4
+      - uses: pyvista/setup-headless-display-action@v5
         with:
           qt: true
 
@@ -151,11 +151,11 @@ jobs:
         with:
           path: pymmcore-plus
           fetch-depth: 0
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
           enable-cache: true
-      - uses: pyvista/setup-headless-display-action@v4
+      - uses: pyvista/setup-headless-display-action@v5
         with:
           qt: true
 
@@ -180,7 +180,7 @@ jobs:
       UV_NO_SYNC: "1"
     steps:
       - uses: actions/checkout@v7
-      - uses: astral-sh/setup-uv@v7
+      - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
         with:
           python-version: "3.12"
           enable-cache: true
@@ -191,7 +191,7 @@ jobs:
       - uses: pymmcore-plus/setup-mm-test-adapters@main
 
       - name: Run benchmarks
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5
         with:
           mode: simulation
           run: uv run pytest -W ignore --codspeed -v --color=yes

@@ -65,3 +65,18 @@ def test_set_shutter_device_via_set_property():
     core.setProperty("Core", "Shutter", DEV)
 
     assert core.getShutterDevice() == DEV
+
+
+def test_set_shutter_open_emits_py_shutter_label() -> None:
+    """setShutterOpen(state) emits propertyChanged for the Python shutter's label."""
+    core = UniMMCore()
+    core.loadPyDevice(DEV, MyShutterDevice())
+    core.initializeDevice(DEV)
+    core.setShutterDevice(DEV)
+
+    seen: list[tuple[str, str, str]] = []
+    core.events.propertyChanged.connect(lambda d, p, v: seen.append((d, p, v)))
+
+    core.setShutterOpen(True)
+    assert core.getShutterOpen() is True
+    assert seen[-1] == (DEV, "State", "1")

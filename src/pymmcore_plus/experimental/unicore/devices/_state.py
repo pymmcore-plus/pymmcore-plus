@@ -9,10 +9,9 @@ from ._device_base import Device
 
 if TYPE_CHECKING:
     from collections.abc import Iterable, Mapping
-    from typing import ClassVar, Literal
+    from typing import ClassVar, Literal, Self
 
     from pymmcore import StateLabel
-    from typing_extensions import Self
 
 
 class StateDevice(Device):

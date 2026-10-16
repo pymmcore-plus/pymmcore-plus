@@ -2034,7 +2034,9 @@ class CMMCorePlus(pymmcore.CMMCore):
         if len(args) == 2:
             shutterLabel, state = args
         elif len(args) == 1:
-            shutterLabel = super().getShutterDevice()
+            # use self (not super) so subclasses that override getShutterDevice
+            # (e.g. UniMMCore, for Python shutters) are respected
+            shutterLabel = self.getShutterDevice()
             state = args[0]
         self._do_shutter_open(shutterLabel, state)
         state = str(int(bool(state)))
