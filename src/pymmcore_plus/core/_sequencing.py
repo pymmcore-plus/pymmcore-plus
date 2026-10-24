@@ -233,20 +233,30 @@ class EventCombiner:
         ):
             return False
 
+        # NOTE: each attribute is compared to the first event only.  Once it has
+        # changed within this batch, it must be sequenced, so the length limit applies
+        # to every event added after that, even one whose value matches the first.
+
         # Exposure
-        if event.exposure != e0.exposure:
+        if event.exposure != e0.exposure or self.attribute_changes.get(
+            Keyword.CoreCamera
+        ):
             if new_chunk_len > self.max_lengths[Keyword.CoreCamera]:
                 return False
             self.attribute_changes[Keyword.CoreCamera] = True
 
         # XY
-        if event.x_pos != e0.x_pos or event.y_pos != e0.y_pos:
+        if (
+            event.x_pos != e0.x_pos
+            or event.y_pos != e0.y_pos
+            or self.attribute_changes.get(Keyword.CoreXYStage)
+        ):
             if new_chunk_len > self.max_lengths[Keyword.CoreXYStage]:
                 return False
             self.attribute_changes[Keyword.CoreXYStage] = True
 
         # Z
-        if event.z_pos != e0.z_pos:
+        if event.z_pos != e0.z_pos or self.attribute_changes.get(Keyword.CoreFocus):
             if new_chunk_len > self.max_lengths[Keyword.CoreFocus]:
                 return False
             self.attribute_changes[Keyword.CoreFocus] = True
@@ -256,7 +266,9 @@ class EventCombiner:
             return False
 
         # SLM
-        if event.slm_image != e0.slm_image:
+        if event.slm_image != e0.slm_image or self.attribute_changes.get(
+            Keyword.CoreSLM
+        ):
             if new_chunk_len > self.max_lengths[Keyword.CoreSLM]:
                 return False
             self.attribute_changes[Keyword.CoreSLM] = True
@@ -271,7 +283,7 @@ class EventCombiner:
             # the first event's value will be applied before the sequence starts.
             if new_val is None:
                 continue
-            if new_val != old_val:
+            if new_val != old_val or self.attribute_changes.get(dev_prop):
                 dev, prop = dev_prop
                 # Stage positions are moved via setPosition/setXYPosition
                 # (see MDAEngine._set_event_properties), not via property sequences.

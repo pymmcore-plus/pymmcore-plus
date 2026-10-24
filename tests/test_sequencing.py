@@ -283,6 +283,28 @@ def test_position_property_absent_in_later_events_treated_as_static() -> None:
     assert ("Dev", "Prop") not in seq.property_sequences
 
 
+def test_alternating_values_respect_max_sequence_length() -> None:
+    """A value that returns to the first event's value still counts toward the max.
+
+    With two channels alternating on a sequenceable property, every other event
+    matches the first one.  The batch must still stop at the max sequence length.
+    """
+    core = MagicMock()
+    core.isPropertySequenceable.return_value = True
+    core.getPropertySequenceMaxLength.return_value = 4
+    events = [
+        useq.MDAEvent(properties=[useq.PropertyTuple("Dev", "Prop", str(i % 2))])
+        for i in range(8)
+    ]
+
+    merged = list(iter_sequenced_events(core, events))
+
+    assert [len(e.events) for e in merged] == [4, 4]
+    for e in merged:
+        assert isinstance(e, SequencedEvent)
+        assert len(e.property_sequences[("Dev", "Prop")]) == 4
+
+
 def test_position_property_changing_value_breaks_sequencing() -> None:
     """A property whose value explicitly changes must still break sequencing.
 
