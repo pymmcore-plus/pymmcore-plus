@@ -168,12 +168,20 @@ class EventCombiner:
         # whether a given attribute has changed in the current batch
         self.attribute_changes: dict[Keyword | tuple[str, str], bool] = {}
         self.first_event_props: dict[tuple[str, str], Any] = {}
+        # properties specified by every event in the current batch
+        self._common_props: set[tuple[str, str]] = set()
         self._reset_tracking()
 
     def _reset_tracking(self) -> None:
         self.event_batch.clear()
         self.attribute_changes.clear()
         self.first_event_props.clear()
+        self._common_props.clear()
+
+    def _start_batch(self, event: MDAEvent) -> None:
+        self.event_batch.append(event)
+        self.first_event_props = self._event_properties(event)
+        self._common_props = set(self.first_event_props)
 
     def feed_event(self, event: MDAEvent) -> MDAEvent | SequencedEvent | None:
         """Feed one new event into the combiner.
@@ -182,9 +190,7 @@ class EventCombiner:
         current batch, or `None` otherwise.
         """
         if not self.event_batch:
-            # Starting a new batch
-            self.event_batch.append(event)
-            self.first_event_props = self._event_properties(event)
+            self._start_batch(event)
             return None
 
         if self.can_extend(event):
@@ -198,8 +204,7 @@ class EventCombiner:
 
         # Then start a new batch with this new event...
         self._reset_tracking()
-        self.event_batch.append(event)
-        self.first_event_props = self._event_properties(event)
+        self._start_batch(event)
 
         # then return the flushed event
         return flushed
@@ -233,45 +238,58 @@ class EventCombiner:
         ):
             return False
 
+        # ROI is not sequenceable, so events with different ROIs cannot be combined
+        if event.roi != e0.roi:
+            return False
+
+        # Every sequenced attribute has one value per event, so the batch can't grow
+        # past the max length of any attribute already sequenced in it.
+        # (This covers values that return to the first event's value.)
+        if any(new_chunk_len > self._max_length(k) for k in self.attribute_changes):
+            return False
+
+        # attributes newly changed by this event; committed only if it's accepted
+        changes: set[Keyword | tuple[str, str]] = set()
+
         # Exposure
         if event.exposure != e0.exposure:
             if new_chunk_len > self.max_lengths[Keyword.CoreCamera]:
                 return False
-            self.attribute_changes[Keyword.CoreCamera] = True
+            changes.add(Keyword.CoreCamera)
 
         # XY
         if event.x_pos != e0.x_pos or event.y_pos != e0.y_pos:
             if new_chunk_len > self.max_lengths[Keyword.CoreXYStage]:
                 return False
-            self.attribute_changes[Keyword.CoreXYStage] = True
+            changes.add(Keyword.CoreXYStage)
 
         # Z
         if event.z_pos != e0.z_pos:
             if new_chunk_len > self.max_lengths[Keyword.CoreFocus]:
                 return False
-            self.attribute_changes[Keyword.CoreFocus] = True
-
-        # ROI is not sequenceable, so events with different ROIs cannot be combined
-        if event.roi != e0.roi:
-            return False
+            changes.add(Keyword.CoreFocus)
 
         # SLM
         if event.slm_image != e0.slm_image:
             if new_chunk_len > self.max_lengths[Keyword.CoreSLM]:
                 return False
-            self.attribute_changes[Keyword.CoreSLM] = True
+            changes.add(Keyword.CoreSLM)
 
         # properties
         event_props = self._event_properties(event)
         all_props = event_props.keys() | self.first_event_props.keys()
         for dev_prop in all_props:
             new_val = event_props.get(dev_prop)
-            old_val = self.first_event_props.get(dev_prop)
+            if dev_prop in self.attribute_changes:
+                # already sequenced: this event must provide the next value
+                if new_val is None:
+                    return False
+                continue
             # If the new event doesn't mention the property, treat it as static:
             # the first event's value will be applied before the sequence starts.
             if new_val is None:
                 continue
-            if new_val != old_val:
+            if new_val != self.first_event_props.get(dev_prop):
                 dev, prop = dev_prop
                 # Stage positions are moved via setPosition/setXYPosition
                 # (see MDAEngine._set_event_properties), not via property sequences.
@@ -283,8 +301,13 @@ class EventCombiner:
                         return False
                 if new_chunk_len > self._get_property_max_length(dev_prop):
                     return False
-                self.attribute_changes[dev_prop] = True
+                # can't sequence a property that an earlier event didn't specify
+                if dev_prop not in self._common_props:
+                    return False
+                changes.add(dev_prop)
 
+        self.attribute_changes.update(dict.fromkeys(changes, True))
+        self._common_props &= event_props.keys()
         return True
 
     def flush(self) -> MDAEvent | SequencedEvent | None:
@@ -394,6 +417,11 @@ class EventCombiner:
             self._channel_props[ch] = data
 
         return self._channel_props[ch]
+
+    def _max_length(self, key: Keyword | tuple[str, str]) -> int:
+        if isinstance(key, tuple):
+            return self._get_property_max_length(key)
+        return self.max_lengths[key]
 
     def _get_property_max_length(self, dev_prop: tuple[str, str]) -> int:
         """Get (and cache) the max sequence length for a given property."""
