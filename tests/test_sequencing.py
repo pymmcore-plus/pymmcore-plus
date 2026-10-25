@@ -283,26 +283,85 @@ def test_position_property_absent_in_later_events_treated_as_static() -> None:
     assert ("Dev", "Prop") not in seq.property_sequences
 
 
-def test_alternating_values_respect_max_sequence_length() -> None:
+def _event(attr: str, val: Any) -> useq.MDAEvent:
+    if attr == "prop":
+        props = [] if val is None else [useq.PropertyTuple("Dev", "Prop", val)]
+        return useq.MDAEvent(properties=props)
+    return useq.MDAEvent(
+        **{"exposure": 1, "x_pos": 1, "y_pos": 1, "z_pos": 1, attr: val}
+    )
+
+
+def _batch_sizes(merged: list[useq.MDAEvent]) -> list[int]:
+    return [len(e.events) if isinstance(e, SequencedEvent) else 1 for e in merged]
+
+
+@pytest.mark.parametrize("attr", ["exposure", "x_pos", "z_pos", "prop"])
+def test_alternating_values_respect_max_sequence_length(attr: str) -> None:
     """A value that returns to the first event's value still counts toward the max.
 
-    With two channels alternating on a sequenceable property, every other event
-    matches the first one.  The batch must still stop at the max sequence length.
+    With two channels alternating, every other event matches the first one.
+    The batch must still stop at the max sequence length.
     """
     core = MagicMock()
-    core.isPropertySequenceable.return_value = True
+    core.getExposureSequenceMaxLength.return_value = 4
+    core.getXYStageSequenceMaxLength.return_value = 4
+    core.getStageSequenceMaxLength.return_value = 4
     core.getPropertySequenceMaxLength.return_value = 4
-    events = [
-        useq.MDAEvent(properties=[useq.PropertyTuple("Dev", "Prop", str(i % 2))])
-        for i in range(8)
-    ]
+    events = [_event(attr, str(i % 2 + 1)) for i in range(8)]
 
     merged = list(iter_sequenced_events(core, events))
 
-    assert [len(e.events) for e in merged] == [4, 4]
+    assert _batch_sizes(merged) == [4, 4]
     for e in merged:
         assert isinstance(e, SequencedEvent)
-        assert len(e.property_sequences[("Dev", "Prop")]) == 4
+        sequences = {
+            "exposure": e.exposure_sequence,
+            "x_pos": e.x_sequence,
+            "z_pos": e.z_sequence,
+            "prop": e.property_sequences.get(("Dev", "Prop"), []),
+        }
+        assert len(sequences[attr]) == 4
+
+
+@pytest.mark.parametrize(
+    ("vals", "max_len", "batches"),
+    [
+        (["0", "1", None], 3, [2, 1]),  # omitted after it's sequenced
+        (["0", None, "1"], 3, [2, 1]),  # omitted before it's sequenced
+        ([None, "1", "1"], 3, [1, 2]),  # omitted from the first event
+        (["0", "1", "0", "1", None], 2, [2, 2, 1]),  # omitted after a split
+        (["0", None, None], 3, [3]),  # never changes: static, one batch
+    ],
+)
+def test_omitted_property_batching(
+    vals: list[str | None], max_len: int, batches: list[int]
+) -> None:
+    """A sequenced property needs a value from every event in its batch."""
+    core = MagicMock()
+    core.getPropertySequenceMaxLength.return_value = max_len
+    events = [_event("prop", v) for v in vals]
+
+    assert _batch_sizes(list(iter_sequenced_events(core, events))) == batches
+
+
+def test_rejected_event_does_not_flag_attributes() -> None:
+    """Changes from an event that can't join the batch don't leak into it."""
+    core = MagicMock()
+    core.getExposureSequenceMaxLength.return_value = 10
+    events = [
+        useq.MDAEvent(exposure=10),
+        useq.MDAEvent(exposure=10),
+        # changes exposure, but a different ROI forces a new batch
+        useq.MDAEvent(
+            exposure=20, roi=useq.CameraROI(offset_x=0, offset_y=0, width=8, height=8)
+        ),
+    ]
+
+    first, _ = iter_sequenced_events(core, events)
+
+    assert isinstance(first, SequencedEvent)
+    assert first.exposure_sequence == ()
 
 
 def test_position_property_changing_value_breaks_sequencing() -> None:
