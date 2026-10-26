@@ -74,6 +74,8 @@ MDAS = CI_MDAS if os.getenv("CI") else ALL_MDAS
 def core(caplog: pytest.LogCaptureFixture) -> CMMCorePlus:
     core = CMMCorePlus()
     core.loadSystemConfiguration()
+    # codspeed's instrumented (valgrind) runs can exceed the default 5s frame timeout
+    core.mda.engine.timeout_base = 60  # type: ignore[union-attr]
     caplog.set_level("CRITICAL")
     return core
 

@@ -69,6 +69,8 @@ docs = [
     "mkdocs-autorefs ==1.3.1",
     "mkdocstrings-python ==1.1.2",
     "mkdocs-typer ==0.0.3",
+    # pymdown-extensions 12 changed Highlight signature, breaking mkdocstrings 0.22
+    "pymdown-extensions <12",
 ]
 test = [
     "pymmcore-plus[io,simulate]",
