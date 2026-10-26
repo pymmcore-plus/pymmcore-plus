@@ -19,7 +19,7 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - run: uv run --group docs mkdocs build
+      - run: uv run --python 3.13 --group docs mkdocs build
 
   deploy:
     if: github.ref == 'refs/heads/main'
@@ -27,4 +27,4 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@c18668ad3cf93ea998bef934396af7bb5c839dc7 # v10.2.0
-      - run: uv run --group docs mkdocs gh-deploy --force
+      - run: uv run --python 3.13 --group docs mkdocs gh-deploy --force
