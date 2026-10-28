@@ -1,6 +1,9 @@
 from __future__ import annotations
 
+import threading
+import traceback
 from abc import abstractmethod
+from time import perf_counter_ns
 from types import MappingProxyType
 from typing import TYPE_CHECKING, ClassVar, Literal
 
@@ -229,6 +232,176 @@ class CameraDevice(Device):
     def get_binning(self) -> int:
         """Get the binning factor for the camera."""
         return 1  # pragma: no cover
+
+    # -------------------------------------------------------------------
+    # Bridge protocol methods (C++ bridge calls these)
+    # Device authors may override for finer control.
+    # -------------------------------------------------------------------
+
+    _snap_buffer: np.ndarray | None = None
+    _bridge_stop_event: threading.Event | None = None
+    _bridge_acq_thread: threading.Thread | None = None
+    _capturing: bool = False
+
+    def get_image_width(self) -> int:
+        return self.shape()[1]
+
+    def get_image_height(self) -> int:
+        return self.shape()[0]
+
+    def get_bytes_per_pixel(self) -> int:
+        return int(np.dtype(self.dtype()).itemsize)
+
+    def get_bit_depth(self) -> int:
+        return int(np.dtype(self.dtype()).itemsize * 8)
+
+    def get_image_buffer_size(self) -> int:
+        return (
+            self.get_image_width()
+            * self.get_image_height()
+            * self.get_bytes_per_pixel()
+        )
+
+    def get_number_of_components(self) -> int:
+        s = self.shape()
+        return 1 if len(s) == 2 else s[2]
+
+    def get_number_of_channels(self) -> int:
+        return 1
+
+    def get_channel_name(self, channel: int) -> str:
+        return ""
+
+    def set_binning(self, binning: int) -> None:
+        """Set the binning factor. Override in subclasses that support binning."""
+
+    def is_capturing(self) -> bool:
+        """Return True if sequence acquisition is running."""
+        return self._capturing
+
+    def is_exposure_sequenceable(self) -> bool:
+        """Return True if the camera supports exposure sequences."""
+        return self.is_property_sequenceable(Keyword.Exposure)
+
+    def get_exposure_sequence_max_length(self) -> int:
+        """Return maximum exposure sequence length."""
+        info = self.get_property_info(Keyword.Exposure)
+        return info.sequence_max_length
+
+    def load_exposure_sequence(self, sequence: list[float]) -> None:
+        """Load an exposure sequence."""
+        self.load_property_sequence(Keyword.Exposure, sequence)
+
+    def start_exposure_sequence(self) -> None:
+        """Start the loaded exposure sequence."""
+        self.start_property_sequence(Keyword.Exposure)
+
+    def stop_exposure_sequence(self) -> None:
+        """Stop the running exposure sequence."""
+        self.stop_property_sequence(Keyword.Exposure)
+
+    def snap_image(self) -> None:
+        """Snap a single image using the generator protocol."""
+        buf = None
+
+        def get_buffer(s: Sequence[int], d: DTypeLike) -> np.ndarray:
+            nonlocal buf
+            buf = np.empty(s, dtype=d)
+            return buf
+
+        gen = self.start_sequence(1, get_buffer)
+        try:
+            next(gen)
+        except StopIteration:
+            pass
+        if buf is not None:
+            self._snap_buffer = buf
+        else:
+            self._snap_buffer = np.empty(self.shape(), dtype=self.dtype())
+
+    def get_image_buffer(self) -> np.ndarray:
+        """Return the last snapped image."""
+        if self._snap_buffer is None:
+            raise RuntimeError("No image. Call snap_image() first.")
+        return self._snap_buffer
+
+    def start_sequence_acquisition(
+        self,
+        num_images: int,
+        interval_ms: float,
+        insert_image: Callable[[np.ndarray, dict | None], bool],
+    ) -> None:
+        """Start sequence acquisition via the generator-to-callback bridge.
+
+        Runs the camera's start_sequence() generator in a background thread,
+        calling insert_image per frame to push into CMMCore's circular buffer.
+        insert_image returns False on buffer overflow.
+        """
+        stop_event = threading.Event()
+        self._bridge_stop_event = stop_event
+
+        buf_holder: list[np.ndarray | None] = [None]
+
+        def get_buffer(s: Sequence[int], d: DTypeLike) -> np.ndarray:
+            buf = np.empty(s, dtype=d)
+            buf_holder[0] = buf
+            return buf
+
+        n = num_images if num_images < 2**62 else None
+        gen = self.start_sequence(n, get_buffer)
+
+        self._capturing = True
+
+        # Base metadata — mirrors what C++ device adapters provide.
+        # CircularBuffer adds ImageNumber, TimeInCore, Width, Height, PixelType.
+        x, y, *_ = self.get_roi()
+        base_meta = {
+            Keyword.Metadata_CameraLabel: self.get_label(),
+            Keyword.Binning: str(self.get_binning()),
+            Keyword.Metadata_ROI_X: str(x),
+            Keyword.Metadata_ROI_Y: str(y),
+        }
+        start_ns = perf_counter_ns()
+        _insert = insert_image
+
+        def _run() -> None:
+            try:
+                for metadata in gen:
+                    buf = buf_holder[0]
+                    if buf is not None:
+                        elapsed_ms = (perf_counter_ns() - start_ns) / 1e6
+                        md = {
+                            **base_meta,
+                            Keyword.Elapsed_Time_ms: f"{elapsed_ms:.4f}",
+                            **(dict(metadata) if metadata else {}),
+                        }
+                        if not _insert(buf, md):
+                            break  # buffer overflow
+                    if stop_event.is_set():
+                        break
+            except (StopIteration, GeneratorExit):
+                pass
+            except Exception:
+                traceback.print_exc()
+            finally:
+                self._capturing = False
+                if self._notify_ is not None:
+                    self._notify_.acq_finished()
+
+        thread = threading.Thread(target=_run, daemon=True)
+        self._bridge_acq_thread = thread
+        thread.start()
+
+    def stop_sequence_acquisition(self) -> None:
+        """Stop sequence acquisition."""
+        if self._bridge_stop_event is not None:
+            self._bridge_stop_event.set()
+        if self._bridge_acq_thread is not None:
+            self._bridge_acq_thread.join(timeout=5)
+            self._bridge_acq_thread = None
+        self._capturing = False
+        if self._notify_ is not None:
+            self._notify_.acq_finished()
 
 
 class SimpleCameraDevice(CameraDevice):
