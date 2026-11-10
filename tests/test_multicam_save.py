@@ -193,16 +193,35 @@ def test_multicam_folds_cameras_into_channels(
         np.testing.assert_array_equal(np.asarray(view[idx]), img)
 
 
-def test_multicam_channel_names(multicam_core: CMMCorePlus) -> None:
-    """Folded channels are named <channel>/<physical camera>."""
+@pytest.mark.parametrize(
+    "channels, expected",
+    [
+        (
+            ["DAPI", "FITC"],
+            ["DAPI-Camera", "DAPI-Camera2", "FITC-Camera", "FITC-Camera2"],
+        ),
+        ([], ["Camera", "Camera2"]),
+    ],
+)
+def test_multicam_channel_names(
+    multicam_core: CMMCorePlus, channels: list[str], expected: list[str]
+) -> None:
+    """Folded channels are named like Micro-Manager's: <channel>-<camera>.
+
+    Without channels, they are named after the cameras alone.
+    """
     from pymmcore_plus.mda._sink import OmeWritersSink
 
-    seq = useq.MDASequence(channels=["DAPI", "FITC"])
+    seq = useq.MDASequence(channels=channels)
+    meta = multicam_core.mda.engine.setup_sequence(seq)
+    assert meta is not None
+    assert meta["image_infos"][0]["camera_channel_names"] == ("Camera", "Camera2")
+
     sink = OmeWritersSink.from_output("scratch")
-    sink.setup(seq, multicam_core.mda.engine.setup_sequence(seq))
+    sink.setup(seq, meta)
     c_dim = next(d for d in sink._settings.dimensions if d.name == "c")
-    names = [ch.name for ch in c_dim.coords]
-    assert names == ["DAPI/Camera", "DAPI/Camera2", "FITC/Camera", "FITC/Camera2"]
+    assert c_dim.coords is not None
+    assert [ch.name for ch in c_dim.coords] == expected  # type: ignore[union-attr]
     sink.close()
 
 

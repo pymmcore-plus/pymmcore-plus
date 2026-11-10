@@ -122,7 +122,10 @@ class OmeWritersSink(SinkProtocol):
         self._reorder = None
         n_cameras = info.get("num_camera_adapter_channels", 1)
         if n_cameras > 1:
-            cameras = _physical_camera_names(meta, info["camera_label"], n_cameras)
+            cameras = list(
+                info.get("camera_channel_names")
+                or [f"cam{i}" for i in range(n_cameras)]
+            )
             dims, self._reorder = _fold_cameras_into_channels(
                 list(useq_settings["dimensions"]), cameras
             )
@@ -210,25 +213,6 @@ def _unbounded_3d_settings(
     }
 
 
-def _physical_camera_names(
-    meta: SummaryMetaV1, camera_label: str, n_cameras: int
-) -> list[str]:
-    """Return the physical camera labels behind the `camera_label` Multi Camera.
-
-    Read from the Multi Camera's "Physical Camera N" properties in the summary
-    metadata; falls back to `cam0`, `cam1`, ... when they can't be found.
-    """
-    for dev in meta.get("devices", ()):
-        if dev.get("label") != camera_label:
-            continue
-        props = {p["name"]: p.get("value") for p in dev.get("properties", ())}
-        names = [props.get(f"Physical Camera {i + 1}") for i in range(n_cameras)]
-        if all(n and n != "Undefined" for n in names):
-            return [str(n) for n in names]
-        break
-    return [f"cam{i}" for i in range(n_cameras)]
-
-
 def _channel_name(coord: Any, idx: int) -> str:
     if isinstance(coord, Channel):
         return coord.name
@@ -242,10 +226,11 @@ def _fold_cameras_into_channels(
 
     Frames arrive in the order of `dims` with the camera innermost (each event
     yields one frame per camera). They are stored with a single channel axis of
-    `n_channels * n_cameras` entries named `<channel>/<camera>`, in place of the
-    original channel axis -- or, without channels, a new one placed before the
-    first spatial index axis (z), as OME requires. Returns the storage dimensions
-    and the reorderer that maps arrival order to storage order.
+    `n_channels * n_cameras` entries named `<channel>-<camera>`, as Micro-Manager
+    names them, in place of the original channel axis -- or, without channels, a
+    new one named after the cameras, placed before the first spatial index axis
+    (z), as OME requires. Returns the storage dimensions and the reorderer that
+    maps arrival order to storage order.
     """
     *index_dims, y_dim, x_dim = dims
     n_cam = len(cameras)
@@ -267,7 +252,7 @@ def _fold_cameras_into_channels(
             update={
                 "count": n_ch * n_cam,
                 "coords": [
-                    Channel(name=f"{ch}/{cam}") for ch in names for cam in cameras
+                    Channel(name=f"{ch}-{cam}") for ch in names for cam in cameras
                 ],
             }
         )
