@@ -255,49 +255,22 @@ class MDAEngine(PMDAEngine):
         if sequence.setup is not None:
             self.setup_single_event(sequence.setup)
 
-        # The summary metadata describes the *current* camera (image_infos[0]), and
-        # output sinks size the dataset from it -- including the per-event frame
-        # count of a Multi Camera. Select the camera the channels will acquire with
-        # first, or the dataset is sized for whatever camera happened to be current.
-        self._select_sequence_camera(sequence)
+        # Apply the first channel too: the first event would anyway (every axis starts
+        # at index 0), and the grid FOV sizes and summary metadata must describe what
+        # is acquired -- the channel's camera and pixel size, and the frame count of a
+        # Multi Camera, which output sinks size the dataset from. setConfig records
+        # the preset, so the first event does not apply it again.
+        if sequence.channels:
+            ch = sequence.channels[0]
+            self._set_event_channel(
+                MDAEvent(channel={"group": ch.group, "config": ch.config})
+            )
 
         if px_size := core.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
 
         self._autoshutter_was_set = core.getAutoShutter()
         return self.get_summary_metadata(mda_sequence=sequence)
-
-    def _select_sequence_camera(self, sequence: MDASequence) -> None:
-        """Select the camera that the sequence's channel presets switch to, if any.
-
-        A channel preset may set Core-Camera (e.g. to a Multi Camera device). The
-        first channel event would select that camera anyway; selecting it here makes
-        the summary metadata, and so any output sink, match what is acquired.
-        """
-        core = self.mmcore
-        cameras: dict[str, None] = {}  # ordered set
-        for channel in sequence.channels:
-            try:
-                settings = core.getConfigData(channel.group, channel.config)
-            except Exception:  # unknown group/preset: setup_event will report it
-                continue
-            for dev, prop, value in settings:
-                if dev == Keyword.CoreDevice and prop == Keyword.CoreCamera:
-                    cameras[value] = None
-
-        if not cameras:
-            return
-        camera, *others = cameras
-        if others:
-            warnings.warn(
-                f"The channels of this sequence select different cameras "
-                f"({', '.join(cameras)}); summary metadata and output sinks "
-                f"describe {camera!r} only.",
-                stacklevel=2,
-            )
-        if camera != core.getCameraDevice():
-            logger.debug("Selecting camera %r used by the sequence channels", camera)
-            core.setCameraDevice(camera)
 
     def get_summary_metadata(
         self,

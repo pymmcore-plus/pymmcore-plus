@@ -150,23 +150,6 @@ def test_multicam_selected_by_channel_preset(
     assert prod(view.shape[:-2]) == expected
 
 
-def test_channels_selecting_different_cameras_warn(multicam_core: CMMCorePlus) -> None:
-    """The output can describe one camera only; mixing cameras must say so."""
-    core = multicam_core
-    core.defineConfig("Cams", "Both", "Core", "Camera", "MultiCam")
-    core.defineConfig("Cams", "Single", "Core", "Camera", "Camera2")
-    seq = useq.MDASequence(
-        channels=[
-            useq.Channel(group="Cams", config="Single"),
-            useq.Channel(group="Cams", config="Both"),
-        ]
-    )
-    with pytest.warns(UserWarning, match="select different cameras"):
-        core.mda.engine.setup_sequence(seq)
-    # the first channel's camera is the one described
-    assert core.getCameraDevice() == "Camera2"
-
-
 @pytest.mark.parametrize("sequenced", [True, False])
 @pytest.mark.parametrize("axis_order", ["tpcz", "tpzc"])
 def test_multicam_folds_cameras_into_channels(
