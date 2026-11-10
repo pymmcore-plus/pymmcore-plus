@@ -119,3 +119,50 @@ def test_multicam_skip_event_multiplier(multicam_core: CMMCorePlus) -> None:
 
     n_cameras = multicam_core.getNumberOfCameraChannels()
     sink.skip.assert_called_once_with(frames=3 * n_cameras)
+
+
+@pytest.mark.parametrize("sequenced", [True, False])
+def test_multicam_selected_by_channel_preset(
+    multicam_core: CMMCorePlus, sequenced: bool
+) -> None:
+    """The sink must be sized for the camera the channels select, not the current one.
+
+    Here a single camera is current when the sequence starts, and the channel preset
+    switches Core-Camera to the Multi Camera, so every event yields two frames.
+    """
+    core = multicam_core
+    core.mda.engine.use_hardware_sequencing = sequenced
+    core.defineConfig("Cams", "Both", "Core", "Camera", "MultiCam")
+    core.defineConfig("Cams", "Single", "Core", "Camera", "Camera")
+    core.setCameraDevice("Camera")
+
+    seq = useq.MDASequence(
+        channels=[useq.Channel(group="Cams", config="Both")],
+        time_plan=useq.TIntervalLoops(interval=0, loops=3),
+    )
+    # the selected camera is a single camera, but the channel's is not
+    expected = len(list(seq)) * 2
+
+    with pytest.warns(UserWarning, match="Multi-camera"):
+        core.mda.run(seq, output="scratch")
+
+    view = core.mda.get_view()
+    assert view is not None
+    assert prod(view.shape[:-2]) == expected
+
+
+def test_channels_selecting_different_cameras_warn(multicam_core: CMMCorePlus) -> None:
+    """The output can describe one camera only; mixing cameras must say so."""
+    core = multicam_core
+    core.defineConfig("Cams", "Both", "Core", "Camera", "MultiCam")
+    core.defineConfig("Cams", "Single", "Core", "Camera", "Camera2")
+    seq = useq.MDASequence(
+        channels=[
+            useq.Channel(group="Cams", config="Single"),
+            useq.Channel(group="Cams", config="Both"),
+        ]
+    )
+    with pytest.warns(UserWarning, match="select different cameras"):
+        core.mda.engine.setup_sequence(seq)
+    # the first channel's camera is the one described
+    assert core.getCameraDevice() == "Camera2"
