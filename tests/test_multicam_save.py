@@ -4,6 +4,7 @@ from math import prod
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock, Mock, patch
 
+import numpy as np
 import pytest
 import useq
 
@@ -86,8 +87,7 @@ def test_multicam_ome_sink_with_channels(
     )
     expected = len(list(seq)) * multicam_core.getNumberOfCameraChannels()
 
-    with pytest.warns(UserWarning, match="Multi-camera.*channels"):
-        multicam_core.mda.run(seq, output="scratch")
+    multicam_core.mda.run(seq, output="scratch")
 
     view = multicam_core.mda.get_view()
     assert view is not None
@@ -143,8 +143,7 @@ def test_multicam_selected_by_channel_preset(
     # the selected camera is a single camera, but the channel's is not
     expected = len(list(seq)) * 2
 
-    with pytest.warns(UserWarning, match="Multi-camera"):
-        core.mda.run(seq, output="scratch")
+    core.mda.run(seq, output="scratch")
 
     view = core.mda.get_view()
     assert view is not None
@@ -166,3 +165,92 @@ def test_channels_selecting_different_cameras_warn(multicam_core: CMMCorePlus) -
         core.mda.engine.setup_sequence(seq)
     # the first channel's camera is the one described
     assert core.getCameraDevice() == "Camera2"
+
+
+@pytest.mark.parametrize("sequenced", [True, False])
+@pytest.mark.parametrize("axis_order", ["tpcz", "tpzc"])
+def test_multicam_folds_cameras_into_channels(
+    multicam_core: CMMCorePlus, sequenced: bool, axis_order: str
+) -> None:
+    """Cameras are stored as channels (t, c*cam, z, y, x), each frame in its slot.
+
+    OME allows at most 5 non-position axes, so t, c, z and a camera axis cannot
+    all be separate. Frames arrive camera-innermost and must be reordered.
+    """
+    core = multicam_core
+    core.mda.engine.use_hardware_sequencing = sequenced
+    seq = useq.MDASequence(
+        channels=["DAPI", "FITC"],
+        time_plan=useq.TIntervalLoops(interval=0, loops=2),
+        z_plan=useq.ZRangeAround(range=2, step=1),
+        axis_order=axis_order,
+    )
+
+    frames: dict[tuple[int, int, int, int], np.ndarray] = {}
+
+    def _collect(img: np.ndarray, event: useq.MDAEvent, _meta: dict) -> None:
+        i = event.index
+        frames[(i["t"], i["c"], i["z"], i["cam"])] = img.copy()
+
+    core.mda.events.frameReady.connect(_collect)
+    core.mda.run(seq, output="scratch")
+    core.mda.events.frameReady.disconnect(_collect)
+
+    view = core.mda.get_view()
+    assert view is not None
+    n_t, n_c, n_z, n_cam = 2, 2, 3, 2
+    if axis_order == "tpcz":
+        assert view.shape[:-2] == (n_t, n_c * n_cam, n_z)
+    else:  # channels innermost: stored as acquired, z before c
+        assert view.shape[:-2] == (n_t, n_z, n_c * n_cam)
+    assert len(frames) == n_t * n_c * n_z * n_cam
+    for (t, c, z, cam), img in frames.items():
+        ch = c * n_cam + cam
+        idx = (t, ch, z) if axis_order == "tpcz" else (t, z, ch)
+        np.testing.assert_array_equal(np.asarray(view[idx]), img)
+
+
+def test_multicam_channel_names(multicam_core: CMMCorePlus) -> None:
+    """Folded channels are named <channel>/<physical camera>."""
+    from pymmcore_plus.mda._sink import OmeWritersSink
+
+    seq = useq.MDASequence(channels=["DAPI", "FITC"])
+    sink = OmeWritersSink.from_output("scratch")
+    sink.setup(seq, multicam_core.mda.engine.setup_sequence(seq))
+    c_dim = next(d for d in sink._settings.dimensions if d.name == "c")
+    names = [ch.name for ch in c_dim.coords]
+    assert names == ["DAPI/Camera", "DAPI/Camera2", "FITC/Camera", "FITC/Camera2"]
+    sink.close()
+
+
+def test_frame_reorderer_skips_and_flush() -> None:
+    """Skipped frames keep their slots; a run that ends early still writes."""
+    from ome_writers import Dimension
+
+    from pymmcore_plus.mda._sink import _fold_cameras_into_channels
+
+    dims = [
+        Dimension(name="c", count=2, type="channel"),
+        Dimension(name="z", count=3, type="space"),
+        Dimension(name="y", count=1, type="space"),
+        Dimension(name="x", count=1, type="space"),
+    ]
+    storage, reorder = _fold_cameras_into_channels(dims, ["A", "B"])
+    assert [d.name for d in storage] == ["c", "z", "y", "x"]
+    assert storage[0].count == 4
+
+    written: list[object] = []
+    stream = MagicMock()
+    stream.append.side_effect = lambda f, **_: written.append(int(f[0, 0]))
+    stream.skip.side_effect = lambda frames: written.extend(["skip"] * frames)
+
+    # arrival order (c, z, cam): label each frame by its arrival index
+    for k in range(9):  # stop partway through c=1 (z=1, cam=0)
+        if k == 4:
+            reorder.push(stream, None, None)  # skipped: c=0, z=2, cam=0
+        else:
+            reorder.push(stream, np.full((1, 1), k), {})
+    reorder.flush(stream)
+    # storage order (c*cam, z): c0/A z0..2, c0/B z0..2, c1/A z0..2, c1/B z0..2.
+    # c1/A z2 never arrived, so flush() skips it before writing the held c1/B z0.
+    assert written == [0, 2, "skip", 1, 3, 5, 6, 8, "skip", 7]
