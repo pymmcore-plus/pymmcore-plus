@@ -8,6 +8,7 @@ import numpy as np
 import pytest
 import useq
 
+from pymmcore_plus.core._sequencing import SequencedEvent
 from pymmcore_plus.mda._runner import SkipEvent
 
 if TYPE_CHECKING:
@@ -168,6 +169,10 @@ def test_multicam_folds_cameras_into_channels(
         z_plan=useq.ZRangeAround(range=2, step=1),
         axis_order=axis_order,
     )
+    if sequenced and axis_order == "tpcz":
+        # with channels innermost (tpzc) the channel changes every frame, so the
+        # z-stack cannot be sequenced and the engine falls back to single events
+        _enable_z_sequencing(core, seq)
 
     frames: dict[tuple[int, int, int, int], np.ndarray] = {}
 
@@ -258,6 +263,14 @@ def test_frame_reorderer_skips_and_flush() -> None:
     assert written == [0, 2, "skip", 1, 3, 5, 6, 8, "skip", 7]
 
 
+def _enable_z_sequencing(core: CMMCorePlus, seq: useq.MDASequence) -> None:
+    """Make the demo Z stage sequenceable, so z-stacks really are SequencedEvents."""
+    core.setProperty("Z", "UseSequences", "Yes")
+    events = list(core.mda.engine.event_iterator(seq))
+    assert events
+    assert all(isinstance(e, SequencedEvent) for e in events)
+
+
 def _define_camera_presets(core: CMMCorePlus) -> None:
     core.defineConfig("Cams", "Both", "Core", "Camera", "MultiCam")
     core.defineConfig("Cams", "Single", "Core", "Camera", "Camera")
@@ -283,6 +296,8 @@ def test_mixed_multi_and_single_camera_channels(
         time_plan=useq.TIntervalLoops(interval=0, loops=2),
         z_plan=useq.ZRangeAround(range=2, step=1),
     )
+    if sequenced:
+        _enable_z_sequencing(core, seq)
     # storage channel of each (channel index, camera index)
     entries = {"Both": ["Both-Camera", "Both-Camera2"], "Single": ["Single"]}
     expected_names = [n for c in configs for n in entries[c]]
@@ -375,3 +390,61 @@ def test_preset_without_camera_keeps_it_when_unambiguous(
     view = core.mda.get_view()
     assert view is not None
     assert view.shape[:-2] == (4,)  # DAPI keeps the Multi Camera: 2 + 2 entries
+
+
+@pytest.mark.parametrize("sequenced", [True, False])
+def test_mixed_cameras_skipped_events(
+    multicam_core: CMMCorePlus, sequenced: bool
+) -> None:
+    """Skipping the Multi Camera channel's events skips two frames per event.
+
+    With Z sequencing, each skipped event is a whole z-stack (SequencedEvent), and
+    SkipEvent.num_frames counts its sub-events.
+    """
+    core = multicam_core
+    core.mda.engine.use_hardware_sequencing = sequenced
+    _define_camera_presets(core)
+    seq = useq.MDASequence(
+        channels=[
+            useq.Channel(group="Cams", config="Both"),
+            useq.Channel(group="Cams", config="Single"),
+        ],
+        time_plan=useq.TIntervalLoops(interval=0, loops=2),
+        z_plan=useq.ZRangeAround(range=2, step=1),
+    )
+    if sequenced:
+        _enable_z_sequencing(core, seq)
+
+    engine = core.mda.engine
+    real_setup_event = engine.setup_event
+
+    def setup_event(event: useq.MDAEvent) -> None:
+        # skip the Multi Camera channel at t=0 (a SequencedEvent's own index is
+        # empty; its sub-events carry the indices)
+        sub_events = getattr(event, "events", [event])
+        assert event.channel is not None
+        if event.channel.config == "Both" and sub_events[0].index["t"] == 0:
+            raise SkipEvent(num_frames=len(sub_events))
+        real_setup_event(event)
+
+    frames: dict[tuple[int, int, int, int], np.ndarray] = {}
+
+    def _collect(img: np.ndarray, event: useq.MDAEvent, _meta: dict) -> None:
+        i = event.index
+        frames[(i["t"], i["c"], i["z"], i.get("cam", 0))] = img.copy()
+
+    core.mda.events.frameReady.connect(_collect)
+    with patch.object(engine, "setup_event", setup_event):
+        core.mda.run(seq, output="scratch")
+    core.mda.events.frameReady.disconnect(_collect)
+
+    view = core.mda.get_view()
+    assert view is not None
+    assert view.shape[:-2] == (2, 3, 3)
+    # t=0 of Both (2 cameras x 3 z) was skipped: 18 - 6 frames acquired
+    assert len(frames) == 12
+    slot = {(0, 0): 0, (0, 1): 1, (1, 0): 2}
+    for (t, c, z, cam), img in frames.items():
+        np.testing.assert_array_equal(np.asarray(view[t, slot[(c, cam)], z]), img)
+    # the skipped slots hold no data, and nothing spilled into them
+    assert not np.asarray(view[0, 0:2]).any()
