@@ -141,7 +141,8 @@ class OmeWritersSink(SinkProtocol):
     def append(self, img: np.ndarray, event: MDAEvent, meta: FrameMetaV1) -> None:
         frame_meta = _frame_meta_to_ome(meta)
         if self._reorder is not None:
-            self._reorder.push(self._stream, img, frame_meta)  # type: ignore[arg-type]
+            cam = event.index.get("cam")
+            self._reorder.push(self._stream, img, frame_meta, cam=cam)  # type: ignore[arg-type]
         else:
             self._stream.append(img, frame_metadata=frame_meta)  # type: ignore[union-attr]
 
@@ -339,8 +340,8 @@ def _fold_cameras_into_channels(
     counts = [d.count for d in index_dims]
     storage_counts = [d.count for d in storage]
 
-    def storage_indices() -> Iterator[int]:
-        """Yield the storage index of each frame, in arrival order."""
+    def storage_indices() -> Iterator[tuple[int, int]]:
+        """Yield the storage index and camera of each frame, in arrival order."""
         idx = [0] * len(index_dims)
         while True:
             c = idx[c_idx] if c_idx is not None else 0
@@ -349,7 +350,7 @@ def _fold_cameras_into_channels(
                     new = [*idx[:c_idx], offsets[c] + cam, *idx[c_idx + 1 :]]
                 else:
                     new = [*idx[:insert_at], cam, *idx[insert_at:]]
-                yield _ravel(new, storage_counts)
+                yield _ravel(new, storage_counts), cam
             # next event: advance the index, last dimension fastest
             for i in reversed(range(len(idx))):
                 idx[i] += 1
@@ -375,20 +376,42 @@ class _FrameReorderer:
     arrives ahead of its storage turn is held until every frame before it has been
     written (or skipped); with cameras folded into channels, that is the later
     cameras' share of each z-stack.
+
+    When a camera of a sequenced event delivers fewer frames than the others, its
+    missing frames are the last ones, but the engine emits the others' remaining
+    frames back to back and reports the missing ones only at the end. A frame whose
+    camera does not match the slot it would fill therefore marks that slot as
+    missing and moves on, and as many of the trailing skips are dropped.
     """
 
-    def __init__(self, storage_indices: Iterator[int]) -> None:
-        # storage index of each frame, in arrival order
+    def __init__(self, storage_indices: Iterator[tuple[int, int]]) -> None:
+        # (storage index, camera) of each frame, in arrival order
         self._storage_indices = storage_indices
         self._next_storage = 0
         # storage index -> (frame, metadata), or None for a skipped frame
         self._pending: dict[int, tuple[np.ndarray, dict] | None] = {}
+        # slots already marked missing, whose skips are still to arrive
+        self._skips_owed = 0
 
     def push(
-        self, stream: OMEStream, frame: np.ndarray | None, frame_meta: dict | None
+        self,
+        stream: OMEStream,
+        frame: np.ndarray | None,
+        frame_meta: dict | None,
+        cam: int | None = None,
     ) -> None:
-        """Accept the next frame in arrival order (`frame=None` skips it)."""
-        idx = next(self._storage_indices)
+        """Accept the next frame in arrival order (`frame=None` skips it).
+
+        `cam` is the frame's camera index, if known; see the class docstring.
+        """
+        if frame is None and self._skips_owed:
+            self._skips_owed -= 1  # this slot was already marked missing
+            return
+        idx, slot_cam = next(self._storage_indices)
+        while frame is not None and cam is not None and cam != slot_cam:
+            self._pending[idx] = None  # this camera's frame is missing
+            self._skips_owed += 1
+            idx, slot_cam = next(self._storage_indices)
         self._pending[idx] = None if frame is None else (frame, frame_meta or {})
         while self._next_storage in self._pending:
             self._write(stream, self._pending.pop(self._next_storage))

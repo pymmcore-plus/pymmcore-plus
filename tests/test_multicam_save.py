@@ -448,3 +448,66 @@ def test_mixed_cameras_skipped_events(
         np.testing.assert_array_equal(np.asarray(view[t, slot[(c, cam)], z]), img)
     # the skipped slots hold no data, and nothing spilled into them
     assert not np.asarray(view[0, 0:2]).any()
+
+
+@pytest.mark.parametrize(
+    "delivered",
+    [(3, 1), (1, 3), (2, 1), (1, 1)],
+    ids=["cam1-short", "cam0-short", "both-short", "both-one"],
+)
+def test_multicam_dropped_frames_in_z_sequence(
+    multicam_core: CMMCorePlus, delivered: tuple[int, int]
+) -> None:
+    """Frames dropped by a camera within a Z sequence leave only their own slots empty.
+
+    A camera that comes up short is missing its last planes (frames are assigned to
+    planes by each camera's frame count). The engine then emits the complete planes,
+    then the other cameras' remaining frames back to back, then one skip per missing
+    frame -- this reproduces that output for the first timepoint's z-stack.
+    """
+    from pymmcore_plus.mda._sink import OmeWritersSink
+
+    core = multicam_core
+    n_z, n_cam = 3, 2
+    seq = useq.MDASequence(
+        time_plan=useq.TIntervalLoops(interval=0, loops=2),
+        z_plan=useq.ZRangeAround(range=2, step=1),
+    )
+    sink = OmeWritersSink.from_output("scratch")
+    sink.setup(seq, core.mda.engine.setup_sequence(seq))
+    meta = {"runner_time_ms": 0.0, "exposure_ms": 1.0}
+    shape = (core.getImageHeight(), core.getImageWidth())
+
+    def value(t: int, z: int, cam: int) -> int:
+        return 100 * t + 10 * z + cam + 1
+
+    def append(t: int, z: int, cam: int) -> None:
+        img = np.full(shape, value(t, z, cam), dtype=np.uint16)
+        sink.append(img, useq.MDAEvent(index={"t": t, "z": z, "cam": cam}), meta)  # type: ignore[arg-type]
+
+    # t=0: one Z sequence in which camera `cam` delivers only `delivered[cam]` planes
+    complete = min(delivered)
+    for z in range(complete):
+        for cam in range(n_cam):
+            append(0, z, cam)
+    for z in range(complete, n_z):  # flush_remaining(): incomplete planes, sorted
+        for cam in range(n_cam):
+            if z < delivered[cam]:
+                append(0, z, cam)
+    sink.skip(frames=n_z * n_cam - sum(delivered))  # validate_count()'s missing frames
+    # t=1: complete
+    for z in range(n_z):
+        for cam in range(n_cam):
+            append(1, z, cam)
+    sink.close()
+
+    view = sink.get_view()
+    assert view is not None
+    for t in range(2):
+        for cam in range(n_cam):
+            got = [int(np.asarray(view[t, cam, z]).flat[0]) for z in range(n_z)]
+            expected = [
+                value(t, z, cam) if t == 1 or z < delivered[cam] else 0
+                for z in range(n_z)
+            ]
+            assert got == expected, (t, cam)
