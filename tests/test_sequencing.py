@@ -65,7 +65,11 @@ def test_sequenced_mda(core: CMMCorePlus) -> None:
     assert core_mock.startSequenceAcquisition.call_count == EXPECTED_SEQUENCES
     core_mock.startSequenceAcquisition.assert_called_with(NLOOPS, 0, True)
 
-    expected_ch = [call("Channel", "DAPI"), call("Channel", "FITC")] * 2
+    # setup_sequence applies the first channel. A real core then skips it for the
+    # first event (setConfig records _last_config), but the mock's _last_config is
+    # a Mock that never matches, so here the first event applies it again.
+    expected_ch = [call("Channel", "DAPI")]
+    expected_ch += [call("Channel", "DAPI"), call("Channel", "FITC")] * 2
     assert core_mock.setConfig.call_args_list == expected_ch
 
     expected_exposure = [call(5), call(10)] * 2

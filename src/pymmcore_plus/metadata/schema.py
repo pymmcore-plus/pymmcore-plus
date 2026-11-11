@@ -247,6 +247,9 @@ class ImageInfo(TypedDict):
     # this will be != 1 for things like multi-camera device,
     # or any "single" device adapter that manages multiple detectors, like PMTs, etc.
     num_camera_adapter_channels: NotRequired[int]
+    # name of each of those channels (getCameraChannelName); for a Multi Camera,
+    # the physical camera labels. Present whenever num_camera_adapter_channels is.
+    camera_channel_names: NotRequired[tuple[str, ...]]
 
 
 class StagePosition(TypedDict):
