@@ -12,10 +12,11 @@ from ome_writers import (
 from pydantic import BaseModel
 
 from pymmcore_plus._logger import logger
+from pymmcore_plus.core._constants import Keyword
 from pymmcore_plus.mda._generator_sequence import GeneratorMDASequence
 
 if TYPE_CHECKING:
-    from collections.abc import Callable, Mapping
+    from collections.abc import Iterator, Mapping
     from pathlib import Path
 
     import numpy as np
@@ -116,18 +117,14 @@ class OmeWritersSink(SinkProtocol):
                     dims[i] = dim.model_copy(update=overrides[dim.name])
             useq_settings["dimensions"] = dims
 
-        # multi-camera: every event yields one frame per physical camera. OME allows
+        # multi-camera: every event yields one frame per camera channel. OME allows
         # at most 5 non-position axes (t, c, z, y, x), so instead of a separate camera
-        # axis the cameras are folded into the channel axis (channels x cameras).
+        # axis the cameras are folded into the channel axis.
         self._reorder = None
-        n_cameras = info.get("num_camera_adapter_channels", 1)
-        if n_cameras > 1:
-            cameras = list(
-                info.get("camera_channel_names")
-                or [f"cam{i}" for i in range(n_cameras)]
-            )
+        channel_cameras = camera_channels(sequence, meta)
+        if any(len(cams) > 1 for cams in channel_cameras):
             dims, self._reorder = _fold_cameras_into_channels(
-                list(useq_settings["dimensions"]), cameras
+                list(useq_settings["dimensions"]), channel_cameras
             )
             useq_settings = {**useq_settings, "dimensions": dims}
 
@@ -219,21 +216,86 @@ def _channel_name(coord: Any, idx: int) -> str:
     return str(coord) if coord is not None else f"c{idx}"
 
 
+def camera_channels(sequence: MDASequence, meta: SummaryMetaV1) -> list[list[str]]:
+    """Return the camera channel names that each channel of `sequence` acquires.
+
+    One list per channel (a single list without channels), with one name per frame
+    each event of that channel yields: the physical cameras of a Multi Camera, or
+    just the camera's label for a single camera.
+
+    A channel acquires with the camera its preset sets as Core-Camera. A preset
+    that sets none keeps whichever camera is selected when it is applied, which
+    depends on the channel before it; that only gives a known frame count when all
+    the cameras yield the same number of frames per event, so if they do not,
+    every channel preset must set Core-Camera.
+    """
+    infos = meta["image_infos"]
+    if not infos:
+        return []
+    by_label = {i["camera_label"]: i for i in infos}
+
+    def _names(label: str) -> list[str]:
+        info = by_label.get(label, {})
+        n = info.get("num_camera_adapter_channels", 1)
+        if n == 1:
+            return [label]
+        return list(info.get("camera_channel_names") or [f"cam{i}" for i in range(n)])
+
+    # image_infos[0] is the camera current after setup_sequence applied the first
+    # channel; channels whose preset sets no camera are assumed to keep it.
+    current = infos[0]["camera_label"]
+    if not sequence.channels:
+        return [_names(current)]
+
+    presets = {
+        (group["name"], preset["name"]): preset["settings"]
+        for group in meta.get("config_groups", ())
+        for preset in group["presets"]
+    }
+    cameras: list[str | None] = []
+    for ch in sequence.channels:
+        settings = presets.get((ch.group, ch.config), ())
+        cameras.append(
+            next(
+                (
+                    s["val"]
+                    for s in settings
+                    if s["dev"] == Keyword.CoreDevice
+                    and s["prop"] == Keyword.CoreCamera
+                ),
+                None,
+            )
+        )
+    names = [_names(cam or current) for cam in cameras]
+    if None in cameras and len({len(n) for n in names}) > 1:
+        raise ValueError(
+            "Channels acquire with cameras that yield different numbers of frames "
+            "per event (e.g. a Multi Camera and a single camera). Every channel "
+            "preset must then set Core-Camera, but these do not: "
+            + ", ".join(
+                f"{ch.group}/{ch.config}"
+                for ch, cam in zip(sequence.channels, cameras, strict=True)
+                if cam is None
+            )
+        )
+    return names
+
+
 def _fold_cameras_into_channels(
-    dims: list[Dimension], cameras: list[str]
+    dims: list[Dimension], channel_cameras: list[list[str]]
 ) -> tuple[list[Dimension], _FrameReorderer]:
     """Fold the per-event camera axis of a multi-camera run into the channel axis.
 
-    Frames arrive in the order of `dims` with the camera innermost (each event
-    yields one frame per camera). They are stored with a single channel axis of
-    `n_channels * n_cameras` entries named `<channel>-<camera>`, as Micro-Manager
-    names them, in place of the original channel axis -- or, without channels, a
-    new one named after the cameras, placed before the first spatial index axis
-    (z), as OME requires. Returns the storage dimensions and the reorderer that
-    maps arrival order to storage order.
+    Frames arrive in the order of `dims`, each event yielding one frame per camera
+    of its channel (`channel_cameras`, see `camera_channels`), camera innermost.
+    They are stored with a single channel axis holding one entry per camera of
+    each channel: named `<channel>-<camera>` as Micro-Manager names them, or just
+    `<channel>` for a single-camera channel. It replaces the original channel axis
+    -- or, without channels, is a new one named after the cameras, placed before
+    the first spatial index axis (z), as OME requires. Returns the storage
+    dimensions and the reorderer that maps arrival order to storage order.
     """
     *index_dims, y_dim, x_dim = dims
-    n_cam = len(cameras)
 
     c_idx = next(
         (
@@ -245,53 +307,57 @@ def _fold_cameras_into_channels(
     )
     if c_idx is not None:
         c_dim = index_dims[c_idx]
-        n_ch = c_dim.count or 1
-        coords = c_dim.coords or [None] * n_ch
+        coords = c_dim.coords or [None] * (c_dim.count or 1)
         names = [_channel_name(c, i) for i, c in enumerate(coords)]
+        entries = [
+            [f"{ch}-{cam}" for cam in cams] if len(cams) > 1 else [ch]
+            for ch, cams in zip(names, channel_cameras, strict=True)
+        ]
         folded = c_dim.model_copy(
             update={
-                "count": n_ch * n_cam,
-                "coords": [
-                    Channel(name=f"{ch}-{cam}") for ch in names for cam in cameras
-                ],
+                "count": sum(len(e) for e in entries),
+                "coords": [Channel(name=n) for e in entries for n in e],
             }
         )
         insert_at = c_idx
         storage = [*index_dims[:c_idx], folded, *index_dims[c_idx + 1 :]]
     else:
+        (cams,) = channel_cameras
         folded = Dimension(
             name="c",
-            count=n_cam,
+            count=len(cams),
             type="channel",
-            coords=[Channel(name=cam) for cam in cameras],
+            coords=[Channel(name=cam) for cam in cams],
         )
         insert_at = next(
             (i for i, d in enumerate(index_dims) if d.type == "space"), len(index_dims)
         )
         storage = [*index_dims[:insert_at], folded, *index_dims[insert_at:]]
 
-    arrival_counts = [d.count for d in index_dims] + [n_cam]
+    n_cams = [len(cams) for cams in channel_cameras]
+    offsets = [sum(n_cams[:i]) for i in range(len(n_cams))]
+    counts = [d.count for d in index_dims]
     storage_counts = [d.count for d in storage]
 
-    def to_storage(k: int) -> int:
-        *idx, cam = _unravel(k, arrival_counts)
-        if c_idx is not None:
-            new = [*idx[:c_idx], idx[c_idx] * n_cam + cam, *idx[c_idx + 1 :]]
-        else:
-            new = [*idx[:insert_at], cam, *idx[insert_at:]]
-        return _ravel(new, storage_counts)
+    def storage_indices() -> Iterator[int]:
+        """Yield the storage index of each frame, in arrival order."""
+        idx = [0] * len(index_dims)
+        while True:
+            c = idx[c_idx] if c_idx is not None else 0
+            for cam in range(n_cams[c]):
+                if c_idx is not None:
+                    new = [*idx[:c_idx], offsets[c] + cam, *idx[c_idx + 1 :]]
+                else:
+                    new = [*idx[:insert_at], cam, *idx[insert_at:]]
+                yield _ravel(new, storage_counts)
+            # next event: advance the index, last dimension fastest
+            for i in reversed(range(len(idx))):
+                idx[i] += 1
+                if i == 0 or idx[i] < counts[i]:  # type: ignore[operator]
+                    break
+                idx[i] = 0
 
-    return [*storage, y_dim, x_dim], _FrameReorderer(to_storage)
-
-
-def _unravel(k: int, counts: list[int | None]) -> list[int]:
-    """Unravel a C-order linear index. Only the first count may be None (unbounded)."""
-    coords: list[int] = []
-    for count in reversed(counts[1:]):
-        k, rem = divmod(k, count)  # type: ignore[arg-type]
-        coords.append(rem)
-    coords.append(k)
-    return coords[::-1]
+    return [*storage, y_dim, x_dim], _FrameReorderer(storage_indices())
 
 
 def _ravel(coords: list[int], counts: list[int | None]) -> int:
@@ -311,9 +377,9 @@ class _FrameReorderer:
     cameras' share of each z-stack.
     """
 
-    def __init__(self, to_storage: Callable[[int], int]) -> None:
-        self._to_storage = to_storage
-        self._next_arrival = 0
+    def __init__(self, storage_indices: Iterator[int]) -> None:
+        # storage index of each frame, in arrival order
+        self._storage_indices = storage_indices
         self._next_storage = 0
         # storage index -> (frame, metadata), or None for a skipped frame
         self._pending: dict[int, tuple[np.ndarray, dict] | None] = {}
@@ -322,8 +388,7 @@ class _FrameReorderer:
         self, stream: OMEStream, frame: np.ndarray | None, frame_meta: dict | None
     ) -> None:
         """Accept the next frame in arrival order (`frame=None` skips it)."""
-        idx = self._to_storage(self._next_arrival)
-        self._next_arrival += 1
+        idx = next(self._storage_indices)
         self._pending[idx] = None if frame is None else (frame, frame_meta or {})
         while self._next_storage in self._pending:
             self._write(stream, self._pending.pop(self._next_storage))

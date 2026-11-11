@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from math import prod
 from typing import TYPE_CHECKING
-from unittest.mock import MagicMock, Mock, patch
+from unittest.mock import MagicMock, Mock, call, patch
 
 import numpy as np
 import pytest
@@ -237,7 +237,7 @@ def test_frame_reorderer_skips_and_flush() -> None:
         Dimension(name="y", count=1, type="space"),
         Dimension(name="x", count=1, type="space"),
     ]
-    storage, reorder = _fold_cameras_into_channels(dims, ["A", "B"])
+    storage, reorder = _fold_cameras_into_channels(dims, [["A", "B"], ["A", "B"]])
     assert [d.name for d in storage] == ["c", "z", "y", "x"]
     assert storage[0].count == 4
 
@@ -256,3 +256,122 @@ def test_frame_reorderer_skips_and_flush() -> None:
     # storage order (c*cam, z): c0/A z0..2, c0/B z0..2, c1/A z0..2, c1/B z0..2.
     # c1/A z2 never arrived, so flush() skips it before writing the held c1/B z0.
     assert written == [0, 2, "skip", 1, 3, 5, 6, 8, "skip", 7]
+
+
+def _define_camera_presets(core: CMMCorePlus) -> None:
+    core.defineConfig("Cams", "Both", "Core", "Camera", "MultiCam")
+    core.defineConfig("Cams", "Single", "Core", "Camera", "Camera")
+
+
+@pytest.mark.parametrize("sequenced", [True, False])
+@pytest.mark.parametrize("first", ["Both", "Single"])
+def test_mixed_multi_and_single_camera_channels(
+    multicam_core: CMMCorePlus, sequenced: bool, first: str
+) -> None:
+    """A Multi Camera channel and a single-camera channel in one sequence.
+
+    The Multi Camera channel yields two frames per event and the other one, so
+    each channel gets as many entries in the channel axis as it has cameras, and
+    every frame must land in its own slot.
+    """
+    core = multicam_core
+    core.mda.engine.use_hardware_sequencing = sequenced
+    _define_camera_presets(core)
+    configs = ["Both", "Single"] if first == "Both" else ["Single", "Both"]
+    seq = useq.MDASequence(
+        channels=[useq.Channel(group="Cams", config=c) for c in configs],
+        time_plan=useq.TIntervalLoops(interval=0, loops=2),
+        z_plan=useq.ZRangeAround(range=2, step=1),
+    )
+    # storage channel of each (channel index, camera index)
+    entries = {"Both": ["Both-Camera", "Both-Camera2"], "Single": ["Single"]}
+    expected_names = [n for c in configs for n in entries[c]]
+    slot = {}
+    for c, config in enumerate(configs):
+        for cam in range(len(entries[config])):
+            slot[(c, cam)] = len(slot)
+
+    frames: dict[tuple[int, int, int, int], np.ndarray] = {}
+
+    def _collect(img: np.ndarray, event: useq.MDAEvent, _meta: dict) -> None:
+        i = event.index
+        frames[(i["t"], i["c"], i["z"], i.get("cam", 0))] = img.copy()
+
+    core.mda.events.frameReady.connect(_collect)
+    core.mda.run(seq, output="scratch")
+    core.mda.events.frameReady.disconnect(_collect)
+
+    view = core.mda.get_view()
+    assert view is not None
+    assert view.shape[:-2] == (2, 3, 3)
+    sink = core.mda._sink
+    c_dim = next(d for d in sink._settings.dimensions if d.name == "c")  # type: ignore[union-attr]
+    assert [ch.name for ch in c_dim.coords] == expected_names  # type: ignore[union-attr]
+
+    assert len(frames) == 2 * 3 * 3  # t * (2 + 1 camera frames) * z
+    for (t, c, z, cam), img in frames.items():
+        np.testing.assert_array_equal(np.asarray(view[t, slot[(c, cam)], z]), img)
+
+
+def test_mixed_cameras_skip_event_frames(multicam_core: CMMCorePlus) -> None:
+    """A skipped event skips as many frames as its own channel's camera yields."""
+    core = multicam_core
+    _define_camera_presets(core)
+    real_engine = core.mda.engine
+
+    class SkippingEngine:
+        def setup_sequence(self, sequence: useq.MDASequence) -> dict:
+            return real_engine.setup_sequence(sequence)
+
+        def setup_event(self, event: useq.MDAEvent) -> None:
+            raise SkipEvent(num_frames=1)
+
+        def exec_event(self, event: useq.MDAEvent) -> tuple:
+            return ()
+
+    seq = useq.MDASequence(
+        channels=[
+            useq.Channel(group="Cams", config="Both"),
+            useq.Channel(group="Cams", config="Single"),
+        ]
+    )
+    sink = MagicMock()
+    with (
+        patch.object(core.mda, "_engine", SkippingEngine()),
+        patch.object(core.mda, "_coerce_outputs", return_value=([], sink)),
+    ):
+        core.mda.run(seq)
+
+    assert sink.skip.call_args_list == [call(frames=2), call(frames=1)]
+
+
+def test_mixed_cameras_need_camera_in_every_preset(multicam_core: CMMCorePlus) -> None:
+    """Which camera a preset without Core-Camera uses is ambiguous: fail early.
+
+    Without Core-Camera, DAPI keeps whatever camera was selected before it, which
+    yields one frame here (after Single) or two (after Both, at the next timepoint).
+    """
+    core = multicam_core
+    _define_camera_presets(core)
+    seq = useq.MDASequence(
+        channels=[
+            useq.Channel(group="Cams", config="Both"),
+            useq.Channel(group="Cams", config="Single"),
+            "DAPI",
+        ],
+    )
+    with pytest.raises(ValueError, match=r"must then set Core-Camera.*Channel/DAPI"):
+        core.mda.run(seq, output="scratch")
+
+
+def test_preset_without_camera_keeps_it_when_unambiguous(
+    multicam_core: CMMCorePlus,
+) -> None:
+    """With one frame count for every camera, presets need not set Core-Camera."""
+    core = multicam_core
+    _define_camera_presets(core)
+    seq = useq.MDASequence(channels=[useq.Channel(group="Cams", config="Both"), "DAPI"])
+    core.mda.run(seq, output="scratch")
+    view = core.mda.get_view()
+    assert view is not None
+    assert view.shape[:-2] == (4,)  # DAPI keeps the Multi Camera: 2 + 2 entries
