@@ -236,7 +236,8 @@ def camera_channels(sequence: MDASequence, meta: SummaryMetaV1) -> list[list[str
     by_label = {i["camera_label"]: i for i in infos}
 
     def _names(label: str) -> list[str]:
-        info = by_label.get(label, {})
+        if (info := by_label.get(label)) is None:
+            return [label]
         n = info.get("num_camera_adapter_channels", 1)
         if n == 1:
             return [label]
@@ -308,7 +309,9 @@ def _fold_cameras_into_channels(
     )
     if c_idx is not None:
         c_dim = index_dims[c_idx]
-        coords = c_dim.coords or [None] * (c_dim.count or 1)
+        coords: list[Any] = [None] * (c_dim.count or 1)
+        if c_dim.coords:
+            coords = list(c_dim.coords)
         names = [_channel_name(c, i) for i, c in enumerate(coords)]
         entries = [
             [f"{ch}-{cam}" for cam in cams] if len(cams) > 1 else [ch]
@@ -365,7 +368,7 @@ def _ravel(coords: list[int], counts: list[int | None]) -> int:
     """Ravel C-order coordinates. Only the first count may be None (unbounded)."""
     k = 0
     for c, count in zip(coords, counts, strict=True):
-        k = k * count + c if count is not None else c  # type: ignore[operator]
+        k = k * count + c if count is not None else c
     return k
 
 
