@@ -201,6 +201,9 @@ def image_info(core: CMMCorePlus) -> ImageInfo:
 
     if (n_channels := core.getNumberOfCameraChannels()) > 1:
         info["num_camera_adapter_channels"] = n_channels
+        info["camera_channel_names"] = tuple(
+            core.getCameraChannelName(i) for i in range(n_channels)
+        )
     if (mag_factor := core.getMagnificationFactor()) != 1.0:
         info["magnification_factor"] = mag_factor
     affine = tuple(core.getPixelSizeAffine(True))

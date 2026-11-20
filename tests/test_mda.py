@@ -1022,3 +1022,26 @@ def test_skip_event_teardown_still_called(core: CMMCorePlus) -> None:
 )
 def test_format_wait_time(seconds: float, expected: str) -> None:
     assert _format_wait_time(seconds) == expected
+
+
+def test_setup_sequence_applies_first_channel(core: CMMCorePlus) -> None:
+    """Summary metadata and grid FOVs describe the first channel's pixel size.
+
+    The channel preset switches the objective, so the pixel size that matches the
+    state left by the setup event is not the one the sequence acquires with.
+    """
+    core.defineConfig("Obj", "20x", "Objective", "Label", "Nikon 20X Plan Fluor ELWD")
+    core.setProperty("Objective", "Label", "Nikon 10X S Fluor")
+    assert core.getPixelSizeUm() == 1.0
+
+    seq = useq.MDASequence(
+        channels=[useq.Channel(group="Obj", config="20x")],
+        grid_plan=useq.GridRowsColumns(rows=1, columns=2),
+    )
+    meta = core.mda.engine.setup_sequence(seq)
+    assert meta is not None
+    assert meta["image_infos"][0]["pixel_size_um"] == 0.5
+    assert seq.grid_plan is not None
+    assert seq.grid_plan.fov_width == core.getImageWidth() * 0.5
+    # recorded, so the first event does not apply the preset again
+    assert core._last_config == ("Obj", "20x")
