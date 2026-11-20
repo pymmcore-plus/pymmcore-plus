@@ -1240,7 +1240,7 @@ class _MultiCameraCoordinator:
 
     def pop_and_process(
         self,
-        events: tuple[MDAEvent, ...],
+        events: Sequence[MDAEvent],
         t0_ms: float,
         payload_factory: Callable,
     ) -> Iterator[PImagePayload]:
