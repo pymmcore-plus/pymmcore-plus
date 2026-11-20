@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 import sys
 import time
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 import numpy as np
 import pytest
@@ -18,6 +18,8 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Iterator, Mapping, Sequence
 
     from numpy.typing import DTypeLike
+
+    from pymmcore_plus.mda import MDAEngine
 
 if all(x not in {"--codspeed", "tests/test_bench.py"} for x in sys.argv):
     pytest.skip(
@@ -85,6 +87,13 @@ def test_run_mda(mda_key: str, core: CMMCorePlus, benchmark: Callable) -> None:
     """Benchmark running MDA sequences."""
     seq = list(MDAS[mda_key])  # expand iterator prior to benchmarking
     benchmark(core.mda.run, seq)
+
+
+def test_long_burst_first_event(core: CMMCorePlus, benchmark: Callable) -> None:
+    """Time until a 12 min, 50 fps zero-interval burst is ready to start."""
+    seq = useq.MDASequence(time_plan={"interval": 0, "loops": 36_000})
+    engine = cast("MDAEngine", core.mda.engine)
+    benchmark(lambda: next(engine.event_iterator(seq)))
 
 
 def test_mda_summary_metadata(benchmark: Callable) -> None:
