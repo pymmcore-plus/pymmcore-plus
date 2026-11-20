@@ -118,6 +118,56 @@ def test_new_position_methods(core: CMMCorePlus) -> None:
     assert round(z2, 2) == z1 + 1
 
 
+def test_wait_for_device_default_path(core: CMMCorePlus) -> None:
+    """Camera in the demo config is never busy — should return immediately."""
+    core.waitForDevice("Camera")
+
+
+def test_device_timeout_registry(core: CMMCorePlus) -> None:
+    """C++ per-device timeout API: set / get / has / unset.
+
+    ``getDeviceTimeoutMs`` returns the *effective* timeout (override or
+    global). ``hasDeviceTimeout`` answers whether an override is registered.
+    """
+    core.setTimeoutMs(5000)
+    assert core.hasDeviceTimeout("Camera") is False
+    # No override → effective timeout is the global.
+    assert core.getDeviceTimeoutMs("Camera") == 5000
+
+    core.setDeviceTimeoutMs("Camera", 500)
+    assert core.hasDeviceTimeout("Camera") is True
+    assert core.getDeviceTimeoutMs("Camera") == 500
+
+    core.unsetDeviceTimeout("Camera")
+    assert core.hasDeviceTimeout("Camera") is False
+    assert core.getDeviceTimeoutMs("Camera") == 5000
+
+
+def test_device_timeout_must_be_positive(core: CMMCorePlus) -> None:
+    """C++ rejects 0 and negative timeouts."""
+    with pytest.raises(RuntimeError, match="positive"):
+        core.setDeviceTimeoutMs("Camera", 0)
+    with pytest.raises(RuntimeError, match="positive"):
+        core.setDeviceTimeoutMs("Camera", -1)
+
+
+def test_device_timeout_unknown_device_raises(core: CMMCorePlus) -> None:
+    """Operations on an unloaded label raise RuntimeError from C++."""
+    with pytest.raises(RuntimeError, match="No device with label"):
+        core.setDeviceTimeoutMs("NoSuchDevice", 100)
+    with pytest.raises(RuntimeError, match="No device with label"):
+        core.hasDeviceTimeout("NoSuchDevice")
+
+
+def test_set_timeout_ms_does_not_affect_registry(core: CMMCorePlus) -> None:
+    """Global setTimeoutMs is independent from per-device override."""
+    core.setDeviceTimeoutMs("Camera", 123)
+    core.setTimeoutMs(9999)
+    assert core.hasDeviceTimeout("Camera") is True
+    assert core.getDeviceTimeoutMs("Camera") == 123  # override wins
+    assert core.getTimeoutMs() == 9999
+
+
 def test_mda(core: CMMCorePlus, anybot: Any) -> None:
     """Test signal emission during MDA"""
     mda = MDASequence(
