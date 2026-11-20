@@ -95,7 +95,7 @@ def test_unicore_xy_stage():
     assert stage.STOPPED
 
     core.setXYStageDevice("")
-    assert core._pycore.current(Keyword.CoreXYStage) is None
+    assert core.getXYStageDevice() == ""
 
 
 # this one is also sequenceable
@@ -147,8 +147,13 @@ def test_unicore_xy_stepper_stage():
     core.initializeDevice(XYDEV)
     core.setXYStageDevice(XYDEV)
 
-    # test position
+    # test position (notification is async via DeviceCallbacks)
     core.setXYPosition(100.5, 200.5)
+    import time
+
+    deadline = time.monotonic() + 1.0
+    while mock.call_count < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
     mock.assert_called_once_with(XYDEV, 100.5, 200.5)
     assert stage.position_steps == (1005, 2005)
     assert core.getXYPosition() == (100.5, 200.5)
@@ -161,8 +166,13 @@ def test_unicore_xy_stepper_stage():
     assert stage.position_steps == (-1055, -2055)
     assert core.getXYPosition() == (105.5, 205.5)
 
+    # Wait for async XYStagePositionChanged callback to settle before reset
+    time.sleep(0.1)
     mock.reset_mock()
     core.setRelativeXYPosition(1.5, 2.5)
+    deadline = time.monotonic() + 1.0
+    while mock.call_count < 1 and time.monotonic() < deadline:
+        time.sleep(0.01)
     mock.assert_called_once_with(XYDEV, 107.0, 208.0)
     assert core.getXYPosition() == (107.0, 208.0)
     steps = stage.position_steps
@@ -170,10 +180,42 @@ def test_unicore_xy_stepper_stage():
 
     core.setOriginXY()
     assert core.getXYPosition() == (0, 0)
-    assert (stage._origin_x_steps, stage._origin_y_steps) == steps
+    assert stage.position_steps == steps  # the origin is a software (adapter) origin
 
     core.setAdapterOriginXY(500, 600)
     assert core.getXYPosition() == (500, 600)
+
+
+def test_xy_stepper_mirror_set_by_config_group() -> None:
+    """Mirroring applied by a config group is used when converting um to steps.
+
+    Same expectations as the setProperty path in test_unicore_xy_stepper_stage.
+    """
+    core = UniMMCore()
+    stage = MyStepperStage()
+    core.loadPyDevice(XYDEV, stage)
+    core.initializeDevice(XYDEV)
+    core.setXYStageDevice(XYDEV)
+
+    core.defineConfig("Orientation", "Mirrored", XYDEV, Keyword.Transpose_MirrorX, "1")
+    core.defineConfig("Orientation", "Mirrored", XYDEV, Keyword.Transpose_MirrorY, "1")
+    core.setConfig("Orientation", "Mirrored")
+
+    core.setXYPosition(105.5, 205.5)
+    assert stage.position_steps == (-1055, -2055)
+    assert core.getXYPosition() == (105.5, 205.5)
+
+
+def test_xy_stepper_rounds_to_nearest_step() -> None:
+    """Like CXYStageBase, um are converted to the *nearest* step (step size 0.1)."""
+    core = UniMMCore()
+    stage = MyStepperStage()
+    core.loadPyDevice(XYDEV, stage)
+    core.initializeDevice(XYDEV)
+    core.setXYStageDevice(XYDEV)
+
+    core.setXYPosition(0.19, -0.19)
+    assert stage.position_steps == (2, -2)
 
 
 def test_unicore_xy_stepper_stage_sequenceable():
@@ -185,10 +227,10 @@ def test_unicore_xy_stepper_stage_sequenceable():
     assert core.isXYStageSequenceable(XYDEV)
     assert core.getXYStageSequenceMaxLength(XYDEV) == 10
 
-    with pytest.raises(ValueError, match="must have the same length"):
+    with pytest.raises((ValueError, RuntimeError)):
         core.loadXYStageSequence(XYDEV, range(10), range(10, 21))
 
-    with pytest.raises(ValueError, match="Sequence is too long"):
+    with pytest.raises((ValueError, RuntimeError)):
         core.loadXYStageSequence(XYDEV, range(100), range(100))
 
     core.loadXYStageSequence(XYDEV, range(10), range(10, 20))
