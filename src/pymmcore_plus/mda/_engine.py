@@ -519,10 +519,17 @@ class MDAEngine(PMDAEngine):
         except Exception as e:
             logger.warning("Failed to capture Z position: %s", e)
 
-        try:
-            state["exposure"] = core.getExposure()
-        except Exception as e:
-            logger.warning("Failed to capture exposure setting: %s", e)
+        # exposure and ROI are camera properties.  Skip them when no camera is
+        # loaded (e.g. engines that only drive stages): CMMCore.getExposure()
+        # and getROI() return dummy values without a camera, but the matching
+        # setters raise at restore time.
+        has_camera = bool(core.getCameraDevice())
+
+        if has_camera:
+            try:
+                state["exposure"] = core.getExposure()
+            except Exception as e:
+                logger.warning("Failed to capture exposure setting: %s", e)
 
         # capture config group states
         try:
@@ -540,10 +547,11 @@ class MDAEngine(PMDAEngine):
             logger.warning("Failed to capture autoshutter state: %s", e)
 
         # capture ROI
-        try:
-            state["roi"] = tuple(core.getROI())  # type: ignore[typeddict-item]
-        except Exception as e:
-            logger.warning("Failed to capture ROI: %s", e)
+        if has_camera:
+            try:
+                state["roi"] = tuple(core.getROI())  # type: ignore[typeddict-item]
+            except Exception as e:
+                logger.warning("Failed to capture ROI: %s", e)
 
         return state
 
@@ -564,9 +572,11 @@ class MDAEngine(PMDAEngine):
         # otherwise we may crash the objective into the sample.
         # Otherwise, we should move XY first, then Z.
         target_z = self._initial_state.get("z_position")
+        has_xy = "xy_position" in self._initial_state
         move_z_first = False
         focus_dir = FocusDirection.Unknown
-        if target_z is not None and (focus_device := core.getFocusDevice()):
+        focus_device = core.getFocusDevice()
+        if target_z is not None and focus_device:
             focus_dir = core.getFocusDirection(focus_device)
             cur_z = core.getZPosition()
             # focus_dir TowardSample => increasing position brings obj. closer to sample
@@ -577,7 +587,9 @@ class MDAEngine(PMDAEngine):
                 move_z_first = True
 
         if focus_dir == FocusDirection.Unknown:
-            _warn_focus_dir(focus_device)
+            # only warn if there is actually a stage position we refuse to restore
+            if target_z is not None or has_xy:
+                _warn_focus_dir(focus_device)
         else:
 
             def _move_z() -> None:
@@ -592,7 +604,7 @@ class MDAEngine(PMDAEngine):
                 _move_z()
 
             # restore XY position
-            if "xy_position" in self._initial_state:
+            if has_xy:
                 try:
                     if core.getXYStageDevice():
                         core.setXYPosition(*self._initial_state["xy_position"])
@@ -1171,7 +1183,7 @@ def _warn_focus_dir(focus_device: str) -> None:
     warnings.warn(
         "Focus direction is unknown: refusing to restore initial XYZ position "
         "for safety reasons. Please set FocusDirection in your config file:\n\n"
-        f"  FocusDirection,{focus_device},<1 or -1>\n\n"
+        f"  FocusDirection,{focus_device or '<focus device>'},<1 or -1>\n\n"
         "Or use the `Hardware Configuration Wizard > Stage Focus Direction`",
         stacklevel=3,
         category=RuntimeWarning,
