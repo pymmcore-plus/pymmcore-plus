@@ -161,3 +161,34 @@ def test_test_dev_install_creates_directory(tmp_path: Path) -> None:
 
     # Check that the nested directory was created
     assert dest.exists()
+
+
+def test_test_adapter_releases_git_fallback() -> None:
+    """If the GitHub API is unavailable, fall back to `git ls-remote --tags`."""
+    from urllib.error import HTTPError
+
+    from pymmcore_plus import install as install_mod
+
+    def _raise(url: str) -> Any:
+        raise HTTPError(url, 403, "Forbidden", None, None)  # type: ignore[arg-type]
+
+    stdout = (
+        "aaaa\trefs/tags/74.20250820\n"
+        "bbbb\trefs/tags/75.20261014\n"
+        "cccc\trefs/tags/75.20261104\n"
+    )
+    install_mod._available_test_adapter_releases.cache_clear()
+    try:
+        with (
+            patch("pymmcore_plus.install.urlopen", _raise),
+            patch("subprocess.run", return_value=Mock(stdout=stdout)) as run,
+        ):
+            releases = install_mod._available_test_adapter_releases()
+        assert "ls-remote" in run.call_args.args[0]
+        assert releases == {
+            "20250820": "74.20250820",
+            "20261014": "75.20261014",
+            "20261104": "75.20261104",
+        }
+    finally:
+        install_mod._available_test_adapter_releases.cache_clear()

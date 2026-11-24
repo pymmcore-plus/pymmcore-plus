@@ -210,18 +210,38 @@ def _available_test_adapter_releases() -> dict[str, str]:
     """
     github_api_url = f"https://api.github.com/repos/{TEST_ADAPTERS_REPO}/releases"
 
-    with urlopen(github_api_url) as resp:
-        releases = json.loads(resp.read().decode("utf-8"))
+    try:
+        with urlopen(github_api_url) as resp:
+            releases = json.loads(resp.read().decode("utf-8"))
+        tag_names = [release["tag_name"] for release in releases]
+    except OSError as e:
+        # The GitHub API may be rate-limited or blocked (e.g. behind a proxy),
+        # but the git protocol often still works: fall back to listing tags.
+        try:
+            tag_names = _git_ls_remote_tags(f"https://github.com/{TEST_ADAPTERS_REPO}")
+        except (OSError, subprocess.CalledProcessError):
+            raise e from None
 
     release_map: dict[str, str] = {}
-    for release in releases:
-        tag_name = release["tag_name"]  # e.g., "74.20250825"
+    for tag_name in tag_names:  # e.g., "74.20250825"
         if "." in tag_name:
             _, date_part = tag_name.split(".", 1)  # Extract YYYYMMDD part
             if date_part not in release_map or tag_name > release_map[date_part]:
                 release_map[date_part] = tag_name
 
     return release_map
+
+
+def _git_ls_remote_tags(url: str) -> list[str]:
+    """Return tag names of the remote git repository at `url`."""
+    out = subprocess.run(
+        ["git", "ls-remote", "--tags", "--refs", url],
+        capture_output=True,
+        text=True,
+        check=True,
+        timeout=60,
+    ).stdout
+    return [line.rsplit("refs/tags/", 1)[-1] for line in out.splitlines() if line]
 
 
 def _get_platform_arch_string() -> str:
