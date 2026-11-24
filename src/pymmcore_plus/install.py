@@ -14,6 +14,7 @@ from functools import cache
 from pathlib import Path
 from platform import machine, system
 from typing import TYPE_CHECKING, Protocol
+from urllib.error import HTTPError
 from urllib.request import urlopen, urlretrieve
 
 import typer
@@ -221,6 +222,11 @@ def _available_test_adapter_releases() -> dict[str, str]:
             tag_names = _git_ls_remote_tags(f"https://github.com/{TEST_ADAPTERS_REPO}")
         except (OSError, subprocess.CalledProcessError):
             raise e from None
+        finally:
+            # HTTPError wraps an open response body; close it so it isn't
+            # left for the garbage collector (ResourceWarning).
+            if isinstance(e, HTTPError):
+                e.close()
 
     release_map: dict[str, str] = {}
     for tag_name in tag_names:  # e.g., "74.20250825"
