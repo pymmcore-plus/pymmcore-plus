@@ -496,6 +496,42 @@ def test_roi_restore_failure_does_not_break_teardown(core: CMMCorePlus) -> None:
         engine.teardown_sequence(seq)
 
 
+def test_restore_initial_state_without_camera() -> None:
+    """Engines driving only stages (no camera device) must tear down cleanly.
+
+    CMMCore.getExposure()/getROI() return dummy values when no camera is loaded,
+    but setExposure()/setROI() raise, so camera state must not be captured.
+    https://forum.image.sc/t/custom-mda-engine-without-camera-does-not-work-any-more/123307
+    """
+    from pymmcore_plus.mda import MDAEngine
+
+    class NoCamEngine(MDAEngine):
+        def exec_event(self, event: MDAEvent) -> Iterable:
+            return ()  # image data acquired elsewhere
+
+    core = CMMCorePlus()  # nothing loaded: no camera, no stages
+    assert not core.getCameraDevice()
+    engine = NoCamEngine(core, restore_initial_state=True)
+    core.mda.set_engine(engine)
+
+    seq = MDASequence(time_plan={"interval": 0, "loops": 2})
+    engine.setup_sequence(seq)
+    assert "exposure" not in engine._initial_state
+    assert "roi" not in engine._initial_state
+    # call teardown directly (the runner swallows teardown exceptions)
+    with patch.object(core, "setExposure") as set_exp:
+        with patch.object(core, "setROI") as set_roi:
+            engine.teardown_sequence(seq)
+    set_exp.assert_not_called()
+    set_roi.assert_not_called()
+
+    finished = Mock()
+    core.mda.events.sequenceFinished.connect(finished)
+    core.mda.run(seq)
+    finished.assert_called_once()
+    assert core.mda._state == RunState.IDLE
+
+
 def test_reset_event_timer(core: CMMCorePlus) -> None:
     seq = [
         MDAEvent(min_start_time=0),
