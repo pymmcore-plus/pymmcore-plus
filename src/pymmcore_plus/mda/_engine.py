@@ -255,6 +255,17 @@ class MDAEngine(PMDAEngine):
         if sequence.setup is not None:
             self.setup_single_event(sequence.setup)
 
+        # Apply the first channel too: the first event would anyway (every axis starts
+        # at index 0), and the grid FOV sizes and summary metadata must describe what
+        # is acquired -- the channel's camera and pixel size, and the frame count of a
+        # Multi Camera, which output sinks size the dataset from. setConfig records
+        # the preset, so the first event does not apply it again.
+        if sequence.channels:
+            ch = sequence.channels[0]
+            self._set_event_channel(
+                MDAEvent(channel={"group": ch.group, "config": ch.config})
+            )
+
         if px_size := core.getPixelSizeUm():
             self._update_grid_fov_sizes(px_size, sequence)
 

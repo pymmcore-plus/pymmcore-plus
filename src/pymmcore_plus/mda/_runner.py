@@ -18,7 +18,7 @@ from useq import MDASequence
 
 from pymmcore_plus._logger import exceptions_logged, logger
 from pymmcore_plus.mda._generator_sequence import GeneratorMDASequence
-from pymmcore_plus.mda._sink import OmeWritersSink
+from pymmcore_plus.mda._sink import OmeWritersSink, camera_channels
 
 from ._protocol import PMDAEngine
 from ._thread_relay import mda_listeners_connected
@@ -557,7 +557,7 @@ class MDARunner:
             except SkipEvent as exc:
                 logger.info("%s", exc)
                 if _skip is not None and exc.num_frames > 0:
-                    _skip(frames=exc.num_frames * self._n_cameras)
+                    _skip(frames=exc.num_frames * self._frames_per_event(event))
                 teardown_event(event)
             else:
                 try:
@@ -662,10 +662,17 @@ class MDARunner:
 
         meta = self._engine.setup_sequence(sequence)
 
-        # extract camera multiplier for sink skip accounting
+        # frames per event of each channel (a Multi Camera yields several), so that
+        # skipped events skip the right number of frames in the sink
+        self._channel_frames: dict[tuple[str, str], int] = {}
         self._n_cameras = 1
-        if meta and (infos := meta.get("image_infos")):
-            self._n_cameras = infos[0].get("num_camera_adapter_channels", 1)
+        if self._sink is not None and meta and meta.get("image_infos"):
+            cams = camera_channels(sequence, meta)
+            self._n_cameras = len(cams[0]) if cams else 1
+            self._channel_frames = {
+                (ch.group, ch.config): len(c)
+                for ch, c in zip(sequence.channels, cams, strict=False)
+            }
 
         if self._sink is not None:
             self._sink.setup(sequence, meta)
@@ -676,6 +683,12 @@ class MDARunner:
         self._signals.sequenceStarted.emit(sequence, meta or {})
         logger.info("MDA Started: %s", sequence)
         return self._engine
+
+    def _frames_per_event(self, event: MDAEvent) -> int:
+        """Number of frames `event` yields: one per camera channel of its camera."""
+        if (ch := event.channel) is not None:
+            return self._channel_frames.get((ch.group, ch.config), self._n_cameras)
+        return self._n_cameras
 
     def _reset_event_timer(self) -> None:
         self._t0 = time.perf_counter()  # reference time, in seconds
