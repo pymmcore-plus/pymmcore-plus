@@ -257,6 +257,24 @@ class MyFilterWheel(StateDevice):
         pass
 ```
 
+If the device can change position by itself (e.g. turned by hand, or reported by a
+hardware callback), call `notify_state_changed` so the core updates its cache and
+emits `propertyChanged`. Moves made through the core (`setState`, `setProperty`,
+...) are reported automatically.
+
+```python
+class MyFilterWheel(StateDevice):
+    ...
+
+    def _on_hardware_moved(self) -> None:  # e.g. called from a polling thread
+        with self:  # holds the device lock
+            pos = self._read_position_from_hardware()
+        self.notify_state_changed(pos)  # lock released
+```
+
+Call `notify_state_changed` after releasing the device lock: listeners run
+immediately and may call back into the device.
+
 ### Shutter Devices (`ShutterDevice`)
 
 For controlling shutters or any binary open/close devices:
