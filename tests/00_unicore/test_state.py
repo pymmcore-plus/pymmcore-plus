@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import threading
+from typing import Any
 from unittest.mock import Mock, call
 
 import pytest
@@ -428,3 +430,59 @@ def test_cached_state_and_label_follow_the_device(unicore: UniMMCore) -> None:
     core.setProperty(DEV, Keyword.Label, "one")
     assert str(core.getPropertyFromCache(DEV, Keyword.State)) == "1"
     assert str(core.getPropertyFromCache(DEV, Keyword.Label)) == "one"
+
+
+def _channel_core() -> tuple[UniMMCore, dict[str, MyStateDevice]]:
+    core = UniMMCore()
+    wheels = {
+        "LED": MyStateDevice({0: "CYAN", 1: "UV"}),
+        "Filter": MyStateDevice({0: "em450", 1: "em520"}),
+    }
+    for name, wheel in wheels.items():
+        core.loadPyDevice(name, wheel)
+        core.initializeDevice(name)
+    for preset, led, flt in (("brightfield", "CYAN", "em450"), ("DAPI", "UV", "em520")):
+        core.defineConfig("Channel", preset, "LED", "Label", led)
+        core.defineConfig("Channel", preset, "Filter", "Label", flt)
+    core.setConfig("Channel", "brightfield")
+    return core, wheels
+
+
+def test_property_changed_is_emitted_after_cache_update_and_unlock() -> None:
+    """Listeners see the new cached State/Label, and the device lock is released.
+
+    e.g. a widget re-matching config presets from the cache in response to the
+    signal must see the new values.
+    """
+    core, wheels = _channel_core()
+    problems: list[tuple[str, str, str]] = []
+
+    def _check(dev: str, prop: str, value: Any) -> None:
+        if str(core.getPropertyFromCache(dev, prop)) != str(value):
+            problems.append(("stale cache", dev, prop))
+        if wheels[dev].locked():
+            problems.append(("device lock held", dev, prop))
+
+    core.events.propertyChanged.connect(_check)
+    core.setConfig("Channel", "DAPI")
+    assert problems == []
+
+
+def test_listener_may_set_the_same_device() -> None:
+    """A propertyChanged listener calling back into the device must not deadlock."""
+    core, _ = _channel_core()
+    once: list[int] = []
+
+    def _reenter(*_: Any) -> None:
+        if not once:  # re-enter just once, to avoid ping-pong
+            once.append(1)
+            core.setConfig("Channel", "brightfield")
+
+    core.events.propertyChanged.connect(_reenter)
+    # run in a daemon thread so that a deadlock fails the test instead of hanging
+    thread = threading.Thread(target=core.setConfig, args=("Channel", "DAPI"))
+    thread.daemon = True
+    thread.start()
+    thread.join(timeout=5)
+    assert not thread.is_alive(), "deadlocked"
+    assert once
