@@ -206,7 +206,10 @@ For controlling 2-axis positioning stages:
 
 === "Stepper Motor"
 
-    For stepper motor stages with sequence support, use `XYStepperStageDevice`:
+    For stepper motor stages, use `XYStepperStageDevice`. You only work in
+    steps: as with C++ stepper adapters, the core converts microns to the nearest
+    step, applying the `TransposeMirrorX`/`TransposeMirrorY` properties and the
+    adapter origin (`setOriginXY` zeroes it).
 
     ```python
     from pymmcore_plus.experimental.unicore import XYStepperStageDevice
@@ -256,6 +259,12 @@ class MyFilterWheel(StateDevice):
         """Get current state/position."""
         pass
 ```
+
+The labels passed to the constructor (e.g. `MyFilterWheel({0: "DAPI", 1: "FITC"})`
+or `MyFilterWheel.from_count(6)`) are only defaults: as with C++ state devices, the
+core owns the labels and the `Label` property, so labels are changed with
+`core.defineStateLabel()`. If the device moves on its own (e.g. a turret turned by
+hand), call `self.notify_state_changed(pos)` so the core updates `State` and `Label`.
 
 ### Shutter Devices (`ShutterDevice`)
 

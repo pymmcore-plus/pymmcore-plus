@@ -2,7 +2,7 @@ from abc import abstractmethod
 from typing import ClassVar, Literal
 
 from pymmcore_plus.core import DeviceType
-from pymmcore_plus.core._constants import FocusDirection, Keyword
+from pymmcore_plus.core._constants import FocusDirection
 
 from ._device_base import SeqT, SequenceableDevice
 
@@ -20,10 +20,6 @@ class _BaseStage(SequenceableDevice[SeqT]):
     def stop(self) -> None:
         """Stop the stage."""
 
-    @abstractmethod
-    def set_origin(self) -> None:
-        """Zero the stage's coordinates at the current position."""
-
 
 class StageDevice(_BaseStage[float]):
     """ABC for Stage devices."""
@@ -37,6 +33,10 @@ class StageDevice(_BaseStage[float]):
     @abstractmethod
     def get_position_um(self) -> float:
         """Returns the current position of the stage in microns."""
+
+    @abstractmethod
+    def set_origin(self) -> None:
+        """Zero the stage's coordinates at the current position."""
 
     def get_focus_direction(self) -> FocusDirection:
         """Returns the focus direction of the stage."""
@@ -83,12 +83,83 @@ class StageDevice(_BaseStage[float]):
         """Return True if positions can be set while continuous focus runs."""
         return False
 
+    # -- Bridge protocol defaults --
 
-# TODO: consider if we can just subclass StageDevice instead of _BaseStage
-class XYStageDevice(_BaseStage[tuple[float, float]]):
-    """ABC for XYStage devices."""
+    def set_position_steps(self, steps: int) -> None:
+        """Default: 1:1 um-to-step mapping."""
+        self.set_position_um(float(steps))
+
+    def get_position_steps(self) -> int:
+        """Default: 1:1 um-to-step mapping."""
+        return int(self.get_position_um())
+
+    def get_limits(self) -> tuple[float, float]:
+        """Return stage travel limits (lower, upper). Override for real limits."""
+        return (0.0, 0.0)
+
+    def move(self, velocity: float) -> None:
+        """Move at the given velocity. Override for motorized stages."""
+
+    def is_stage_sequenceable(self) -> bool:
+        """Return True if the stage supports triggered sequences."""
+        return self.is_sequenceable()
+
+    def get_stage_sequence_max_length(self) -> int:
+        """Return maximum stage sequence length."""
+        return self.get_sequence_max_length()
+
+    def load_stage_sequence(self, positions: list[float]) -> None:
+        """Load a stage position sequence."""
+        self.send_sequence(tuple(positions))
+
+    def start_stage_sequence(self) -> None:
+        """Start the loaded stage sequence."""
+        self.start_sequence()
+
+    def stop_stage_sequence(self) -> None:
+        """Stop the running stage sequence."""
+        self.stop_sequence()
+
+
+class _BaseXYStage(_BaseStage[tuple[float, float]]):
+    """Shared logic for XYStage and XYStepperStage devices."""
 
     _TYPE: ClassVar[Literal[DeviceType.XYStage]] = DeviceType.XYStage
+
+    def get_limits_um(self) -> tuple[float, float, float, float]:
+        """Return (xMin, xMax, yMin, yMax). Override for real limits."""
+        return (0.0, 0.0, 0.0, 0.0)
+
+    def get_step_limits(self) -> tuple[int, int, int, int]:
+        """Return (xMin, xMax, yMin, yMax) in steps. Override for real limits."""
+        return (0, 0, 0, 0)
+
+    def move(self, vx: float, vy: float) -> None:
+        """Move at velocity. Override for motorized stages."""
+
+    def is_xy_stage_sequenceable(self) -> bool:
+        """Return True if the XY stage supports triggered sequences."""
+        return self.is_sequenceable()
+
+    def get_xy_stage_sequence_max_length(self) -> int:
+        """Return maximum XY stage sequence length."""
+        return self.get_sequence_max_length()
+
+    def load_xy_stage_sequence(self, positions: list[tuple[float, float]]) -> None:
+        """Load an XY stage position sequence."""
+        self.send_sequence(tuple(positions))
+
+    def start_xy_stage_sequence(self) -> None:
+        """Start the loaded XY stage sequence."""
+        self.start_sequence()
+
+    def stop_xy_stage_sequence(self) -> None:
+        """Stop the running XY stage sequence."""
+        self.stop_sequence()
+
+
+class XYStageDevice(_BaseXYStage):
+    """ABC for XYStage devices that work in microns."""
 
     @abstractmethod
     def set_position_um(self, x: float, y: float) -> None:
@@ -121,10 +192,6 @@ class XYStageDevice(_BaseStage[tuple[float, float]]):
 
         ... such that the current position becomes the given coordinates.
         """
-        # I don't quite understand what this method is supposed to do yet.
-        # I believe it's here to give device adapter implementations a way to to set
-        # the origin of some translation between micrometers and steps, rather than to
-        # directly update the origin on the device itself.
 
     def set_origin(self) -> None:
         """Zero the stage's coordinates at the current position.
@@ -135,15 +202,50 @@ class XYStageDevice(_BaseStage[tuple[float, float]]):
         self.set_origin_x()
         self.set_origin_y()
 
+    def set_x_origin(self) -> None:
+        """Zero the X axis. Alias for set_origin_x."""
+        self.set_origin_x()
 
-class XYStepperStageDevice(XYStageDevice):
-    """ABC for XYStage devices that support stepper motors.
+    def set_y_origin(self) -> None:
+        """Zero the Y axis. Alias for set_origin_y."""
+        self.set_origin_y()
 
-    In this variant, rather than providing `set_position_um` and `get_position_um`,
-    you provide `set_position_steps`, `get_position_steps`, `get_step_size_x_um`,
-    and `get_step_size_y_um`.  A default implementation of `set_position_um` and
-    `get_position_um` is then provided that uses these methods, taking into account
-    the XY-mirroring properties of the device.
+    # -- Bridge protocol defaults --
+
+    def set_position_steps(self, x: int, y: int) -> None:
+        """Default: 1:1 um-to-step mapping."""
+        self.set_position_um(float(x), float(y))
+
+    def get_position_steps(self) -> tuple[int, int]:
+        """Default: 1:1 um-to-step mapping."""
+        ux, uy = self.get_position_um()
+        return (int(ux), int(uy))
+
+    def get_step_size_x_um(self) -> float:
+        """Default step size. Override for real hardware."""
+        return 1.0
+
+    def get_step_size_y_um(self) -> float:
+        """Default step size. Override for real hardware."""
+        return 1.0
+
+    def set_relative_position_steps(self, dx: int, dy: int) -> None:
+        """Default: convert steps to um."""
+        self.set_relative_position_um(
+            float(dx) * self.get_step_size_x_um(),
+            float(dy) * self.get_step_size_y_um(),
+        )
+
+
+class XYStepperStageDevice(_BaseXYStage):
+    """ABC for XYStage devices driven by stepper motors.
+
+    Rather than working in microns, you provide `set_position_steps`,
+    `get_position_steps`, `get_step_size_x_um`, and `get_step_size_y_um`. As with a
+    C++ stepper stage adapter, the core converts between microns and steps, applying
+    the `TransposeMirrorX`/`TransposeMirrorY` properties and the adapter origin
+    (`setAdapterOriginXY`; `setOriginXY` zeroes it). Moves are reported to the core
+    as XY stage position changes.
     """
 
     @abstractmethod
@@ -164,47 +266,6 @@ class XYStepperStageDevice(XYStageDevice):
 
     # ----------------------------------------------------------------
 
-    def __init__(self) -> None:
-        super().__init__()
-        self.register_property(name=Keyword.Transpose_MirrorX, default_value=False)
-        self.register_property(name=Keyword.Transpose_MirrorY, default_value=False)
-        self._origin_x_steps: int = 0
-        self._origin_y_steps: int = 0
-
-    def set_position_um(self, x: float, y: float) -> None:
-        """Set the position of the XY stage in microns."""
-        # Converts the given micrometer coordinates to steps and sets the position.
-        mirror_x, mirror_y = self._get_orientation()
-
-        steps_x = int(x / self.get_step_size_x_um())
-        steps_y = int(y / self.get_step_size_y_um())
-
-        if mirror_x:
-            steps_x = -steps_x
-        if mirror_y:
-            steps_y = -steps_y
-
-        x_steps = self._origin_x_steps + steps_x
-        y_steps = self._origin_y_steps + steps_y
-        self.set_position_steps(x_steps, y_steps)
-
-        self.core.events.XYStagePositionChanged.emit(self.get_label(), x, y)
-
-    def get_position_um(self) -> tuple[float, float]:
-        """Get the position of the XY stage in microns."""
-        # Converts the current steps to micrometer coordinates and returns the position.
-        mirror_x, mirror_y = self._get_orientation()
-        x_steps, y_steps = self.get_position_steps()
-
-        x = (self._origin_x_steps - x_steps) * self.get_step_size_x_um()
-        y = (self._origin_y_steps - y_steps) * self.get_step_size_y_um()
-        if not mirror_x:
-            x = -x
-        if not mirror_y:
-            y = -y
-
-        return x, y
-
     def set_relative_position_steps(self, dx: int, dy: int) -> None:
         """Move the stage by a relative amount.
 
@@ -212,55 +273,3 @@ class XYStepperStageDevice(XYStageDevice):
         """
         x_steps, y_steps = self.get_position_steps()
         self.set_position_steps(x_steps + dx, y_steps + dy)
-
-    def set_relative_position_um(self, dx: float, dy: float) -> None:
-        """Default implementation for relative motion.
-
-        Can be overridden for more efficient implementations.
-        """
-        mirror_x, mirror_y = self._get_orientation()
-
-        if mirror_x:
-            dx = -dx
-        if mirror_y:
-            dy = -dy
-
-        steps_x = int(dx / self.get_step_size_x_um())
-        steps_y = int(dy / self.get_step_size_y_um())
-
-        self.set_relative_position_steps(steps_x, steps_y)
-
-        x, y = self.get_position_um()
-        self.core.events.XYStagePositionChanged.emit(self.get_label(), x, y)
-
-    def set_adapter_origin_um(self, x: float = 0.0, y: float = 0.0) -> None:
-        """Alter the software coordinate translation between micrometers and steps.
-
-        ... such that the current position becomes the given coordinates.
-        """
-        mirror_x, mirror_y = self._get_orientation()
-        x_steps, y_steps = self.get_position_steps()
-
-        steps_x = int(x / self.get_step_size_x_um())
-        steps_y = int(y / self.get_step_size_y_um())
-
-        self._origin_x_steps = x_steps + (steps_x if mirror_x else -steps_x)
-        self._origin_y_steps = y_steps + (steps_y if mirror_y else -steps_y)
-
-    def set_origin(self) -> None:
-        """Zero the stage's coordinates at the current position."""
-        self.set_adapter_origin_um()
-
-    def set_origin_x(self) -> None:
-        """Zero the stage's X coordinates at the current position."""
-        raise NotImplementedError  # pragma: no cover
-
-    def set_origin_y(self) -> None:
-        """Zero the stage's Y coordinates at the current position."""
-        raise NotImplementedError  # pragma: no cover
-
-    def _get_orientation(self) -> tuple[bool, bool]:
-        return (
-            self.get_property_value(Keyword.Transpose_MirrorX),
-            self.get_property_value(Keyword.Transpose_MirrorY),
-        )
