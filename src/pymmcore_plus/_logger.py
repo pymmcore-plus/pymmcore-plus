@@ -3,18 +3,26 @@ from __future__ import annotations
 import logging
 import os
 import sys
+import time
+import weakref
 from contextlib import contextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 if TYPE_CHECKING:
     from collections.abc import Iterator
+
+    import pymmcore
 
 __all__ = ["logger"]
 
 
 logger = logging.getLogger("pymmcore-plus")
+
+# Cores whose primary (CoreLog) log file follows the pymmcore-plus log file.
+# See `follow_logfile`.
+_CORES: weakref.WeakSet[pymmcore.CMMCore] = weakref.WeakSet()
 
 PYMM_LOG_FILE = os.getenv("PYMM_LOG_FILE", "")
 DEFAULT_LOG_LEVEL: str = os.getenv("PYMM_LOG_LEVEL", "WARNING").upper()
@@ -58,6 +66,83 @@ _FILE_FORMATTER = logging.Formatter(
     "%(asctime)s.%(msecs)03d    tid0x%(thread)x [%(levelname)s,%(name)s] %(message)s",
     datefmt="%Y-%m-%dT%H:%M:%S",
 )
+
+
+class _RotatingFileHandler(RotatingFileHandler):
+    """RotatingFileHandler for a log file that MMCore writes to as well.
+
+    `CMMCorePlus` points the C++ core's own log (the "CoreLog") at the same file
+    this handler writes to, via `follow_logfile`, so that Python- and C++-side
+    messages interleave in one file. The core keeps its own handle to that file
+    open, and on Windows a file cannot be renamed while another handle is open:
+    the plain stdlib handler's rollover then fails with ``PermissionError``, drops
+    the record, prints a traceback to stderr, and tries again (and fails again) on
+    every subsequent record. This handler therefore releases the core's log file
+    around the rename and points it at the fresh file afterwards.
+
+    Should the rename still fail (e.g. a second pymmcore-plus process shares the
+    default log file), the failure is a soft error: the handler keeps appending to
+    the current file, leaves one note in the log, and only retries the rollover
+    after ``rollover_retry_interval`` seconds.
+    """
+
+    rollover_retry_interval: float = 60.0
+
+    def __init__(self, *args: Any, **kwargs: Any) -> None:
+        super().__init__(*args, **kwargs)
+        self._next_rollover_attempt = 0.0
+
+    def shouldRollover(self, record: logging.LogRecord) -> bool:
+        if time.monotonic() < self._next_rollover_attempt:
+            return False
+        return bool(super().shouldRollover(record))
+
+    def doRollover(self) -> None:
+        # Let go of the file on the C++ side before renaming it (Windows).
+        _set_core_logfiles(None)
+        try:
+            super().doRollover()
+        except OSError as exc:
+            self._next_rollover_attempt = (
+                time.monotonic() + self.rollover_retry_interval
+            )
+            if self.stream is None:
+                self.stream = self._open()
+            # Not routed through the logger: emitting from inside a handler would
+            # re-enter shouldRollover/doRollover on this same handler.
+            self.stream.write(
+                f"{time.strftime('%Y-%m-%dT%H:%M:%S')}.000    [WARNING,pymmcore-plus] "
+                f"Could not rotate log file {self.baseFilename!r} ({exc}); "
+                f"continuing in the current file and retrying in "
+                f"{self.rollover_retry_interval:.0f}s\n"
+            )
+            self.stream.flush()
+        finally:
+            _set_core_logfiles(Path(self.baseFilename))
+
+
+def follow_logfile(core: pymmcore.CMMCore) -> Path | None:
+    """Write `core`'s own log (the MMCore "CoreLog") into the pymmcore-plus log file.
+
+    The core keeps following the pymmcore-plus log file when that file rotates and
+    when `configure_logging` is called again. Returns the current log file, or
+    `None` if pymmcore-plus is not logging to a file (the core's primary log file
+    is then disabled).
+    """
+    _CORES.add(core)
+    logfile = current_logfile(logger)
+    core.setPrimaryLogFile(str(logfile) if logfile else "")
+    return logfile
+
+
+def _set_core_logfiles(file: Path | None) -> None:
+    """Point every core registered with `follow_logfile` at `file`.
+
+    If `file` is None, the cores' primary log file is disabled, which closes
+    their handle on the previous file.
+    """
+    for core in list(_CORES):
+        core.setPrimaryLogFile(str(file) if file else "")
 
 
 def configure_logging(
@@ -145,12 +230,15 @@ def configure_logging(
         log_file.parent.mkdir(parents=True, exist_ok=True)
 
         # Create a rotating file handler with a maximum file size and backup count.
-        file_handler = RotatingFileHandler(
+        file_handler = _RotatingFileHandler(
             log_file, maxBytes=file_rotation * 1_000_000, backupCount=file_retention
         )
         file_handler.setLevel(file_level)
         file_handler.setFormatter(_FILE_FORMATTER)
         logger.addHandler(file_handler)
+
+    # cores created earlier keep logging into the (possibly new) log file
+    _set_core_logfiles(current_logfile(logger))
 
 
 def current_logfile(logger: logging.Logger) -> Path | None:
