@@ -5,7 +5,7 @@ import threading
 import warnings
 import weakref
 from collections.abc import Callable, Iterator, MutableMapping, Sequence
-from contextlib import suppress
+from contextlib import nullcontext, suppress
 from datetime import datetime
 from itertools import count
 from pathlib import Path
@@ -27,6 +27,7 @@ from pymmcore_plus.core import CMMCorePlus, DeviceType, FocusDirection, Keyword
 from pymmcore_plus.core import Keyword as KW
 from pymmcore_plus.core._config import Configuration
 from pymmcore_plus.core._constants import PixelType
+from pymmcore_plus.core._mmcore_plus import STATE_PROPS
 from pymmcore_plus.experimental.unicore._device_manager import PyDeviceManager
 from pymmcore_plus.experimental.unicore._proxy import create_core_proxy
 from pymmcore_plus.experimental.unicore.devices._camera import CameraDevice
@@ -582,7 +583,14 @@ class UniMMCore(CMMCorePlus):
 
         if label not in self._pydevices:  # pragma: no cover
             return super().setProperty(label, propName, propValue)
-        with self._pydevices[label] as dev:
+        dev = self._pydevices[label]
+        # emit State/Label changes once the device lock is released (like CMMCorePlus)
+        emission = (
+            self._property_change_emission_ensured(label, STATE_PROPS)
+            if isinstance(dev, StateDevice) and propName in STATE_PROPS
+            else nullcontext()
+        )
+        with emission, dev:
             dev.set_property_value(propName, propValue)
             self._state_cache[(label, propName)] = propValue
             # a state device's State and Label change together
@@ -2044,7 +2052,10 @@ class UniMMCore(CMMCorePlus):
         if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
             return super().setState(stateDeviceLabel, state)
 
-        with state_dev:
+        with (
+            self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS),
+            state_dev,
+        ):
             state_dev.set_position_or_label(state)
             self._cache_state_props(stateDeviceLabel, state_dev)
 
@@ -2077,7 +2088,10 @@ class UniMMCore(CMMCorePlus):
         if (state_dev := self._py_state(stateDeviceLabel)) is None:  # pragma: no cover
             return super().setStateLabel(stateDeviceLabel, stateLabel)
 
-        with state_dev:
+        with (
+            self._property_change_emission_ensured(stateDeviceLabel, STATE_PROPS),
+            state_dev,
+        ):
             try:
                 state_dev.set_position_or_label(stateLabel)
             except KeyError as e:

@@ -133,15 +133,11 @@ class StateDevice(Device):
     def _set_state(self, state: int) -> None:
         # internal method to set the state, called by the property setter
         # to keep the label and state property in sync
+        # propertyChanged is emitted by the core, after the cache is updated and the
+        # device lock is released (see UniMMCore.setState)
         self.set_state(state)  # call the device-specific method
-        self.core.events.propertyChanged.emit(
-            self.get_label(), Keyword.State.value, state
-        )
         label = self._state_to_label.get(state, "")
         self.set_property_value(Keyword.Label, label)
-        self.core.events.propertyChanged.emit(
-            self.get_label(), Keyword.Label.value, label
-        )
 
     def _get_current_label(self) -> str:
         # internal method to get the current label, called by the property getter
