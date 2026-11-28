@@ -4,10 +4,9 @@ import operator
 from collections import defaultdict
 from collections.abc import Iterable, Sequence
 from contextlib import suppress
-from typing import TYPE_CHECKING, Annotated, Any, Optional, TypeVar, cast, overload
+from typing import TYPE_CHECKING, Annotated, Any, Optional, TypeVar, overload
 
-from pydantic import Field, GetPydanticSchema, model_validator
-from pydantic_core import core_schema
+from pydantic import Field, InstanceOf, PlainSerializer, model_validator
 from useq import AcquireImage, MDAEvent, MDASequence, TDurationLoops, TIntervalLoops
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
@@ -16,7 +15,6 @@ if TYPE_CHECKING:
     from collections.abc import Iterable, Iterator
     from typing import Self
 
-    from pydantic import GetCoreSchemaHandler
     from useq._mda_event import Channel as EventChannel
 
     from pymmcore_plus import CMMCorePlus
@@ -132,35 +130,15 @@ class _BurstEvents(Sequence[MDAEvent]):
         return type(tmpl).model_construct(fields_set, **values)
 
 
-def _events_schema(
-    source: Any, handler: GetCoreSchemaHandler
-) -> core_schema.CoreSchema:
-    """Validate/serialize `SequencedEvent.events` like `tuple[MDAEvent, ...]`."""
-    events = handler.generate_schema(tuple[MDAEvent, ...])
-    return core_schema.json_or_python_schema(
-        json_schema=events,
-        # a _BurstEvents is accepted as-is: validating it would create every event
-        python_schema=core_schema.union_schema(
-            [core_schema.is_instance_schema(_BurstEvents), events],
-            mode="left_to_right",
-        ),
-        serialization=core_schema.plain_serializer_function_ser_schema(
-            tuple, return_schema=events
-        ),
-    )
-
-
 class SequencedEvent(MDAEvent):
-    """Subclass of MDAEvent that represents a sequence of triggered events.
+    """Subclass of MDAEvent that represents a sequence of triggered events."""
 
-    For a zero-interval time burst, `events` may be a read-only sequence that
-    creates each `MDAEvent` when it is accessed (rather than a tuple), so changes
-    made to an event obtained from it are not kept.
-    """
-
-    events: Annotated[Sequence[MDAEvent], GetPydanticSchema(_events_schema)] = Field(
-        repr=False
-    )
+    # validated as a tuple, but typed as a Sequence: a zero-interval burst holds a
+    # read-only sequence that creates each event on access (see _BurstSequencedEvent)
+    if TYPE_CHECKING:
+        events: Sequence[MDAEvent]
+    else:
+        events: tuple[MDAEvent, ...] = Field(repr=False)
 
     exposure_sequence: tuple[float, ...] = Field(default_factory=tuple)
     x_sequence: tuple[float, ...] = Field(default_factory=tuple)
@@ -188,6 +166,18 @@ class SequencedEvent(MDAEvent):
             if isinstance(v, dict):
                 v = f"({len(v)} items)"
             yield k, v
+
+
+class _BurstSequencedEvent(SequencedEvent):
+    """SequencedEvent of a zero-interval time burst, with lazily created `events`.
+
+    `events` is a read-only `_BurstEvents`, not a tuple, and is dumped as a tuple.
+    """
+
+    events: Annotated[
+        InstanceOf[_BurstEvents],
+        PlainSerializer(tuple, return_type=tuple[MDAEvent, ...]),
+    ] = Field(repr=False)
 
 
 def get_all_sequenceable(
@@ -553,8 +543,10 @@ def _single_burst(core: CMMCorePlus, seq: MDASequence) -> SequencedEvent | None:
     combiner.feed_event(first)
     if combiner.feed_event(template) is not None or combiner.attribute_changes:
         return None
-    burst = cast("SequencedEvent", combiner.flush())
-    return burst.model_copy(update={"events": _BurstEvents(first, template, length)})
+    if (burst := combiner.flush()) is None:
+        return None
+    values = {**burst.__dict__, "events": _BurstEvents(first, template, length)}
+    return _BurstSequencedEvent.model_construct(burst.model_fields_set, **values)
 
 
 def _burst_length(seq: MDASequence) -> int | None:

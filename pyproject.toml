@@ -243,5 +243,4 @@ extend-ignore-identifiers-re = [
     "anager",
     "ba",
     "(?:FOVs?)",
-    ".*_ser_schema",  # pydantic_core API
 ]

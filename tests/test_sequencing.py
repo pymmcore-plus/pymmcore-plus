@@ -657,7 +657,11 @@ def test_sequence_combining_matches_eager_combining(
     expected = list(iter_sequenced_events(core, list(seq)))  # eager reference
     result = list(iter_sequenced_events(core, seq))
 
-    assert result == expected
+    # a lazy burst is a private SequencedEvent subclass, so compare field values
+    assert [e.__dict__ for e in result] == [e.__dict__ for e in expected]
+    assert [isinstance(e, SequencedEvent) for e in result] == [
+        isinstance(e, SequencedEvent) for e in expected
+    ]
     assert [e.model_dump() for e in result] == [e.model_dump() for e in expected]
     assert [e.model_dump_json() for e in result] == [
         e.model_dump_json() for e in expected
