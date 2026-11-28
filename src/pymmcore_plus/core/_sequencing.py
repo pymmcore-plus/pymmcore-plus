@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import operator
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from contextlib import suppress
-from typing import TYPE_CHECKING, Any, Optional, TypeVar
+from typing import TYPE_CHECKING, Annotated, Any, Optional, TypeVar, overload
 
-from pydantic import Field, model_validator
-from useq import AcquireImage, MDAEvent, MDASequence
+from pydantic import Field, InstanceOf, PlainSerializer, model_validator
+from useq import AcquireImage, MDAEvent, MDASequence, TDurationLoops, TIntervalLoops
 
 from pymmcore_plus.core._constants import DeviceType, Keyword
 
@@ -44,7 +45,17 @@ def iter_sequenced_events(
         Note that `SequencedEvent` itself is a subclass of `MDAEvent`, but it's up to
         the engine to check `isinstance(event, SequencedEvent)` in order to handle
         SequencedEvents differently.
+
+        If `events` is an `MDASequence` that is a single zero-interval time burst
+        (only the time axis has more than one item), a single `SequencedEvent` is
+        yielded whose `events` are created on access, rather than creating and
+        holding every `MDAEvent` before the sequence can start.
     """
+    if isinstance(events, MDASequence):
+        if (burst := _single_burst(core, events)) is not None:
+            yield burst
+            return
+
     combiner = EventCombiner(core)
     for e in events:
         if (flushed := combiner.feed_event(e)) is not None:
@@ -54,10 +65,80 @@ def iter_sequenced_events(
         yield leftover
 
 
+class _BurstEvents(Sequence[MDAEvent]):
+    """Read-only sequence of the events of a zero-interval time burst.
+
+    Event 0 is `first`; every later event `i` is `template` with `index["t"] = i`.
+    As in `useq` iteration, the last event never keeps the shutter open.
+    Events are created on each access and not stored.
+    """
+
+    def __init__(self, first: MDAEvent, template: MDAEvent, length: int) -> None:
+        if length < 2:
+            raise ValueError(f"A burst needs at least 2 events, got {length}")
+        self._first = first
+        self._template = template
+        self._length = length
+
+    def __len__(self) -> int:
+        return self._length
+
+    @overload
+    def __getitem__(self, index: int) -> MDAEvent: ...
+    @overload
+    def __getitem__(self, index: slice) -> tuple[MDAEvent, ...]: ...
+    def __getitem__(self, index: int | slice) -> MDAEvent | tuple[MDAEvent, ...]:
+        if isinstance(index, slice):
+            return tuple(self[i] for i in range(*index.indices(self._length)))
+        i = operator.index(index)
+        if i < 0:
+            i += self._length
+        if not 0 <= i < self._length:
+            raise IndexError("index out of range")
+        return self._event(i)
+
+    def __iter__(self) -> Iterator[MDAEvent]:
+        for i in range(self._length):
+            yield self._event(i)
+
+    def __eq__(self, other: object) -> bool:
+        if isinstance(other, _BurstEvents) and (
+            (self._first, self._template, self._length)
+            == (other._first, other._template, other._length)
+        ):
+            return True
+        if isinstance(other, (_BurstEvents, tuple)):
+            if len(self) != len(other):
+                return False
+            return all(a == b for a, b in zip(self, other, strict=True))
+        return NotImplemented
+
+    def __repr__(self) -> str:
+        return f"<{type(self).__name__} with {self._length} events>"
+
+    def _event(self, i: int) -> MDAEvent:
+        if i == 0:
+            return self._first
+        tmpl = self._template
+        values = dict(tmpl.__dict__)
+        values["index"] = type(tmpl.index)({**tmpl.index, "t": i})
+        values["metadata"] = dict(tmpl.metadata)  # don't share a mutable dict
+        fields_set = set(tmpl.model_fields_set)
+        if i == self._length - 1 and tmpl.keep_shutter_open:
+            values["keep_shutter_open"] = False
+            fields_set.discard("keep_shutter_open")
+        return type(tmpl).model_construct(fields_set, **values)
+
+
 class SequencedEvent(MDAEvent):
     """Subclass of MDAEvent that represents a sequence of triggered events."""
 
-    events: tuple[MDAEvent, ...] = Field(repr=False)
+    # validated as a tuple, but typed as a Sequence: a zero-interval burst holds a
+    # read-only sequence that creates each event on access (see _BurstSequencedEvent)
+    if TYPE_CHECKING:
+        events: Sequence[MDAEvent]
+    else:
+        events: tuple[MDAEvent, ...] = Field(repr=False)
 
     exposure_sequence: tuple[float, ...] = Field(default_factory=tuple)
     x_sequence: tuple[float, ...] = Field(default_factory=tuple)
@@ -85,6 +166,18 @@ class SequencedEvent(MDAEvent):
             if isinstance(v, dict):
                 v = f"({len(v)} items)"
             yield k, v
+
+
+class _BurstSequencedEvent(SequencedEvent):
+    """SequencedEvent of a zero-interval time burst, with lazily created `events`.
+
+    `events` is a read-only `_BurstEvents`, not a tuple, and is dumped as a tuple.
+    """
+
+    events: Annotated[
+        InstanceOf[_BurstEvents],
+        PlainSerializer(tuple, return_type=tuple[MDAEvent, ...]),
+    ] = Field(repr=False)
 
 
 def get_all_sequenceable(
@@ -433,6 +526,55 @@ class EventCombiner:
                     max_length = self.core.getPropertySequenceMaxLength(dev, prop)
             self._prop_lengths[dev_prop] = max_length
         return self._prop_lengths[dev_prop]
+
+
+def _single_burst(core: CMMCorePlus, seq: MDASequence) -> SequencedEvent | None:
+    """Return all of `seq` as one SequencedEvent with lazy events, if possible.
+
+    Only applies to zero-interval time bursts (see `_burst_length`) whose events
+    the combiner would merge without sequencing any hardware.
+    """
+    if (length := _burst_length(seq)) is None:
+        return None
+
+    events = iter(seq)
+    first, template = next(events), next(events)
+    combiner = EventCombiner(core)
+    combiner.feed_event(first)
+    if combiner.feed_event(template) is not None or combiner.attribute_changes:
+        return None
+    if (burst := combiner.flush()) is None:
+        return None
+    values = {**burst.__dict__, "events": _BurstEvents(first, template, length)}
+    return _BurstSequencedEvent.model_construct(burst.model_fields_set, **values)
+
+
+def _burst_length(seq: MDASequence) -> int | None:
+    """Return the number of events in `seq` if it is a zero-interval time burst.
+
+    i.e. useq yields exactly one event per timepoint, all with the same start time
+    and differing only in their "t" index.
+    """
+    # events are built from a template, which assumes useq's own iteration
+    # (exact types: subclasses may change it)
+    if type(seq) is not MDASequence or "t" not in seq.axis_order:
+        return None
+    # checked without iterating the time plan, which may have millions of points
+    tp = seq.time_plan
+    if not (type(tp) is TIntervalLoops or type(tp) is TDurationLoops):
+        return None
+    if tp.loops < 2 or tp.interval.total_seconds() != 0:
+        return None
+    if any(len(tuple(seq.iter_axis(ax))) > 1 for ax in seq.axis_order if ax != "t"):
+        return None
+    # these insert (autofocus, sub-sequences) or skip (acquire_every) events
+    if seq.autofocus_plan is not None:
+        return None
+    if any(pos.sequence is not None for pos in seq.stage_positions):
+        return None
+    if any(ch.acquire_every != 1 for ch in seq.channels):
+        return None
+    return tp.loops
 
 
 def _get_max_sequence_lengths(core: CMMCorePlus) -> dict[Keyword, int]:

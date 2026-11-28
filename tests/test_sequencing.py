@@ -544,3 +544,161 @@ def test_multicam_sequence_frames_inserted_during_stop_check(
 
     assert frames == [(t, c) for t in range(5) for c in range(2)]
     assert core.getRemainingImageCount() == 0
+
+
+def test_long_zero_interval_timelapse_is_not_materialized(
+    core: CMMCorePlus, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A long zero-interval time-lapse must start without building every MDAEvent.
+
+    Previously every MDAEvent was created and held in memory before the sequence
+    could start (~7 s and ~900 MB for 2 h at 50 fps).
+    """
+    n_frames = 360_000  # 2 h at 50 fps
+    seq = useq.MDASequence(time_plan={"interval": 0, "loops": n_frames})
+
+    pulled = 0
+    real_iter = useq.MDASequence.__iter__
+
+    def _counting_iter(self: useq.MDASequence) -> Iterator[useq.MDAEvent]:
+        nonlocal pulled
+        for event in real_iter(self):
+            pulled += 1
+            yield event
+
+    monkeypatch.setattr(useq.MDASequence, "__iter__", _counting_iter)
+
+    (burst,) = iter_sequenced_events(core, seq)
+    assert isinstance(burst, SequencedEvent)
+    assert len(burst.events) == n_frames
+    assert pulled <= 2
+    assert burst.events[-1].index == {"t": n_frames - 1}
+
+
+# sequences in which every event is the same apart from its "t" index
+UNIFORM_SEQS = {
+    "t": useq.MDASequence(time_plan={"interval": 0, "loops": 5}),
+    "t2": useq.MDASequence(time_plan={"interval": 0, "loops": 2}),
+    "duration_loops": useq.MDASequence(time_plan={"duration": 0, "loops": 4}),
+    "single_c_p_z_g": useq.MDASequence(
+        time_plan={"interval": 0, "loops": 4},
+        channels=[useq.Channel(config="FITC", exposure=12)],
+        stage_positions=[
+            useq.Position(
+                x=1, y=2, z=3, name="pos", properties=[("Camera", "Gain", "1")]
+            )
+        ],
+        z_plan={"absolute": [10]},
+        grid_plan={"rows": 1, "columns": 1},
+        axis_order="ptgcz",
+    ),
+    "keep_shutter_open": useq.MDASequence(
+        time_plan={"interval": 0, "loops": 4},
+        channels=["DAPI"],
+        keep_shutter_open_across="t",
+    ),
+    "metadata": useq.MDASequence(
+        time_plan={"interval": 0, "loops": 3}, metadata={"a": 1}
+    ),
+}
+
+
+class _CustomIterSequence(useq.MDASequence):
+    def iter_events(self) -> Iterator[useq.MDAEvent]:
+        for e in super().iter_events():
+            yield e.model_copy(update={"metadata": {"t": e.index["t"]}})
+
+
+class _RepeatedTimesSequence(useq.MDASequence):
+    def iter_axis(self, axis: str) -> Iterator[Any]:
+        if axis == "t":
+            yield from (0.0, 0.0, 1.0, 1.0)
+        else:
+            yield from super().iter_axis(axis)
+
+
+# sequences that need real per-event combining (or none at all)
+OTHER_SEQS = {
+    "custom_iteration": _CustomIterSequence(time_plan={"interval": 0, "loops": 3}),
+    "custom_axis": _RepeatedTimesSequence(time_plan={"interval": 0, "loops": 4}),
+    "multiphase": useq.MDASequence(
+        time_plan=[{"interval": 0, "loops": 3}, {"interval": 0, "loops": 4}]
+    ),
+    "interval": useq.MDASequence(time_plan={"interval": 0.01, "loops": 3}),
+    "two_channels": useq.MDASequence(
+        time_plan={"interval": 0, "loops": 3}, channels=["DAPI", "FITC"]
+    ),
+    "acquire_every": useq.MDASequence(
+        time_plan={"interval": 0, "loops": 6},
+        channels=[useq.Channel(config="DAPI", acquire_every=2)],
+    ),
+    "autofocus": useq.MDASequence(
+        time_plan={"interval": 0, "loops": 3},
+        autofocus_plan={"autofocus_motor_offset": 1, "axes": ("t",)},
+    ),
+    "sub_sequence": useq.MDASequence(
+        time_plan={"interval": 0, "loops": 3},
+        stage_positions=[
+            useq.Position(x=1, sequence={"z_plan": {"range": 2, "step": 1}})
+        ],
+    ),
+    "z_inner": useq.MDASequence(
+        time_plan={"interval": 0, "loops": 3}, z_plan={"range": 2, "step": 1}
+    ),
+}
+
+
+@pytest.mark.parametrize("key", [*UNIFORM_SEQS, *OTHER_SEQS])
+def test_sequence_combining_matches_eager_combining(
+    core: CMMCorePlus, key: str
+) -> None:
+    """Combining an MDASequence must give the same result as combining its events."""
+    seq = UNIFORM_SEQS.get(key) or OTHER_SEQS[key]
+    expected = list(iter_sequenced_events(core, list(seq)))  # eager reference
+    result = list(iter_sequenced_events(core, seq))
+
+    # a lazy burst is a private SequencedEvent subclass, so compare field values
+    assert [e.__dict__ for e in result] == [e.__dict__ for e in expected]
+    assert [isinstance(e, SequencedEvent) for e in result] == [
+        isinstance(e, SequencedEvent) for e in expected
+    ]
+    assert [e.model_dump() for e in result] == [e.model_dump() for e in expected]
+    assert [e.model_dump_json() for e in result] == [
+        e.model_dump_json() for e in expected
+    ]
+    lazy = [e for e in result if not isinstance(getattr(e, "events", ()), tuple)]
+    if key in UNIFORM_SEQS:
+        assert len(lazy) == 1
+        sub_events = lazy[0].events  # type: ignore[attr-defined]
+        # the lazily created events must be exactly what useq creates
+        assert list(sub_events) == list(seq)
+        assert [e.model_fields_set for e in sub_events] == [
+            e.model_fields_set for e in seq
+        ]
+        assert [type(e.index) for e in sub_events] == [type(e.index) for e in seq]
+        assert sub_events[-1] == list(seq)[-1]
+        assert sub_events[1:3] == tuple(seq)[1:3]
+        # events are created on access: changing one changes no other event
+        sub_events[-1].metadata["x"] = 1
+        assert not any("x" in e.metadata for e in sub_events)
+        # validating a dump gives back a plain tuple
+        dumped = SequencedEvent.model_validate(lazy[0].model_dump())
+        assert isinstance(dumped.events, tuple)
+        assert dumped.events == sub_events
+    else:
+        assert not lazy
+
+
+def test_lazy_sequenced_event_runs(core: CMMCorePlus) -> None:
+    """A lazily combined sequence runs as one sequence and emits useq's events."""
+    core.mda.engine.use_hardware_sequencing = True  # type: ignore[union-attr]
+    seq = UNIFORM_SEQS["keep_shutter_open"]
+    started: list[tuple] = []
+    frames: list[useq.MDAEvent] = []
+    core.events.sequenceAcquisitionStarting.connect(lambda *a: started.append(a))
+    core.mda.events.frameReady.connect(lambda img, event: frames.append(event))
+
+    core.mda.run(seq)
+
+    assert len(started) == 1
+    assert frames == list(seq)
